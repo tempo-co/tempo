@@ -1,6 +1,6 @@
 ## Tempo
 
-Tempo Web is the frontend of [Tempo](../../README.md): a private personal-finance overview for connected bank accounts. Built with React 19, TypeScript, Vite, Tailwind CSS, and TanStack Router/Query; end-to-end tested with Playwright.
+Tempo Web is the frontend of [Tempo](../../README.md): a personal-finance overview for connected bank accounts. Built with React 19, TypeScript, Vite, Tailwind CSS, and TanStack Router/Query; end-to-end tested with Playwright.
 
 ## Prerequisites
 

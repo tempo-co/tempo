@@ -1,63 +1,42 @@
 # Tempo API Agent Instructions
 
-NestJS backend for Tempo, a personal-finance app that syncs real bank data through Enable Banking. Paths below are relative to `apps/api` unless they start at the repository root. Repo-wide rules (product direction, workflow, privacy, writing tests) are in the root `AGENTS.md`.
+Paths are relative to `apps/api` unless they start at the repository root.
 
 ## Read before touching
 
-- `src/app/modules/banking/` (authorization, sync, deletion, identity, own transfers, exchanges, totals, alerts) and `src/app/modules/notifications/`: `docs/banking-invariants.md`.
+- `src/app/modules/banking/` and `src/app/modules/notifications/`: `docs/banking-invariants.md`. Code that writes derived values (categories, own transfers, exchanges, recurring series, merchant keys): `docs/derived-data-writes.md`.
 - The reporting currency and amount conversion (`src/app/modules/banking/services/reporting-currency.service.ts`, `src/app/modules/banking/services/bank-transaction-amount-conversion.service.ts`): `docs/reporting-currency.md`.
 - `src/app/modules/file-import/`, and sync's handling of imported rows (`src/app/modules/banking/sync-sweep.ts`, the takeover in `src/app/modules/banking/services/bank-transaction-persistence.service.ts`): `docs/file-import.md`.
 - `src/app/modules/banking/categorization/`: `docs/categorization.md`.
-- `src/app/modules/banking/merchant-logos/` (identification, icon choice, brand trust rules, site fetcher, image route): `docs/merchant-logos.md`. Read for display and merchant spending totals only: categories, merchant keys and recurring payments never read it.
+- `src/app/modules/banking/merchant-logos/`: `docs/merchant-logos.md`. Logos are for display and merchant spending totals only: categories, merchant keys and recurring payments never read them.
+- `src/app/modules/auth/`, `src/app/core/session/` and `src/app/core/personal-access-token/`: `docs/auth-and-sessions.md`.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
-- E2E setup, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
-- `Dockerfile`, migrations: `docs/migrations-and-image.md`. CI workflows and release tags: root `docs/ci-and-images.md`.
-- Deploy scripts, host units and staging: root `ops/README.md`.
+- E2E setup, test helpers, seeds, Compose stacks, `NODE_ENV`, image consumers: `docs/e2e-and-seeding.md`.
+- `Dockerfile`, migrations: `docs/migrations-and-image.md`. Deploy scripts, host units and staging: root `ops/README.md`.
 - `src/app/modules/banking/mcp/` and the hosted MCP endpoint: `docs/mcp.md`.
 
-## Commands
+## Commands and traps
 
-- Setup: Node.js 26.x, Docker Engine 28+, `npm ci`. Development: `npm run start:dev` (starts `docker-compose.dev.yml`, then Nest in watch mode).
-- `src/app/core/config/config.schema.ts` is the source of truth for environment variables. Local secrets go in `.env.<env>.local`, never in Git.
-- Checks: `npm run lint:check`, `npm run format:check`, `npm run build`. `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
-- Unit: `npm run test`. E2E: `npm run test:e2e` (serial, recreates the test containers).
-- CI publishes `ghcr.io/tempo-co/api:pr-<n>` for every same-repo PR that changes `apps/api` and, after tests pass on `main`, tags that commit's image `:main`, which production deploys. The same run's web E2E uses that image, so an API contract change needs web E2E coverage in the same PR.
-- Jest unit tests match `src/**/*.spec.ts`; E2E tests match `test/**/*.e2e.spec.ts`. A spec named any other way (for example `*.spec.ts.ts`, or a `test/` file without `.e2e.`) silently never runs.
+- `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
+- Jest unit tests match `src/**/*.spec.ts` and E2E tests `test/**/*.e2e.spec.ts`; a spec named any other way silently never runs. Run known files with `npx jest --runTestsByPath <file> --runInBand`: a plain path pattern is a regex over absolute paths, so a word in the worktree path can select the whole suite.
+- The API E2E stack is shared by every worktree on a host: fixed project `tempo-api-test`, container names and ports, one `tempo_test` database, and its schema is dropped each time a test API starts. `npm run test:e2e` also runs `down -v` first, so check `docker compose ls --all` for another run before starting one, and never point `.env.test` at a database you care about.
+- `npm run db:seed` truncates and recreates the `public` schema: run it only against a disposable database.
+- The `input` sections of `src/app/modules/banking/categorization/providers/claude-categorization-contract.json` are generated (`npm run contract:input`); see `docs/categorization.md` before editing it.
 
-## Test conventions
+## Tests
 
 - E2E first: prove ownership, cascades, locking, delivery and queue behavior against real PostgreSQL, Redis and Mailpit. Unit tests are for ordering invariants before side effects, fault injection and pure functions over provider payloads; drop mocked wiring tests once E2E covers the property.
-- Reuse `test/setup/e2e.setup.ts` (`getApp`, `loginAgent`, `enableAiCategorizationE2e()` or `enableMerchantLogosE2e()` at module scope), `test/utils/wait-utils.ts` (`waitFor` until background workers finish), `test/utils/auth-utils.ts` (`createVerifiedAccount`, `expectValidationMessage`), `test/utils/email-utils.ts` (Mailpit), `scripts/seed-data/banking-fixtures.ts` (`BankingFixtures` with valid defaults; pass only the fields a test depends on) and `test/fixtures/bank-transaction.fixture.ts` for unit tests.
-- Use `test/utils/banking-utils.ts` (`createBankingOwner(app, {baseCurrency})`) for an isolated verified owner with one empty bank account. Choose the base currency explicitly, including `null` when the scenario needs it unset; create the transaction rows in the spec. Keep repeated mechanics local to a spec until multiple callers need the same contract.
-- Use the seeded account dedicated to a flow (`PW_CHANGE`, `PW_RESET`, `EMAIL_CHANGE`, `SESSION_TEST`) when a test changes account data, not the shared `VERIFIED` account. Feature scenarios use `BankingFixtures`, not assertions on the full `seedBankingData` dataset; account-deletion coverage uses that dataset to exercise populated cascades.
 - Route authentication (401, 403 `EMAIL_NOT_VERIFIED`, token-readable routes) is covered once in `test/e2e/auth/auth-guard.e2e.spec.ts`; add new protected routes to its tables.
-- Unit tests of services with many dependencies use named-dependency builders (as in `src/app/modules/banking/services/bank-authorization.service.spec.ts` and `src/app/modules/banking/services/banking-sync.service.spec.ts`), not positional `{} as never` lists. Use `it.each` tables for validation cases.
+- Unit tests of services with many dependencies use named-dependency builders, not positional `{} as never` lists. Use `it.each` tables for validation cases.
 - A TypeORM `select: false` column is `undefined` on every plain find, so asserting it is `undefined` proves nothing; assert a selected companion column or `addSelect` it.
 - Compare database read-backs, not the object `save` returned: `numeric` columns change string scale on the first read.
 
 ## Code rules
 
 - No `forwardRef`. When two modules need each other, extract a leaf module around the shared dependency (as `BankingAuthorizationStateModule` does) and delegate to the owning service instead of duplicating its logic.
-- When a service moves into `core`, move the smallest shared contract (response type, error code, message constant) down with it; don't leave `core` importing a feature's DTOs or message constants. Keep the HTTP shape and messages unchanged and type-check test files too, since the Nest build (`tsconfig.build.json`) excludes them.
+- When a service moves into `core`, move the smallest shared contract (response type, error code, message constant) down with it, and type-check the test files too: the Nest build (`tsconfig.build.json`) excludes them.
 - Use `@core/*` and `@modules/*` across features and relative imports inside one.
 - HTTP request and response shapes come from `@tempo/contracts` (root `packages/contracts`). Controllers declare return types with them, request DTO classes keep their validators and `implements` the contract type, and response shapes are not redefined in the API. Rerun `npm run contracts:build` after editing the package.
 - Expected races and refusals use the module's typed error codes (e.g. `BankingAuthorizationStateError('state_superseded')`) or Nest HTTP exceptions with a stated status, never a bare `Error`.
 - Every account-owned query includes the owner's account id.
-- Bearer-token requests are told apart by `isBearerRequest` both in `src/app/core/session/session.module.ts` (session middleware skipped) and in `src/app/modules/auth/guards/auth.guard.ts`. A new auth path needs the same discriminator at both, or token requests read and refresh sessions.
-- Every session-authenticated request other than GET, HEAD and OPTIONS must carry the exact origin of `WEB_BASE_URL`; `AuthGuard` refuses it with 403 otherwise. `SameSite=Strict` alone does not stop sibling hosts of the same site: `ts.net` is on the Public Suffix List, so every device on one tailnet shares a site. `loginAgent` in API E2E sends that Origin by default; `.unset('Origin')` drops it for a request.
-- `@Public()` routes other than GET, HEAD and OPTIONS (login, signup and its verification, password reset) need the same Origin, or another site could sign a victim in to an account it controls (login CSRF), and a JSON body: anything else gets 415. The API parses only JSON bodies (`bodyParser: false` plus `useBodyParser('json')` in `src/main.ts` and `test/setup/e2e.setup.ts`), so no route reads an HTML form post. API E2E calls to these routes outside `loginAgent` set `.set('Origin', webOrigin())`; web E2E fixtures send the app's Origin on their API calls.
-- Personal access tokens are revoked by revoke-all-other-sessions, password change/reset and account deletion; ordinary logout and single-session revocation keep them. Extend those flow tests when changing either side.
-- Emailed secrets (signup codes, reset and email-change tokens) are stored in Redis only as SHA-256 hashes under the per-account keys in `src/app/modules/account/auth-secret-keys.ts`: one live secret of each kind per account, consumed atomically. Password change, password reset and a confirmed email change invalidate the reset link; account deletion removes all three. Verifying an email never creates a session, and changing the email requires the current password. Extend those flow tests when changing either side.
 - Queue changes touch the `src/app/core/queue/` constants/module and the feature processor/service together. Jobs carry ids, never financial payloads.
-- Email templates live under `src/app/core/email/templates`; `nest-cli.json` copies them to `dist/`.
-
-## Pitfalls
-
-- `NODE_ENV=test` drops and recreates the schema on every boot (`dropSchema`). Anything seeded before a test-mode API is up gets wiped.
-- `npm run test:e2e*` runs `docker compose ... down -v --remove-orphans` on the test project. Never point `.env.test` at a database you care about.
-- `npm run db:seed` truncates and recreates the `public` schema. Run it only against a disposable database.
-- Compose files use fixed container names and env-interpolated host ports; stale containers or another worktree's stack block startup. Check `docker compose ls --all` before starting or tearing anything down.
-- Process environment overrides the env files, so an inherited `NODE_ENV` or `DB_*` silently retargets tests and seeds. Prefix with `NODE_ENV=test` when unsure.
-- The runtime image ships no env files and `NODE_ENV=production`; the image smoke check fails the build if an env file appears. Web E2E (`apps/web/docker-compose.e2e.yml`) passes its own synthetic config when it runs the image with `NODE_ENV=test`.
-- The `input` sections of `src/app/modules/banking/categorization/providers/claude-categorization-contract.json` are generated from the categorization input schema (`npm run contract:input`). See `docs/categorization.md` before editing it.
-- `dist/` and `coverage/` are generated.

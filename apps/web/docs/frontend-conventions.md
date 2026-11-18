@@ -17,7 +17,7 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
 - Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either.
 - The Toaster uses sonner's default lifetime and stacking. Sonner has no per-type duration, so split success/error lifetimes mean touching call sites.
-- When a hook changes which `sonner` methods it calls, update the `sonner` stub in hook-harness specs (see `docs/browser-and-e2e-testing.md`).
+- When a hook changes which `sonner` methods it calls, update the `sonner` stub in hook-harness specs (see `docs/e2e-helpers.md`).
 
 ## Colour and theme
 
@@ -68,6 +68,10 @@ Keep exact values and actions available through the chart's accessible table as 
 Pointer focus outlines on SVG marks are suppressed centrally, including Recharts z-index layers;
 ordinary controls and table links retain their keyboard focus indicators.
 
+Value axes take their ticks from `axisTicks` (`src/features/dashboard/utils/chart-axis.ts`): round steps from zero with
+about 6% headroom, passed as explicit `ticks` rather than `tickCount`. A Recharts `Bar` has no default fill: a `Cell`
+without `fill` takes the bar's, and with neither the bar renders black.
+
 ## Settings lists
 
 Pattern in `src/features/settings/components/settings-group.tsx` and the access-token settings:
@@ -99,6 +103,21 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 
 - Dialog state that Back should close lives in the host route's search schema; see `docs/browser-and-e2e-testing.md` for the close/back rule and the test.
 - Input limits that reach the URL use one exported constant for the schema and the input's `maxLength` (`BANK_TRANSACTION_SEARCH_MAX_LENGTH`).
+
+## Query caches
+
+- `invalidateBankDerivedData` (`src/features/banking/api/invalidate-bank-derived-data.ts`) lists every cache derived from bank transactions; a new derived query goes under one of its roots.
+- A finished sync marks that data stale only when a connection leaves its in-progress status or its `lastSyncedAt` advances (`hasSyncAdvanced` in `src/features/banking/api/use-get-all-bank-connections.ts`), never on a first read or an unchanged poll. Ingestion finishing does not mean categorization, conversion or matching has.
+- Aggregates have their own key root (`['bank-dashboard']`, `src/features/banking/api/aggregate-query-keys.ts`). Code that scans the transaction-list root with `getQueriesData` reads every entry as a page list and breaks on another shape; grep `getQueriesData` and `setQueriesData` before caching under an existing root.
+- A mutation that changes a server-filtered field can patch cached lists for an immediate result, then invalidates the derived data, since the server decides membership and totals (`src/features/banking/api/use-update-bank-transaction-category.ts`).
+- `keepPreviousData` is set per query. Where a period label or a total is shown, gate on `isPlaceholderData`, as the Transactions page does (`src/routes/bank-transactions/index.tsx`), so old figures never stand under a new label.
+- A Transactions filter that reaches the API is an entry in `BANK_TRANSACTION_FILTER_KEYS` (`src/features/banking/types/bank-transaction.ts`). That list feeds the request, the filter count, Clear filters and the chip labels, so a param read outside it reaches none of them.
+
+## Library traps
+
+- Tailwind `max-[N]:` variants apply below N (`width < N`), not at N.
+- Radix `ScrollArea` wraps its content in a `display: table` box with `min-width: 100%`. Inside a grid track with the default `min-width: auto`, wide content then widens the whole sheet; give the grid `grid-cols-1` and measure the ancestors, not only the scrolled element.
+- Capture a dialog's focus-return target from `event.currentTarget` in the click handler (the Details button in `src/features/banking/components/bank-connection-list.tsx`), never from `document.activeElement`: Safari on iPhone does not focus a tapped button.
 
 ## UI primitives
 

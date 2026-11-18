@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: Tempo
-description: A calm, considered interface for a private personal-finance overview and bank account tracker.
+description: A calm, considered interface for a personal-finance overview and bank account tracker.
 colors:
   # Brand palette (hex) + semantic tokens consumed by the app (HSL, theme-switched in src/index.css)
   ink: "#28252B"
@@ -171,7 +171,7 @@ components:
 
 ## Overview
 
-Tempo is a private personal-finance overview and account tracker: balances,
+Tempo is a personal-finance overview and account tracker: balances,
 transactions, categories, and cash movement in one calm view. The interface is quiet and
 trustworthy, data-forward without density for its own sake, and distinctive through
 proportion, spacing, and a small number of deliberate forms — never through effects.
@@ -182,6 +182,7 @@ Make state, task, and next action clear before adding visual personality.
 
 **The Quiet Signal Rule.** Tempo earns attention with hierarchy and relevance first. Color,
 motion, and ornament are supporting signals, never the content of the screen.
+What screens show: `docs/product-ui-rules.md`.
 
 ## Colors
 

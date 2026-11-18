@@ -17,14 +17,16 @@ PostgreSQL is the record; BullMQ only schedules work.
 | Sync upserts with the same input hash                               | Category kept, no AI work.                                                                                                               |
 | Sync changes a classification-relevant field                        | Hash updated, row back to `PENDING` unless `MANUAL`, keeping its category until the new one lands; a completed AI row is re-checked too. |
 | Sync changes only dates, the amount's size or other unhashed fields | Category and status kept, no AI work.                                                                                                    |
-| Row becomes an own transfer or currency exchange                    | `NOT_APPLICABLE`; never sent to the model.                                                                                               |
+| Row becomes an own transfer                                         | `COMPLETED` as `TRANSFER_IN` or `TRANSFER_OUT` by direction, set by the own-transfer rule without a model call; a manual category is kept. A row that stops being one goes back to `PENDING` with no category, enqueued after commit. |
+| Row becomes a currency exchange                                     | `NOT_APPLICABLE`; never sent to the model.                                                                                               |
 | Exchange recompute finds a row is no longer an exchange             | Back to `PENDING` unless `MANUAL`, enqueued after commit.                                                                                |
 | Owner sets a category                                               | `MANUAL`, applied hash = current hash, AI metadata cleared; later syncs never overwrite it.                                              |
 
 - Jobs carry transaction ids, never financial payloads. The worker claims a job's `PENDING`/`FAILED` rows in one guarded update and every write is conditional on id, expected input hash and non-manual source, so a stale job cannot overwrite newer data.
 - A row keeps its category, even one given for an older input, until a new one is applied: a claim never clears it and a failed call leaves it in place.
 - A `PROCESSING` claim older than 15 minutes counts as abandoned and can be claimed again. The worker renews the claims of the rows still waiting before every model call after the first, so a batch that runs many calls for longer than that is never taken by a second worker or replica.
-- A database commit and a Redis enqueue are not atomic: the hourly reconciliation sweep re-enqueues rows still waiting.
+- A database commit and a Redis enqueue are not atomic: the hourly reconciliation sweep re-enqueues rows still waiting, including rows written without an enqueue.
+- A categorize job's id hashes its row ids and input hashes. Finished and failed categorize jobs are removed, so an identical batch is dropped only while its job is still waiting, delayed or active.
 - `NEEDS_REVIEW` is an ordinary category value meaning "purpose unknown or evidence conflicts". `OTHER` means the evidence names a kind of spending no category covers; a merchant known only by its name, with nothing that pins down what it sells, is `NEEDS_REVIEW`. A provider or queue failure is neither: rows stay `PENDING`/`FAILED`.
 - Never erase a completed category (including historical `OTHER`) in a response shim, sync reset or worker path; guard resets with the row's current status and hash.
 
@@ -40,7 +42,7 @@ The processor-collected-business refresh migration updates only these two derive
 
 Read `CategorizationPipeline` before explaining a result. The categorization module splits into `CategorizationScheduler` (enqueue, job ids, retry delays, reconciliation), `CategorizationRowStore` (claim, guarded writes), `CategorizationContextLoader` (manual history, same-amount payments), `ManualCategoryService` (preview, manual category, follow-up) and `CategorizationPipeline` (the job itself).
 
-Own transfers and currency exchanges never reach the model, and `MANUAL` rows are never claimed or overwritten. Every other row goes to the model with its full sanitized input and the owner's history; there are no fixed rules and no second pass.
+Own transfers and currency exchanges never reach the model, and `MANUAL` rows are never claimed or overwritten. Every other row goes to the model with its full sanitized input and the owner's history; there are no fixed rules for the model's choice and no second pass.
 
 1. **History hints.** The owner's `MANUAL` picks for the same `merchantKey` go to the model as `previousManualCategories`: every category with its raw count and a few recent examples (amount, currency, date, sanitized note), one-off picks included, for the model to weigh. AI rows are never examples there. Outgoing payments also get `sameAmountPayments` (below).
 2. **One call per row group** (`BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE` rows per job, processor concurrency 1). With `AI_CATEGORIZATION_WEB_SEARCH_ENABLED`, the rows of a batch that allow the same search query (`toCategorizationSearch`: the same sanitized merchant name and location) form one group, and rows without merchant text share one group without search. Without it, the whole batch is one call without search.
@@ -77,12 +79,13 @@ Every model call goes to the Anthropic API with `ANTHROPIC_API_KEY`; there is no
 ## Input privacy
 
 - Send only redacted semantic fields: no account identifiers, balances, provider references or unbounded remittance. `sanitizeCategorizationText` strips labelled identifiers; test it at every serialized boundary (the categorizing and the search request) with separators, label variants, mixed alphanumerics and the next label right after punctuation, and assert useful merchant text survives.
+- A long opaque identifier becomes `[REDACTED]`, keeping only a glued leading word of one capital and three or more lower-case letters (`ExampleREF0012345` becomes `Example [REDACTED]`). A merchant glued to an ID in capitals reaches the model nameless.
 - Search queries are built in code from sanitized, normalized merchant text only, never IBANs, references, amounts or dates. The searching model sees nothing but that query.
 - Bank text is untrusted input; the contract tells the model to ignore instructions inside transaction fields.
 
 ## Applying a manual category
 
-`updateCategory` → `setManualCategory` updates the one row and fans out only to the ids passed in `applyToTransactionIds`. A follow-up for those ids is retried via the queue if it fails. Anything that writes categories outside this path (scripts, migrations) must mirror its field resets exactly and leave non-selected rows alone.
+How a correction reaches other rows, and the rules for every other path that writes categories, are in `docs/derived-data-writes.md`.
 
 ## Tests
 

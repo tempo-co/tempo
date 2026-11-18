@@ -1,6 +1,6 @@
 # Browser and E2E testing
 
-Recipes and traps for the Playwright suite under `test/`. Environment setup is in `docs/env-boundaries.md`.
+Recipes and traps for the Playwright suite under `test/`. Environment setup is in `docs/env-boundaries.md`; the shared helpers and the rules for reusing fixtures are in `docs/e2e-helpers.md`.
 
 ## Which specs need the stack
 
@@ -26,20 +26,19 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 ## Local runs and shared servers
 
 - The suite runs with one worker and `fullyParallel: false`; local runs do not retry. A pass that needed a retry is a flake; say so.
+- Every local worktree shares one E2E stack and port 5173. Start a local run only when `pgrep -af 'playwright test'` shows no other.
 - Parallel Playwright runs in one checkout overwrite `test-results/` and `playwright-report/`. Give each run its own `--output` directory and `PLAYWRIGHT_HTML_OUTPUT_DIR`.
 - Stop a background preview by PID or port. `pkill -f "<command line>"` also matches the shell running it.
 
 ## Flaky tests
 
-CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project and the first attempt's error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error and the retry's trace. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
+CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project and the first attempt's error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error; the trace (`on-first-retry`) records the retry, not the failure. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
 
-## Reusing fixtures
+## Contracts to assert exactly
 
-The helpers and when to use them are listed in `AGENTS.md` (E2E test helpers). Beyond that:
-
-- Password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.
-- Keep meaningful dates, amounts, category states, conversion evidence and linked identities explicit in the spec, not in fixture defaults.
-- Do not cast incomplete responses to a contract type or share a mutable fixture between tests. Do not use API entity factories or full database seeds to construct HTTP mocks: they represent different boundaries.
+- Paged lists: seed more rows than the default page, then assert the default page length, the full `total`, the next page's rows and that ids do not repeat across pages. A 200 proves nothing.
+- Server-side sort or filter: assert the request sent and the order of the rendered rows. A query that keeps previous data shows the old order while the new request is pending, so a sort that was never sent can look applied.
+- When splitting or moving specs, compare `npx playwright test --list --reporter=json` before and after: it counts cases (each table row, in both browser projects), not files.
 
 ## Fixtures and RED runs
 
@@ -47,10 +46,6 @@ The helpers and when to use them are listed in `AGENTS.md` (E2E test helpers). B
 - `test/` is compiled with `tsconfig.app.json` (`lib: ES2020`). Test code must fit that `lib`, not just the installed Node.
 - Prove RED by restoring the old source while keeping the new tests: `git checkout origin/main -- src`, run the spec, then `git checkout HEAD -- src`. Confirm `git status` shows `src` modified before trusting the run; a stash taken after committing the fix is empty and the "RED" run tests the fix. Order assertions so the one specific to the change fails first.
 - A RED run of a seeded spec leaves state behind (extra sessions, changed data). Reset the stack before the GREEN run.
-
-## Hook harness
-
-`createHookHarness` (see `AGENTS.md`) is for cache behaviour the UI cannot set up. A named import missing from a stub is `undefined` in the harness, so the failure-path test throws `TypeError` instead of the expected error; for `@/utils/api` or `sonner` add it to every stub of that module (for example `isAuthError: () => false`, `toast.error: () => undefined`). Current users: `grep -rl createHookHarness test`.
 
 ## Route mocks
 
@@ -79,8 +74,9 @@ The helpers and when to use them are listed in `AGENTS.md` (E2E test helpers). B
 - Dialog open state that should close on Back lives in a search param on the host route; see `month` in `src/routes/index.tsx`. Dialogs any page links to (recurring, merchants) take their params on the root route (`src/features/dashboard/components/app-dialogs.tsx`), so a link opens them over the current page with `to='.'`. Close with `router.history.back()` when `useCanGoBack()` is true and with `navigate({replace: true})` only for a deep link. Test: open, Escape, then `page.goBack()` must leave the page.
 - Constrain a dialog's inner `ScrollArea` with a definite content height (the recurring dialog) or the `min-h-0` grid in `docs/frontend-conventions.md` (transaction details); an unconstrained viewport grows off screen. Test real mouse-wheel scrolling and Chromium touch swipes with `Input.dispatchTouchEvent` and animation-frame-separated moves; `scrollIntoViewIfNeeded()` is programmatic and passes on a broken dialog. Await opening animations before measuring.
 - `test/e2e/settings/dialog-focus.spec.ts` dismisses every settings drawer with Escape and Cancel; extend that loop for drawer regressions (the `shouldScaleBackground` rule is in `docs/frontend-conventions.md`).
-- On phone viewports, the fixed tab bar and stacked toasts cover controls near the bottom. Use `focus()` plus `keyboard.press('Enter')`, or scroll the control to the centre first.
-- Wait out open animations (about 300 ms) before screenshots; a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
+- On phone viewports, the fixed tab bar and stacked toasts cover controls near the bottom. Use `focus()` plus `keyboard.press('Enter')`, or scroll the control to the centre first. `locator.click()`, `fill()` and `toBeInViewport()` pass even when another layer would take a real tap; to prove a tap lands, tap the box centre with `page.touchscreen.tap` or `page.mouse.click`.
+- Phone screenshots are viewport shots, not `fullPage`: a full-page capture paints the fixed tab bar in the middle of the list.
+- Wait out open animations before screenshots or measuring (`Promise.all(element.getAnimations().map((a) => a.finished))`, as `test/e2e/mobile-selection-controls.spec.ts` does); a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
 - Theme: the storage key is `vite-ui-theme`. Set it with `page.addInitScript` and assert the rendered theme; a different key leaves both captures in the default theme.
 - The Transactions Filters control scrolls only inside its Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`): the desktop panel's options pane and the phone sheet's body. Filter components rendered with `variant='pane'` have no scroll box of their own. `openTransactionFilter` in `test/utils/transaction-filters.ts` opens one filter on either layout.
 
@@ -90,10 +86,10 @@ The helpers and when to use them are listed in `AGENTS.md` (E2E test helpers). B
 
 ## WebKit project
 
-Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a second time in the `webkit` project, a new spec included without listing it. It uses the same desktop default viewport as Chromium; a spec reaches iPhone layouts by setting a phone width (390 or 320) itself, so a layout check belongs at those widths. Install the browser locally with `npx playwright install webkit --with-deps` and run one spec with `--project=webkit`.
+Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a second time in the `webkit` project, a new spec included without listing it. It uses the same desktop default viewport as Chromium; a spec reaches iPhone layouts by setting a phone width (390 or 320) itself, so a layout check belongs at those widths. Install the browsers locally with `npx playwright install chromium webkit` and run one spec with `--project=webkit`. CI adds `--with-deps`, which installs system packages as root.
 
 - WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
-- Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch is not covered.
+- Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch, native drag-and-drop and the Android on-screen keyboard are not covered; the owner checks them by hand on a device.
 - With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `test/e2e/home/where-you-stand.spec.ts` does.
 - WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
 - Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine.
