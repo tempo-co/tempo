@@ -151,6 +151,18 @@
         "apps/web/AGENTS.md"
       ],
       "reason": "an example file name for a naming rule"
+    },
+    {
+      "paths": [
+        "GLOSSARY.md",
+        "GLOSSARY-MAP.md",
+        "docs/adr/**"
+      ],
+      "docs": [
+        "AGENTS.md",
+        "docs/agents/**"
+      ],
+      "reason": "domain docs the domain-modeling skill creates on first use"
     }
   ]
 }
