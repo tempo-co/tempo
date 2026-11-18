@@ -45,3 +45,17 @@ This repository and everything attached to it (commits, PRs, comments, issues, C
 ## Docs
 
 Living docs (`README.md`, `AGENTS.md`, `docs/`, `ops/README.md`, each app's docs) state current durable facts: no dates, decision history or rename narration. Edit Markdown by hand.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the Linear project named Tempo; GitHub Issues are disabled. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, named as the roles. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` and `docs/adr/`, created when first needed. See `docs/agents/domain.md`.
