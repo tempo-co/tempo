@@ -57,7 +57,7 @@ export const useUpdateRecurringSeries = () => {
     try {
       await mutateAsync(change);
     } catch (error) {
-      if (!wasToasted(error)) toast.error('Could not save. Please try again.');
+      if (!wasToasted(error)) toast.error('Could not save. Try again.');
       return;
     }
     toast.success(

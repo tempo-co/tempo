@@ -71,9 +71,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
         },
         onError: (error) => {
           if (!wasToasted(error)) {
-            toast.error(
-              'Category changes could not be previewed. Nothing was saved. Please try again.',
-            );
+            toast.error('Category changes could not be previewed. Nothing was saved. Try again.');
           }
         },
       },

@@ -39,7 +39,7 @@ export function useChooseReportingCurrency() {
     try {
       return await mutateAsync(currency);
     } catch (error) {
-      if (!wasToasted(error)) toast.error('The currency could not be saved. Please try again.');
+      if (!wasToasted(error)) toast.error('The currency could not be saved. Try again.');
       throw error;
     }
   };

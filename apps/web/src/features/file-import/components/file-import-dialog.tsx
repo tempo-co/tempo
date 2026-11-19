@@ -335,7 +335,7 @@ function PreviewStep({
         return;
       }
       toast.error("Couldn't save this layout", {
-        description: 'Please try again in a moment.',
+        description: 'Try again in a moment.',
         id: 'bank-import-layout-confirm-failed',
       });
     }
