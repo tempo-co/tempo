@@ -8,6 +8,7 @@ Paths are relative to `apps/api` unless they start at the repository root.
 - The reporting currency and amount conversion (`src/app/modules/banking/services/reporting-currency.service.ts`, `src/app/modules/banking/services/bank-transaction-amount-conversion.service.ts`): `docs/reporting-currency.md`.
 - `src/app/modules/file-import/`, and sync's handling of imported rows (`src/app/modules/banking/sync-sweep.ts`, the takeover in `src/app/modules/banking/services/bank-transaction-persistence.service.ts`): `docs/file-import.md`.
 - `src/app/modules/banking/categorization/`: `docs/categorization.md`.
+- `src/app/modules/banking/bank-logos/`: `docs/bank-logos.md`.
 - `src/app/modules/banking/merchant-logos/`: `docs/merchant-logos.md`. Logos are for display and merchant spending totals only: categories, merchant keys and recurring payments never read them.
 - `src/app/modules/auth/`, `src/app/core/session/` and `src/app/core/personal-access-token/`: `docs/auth-and-sessions.md`.
 - Anything calling Enable Banking or Claude, or tests that mock them: `docs/provider-testing.md`.
@@ -38,5 +39,5 @@ Paths are relative to `apps/api` unless they start at the repository root.
 - Use `@core/*` and `@modules/*` across features and relative imports inside one.
 - HTTP request and response shapes come from `@tempo/contracts` (root `packages/contracts`). Controllers declare return types with them, request DTO classes keep their validators and `implements` the contract type, and response shapes are not redefined in the API. Rerun `npm run contracts:build` after editing the package.
 - Expected races and refusals use the module's typed error codes (e.g. `BankingAuthorizationStateError('state_superseded')`) or Nest HTTP exceptions with a stated status, never a bare `Error`.
-- Every account-owned query includes the owner's account id.
+- Every account-owned query includes the user's account id.
 - Queue changes touch the `src/app/core/queue/` constants/module and the feature processor/service together. Jobs carry ids, never financial payloads.

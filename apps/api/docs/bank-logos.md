@@ -4,7 +4,7 @@ Bank artwork comes from Enable Banking, in its original colours. The picker uses
 
 ## HTTP contract
 
-`GET /bank-connections/aspsps` and `GET /bank-connections` expose `logo.metadataUrl`, a same-origin path under `/bank-connections/aspsps/logos/:country/:name`. The name segment is UTF-8 encoded as base64url so punctuation and slashes survive reverse-proxy path normalization. The catalogue also keeps its original `logoUrl` for older clients. Current clients display the converted artwork, not the provider URL.
+`GET /bank-connections/aspsps` and `GET /bank-connections` expose `logo.metadataUrl`, a same-origin path under `/bank-connections/aspsps/logos/:country/:name`. The name segment is UTF-8 encoded as base64url so punctuation and slashes survive reverse-proxy path normalization. The catalogue also carries the provider's `logoUrl`; the web app shows the converted artwork and loads `logoUrl` directly only for a bank without `metadataUrl`.
 
 Metadata returns one PNG `url`, used in both themes. Conversion is lazy: opening a catalogue never downloads all its artwork, and clients request metadata only when a logo slot enters the viewport. Logo sources come from the country's bank catalog that authorization and sync also read, cached in Redis for an hour (`banking:aspsp-catalog:<country>`), so showing connected banks does not repeatedly list every supported bank. Saved connection reads themselves never contact the provider.
 
@@ -18,11 +18,11 @@ The metadata route and `/:algorithm/:hash` image route require a verified sessio
 - A near-white field has minimum RGB ≥235, channel spread ≤18 and alpha ≥245. Remove only its four-connected edge components, and only when it covers at least 65% of the whole boundary and three corners. Enclosed white and sparse white lettering on transparent edges stay intact.
 - Otherwise preserve RGB and alpha. Neutral ink and brand colours remain unchanged in both themes. Empty results are rejected.
 
-Pixel-affecting changes require a new converter version and visual comparison of the resulting artwork. No bank-specific exceptions or alternate logo sources exist.
+Pixel-affecting changes require a new converter version, because image URLs are immutable and cached for a year, and visual comparison of the resulting artwork. No bank-specific exceptions or alternate logo sources exist.
 
 ## Fetching and caching
 
-Only catalogue-provided URLs are logo sources; a request cannot supply a fetch target. `MerchantSiteFetcher` supplies the public-address, redirect, timeout and byte-limit checks; source images have a 1 MiB limit, with at most four fetch/conversion operations active per process. SVG uses the existing 256 KiB limit and five-second kill deadline. No browser request goes to Enable Banking for a current logo.
+Only catalogue-provided URLs are logo sources; a request cannot supply a fetch target. `MerchantSiteFetcher` supplies the public-address, redirect, timeout and byte-limit checks; source images have a 1 MiB limit, with at most four fetch/conversion operations active per process. SVG uses the existing 256 KiB limit and five-second kill deadline. No browser request goes to Enable Banking for a bank with `metadataUrl`.
 
 `LogoCache` is shared with merchant masks. It keys successful derivatives by source-byte SHA-256 plus converter version, deduplicates in-flight work, and atomically bounds each family at 256 entries with seven-day TTLs. A bank entry stores one PNG. A one-day source-URL index avoids downloading unchanged sources for each metadata read. An evicted image is rebuilt from its catalog source; a mismatching hash or unknown algorithm returns 404, never different pixels at an immutable URL. No banking or merchant database rows are changed.
 

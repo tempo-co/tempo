@@ -4,8 +4,6 @@ Tempo Web is the frontend of [Tempo](../../README.md): a personal-finance overvi
 
 ## Prerequisites
 
-Make sure you have the following installed on your system:
-
 - [Node.js](https://nodejs.org/) (26.x)
 - [Docker](https://www.docker.com/) (for the E2E stack)
 
@@ -17,12 +15,7 @@ $ npm ci
 
 ## Env setup
 
-Vite environment values are declared in `vite-env.d.ts`:
-
-- `VITE_API_URL`: API base URL used by `src/utils/api.ts`
-- `VITE_APP_URL`: app URL used by Playwright's web server and `baseURL`
-- `VITE_EMAIL_UI_URL`: Mailpit URL used by `test/utils/email-utils.ts`
-- `VITE_BASE_PATH` (optional, default `/`): base path the app and PWA manifest are served under
+Vite environment values are declared in `vite-env.d.ts`; what each does and how to pass them: `docs/env-boundaries.md`.
 
 ## Development
 
@@ -59,4 +52,4 @@ This uses `ghcr.io/tempo-co/api:main`. To test against an unmerged API change, s
 
 CI runs the same suite on every pull request that changes either app and on `main`, against fresh services and the API image built from the same commit ([CI and images](../../docs/ci-and-images.md)).
 
-`docker:test:up` / `docker:test:down` manage the E2E services; each E2E run starts from a pristine database, and the E2E setup authenticates seeded users via `test/auth.setup.ts`.
+`docker:test:down` deletes the database; `test:e2e:local` recreates and seeds it; `test/auth.setup.ts` logs the seeded users in.

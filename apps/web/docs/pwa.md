@@ -36,8 +36,7 @@ An installed shortcut keeps the old manifest's identity; remove it and install a
 
 ## iOS home-screen apps
 
-CI runs Chromium only (`playwright.config.ts` has one `chromium` project), so iOS behaviour is untested. Known gaps:
+On a web change every spec also runs in WebKit, except the saved-app specs that need the service worker (`testIgnore` in `playwright.config.ts`), and none runs as an installed iOS Home Screen app. Gaps:
 
-- `env(safe-area-inset-*)` is 0 unless the viewport meta has `viewport-fit=cover`; `index.html` does not set it.
 - Push and the app badge need the Home Screen app, notification permission and iOS 16.4 or later; check them on a device.
 - Installed web apps on iOS do not capture links. A bank login that hands off to another app usually returns to Safari, which has its own cookie jar. The API's bank callback is public and state-based, so the connection is saved, but Safari then shows the login page; reopen the home-screen app.
