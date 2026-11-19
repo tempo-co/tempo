@@ -33,7 +33,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
   const currency = merchant.baseCurrency;
   const hasIncome = toCents(merchant.received) > 0;
   const frequency = formatFrequency(merchant);
-  const excluded = merchant.excluded.missingBaseAmount + merchant.excluded.unknownDirection;
+  const excluded = merchant.excluded.missingBaseAmount;
 
   return (
     <div className='grid grid-cols-1 gap-6'>
@@ -109,7 +109,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
         </dl>
         {excluded > 0 && (
           <p className='text-xs text-muted-foreground'>
-            {countLabel(excluded, 'transaction')} without a converted amount or direction{' '}
+            {countLabel(excluded, 'transaction')} without a converted amount{' '}
             {excluded === 1 ? 'is' : 'are'} not counted.
           </p>
         )}

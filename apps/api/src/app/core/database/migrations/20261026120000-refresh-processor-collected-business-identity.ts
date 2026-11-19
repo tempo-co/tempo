@@ -1,5 +1,6 @@
 import {MigrationInterface, QueryRunner} from 'typeorm';
 
+import type {CreditDebitIndicator} from '../../../modules/banking/bank-transaction-direction';
 import {extractProcessorCollectedBusinessName} from '../../../modules/banking/bank-transaction-display';
 import {deriveBankTransactionTextColumns} from '../../../modules/banking/bank-transaction-text-columns';
 
@@ -7,7 +8,7 @@ type CollectedBusinessRow = {
 	id: string;
 	description: string;
 	counterpartyName: string | null;
-	creditDebitIndicator: string | null;
+	creditDebitIndicator: CreditDebitIndicator;
 };
 
 /** Refreshes only derived identity backed by explicit business evidence in a processor-collected direct debit. */

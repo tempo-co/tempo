@@ -1,5 +1,6 @@
 import {MigrationInterface, QueryRunner} from 'typeorm';
 
+import type {CreditDebitIndicator} from '../../../modules/banking/bank-transaction-direction';
 import {deriveBankTransactionTextColumns} from '../../../modules/banking/bank-transaction-text-columns';
 import {isAccountHolderName} from '../../../modules/banking/own-transfer/own-transfer-detection';
 
@@ -7,7 +8,7 @@ type CounterpartyRow = {
 	id: string;
 	description: string | null;
 	counterpartyName: string;
-	creditDebitIndicator: string | null;
+	creditDebitIndicator: CreditDebitIndicator;
 	remittanceInformation: string | null;
 	bankTransactionDescription: string | null;
 	ownTransferEvidence: string | null;

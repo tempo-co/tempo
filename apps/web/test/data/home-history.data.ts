@@ -313,7 +313,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
       spending: money(spending),
       net: money(income - spending),
       count: inRange.length,
-      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      excluded: {missingBaseAmount: 0},
     };
   };
 
@@ -343,7 +343,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
         net: money(sum(incomeOf(month)) - sum(spending)),
         ownTransfers: '0.00',
       },
-      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      excluded: {missingBaseAmount: 0},
       daily: [],
       baseline: {
         months: baselineMonths,
@@ -482,14 +482,12 @@ export function homeRecurring() {
 }
 
 /**
- * Two to review, one failed and one without a direction, which is also one of the two to review: 3 rows need the
- * owner, the Transactions badge.
+ * Two to review and one failed: 3 rows need the owner, the Transactions badge.
  */
 export const HOME_REVIEW_COUNTS: BankTransactionReviewCounts = {
   needsReview: 2,
   categorizationFailed: 1,
   categorizing: 5,
-  unknownDirection: 1,
   missingBaseAmount: 3,
   needsAttention: 3,
 };

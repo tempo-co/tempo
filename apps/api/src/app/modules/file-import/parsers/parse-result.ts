@@ -1,3 +1,5 @@
+import type {CreditDebitIndicator} from '@tempo/contracts';
+
 /** Refusals a parser can reach on its own; the parent adds size, timeout and account refusals. */
 export const PARSE_REFUSAL_CODES = [
 	'unsupported_format',
@@ -36,7 +38,7 @@ export type NormalizedRow = {
 	valueDate: string | null;
 	transactionDate: string | null;
 	amount: string;
-	creditDebitIndicator: 'CRDT' | 'DBIT';
+	creditDebitIndicator: CreditDebitIndicator;
 	currency: string;
 	balanceAfter: string | null;
 	bankReference: string | null;

@@ -1,5 +1,6 @@
 import type {
 	BankTransactionCashFlowTreatment,
+	BankTransactionDirection,
 	BankTransactionFinancialEventSource,
 	BankTransactionFinancialEventType,
 } from '@tempo/contracts';
@@ -23,7 +24,6 @@ export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = {
 	INCOME: 'INCOME',
 	EXPENSE: 'EXPENSE',
 	INTERNAL: 'INTERNAL',
-	UNKNOWN: 'UNKNOWN',
 } as const satisfies {[T in BankTransactionCashFlowTreatment]: T};
 
 export type CurrencyExchangeMarkerInput = {
@@ -107,17 +107,11 @@ function hasForeignExchangeSpotCode(code: string | null | undefined, subCode: st
 
 export function getBankTransactionCashFlowTreatment(
 	financialEventType: string | null | undefined,
-	direction: string | null | undefined,
+	direction: BankTransactionDirection,
 	ownTransferEvidence?: string | null,
 ): BankTransactionCashFlowTreatment {
 	if (financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE || ownTransferEvidence) {
 		return BANK_TRANSACTION_CASH_FLOW_TREATMENTS.INTERNAL;
 	}
-	if (direction === BANK_TRANSACTION_CASH_FLOW_TREATMENTS.INCOME) {
-		return BANK_TRANSACTION_CASH_FLOW_TREATMENTS.INCOME;
-	}
-	if (direction === BANK_TRANSACTION_CASH_FLOW_TREATMENTS.EXPENSE) {
-		return BANK_TRANSACTION_CASH_FLOW_TREATMENTS.EXPENSE;
-	}
-	return BANK_TRANSACTION_CASH_FLOW_TREATMENTS.UNKNOWN;
+	return direction;
 }

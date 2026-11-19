@@ -4,6 +4,7 @@ import type {
 	BankTransactionCategorizationStatus,
 	BankTransactionFinancialEventSource,
 	BankTransactionFinancialEventType,
+	CreditDebitIndicator,
 } from './transactions.js';
 import type {BankTransactionCategory} from './categories.js';
 
@@ -151,7 +152,7 @@ export type BankConnectionTransaction = {
 	valueDate: string | null;
 	amount: string;
 	currency: string;
-	creditDebitIndicator: string | null;
+	creditDebitIndicator: CreditDebitIndicator;
 	transactionStatus: string | null;
 	description: string | null;
 	displayDescription: string;

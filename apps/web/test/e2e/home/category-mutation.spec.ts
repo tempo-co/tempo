@@ -46,7 +46,7 @@ function observeList(
 }
 
 for (const filters of [
-  {cashFlows: ['UNKNOWN']},
+  {cashFlows: ['INCOME']},
   {categoryStatuses: ['FAILED']},
   {categoryStatuses: ['CATEGORIZING']},
 ] satisfies BankTransactionFilterParams[]) {
@@ -88,7 +88,7 @@ for (const filters of [
 test('category save refreshes a drill that did not previously contain the transaction', async () => {
   const updated = {id: 'example-transaction', category: 'OTHER', categoryStatus: 'COMPLETED'};
   const {client, hook} = mutationHarness(updated);
-  const key = bankQueryKeys.transactions({cashFlows: ['UNKNOWN']}, undefined);
+  const key = bankQueryKeys.transactions({cashFlows: ['INCOME']}, undefined);
   client.setQueryData(key, pagesOf({transactions: [], total: 0}));
   // The synthetic response changes without changing the server filter key.
   const unsubscribe = observeList(client, key, () => ({transactions: [updated], total: 1}));

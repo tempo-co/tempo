@@ -12,7 +12,6 @@ for (const [value, label] of [
   ['INTERNAL', 'Internal movements'],
   ['CURRENCY_EXCHANGE', 'Currency exchange'],
   ['OWN_TRANSFER', 'Own transfer'],
-  ['UNKNOWN', 'Unknown direction'],
 ]) {
   test(`cash flow ${label} is selectable and renders real filtered results`, async ({page}) => {
     await page.goto('/bank-transactions');
@@ -38,7 +37,7 @@ for (const [value, label] of [
     } else {
       for (const row of list.transactions) {
         await expect(page.getByTestId(`bank-transaction-row-${row.id}`)).toBeVisible();
-        if (value === 'SPENDING' || value === 'INCOME' || value === 'UNKNOWN') {
+        if (value === 'SPENDING' || value === 'INCOME') {
           expect(row.financialEventType).not.toBe('CURRENCY_EXCHANGE');
           expect(row.ownTransfer).toBeNull();
         }
@@ -64,14 +63,14 @@ test('mobile pickers share combined drills, preserve category status and clear a
 }) => {
   await page.setViewportSize({width: 390, height: 844});
   const params = new URLSearchParams({
-    cashFlows: JSON.stringify(['SPENDING', 'INCOME', 'UNKNOWN']),
+    cashFlows: JSON.stringify(['SPENDING', 'INCOME']),
     baseAmount: 'MISSING',
     categoryStatuses: JSON.stringify(['FAILED']),
   });
   await page.goto(`/bank-transactions?${params}`);
   await expect(page.getByRole('button', {name: 'Remove filter: Not categorized'})).toBeVisible();
   const drawer = await openTransactionFilter(page, 'Cash flow');
-  for (const label of ['Spending', 'Income', 'Unknown direction']) {
+  for (const label of ['Spending', 'Income']) {
     await expect(drawer.getByRole('option', {name: label, exact: true})).toHaveAttribute(
       'data-filter-selected',
       'true',
@@ -80,7 +79,7 @@ test('mobile pickers share combined drills, preserve category status and clear a
   await drawer.getByRole('option', {name: 'Internal movements', exact: true}).click();
   await expect
     .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
-    .toEqual(['SPENDING', 'INCOME', 'INTERNAL', 'UNKNOWN']);
+    .toEqual(['SPENDING', 'INCOME', 'INTERNAL']);
   expect(new URL(page.url()).searchParams.get('baseAmount')).toBe('MISSING');
   expect(JSON.parse(new URL(page.url()).searchParams.get('categoryStatuses')!)).toEqual(['FAILED']);
   await drawer.getByRole('button', {name: 'Clear all', exact: true}).click();

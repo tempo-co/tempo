@@ -1,6 +1,7 @@
 import {
 	BANK_TRANSACTION_DIRECTIONS,
 	type BankTransactionDirection,
+	type CreditDebitIndicator,
 	toBankTransactionDirection,
 } from '../bank-transaction-direction';
 import {
@@ -11,11 +12,12 @@ import {
 	normalizeBankTransactionText,
 } from '../bank-transaction-display';
 
-type MerchantKeyTransaction = {
+type MerchantKeyText = {
 	description?: string | null;
 	counterpartyName?: string | null;
-	creditDebitIndicator?: string | null;
 };
+
+type MerchantKeyTransaction = MerchantKeyText & {creditDebitIndicator: CreditDebitIndicator};
 
 const TRAILING_TERMINAL_NUMBER_PATTERN = /\s+\d{1,5}$/;
 // "Example Shop via Example Pay" or "Example Shop by Example Pay": banks cut the processor tail of a counterparty
@@ -48,7 +50,7 @@ const TRAILING_SEPARATOR_PATTERN = /[\s,;]+$/;
 export function getBankTransactionMerchantKey(transaction: MerchantKeyTransaction): string | null {
 	const description = normalizeBankTransactionText(transaction.description);
 	const entityName = getEntityName(transaction, description);
-	const direction = toBankTransactionDirection(transaction.creditDebitIndicator?.trim() ?? null);
+	const direction = toBankTransactionDirection(transaction.creditDebitIndicator);
 	const name = entityName ?? extractTransferPayeeName(description, direction) ?? description;
 	const normalizedName = name?.toLowerCase();
 	if (!normalizedName || isPaymentProcessorName(normalizedName)) return null;
@@ -73,13 +75,13 @@ function extractTransferPayeeName(description: string | null, direction: string)
 }
 
 /** Whether the merchant key comes from a "Transfer to/from" description, which names a person, not a merchant. */
-export function isTransferDescriptionMerchantKey(transaction: MerchantKeyTransaction): boolean {
+export function isTransferDescriptionMerchantKey(transaction: MerchantKeyText): boolean {
 	const description = normalizeBankTransactionText(transaction.description);
 	return !getEntityName(transaction, description) && /^transfer (?:to|from)\s+\S/i.test(description ?? '');
 }
 
 // A card merchant comes first, then an explicitly collected business, then the counterparty without its processor tail.
-function getEntityName(transaction: MerchantKeyTransaction, description: string | null): string | null {
+function getEntityName(transaction: MerchantKeyText, description: string | null): string | null {
 	const counterpartyName =
 		normalizeBankTransactionText(transaction.counterpartyName) ??
 		(description ? extractStructuredCounterpartyName(description) : null);

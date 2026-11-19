@@ -308,7 +308,7 @@ test('Home’s text actions and Load more buttons share one style with the month
       paymentCount: 45,
       averagePayment: '11.11',
       firstDate: '2025-01-02',
-      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      excluded: {missingBaseAmount: 0},
       variants: [],
     }),
   );

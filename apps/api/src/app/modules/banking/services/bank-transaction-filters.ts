@@ -31,7 +31,6 @@ export const SQL_INTERNAL = `("transaction"."financialEventType" IS NOT DISTINCT
 /** Debits, including payments to other people, plus refund credits, which reduce spending. */
 export const SQL_SPENDING = `(NOT ${SQL_INTERNAL} AND (${INDICATOR_SQL} = 'DBIT' OR (${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" = '${REFUND}')))`;
 export const SQL_INCOME = `(NOT ${SQL_INTERNAL} AND ${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" IS DISTINCT FROM '${REFUND}')`;
-export const SQL_UNKNOWN_DIRECTION = `(NOT ${SQL_INTERNAL} AND COALESCE(${INDICATOR_SQL}, '') NOT IN ('CRDT', 'DBIT'))`;
 export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT')`;
 export const SQL_MISSING_BASE_AMOUNT = `(NOT ${SQL_INTERNAL} AND ${SQL_BASE_AMOUNT} IS NULL)`;
 
@@ -55,7 +54,6 @@ const CASH_FLOW_SQL: Record<BankTransactionCashFlowFilterValue, string> = {
 	INTERNAL: SQL_INTERNAL,
 	CURRENCY_EXCHANGE: `("transaction"."financialEventType" = '${BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE}')`,
 	OWN_TRANSFER: '("transaction"."ownTransferEvidence" IS NOT NULL)',
-	UNKNOWN: SQL_UNKNOWN_DIRECTION,
 };
 
 export const SQL_CATEGORIZATION_FAILED = `("transaction"."categoryStatus" = '${FAILED}' AND "transaction"."category" IS NULL)`;
@@ -70,8 +68,8 @@ const anyOf = (conditions: string[]) => `(${conditions.join(' OR ')})`;
 
 /** An income source as the breakdown groups it: the merchant key, else the display name. */
 export const SQL_INCOME_SOURCE = `COALESCE(NULLIF("transaction"."merchantKey", ''), "transaction"."displayDescription")`;
-/** Rows to review, failed or without a direction: what the owner still has to settle, each row once. */
-export const SQL_NEEDS_ATTENTION = `("transaction"."category" = 'NEEDS_REVIEW' OR ${SQL_CATEGORIZATION_FAILED} OR ${SQL_UNKNOWN_DIRECTION})`;
+/** Rows to review or whose categorization failed: what the owner still has to settle, each row once. */
+export const SQL_NEEDS_ATTENTION = `("transaction"."category" = 'NEEDS_REVIEW' OR ${SQL_CATEGORIZATION_FAILED})`;
 
 /** Owner-scoped ledger query; transaction and bankAccount aliases are shared with the filters below. */
 export function createOwnerScopedQuery(repository: Repository<BankTransaction>, accountId: string) {

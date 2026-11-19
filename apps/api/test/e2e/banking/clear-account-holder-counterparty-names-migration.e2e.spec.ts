@@ -22,7 +22,7 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 		]);
 		const debit = bookedRow('2026-08-20', '-5.00');
 		const holderKey = 'EXPENSE:example account holder';
-		const [fee, salutation, topUp, undirected, copied] = await fixtures.createTransactions(bank, [
+		const [fee, salutation, topUp, copied] = await fixtures.createTransactions(bank, [
 			{
 				...debit,
 				counterpartyName: HOLDER,
@@ -49,14 +49,6 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 				remittanceInformation: 'Example top-up',
 				displayDescription: 'Example top-up',
 				merchantKey: 'INCOME:example account holder',
-			},
-			{
-				...debit,
-				creditDebitIndicator: null,
-				counterpartyName: 'Example Shop',
-				description: 'Example note',
-				displayDescription: 'Example note',
-				merchantKey: 'UNKNOWN:example shop',
 			},
 			{
 				...debit,
@@ -87,7 +79,7 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 				displayDescription: HOLDER,
 			}),
 		];
-		const targets = [fee, salutation, topUp, undirected, copied];
+		const targets = [fee, salutation, topUp, copied];
 		// An owner decision on a series of rows the migration rewrites.
 		const hides = ds.getRepository(RecurringSeriesHide);
 		const hide = await hides.save({
@@ -149,12 +141,6 @@ describe('ClearAccountHolderCounterpartyNames migration', () => {
 					description: 'Example top-up',
 					displayDescription: 'Example top-up',
 					merchantKey: 'INCOME:example top-up',
-				},
-				[undirected.id]: {
-					counterpartyName: null,
-					description: 'Example note',
-					displayDescription: 'Example note',
-					merchantKey: 'UNKNOWN:example note',
 				},
 				[copied.id]: {
 					counterpartyName: 'Example Shop',

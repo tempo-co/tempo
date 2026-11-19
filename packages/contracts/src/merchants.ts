@@ -82,7 +82,7 @@ export type MerchantGroup = MerchantGroupListItem & {
 	/** `paid` over `paymentCount`, null without payments. */
 	averagePayment: string | null;
 	firstDate: string | null;
-	excluded: {unknownDirection: number; missingBaseAmount: number};
+	excluded: {missingBaseAmount: number};
 	/** Most spent first. */
 	variants: MerchantGroupVariant[];
 };

@@ -3,7 +3,7 @@ import {z} from 'zod';
 
 import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';
 
-import {BANK_TRANSACTION_DIRECTIONS} from '../bank-transaction-direction';
+import {BANK_TRANSACTION_DIRECTIONS, CREDIT_DEBIT_INDICATORS} from '../bank-transaction-direction';
 import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './bank-transaction-categorization.constants';
 
 /**
@@ -42,7 +42,7 @@ const classifiedFields = {
 	valueDate: nullableText,
 	amount: text,
 	currency: text,
-	creditDebitIndicator: nullableText,
+	creditDebitIndicator: z.enum(CREDIT_DEBIT_INDICATORS),
 	direction,
 	transactionType: text,
 	bankTransactionCode: nullableText,

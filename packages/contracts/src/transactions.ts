@@ -11,8 +11,12 @@ export type BankTransactionRecurring = {
 	payments: Array<Pick<BankTransaction, 'id' | 'transactionDate' | 'bookingDate' | 'amount' | 'currency'>>;
 };
 
-export const BANK_TRANSACTION_DIRECTIONS = ['INCOME', 'EXPENSE', 'UNKNOWN'] as const;
+export const BANK_TRANSACTION_DIRECTIONS = ['INCOME', 'EXPENSE'] as const;
 export type BankTransactionDirection = (typeof BANK_TRANSACTION_DIRECTIONS)[number];
+
+/** The stored direction code: every row is a credit or a debit (ISO 20022 `CdtDbtInd`). */
+export const CREDIT_DEBIT_INDICATORS = ['CRDT', 'DBIT'] as const;
+export type CreditDebitIndicator = (typeof CREDIT_DEBIT_INDICATORS)[number];
 
 export const BANK_TRANSACTION_TYPES = [
 	'CARD_PAYMENT',
@@ -50,7 +54,7 @@ export const BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES = ['RULE'] as const;
 export type BankTransactionFinancialEventSource = (typeof BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES)[number];
 
 /** How a row counts in cash flow. */
-export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = ['INCOME', 'EXPENSE', 'INTERNAL', 'UNKNOWN'] as const;
+export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = ['INCOME', 'EXPENSE', 'INTERNAL'] as const;
 export type BankTransactionCashFlowTreatment = (typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[number];
 
 export const OWN_TRANSFER_EVIDENCE = ['IBAN', 'NAME', 'MANUAL'] as const;
@@ -82,7 +86,6 @@ export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
 	// The two kinds of internal movement, for narrowing `INTERNAL`.
 	'CURRENCY_EXCHANGE',
 	BANK_TRANSACTION_OWN_TRANSFER_FILTER,
-	'UNKNOWN',
 ] as const;
 export type BankTransactionCashFlowFilterValue = (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
 
@@ -135,7 +138,7 @@ export type BankTransaction = {
 	counterpartyName: string | null;
 	amount: string;
 	currency: string;
-	creditDebitIndicator: string | null;
+	creditDebitIndicator: CreditDebitIndicator;
 	direction: BankTransactionDirection;
 	transactionType: BankTransactionType;
 	transactionStatus: string | null;
@@ -201,7 +204,7 @@ export type BankTransactionFilter = {
 	merchantGroup?: string;
 	/** Only the rows of one income source, by its breakdown part's `key`. */
 	incomeSource?: string;
-	/** Only the rows review counts count as `needsAttention`: to review, failed to categorize or without a direction. */
+	/** Only the rows review counts count as `needsAttention`: to review or failed to categorize. */
 	needsAttention?: true;
 };
 

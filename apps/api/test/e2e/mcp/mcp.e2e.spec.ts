@@ -308,7 +308,7 @@ describe('Hosted MCP', () => {
 					spending: '7.50',
 					income: '0.00',
 					net: '-7.50',
-					excluded: {unknownDirection: 0, missingBaseAmount: 0},
+					excluded: {missingBaseAmount: 0},
 				});
 				expect(await call('search_transactions', {filters: {bankAccountIds: [otherBankAccount.id]}})).toEqual({
 					transactions: [],
@@ -338,7 +338,6 @@ describe('Hosted MCP', () => {
 					needsReview: 0,
 					categorizationFailed: 1,
 					categorizing: 0,
-					unknownDirection: 0,
 					missingBaseAmount: 1,
 					needsAttention: 1,
 				});
@@ -491,7 +490,7 @@ describe('Hosted MCP', () => {
 					income: '0.00',
 					net: '-59.94',
 					count: 6,
-					excluded: {unknownDirection: 0, missingBaseAmount: 0},
+					excluded: {missingBaseAmount: 0},
 				});
 				const narrowed = {...seriesFilters, bookingDate: {from: '2025-10-01'}};
 				expect(await call('search_transactions', {filters: narrowed})).toMatchObject({total: 3});

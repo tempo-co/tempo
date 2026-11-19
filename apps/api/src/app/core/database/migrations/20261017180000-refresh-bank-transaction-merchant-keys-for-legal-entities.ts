@@ -1,5 +1,6 @@
 import {MigrationInterface, QueryRunner} from 'typeorm';
 
+import type {CreditDebitIndicator} from '../../../modules/banking/bank-transaction-direction';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray} from '../../../modules/banking/banking.utils';
 import {getBankTransactionMerchantKey} from '../../../modules/banking/categorization/bank-transaction-merchant-key';
 
@@ -7,7 +8,7 @@ type MerchantKeyRow = {
 	id: string;
 	description: string | null;
 	counterpartyName: string | null;
-	creditDebitIndicator: string | null;
+	creditDebitIndicator: CreditDebitIndicator;
 };
 
 /** Recomputes stored merchant keys after the key started dropping legal forms and entity words, so one business's

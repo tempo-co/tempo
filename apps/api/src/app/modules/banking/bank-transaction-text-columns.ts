@@ -1,10 +1,11 @@
+import type {CreditDebitIndicator} from './bank-transaction-direction';
 import {getBankTransactionDisplayDescription} from './bank-transaction-display';
 import {getBankTransactionMerchantKey} from './categorization/bank-transaction-merchant-key';
 
 type BankTransactionText = {
 	description?: string | null;
 	counterpartyName?: string | null;
-	creditDebitIndicator?: string | null;
+	creditDebitIndicator: CreditDebitIndicator;
 };
 
 /** The stored columns derived from a transaction's text. Sync and seed data both write them through this. */

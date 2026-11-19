@@ -56,7 +56,7 @@ export type BankTransactionSummary = {
 	baseCurrency: string | null;
 	totals: {spending: string; income: string; net: string; ownTransfers: string};
 	/** Rows in the period left out of the totals. */
-	excluded: {unknownDirection: number; missingBaseAmount: number};
+	excluded: {missingBaseAmount: number};
 	daily: SpendingPaceDay[];
 	baseline: {
 		months: string[];
@@ -170,9 +170,8 @@ export type BankTransactionReviewCounts = {
 	needsReview: number;
 	categorizationFailed: number;
 	categorizing: number;
-	unknownDirection: number;
 	missingBaseAmount: number;
-	/** Rows to review, failed or without a direction, each counted once: the groups above can overlap. */
+	/** Rows to review or whose categorization failed, each counted once: the groups above can overlap. */
 	needsAttention: number;
 };
 
@@ -183,5 +182,5 @@ export type BankTransactionTotals = {
 	income: string;
 	net: string;
 	count: number;
-	excluded: {unknownDirection: number; missingBaseAmount: number};
+	excluded: {missingBaseAmount: number};
 };
