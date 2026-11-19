@@ -12,6 +12,7 @@ import {CategorizationPipeline} from './categorization-pipeline.service';
 import {CategorizationRowStore} from './categorization-row-store.service';
 import {CategorizationScheduler} from './categorization-scheduler.service';
 import {ManualCategoryService} from './manual-category.service';
+import {BraveWebSearchClient} from './providers/brave-web-search.client';
 import {ClaudeBankTransactionCategorizationProvider} from './providers/claude-bank-transaction-categorization.provider';
 
 @Module({
@@ -20,6 +21,7 @@ import {ClaudeBankTransactionCategorizationProvider} from './providers/claude-ba
 		TypeOrmModule.forFeature([BankTransaction]),
 	],
 	providers: [
+		BraveWebSearchClient,
 		ClaudeBankTransactionCategorizationProvider,
 		{provide: BANK_TRANSACTION_CATEGORIZATION_PROVIDER, useExisting: ClaudeBankTransactionCategorizationProvider},
 		CategorizationScheduler,
