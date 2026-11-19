@@ -100,6 +100,54 @@ test('does not send an unreachable session check to login', async ({page}) => {
   await expect(page.getByRole('button', {name: 'Try again'})).toBeVisible();
 });
 
+test.describe('offline shell', () => {
+  test.use({storageState: {cookies: [], origins: []}});
+
+  test('takes over a tab whose page arrives while the shell activates', async ({page, context}) => {
+    await context.route(`${API_URL}/accounts/me`, (route) =>
+      fulfillJson(route, {message: 'Unauthorized'}, 401),
+    );
+    // Installing caches index.html by name; holding that request keeps the shell installing.
+    let releaseInstall!: () => void;
+    const installHeld = new Promise<void>((resolve) => (releaseInstall = resolve));
+    await context.route('**/index.html', async (route) => {
+      await installHeld;
+      await route.fallback();
+    });
+    let releasePage!: () => void;
+    const pageHeld = new Promise<void>((resolve) => (releasePage = resolve));
+    try {
+      await page.goto('/login');
+      await expect
+        .poll(() =>
+          page.evaluate(
+            async () => !!(await navigator.serviceWorker.getRegistration())?.installing,
+          ),
+        )
+        .toBe(true);
+      // The second tab's request starts before the shell is active; its page arrives after.
+      const other = await context.newPage();
+      let markPageRequested!: () => void;
+      const pageRequested = new Promise<void>((resolve) => (markPageRequested = resolve));
+      await other.route('**/login', async (route) => {
+        markPageRequested();
+        await pageHeld;
+        await route.fallback();
+      });
+      const opening = other.goto('/login');
+      await pageRequested;
+      releaseInstall();
+      await waitForOfflineShell(page);
+      releasePage();
+      await opening;
+      await waitForOfflineShell(other);
+    } finally {
+      releaseInstall();
+      releasePage();
+    }
+  });
+});
+
 test.describe('saved app', () => {
   test.use({storageState: VERIFIED_USER_AUTH_FILE});
 
