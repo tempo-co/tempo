@@ -360,17 +360,50 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		});
 	});
 
+	it('looks up the merchant when the first answer leaves an outgoing card payment in review without asking for a lookup', async () => {
+		const {provider, create, search} = setup();
+		search.mockResolvedValue(SEARCH_RESULTS);
+		create
+			.mockResolvedValueOnce(response([classification({category: 'NEEDS_REVIEW', evidenceType: 'INSUFFICIENT'})]))
+			.mockResolvedValueOnce(
+				response([classification({category: 'SHOPPING', evidenceType: 'MERCHANT_IDENTITY_ONLY'})]),
+			);
+		const [result] = await categorizeOn(provider, 'search');
+		expect(result).toMatchObject({category: 'SHOPPING', searchTrace: {queries: [SEARCH_QUERY]}});
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY]]);
+		expect(create).toHaveBeenCalledTimes(2);
+	});
+
 	it.each([
 		['the first answer asks for no lookup', {lookUpMerchant: false, kind: 'search', category: 'FOOD_AND_DRINK'}],
+		[
+			'a payment that is not by card is left in review without asking for a lookup',
+			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', transactionType: 'TRANSFER'},
+		],
+		[
+			'an incoming card payment is left in review without asking for a lookup',
+			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', direction: 'INCOME'},
+		],
 		['the group has no merchant query', {lookUpMerchant: true, kind: 'plain', category: 'FOOD_AND_DRINK'}],
 		[
 			'the first answer files it as a transfer to a person',
 			{lookUpMerchant: true, kind: 'search', category: 'TRANSFER_OUT'},
 		],
-	] as const)('keeps the first answer without searching when %s', async (_case, {lookUpMerchant, kind, category}) => {
+	] as const)('keeps the first answer without searching when %s', async (_case, testCase) => {
+		const {lookUpMerchant, kind, category} = testCase;
 		const {provider, create, search} = setup();
 		create.mockResolvedValue(response([classification({category})], {lookUpMerchant}));
-		const [result] = await categorizeOn(provider, kind);
+		const [result] = await provider.categorize(
+			[
+				{
+					...input(),
+					transactionType: 'transactionType' in testCase ? testCase.transactionType : 'CARD_PAYMENT',
+					direction: 'direction' in testCase ? testCase.direction : 'EXPENSE',
+				},
+			],
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+			kind === 'search' ? {searchQuery: SEARCH_QUERY} : {},
+		);
 		expect(result).toMatchObject({category});
 		expect(result).not.toHaveProperty('searchTrace');
 		expect(search).not.toHaveBeenCalled();

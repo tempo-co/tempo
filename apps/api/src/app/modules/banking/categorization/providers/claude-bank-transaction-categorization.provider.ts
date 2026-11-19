@@ -14,6 +14,7 @@ import {ConfigurationService} from '@core/config/config.service';
 import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';
 
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
+import {BANK_TRANSACTION_TYPES} from '../../bank-transaction-type';
 import {isHostname, safeErrorName} from '../../banking.utils';
 import {type MerchantSearch, toCategorizationRequestTransaction} from '../bank-transaction-categorization-input.schema';
 import {
@@ -135,7 +136,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 
 	/**
 	 * Categorizes a row group on the Anthropic API. With a `searchQuery`, a first answer that asks to look up the
-	 * merchant makes code run that query, and only it, on a web search API; a second call then categorizes with the top
+	 * merchant, or leaves an outgoing card payment in review, makes code run that query, and only it, on a web search API; a second call then categorizes with the top
 	 * results, and its answer is the one returned. A failed or empty search keeps the first answer. The categorizing
 	 * calls offer no server tool, because the API cannot hold a model that sees the full input to the code-built query;
 	 * they only offer the StructuredOutput tool that carries the answer.
@@ -153,9 +154,16 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		}));
 		try {
 			const first = await this.callCategorize(categories, requestTransactions, transactions);
+			// An outgoing card payment left in review is one a search may settle, whether or not the model asked: a card
+			// pays a merchant account.
+			const cardPaymentInReview =
+				transactions.every(
+					({transactionType, direction}) =>
+						transactionType === BANK_TRANSACTION_TYPES.CARD_PAYMENT && direction === 'EXPENSE',
+				) && first.results.some(({category}) => category === 'NEEDS_REVIEW');
 			const lookUp =
 				searchQuery &&
-				first.lookUpMerchant &&
+				(first.lookUpMerchant || cardPaymentInReview) &&
 				!first.results.some(({category}) => PERSON_TRANSFER_CATEGORIES.has(category));
 			const merchantSearch = lookUp ? await this.searchMerchant(searchQuery) : undefined;
 			if (!merchantSearch) return first.results;
