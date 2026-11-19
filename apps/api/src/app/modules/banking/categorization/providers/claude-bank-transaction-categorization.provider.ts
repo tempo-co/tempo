@@ -99,6 +99,8 @@ const CLAUDE_API = 'claude-api';
 type SearchTrace = Omit<BankTransactionCategorizationSearchTrace, 'evidenceType'>;
 
 type ClaudeClient = Pick<Anthropic, 'messages'>;
+/** What a request is for and how many rows or merchants it carries, for its usage log line. */
+type ApiCall = {kind: 'categorize' | 'merchant search' | 'merchant identification'; items: number};
 type RequestInput = {correlationId: string};
 type ClaudeEffort = NonNullable<NonNullable<MessageCreateParamsNonStreaming['output_config']>['effort']>;
 const API_TIMEOUT_MS = 90_000;
@@ -163,6 +165,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		try {
 			const search = searchQuery && this.hasApi() ? await this.searchMerchant(searchQuery) : undefined;
 			const answer = await this.callStructuredOutput(
+				{kind: 'categorize', items: transactions.length},
 				this.createStructuredOutputRequest(
 					this.createCategorizationSystem(categories),
 					{
@@ -191,16 +194,21 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		searchQuery: string,
 	): Promise<{finding?: BankTransactionCategorizationSearchFinding; trace: SearchTrace} | undefined> {
 		try {
-			const response = await this.createMessage({
-				...this.createRequest(
-					SEARCH_INSTRUCTIONS,
-					{query: searchQuery},
-					searchFindingResponseJsonSchema,
-					SEARCH_MAX_TOKENS,
-					SEARCH_EFFORT,
-				),
-				tools: [{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']}],
-			});
+			const response = await this.createMessage(
+				{kind: 'merchant search', items: 1},
+				{
+					...this.createRequest(
+						SEARCH_INSTRUCTIONS,
+						{query: searchQuery},
+						searchFindingResponseJsonSchema,
+						SEARCH_MAX_TOKENS,
+						SEARCH_EFFORT,
+					),
+					tools: [
+						{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']},
+					],
+				},
+			);
 			const searches = response.usage.server_tool_use?.web_search_requests ?? 0;
 			const invocations = response.content.filter((block) => block.type === 'server_tool_use');
 			// One search at most, counted both ways: an invocation the tool refused is not billed but still a second try.
@@ -267,6 +275,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		};
 		try {
 			const text = await this.callApi(
+				{kind: 'merchant identification', items: merchants.length},
 				this.createRequest(merchantContract.instructions, input, merchantContract.schema, 16384),
 			);
 			return this.parseMerchants(this.parseJson(text), merchants);
@@ -337,8 +346,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	}
 
 	/** Sends a request that offers no tools and returns its reply text; a reply that used a tool is invalid. */
-	private async callApi(request: MessageCreateParamsNonStreaming): Promise<string> {
-		const response = await this.createMessage(request);
+	private async callApi(call: ApiCall, request: MessageCreateParamsNonStreaming): Promise<string> {
+		const response = await this.createMessage(call, request);
 		if (response.content.some((block) => !REPLY_BLOCKS.has(block.type)) || this.ranServerTool(response))
 			throw this.invalidResponseError();
 		return this.replyText(response);
@@ -348,8 +357,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	 * Sends a request that offers only the StructuredOutput tool and returns that tool call's input. The reply must
 	 * stop to call it exactly once; a reply without the call, with another tool or a server tool is invalid.
 	 */
-	private async callStructuredOutput(request: MessageCreateParamsNonStreaming): Promise<unknown> {
-		const response = await this.createMessage(request, 'tool_use');
+	private async callStructuredOutput(call: ApiCall, request: MessageCreateParamsNonStreaming): Promise<unknown> {
+		const response = await this.createMessage(call, request, 'tool_use');
 		const calls = response.content.filter((block) => block.type === 'tool_use');
 		if (
 			calls.length !== 1 ||
@@ -369,8 +378,12 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		return !!this.apiKey || !!this.client;
 	}
 
-	/** Sends one API request and returns a complete reply, one that ended with the expected stop reason. */
+	/**
+	 * Sends one API request and returns a complete reply, one that ended with the expected stop reason. Logs every reply
+	 * the API billed, cut-off ones included, with counts only: never request or reply content.
+	 */
 	private async createMessage(
+		call: ApiCall,
 		request: MessageCreateParamsNonStreaming,
 		stopReason: 'end_turn' | 'tool_use' = 'end_turn',
 	): Promise<Message> {
@@ -383,9 +396,21 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				timeout: API_TIMEOUT_MS,
 				logLevel: 'off',
 			}));
+		const startedAt = Date.now();
 		const response = await client.messages.create(request);
+		this.logUsage(call, request, response, Date.now() - startedAt);
 		if (response.stop_reason !== stopReason) throw this.invalidResponseError();
 		return response;
+	}
+
+	private logUsage(call: ApiCall, request: MessageCreateParamsNonStreaming, response: Message, ms: number): void {
+		const {usage} = response;
+		this.logger.log(
+			`Claude ${call.kind} call: items ${call.items}, ${request.model} ${request.output_config?.effort ?? 'default'}, ` +
+				`${ms} ms, stop ${response.stop_reason}, input ${usage.input_tokens}, ` +
+				`cache read ${usage.cache_read_input_tokens ?? 0}, cache write ${usage.cache_creation_input_tokens ?? 0}, ` +
+				`output ${usage.output_tokens}, web searches ${usage.server_tool_use?.web_search_requests ?? 0}`,
+		);
 	}
 
 	private replyText(response: Message): string {
