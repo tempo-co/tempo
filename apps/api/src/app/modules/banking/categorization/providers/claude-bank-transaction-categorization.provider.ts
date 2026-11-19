@@ -1,5 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type {Message, MessageCreateParamsNonStreaming, Tool} from '@anthropic-ai/sdk/resources/messages';
+import type {
+	Message,
+	MessageCreateParamsNonStreaming,
+	TextBlockParam,
+	Tool,
+} from '@anthropic-ai/sdk/resources/messages';
 import {Injectable, Logger, Optional} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategoryDefinition} from '@tempo/contracts';
 import {z} from 'zod';
@@ -155,13 +160,15 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			...toCategorizationRequestTransaction(transaction),
 			correlationId: String(index),
 		}));
-		const input = this.createInput(categories, requestTransactions);
 		try {
 			const search = searchQuery && this.hasApi() ? await this.searchMerchant(searchQuery) : undefined;
 			const answer = await this.callStructuredOutput(
 				this.createStructuredOutputRequest(
-					CATEGORIZATION_INSTRUCTIONS,
-					search?.finding ? {...input, searchFinding: search.finding} : input,
+					this.createCategorizationSystem(categories),
+					{
+						transactions: requestTransactions,
+						...(search?.finding && {searchFinding: search.finding}),
+					},
 					categorizationResponseJsonSchema,
 					CATEGORIZATION_MAX_TOKENS,
 				),
@@ -285,7 +292,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	}
 
 	private createRequest(
-		system: string,
+		system: string | TextBlockParam[],
 		input: object,
 		schema: object,
 		maxTokens: number,
@@ -309,7 +316,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	 * through a json_schema format. The tool's input is not constrained to the schema; the caller validates it.
 	 */
 	private createStructuredOutputRequest(
-		system: string,
+		system: TextBlockParam[],
 		input: object,
 		schema: object,
 		maxTokens: number,
@@ -527,14 +534,23 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		return normalized && normalized.length <= merchantContract.maxBrandLength ? normalized : null;
 	}
 
-	private createInput(
-		categories: readonly BankTransactionCategoryDefinition[],
-		transactions: readonly object[],
-	): object {
-		return {
-			categories: categories.map(({value, label, description}) => ({value, label, description})),
-			transactions,
-		};
+	/**
+	 * The categorizing call's system prompt: the instructions, then the category definitions as JSON. Rendered after
+	 * the tools, they are the same for every call, so the cache breakpoint on the last block caches tools, instructions
+	 * and categories for five minutes; the transactions follow in the user message. The prefix must stay
+	 * byte-identical across calls, so nothing per request goes into it.
+	 */
+	private createCategorizationSystem(categories: readonly BankTransactionCategoryDefinition[]): TextBlockParam[] {
+		return [
+			{type: 'text', text: CATEGORIZATION_INSTRUCTIONS},
+			{
+				type: 'text',
+				text: JSON.stringify({
+					categories: categories.map(({value, label, description}) => ({value, label, description})),
+				}),
+				cache_control: {type: 'ephemeral'},
+			},
+		];
 	}
 
 	private assertUniqueCorrelationIds(transactions: readonly RequestInput[]): void {

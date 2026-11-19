@@ -23,6 +23,11 @@ export const MIN_SAME_AMOUNT_PAYMENTS = 2;
 /** Same-amount payments to one payee the model sees, per source. */
 export const MAX_SAME_AMOUNT_MANUAL_PAYMENTS = 5;
 export const MAX_SAME_AMOUNT_AI_PAYMENTS = 10;
+/** Earlier payments with the same counterparty the model sees, newest first, per direction relative to the row. */
+export const MAX_COUNTERPARTY_HISTORY_SAME_DIRECTION = 6;
+export const MAX_COUNTERPARTY_HISTORY_OPPOSITE_DIRECTION = 4;
+/** How far before a row's own date its counterparty history reaches. */
+export const COUNTERPARTY_HISTORY_MONTHS = 24;
 
 const text = z.string().max(MAX_FIELD_LENGTH);
 const nullableText = text.nullable();
@@ -69,8 +74,16 @@ const sameAmountPaymentSchema = z
 	.object({date: nullableText, category, source: z.enum(['MANUAL', 'AI']), text: nullableText})
 	.strict();
 
-/** Hints from the owner's history. They are context for the model, never part of the input hash. */
+const ownerBankSchema = z.object({name: text, country: text}).strict();
+
+const counterpartyHistoryEntrySchema = z
+	.object({date: text, amount: text, currency: text, direction, category})
+	.strict();
+
+/** Hints from the owner's bank and history. They are context for the model, never part of the input hash. */
 const hintFields = {
+	/** The bank that holds the owner's account and its country, which tell which local businesses are likely. */
+	ownerBank: ownerBankSchema.optional(),
 	/**
 	 * Every category the owner chose manually for the same merchant, most frequent first, with how often and the
 	 * amounts, currencies, dates and notes of their most recent choices. Only a hint for the model; never applied
@@ -86,6 +99,15 @@ const hintFields = {
 		.array(sameAmountPaymentSchema)
 		.min(MIN_SAME_AMOUNT_PAYMENTS)
 		.max(MAX_SAME_AMOUNT_MANUAL_PAYMENTS + MAX_SAME_AMOUNT_AI_PAYMENTS)
+		.optional(),
+	/**
+	 * Earlier categorized payments in either direction with the same counterparty (the same IBAN or merchant name)
+	 * within the months before this one, newest first per direction, leaving out those in `sameAmountPayments`.
+	 * Reveals subscriptions, refunds and money paid back.
+	 */
+	counterpartyHistory: z
+		.array(counterpartyHistoryEntrySchema)
+		.max(MAX_COUNTERPARTY_HISTORY_SAME_DIRECTION + MAX_COUNTERPARTY_HISTORY_OPPOSITE_DIRECTION)
 		.optional(),
 };
 
@@ -123,6 +145,8 @@ export function toSearchFinding(value: unknown): BankTransactionCategorizationSe
 }
 export type PreviousManualCategory = z.infer<typeof previousManualCategorySchema>;
 export type SameAmountPayment = z.infer<typeof sameAmountPaymentSchema>;
+export type OwnerBank = z.infer<typeof ownerBankSchema>;
+export type CounterpartyHistoryEntry = z.infer<typeof counterpartyHistoryEntrySchema>;
 
 type ClassifiedField = keyof typeof classifiedFields;
 

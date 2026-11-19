@@ -4,6 +4,8 @@ import type {BankTransactionDirection} from '../bank-transaction-direction';
 
 export type {
 	BankTransactionCategorizationInput,
+	CounterpartyHistoryEntry,
+	OwnerBank,
 	PreviousManualCategory,
 	SameAmountPayment,
 } from './bank-transaction-categorization-input.schema';

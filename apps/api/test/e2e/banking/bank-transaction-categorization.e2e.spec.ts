@@ -30,13 +30,17 @@ import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD} from '../../../scripts/seed-data/seed.constants';
 import {
 	CATEGORIZATION_E2E_AI_TRANSACTION_ID,
+	CATEGORIZATION_E2E_COUNTERPARTY_TRANSACTION_ID,
 	CATEGORIZATION_E2E_FAILURE_TRANSACTION_ID,
+	CATEGORIZATION_E2E_GOVERNMENT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_MANUAL_HISTORY_TRANSACTION_ID,
 	CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID,
 	CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_OTHER_ACCOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_REPEAT_MERCHANT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID,
+	CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID,
 	CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID,
 	CATEGORIZATION_E2E_WEB_TRANSACTION_ID,
 	seedBankTransactionCategorizationData,
@@ -303,6 +307,73 @@ describe('Bank transaction categorization integration', () => {
 			noNote('2026-07-01', 'HOUSING_AND_UTILITIES'),
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID)?.sameAmountPayments).toBeUndefined();
+	});
+
+	it("sends the owner's bank and earlier payments with the same counterparty in both directions", async () => {
+		const ids = [
+			CATEGORIZATION_E2E_COUNTERPARTY_TRANSACTION_ID,
+			CATEGORIZATION_E2E_GOVERNMENT_TRANSACTION_ID,
+			CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID,
+			CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID,
+		];
+		await app.get(CategorizationScheduler).enqueueForTransactions(ids);
+		await Promise.all(
+			ids.map((id) =>
+				waitFor(
+					() => bankTransactionRepository.findOneByOrFail({id}),
+					(row) => row.categoryStatus === 'COMPLETED',
+				),
+			),
+		);
+		const inputs = new Map(
+			categorizeSpy.mock.calls.flatMap(([transactions]) =>
+				transactions.map((input) => [input.correlationId, input]),
+			),
+		);
+		const gymPayment = inputs.get(CATEGORIZATION_E2E_COUNTERPARTY_TRANSACTION_ID);
+		const councilRefund = inputs.get(CATEGORIZATION_E2E_GOVERNMENT_TRANSACTION_ID);
+		for (const input of [gymPayment, councilRefund])
+			expect(input?.ownerBank).toEqual({name: 'ABN AMRO', country: 'NL'});
+
+		const entry = (date: string, amount: string, direction: 'EXPENSE' | 'INCOME', category: string) => ({
+			date,
+			amount,
+			currency: 'EUR',
+			direction,
+			category,
+		});
+		expect(gymPayment?.sameAmountPayments).toEqual([
+			{date: '2026-08-01', category: 'SUBSCRIPTIONS', source: 'AI', text: 'Example Gym'},
+			{date: '2026-09-01', category: 'SUBSCRIPTIONS', source: 'AI', text: 'Example Gym'},
+		]);
+		// Newest first: the six newest payments to the gym that sameAmountPayments does not already show, one matched
+		// by its IBAN alone, and the four newest payments back from it. Never a later or uncategorized
+		// row, nor another owner's.
+		expect(gymPayment?.counterpartyHistory).toEqual([
+			entry('2026-09-15', '12.00', 'INCOME', 'REFUND'),
+			entry('2026-07-01', '-31.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2026-06-01', '-32.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2026-05-01', '-33.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2026-04-01', '-34.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2026-03-01', '-35.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2026-02-01', '-36.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2025-12-01', '13.00', 'INCOME', 'REFUND'),
+			entry('2025-06-01', '14.00', 'INCOME', 'REFUND'),
+			entry('2025-01-01', '15.00', 'INCOME', 'REFUND'),
+		]);
+		// Money received sees the owner's payments to the same body, back to 24 months before its own date.
+		expect(councilRefund?.counterpartyHistory).toEqual([
+			entry('2026-03-01', '-120.00', 'EXPENSE', 'TAXES_AND_GOVERNMENT'),
+			entry('2024-10-05', '-119.00', 'EXPENSE', 'TAXES_AND_GOVERNMENT'),
+		]);
+		// An IBAN the owner's rows show under two merchants is a processor's: each shop's history is its own rows, never
+		// the other shop's on the same account.
+		expect(inputs.get(CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID)?.counterpartyHistory).toEqual([
+			entry('2026-09-05', '-6.00', 'EXPENSE', 'FOOD_AND_DRINK'),
+		]);
+		expect(inputs.get(CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID)?.counterpartyHistory).toEqual([
+			entry('2026-09-10', '-14.00', 'EXPENSE', 'ENTERTAINMENT'),
+		]);
 	});
 
 	it("sends the owner's one-off manual choice in the next row's hint, for the model to weigh", async () => {
