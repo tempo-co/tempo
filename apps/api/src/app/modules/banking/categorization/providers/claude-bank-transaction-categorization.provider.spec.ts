@@ -231,17 +231,57 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		);
 	});
 
-	it('sends a byte-identical cached prefix on every categorizing call', async () => {
-		const {provider, create} = setup();
-		create.mockResolvedValue(response([classification()]));
-		await provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS);
-		await provider.categorize(
-			[{...input('transaction-2'), amount: '-99.00', ownerBank: {name: 'Example Bank', country: 'BE'}}],
-			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-		);
-		const [[first], [second]] = create.mock.calls;
-		expect(JSON.stringify([second.tools, second.system])).toBe(JSON.stringify([first.tools, first.system]));
-		expect(second.messages).not.toEqual(first.messages);
+	it('sends a byte-identical cached prefix on every categorizing call and logs its cache use', async () => {
+		const {provider, create} = setup({
+			AI_CATEGORIZATION_MODEL: 'claude-sonnet-5-5',
+			AI_CATEGORIZATION_EFFORT: 'medium',
+		});
+		const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+		const withUsage = (usage: Record<string, number>) => ({
+			...response([classification()]),
+			usage: {...usage, server_tool_use: {web_search_requests: 0}},
+		});
+		create
+			.mockResolvedValueOnce(
+				withUsage({
+					input_tokens: 410,
+					cache_creation_input_tokens: 3020,
+					cache_read_input_tokens: 0,
+					output_tokens: 150,
+				}),
+			)
+			.mockResolvedValueOnce(
+				withUsage({
+					input_tokens: 395,
+					cache_creation_input_tokens: 0,
+					cache_read_input_tokens: 3020,
+					output_tokens: 140,
+				}),
+			);
+		try {
+			await provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS);
+			await provider.categorize(
+				[{...input('transaction-2'), amount: '-99.00', ownerBank: {name: 'Example Bank', country: 'BE'}}],
+				BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+			);
+			const [[first], [second]] = create.mock.calls;
+			expect(JSON.stringify([second.tools, second.system])).toBe(JSON.stringify([first.tools, first.system]));
+			expect(second.messages).not.toEqual(first.messages);
+			// One line per call with counts only: the second call reads the prefix the first one wrote.
+			const lines = log.mock.calls.map(([message]) => String(message));
+			expect(lines).toEqual([
+				expect.stringMatching(
+					new RegExp(
+						'^Claude categorize call: items 1, claude-sonnet-5-5 medium, ' +
+							`\\d+ ms, stop tool_use, input 410, cache read 0, cache write 3020, output 150, web searches 0$`,
+					),
+				),
+				expect.stringMatching(/input 395, cache read 3020, cache write 0, output 140, web searches 0$/),
+			]);
+			expect(lines.join('\n')).not.toContain('Example Bank');
+		} finally {
+			log.mockRestore();
+		}
 	});
 
 	it('keeps the shared contract limits equal to the app limits', () => {
