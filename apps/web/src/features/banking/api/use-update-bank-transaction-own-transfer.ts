@@ -61,7 +61,7 @@ export const useUpdateBankTransactionOwnTransfer = () => {
         if (input.override === 'UNMARKED') return describeUnmarked(input.counterpartId);
         return 'Back to automatic recognition.';
       },
-      error: 'Own-transfer setting could not be saved. Please try again.',
+      error: 'Own-transfer setting could not be saved. Try again.',
     });
 
   return {updateBankTransactionOwnTransfer, isPending};

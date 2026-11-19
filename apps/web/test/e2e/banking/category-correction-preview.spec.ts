@@ -97,8 +97,7 @@ async function mockCorrection(page: Page, preview: BankTransactionCategoryImpact
   return state;
 }
 
-const PREVIEW_FAILED =
-  'Category changes could not be previewed. Nothing was saved. Please try again.';
+const PREVIEW_FAILED = 'Category changes could not be previewed. Nothing was saved. Try again.';
 const categorySelect = (page: Page) => page.getByRole('combobox', {name: 'Transaction category'});
 const impactDialog = (page: Page) => page.getByRole('dialog', {name: 'Update other transactions?'});
 
@@ -330,7 +329,7 @@ for (const viewport of [
       {
         failure: 'failed',
         status: 500,
-        message: 'Transaction category could not be saved. Please try again.',
+        message: 'Transaction category could not be saved. Try again.',
       },
       {failure: 'rate-limited', status: 429, message: 'Rate limit exceeded'},
     ]) {

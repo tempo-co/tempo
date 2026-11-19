@@ -51,7 +51,7 @@ const logoutLocks = (page: Page) =>
     return {held: count(held), pending: count(pending)};
   });
 const nameSaveOutcome = (page: Page) =>
-  page.getByText(/^(Name saved\.|Your name could not be saved\. Please try again)$/);
+  page.getByText(/^(Name saved\.|Your name could not be saved\. Try again)$/);
 
 /** Brings the tab back into view, which refetches the page's data as switching apps does. */
 const refocus = (page: Page) =>
