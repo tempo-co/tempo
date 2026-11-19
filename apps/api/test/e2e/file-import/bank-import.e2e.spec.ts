@@ -1116,7 +1116,11 @@ describe('Bank imports', () => {
 		const {owner, agent} = await createOwner();
 		await drop(agent, [ARCHIVE, OTHER_STATEMENT]).expect(201);
 		const connection = (await fileConnection(owner))!;
+		const rows = await ownerRows(owner);
 
+		// Imported files have nowhere else to be kept, so removing them always needs the DELETE confirmation.
+		await agent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(400);
+		expect(await ownerRows(owner)).toEqual(rows);
 		await agent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
 
 		expect(await ownerRows(owner)).toEqual([]);

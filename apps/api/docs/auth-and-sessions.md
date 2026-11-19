@@ -4,7 +4,7 @@ Rules for `src/app/modules/auth/`, `src/app/core/session/` and `src/app/core/per
 
 ## Bearer tokens and sessions
 
-- Bearer-token requests are told apart by `isBearerRequest` both in `src/app/core/session/session.module.ts` (session middleware skipped) and in `src/app/modules/auth/guards/auth.guard.ts`. A new auth path needs the same discriminator at both, or token requests read and refresh sessions.
+- Token requests are told apart in two places that must agree. `src/app/core/session/session.module.ts` skips the session middleware when `isMcpRequest` or `isBearerRequest` matches; `src/app/modules/auth/guards/auth.guard.ts` handles `@McpTokenOnly()` routes, then `isBearerRequest`, before any session check. A new auth path needs a matching discriminator at both, or token requests read and refresh sessions.
 - Personal access tokens are revoked by password change, password reset and account deletion, which all call `revokeAllCredentials` in `src/app/core/session/session.service.ts`. Logout, revoking one session and revoking all other sessions (`DELETE /auth/sessions`) keep them. Extend those flow tests (`test/e2e/auth/personal-access-tokens.e2e.spec.ts`, `test/e2e/auth/sessions.e2e.spec.ts`) when changing either side.
 - Emailed secrets (signup codes, reset and email-change tokens) are stored in Redis only as SHA-256 hashes under the per-account keys in `src/app/modules/account/auth-secret-keys.ts`: one live secret of each kind per account, consumed atomically. Password change, password reset and a confirmed email change end the reset link; account deletion removes all three. Verifying an email never creates a session, and changing the email requires the current password. Extend those flow tests when changing either side.
 

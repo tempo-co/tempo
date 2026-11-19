@@ -38,14 +38,10 @@ import {
 	BankingConnectionLock,
 	BankingConnectionLockService,
 } from '@modules/banking/services/banking-connection-lock.service';
-import {
-	BANK_CONNECTION_PROVIDERS,
-	BANK_CONNECTION_STATUSES,
-	BANK_SYNC_STATUSES,
-	FILE_CONNECTION_ASPSP,
-} from '@modules/banking/services/banking-sync.constants';
+import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
 import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
+import {fileAccountProviderId, lockFileConnection} from '@modules/banking/services/file-connection';
 import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 import {ReportingCurrencyService} from '@modules/banking/services/reporting-currency.service';
 import {FinalSyncDays, finalSyncDays} from '@modules/banking/sync-coverage';
@@ -1156,36 +1152,10 @@ export class BankImportService {
 		return {accounts, fileConnection};
 	}
 
-	/**
-	 * The owner's imported-files connection, created on the first import and locked for this transaction. The
-	 * partial unique index makes two concurrent first imports end up with one connection; the row lock serializes
-	 * imports, undo and removal of the connection.
-	 */
+	/** The owner's imported-files connection (`lockFileConnection`), locked for this transaction. */
 	private async lockFileConnection(manager: EntityManager, ownerId: Account['id']): Promise<BankConnection> {
-		const connections = manager.getRepository(BankConnection);
-		await connections
-			.createQueryBuilder()
-			.insert()
-			.into(BankConnection)
-			.values({
-				account: {id: ownerId},
-				provider: BANK_CONNECTION_PROVIDERS.FILE,
-				aspspName: FILE_CONNECTION_ASPSP.name,
-				aspspCountry: FILE_CONNECTION_ASPSP.country,
-				status: BANK_CONNECTION_STATUSES.AUTHORIZED,
-				syncStatus: BANK_SYNC_STATUSES.IDLE,
-				nextSyncAt: null,
-				consentValidUntil: null,
-				providerSessionId: null,
-			})
-			.orIgnore()
-			.updateEntity(false)
-			.execute();
-		const connection = await connections.findOne({
-			where: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-			lock: {mode: 'pessimistic_write'},
-		});
-		// Only a removal committing between the two statements gets here.
+		const connection = await lockFileConnection(manager, ownerId);
+		// Only a removal committing between creating and locking it gets here.
 		if (!connection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 		return connection;
 	}
@@ -1615,7 +1585,7 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 		};
 	}
 	return {
-		providerAccountId: `file:${identifier}:${currency}`,
+		providerAccountId: fileAccountProviderId(identifier, currency),
 		hashSeed: `${identifier}:${currency}`,
 		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
 	};
