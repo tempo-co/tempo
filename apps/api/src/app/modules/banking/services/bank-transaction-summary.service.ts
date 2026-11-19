@@ -55,7 +55,6 @@ import {
 	SQL_OWN_TRANSFER_DEBIT,
 	SQL_PERIOD_START,
 	SQL_SPENDING,
-	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
 	findFirstBookingDate,
@@ -183,7 +182,7 @@ export class BankTransactionSummaryService {
 				net: formatCents(income - spending),
 				ownTransfers: formatCents(parseCents(period.ownTransfers)),
 			},
-			excluded: {unknownDirection: period.unknownDirection, missingBaseAmount: period.missingBaseAmount},
+			excluded: {missingBaseAmount: period.missingBaseAmount},
 			daily: pace.daily,
 			baseline: {
 				months: baselineMonths,
@@ -337,13 +336,11 @@ export class BankTransactionSummaryService {
 			.select('COUNT(*)::int', 'count')
 			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spending')
 			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'income')
-			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
 			.getRawOne<{
 				count: number;
 				spending: string;
 				income: string;
-				unknownDirection: number;
 				missingBaseAmount: number;
 			}>();
 		const spending = -BigInt(row!.spending);
@@ -354,7 +351,7 @@ export class BankTransactionSummaryService {
 			income: formatCents(income),
 			net: formatCents(income - spending),
 			count: row!.count,
-			excluded: {unknownDirection: row!.unknownDirection, missingBaseAmount: row!.missingBaseAmount},
+			excluded: {missingBaseAmount: row!.missingBaseAmount},
 		};
 	}
 
@@ -363,7 +360,6 @@ export class BankTransactionSummaryService {
 			.select(`COUNT(*) FILTER (WHERE "transaction"."category" = 'NEEDS_REVIEW')::int`, 'needsReview')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZATION_FAILED})::int`, 'categorizationFailed')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_CATEGORIZING})::int`, 'categorizing')
-			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_NEEDS_ATTENTION})::int`, 'needsAttention')
 			.getRawOne<BankTransactionReviewCounts>();
@@ -419,9 +415,8 @@ export class BankTransactionSummaryService {
 				`ROUND(COALESCE(SUM(ABS(${SQL_BASE_AMOUNT})) FILTER (WHERE ${SQL_OWN_TRANSFER_DEBIT}), 0), 2)::text`,
 				'ownTransfers',
 			)
-			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
-			.getRawOne<{ownTransfers: string; unknownDirection: number; missingBaseAmount: number}>();
+			.getRawOne<{ownTransfers: string; missingBaseAmount: number}>();
 		return counts!;
 	}
 }

@@ -140,7 +140,6 @@ export const EMPTY_REVIEW_COUNTS: BankTransactionReviewCounts = {
   needsReview: 0,
   categorizationFailed: 0,
   categorizing: 0,
-  unknownDirection: 0,
   missingBaseAmount: 0,
   needsAttention: 0,
 };
@@ -201,7 +200,7 @@ export async function mockEmptyHome(page: Page) {
     income: '0.00',
     net: '0.00',
     count: 0,
-    excluded: {unknownDirection: 0, missingBaseAmount: 0},
+    excluded: {missingBaseAmount: 0},
   } satisfies BankTransactionTotals);
   await page.route('**/bank-transactions/summary?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
@@ -212,7 +211,7 @@ export async function mockEmptyHome(page: Page) {
       daysInMonth: 30,
       baseCurrency: null,
       totals: {spending: '0.00', income: '0.00', net: '0.00', ownTransfers: '0.00'},
-      excluded: {unknownDirection: 0, missingBaseAmount: 0},
+      excluded: {missingBaseAmount: 0},
       daily: [],
       baseline: {
         months: [],

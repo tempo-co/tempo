@@ -212,7 +212,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 		'transaction_totals',
 		{
 			description:
-				'Exact decimal-string spending, income and net across ALL matching transactions, plus count and excluded unknownDirection/missingBaseAmount counts. Uses Tempo base-currency and spending semantics, not a page sum.',
+				'Exact decimal-string spending, income and net across ALL matching transactions, plus count and the excluded missingBaseAmount count. Uses Tempo base-currency and spending semantics, not a page sum.',
 			inputSchema: z.strictObject({filters: filtersSchema.optional()}),
 			annotations,
 		},

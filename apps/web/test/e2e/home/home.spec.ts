@@ -104,8 +104,7 @@ test.describe('Home navigation badges', () => {
     await page.goto('/');
 
     const primary = page.getByRole('navigation', {name: 'Primary'}).first();
-    // Two to review, one failed and one without a direction that is also to review, each counted once; the five
-    // still categorizing are not counted.
+    // Two to review and one failed; the five still categorizing are not counted.
     const transactions = primary.getByRole('link', {name: 'Transactions, 3 to review'});
     await expect(transactions).toHaveText('Transactions3');
     await expect(
@@ -218,7 +217,6 @@ test.describe('Home navigation badges', () => {
         needsReview: 0,
         categorizationFailed: 0,
         categorizing: 4,
-        unknownDirection: 0,
         missingBaseAmount: 2,
         needsAttention: 0,
       },

@@ -1837,7 +1837,7 @@ describe('BankConnectionController', () => {
 		]);
 		const [payment, exchange, added] = makeTransactions('held-categorization').map((transaction) => ({
 			...transaction,
-			creditDebitIndicator: 'DBIT',
+			creditDebitIndicator: 'DBIT' as const,
 		}));
 		const exchangeCredit: EnableBankingTransaction = {
 			...exchange,
@@ -2296,7 +2296,7 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('normalizes incoming currency and direction codes before persisting a sync', async () => {
+	it('normalizes incoming currency codes before persisting a sync', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('canonical-codes-session');
 		getAccountBalances.mockResolvedValueOnce(makeBalances().map((balance) => ({...balance, currency: ' eUr '})));
 		getAccountTransactions.mockResolvedValueOnce(
@@ -2305,7 +2305,7 @@ describe('BankConnectionController', () => {
 					...makeTransactions('canonical-codes')[0],
 					amount: '12.50',
 					currency: ' eUr ',
-					creditDebitIndicator: ' dbit ',
+					creditDebitIndicator: 'DBIT',
 					balanceAfterCurrency: ' eUr ',
 					instructedCurrency: ' uSd ',
 					exchangeRateUnitCurrency: ' uSd ',

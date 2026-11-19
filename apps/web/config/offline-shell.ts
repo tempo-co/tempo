@@ -66,6 +66,10 @@ self.addEventListener('activate', (event) => {
     await self.clients.claim();
   })());
 });
+// Sent by a page that opened after the claim above and is not yet controlled.
+self.addEventListener('message', (event) => {
+  if (event.data === 'claim') event.waitUntil(self.clients.claim());
+});
 // The app icon shows how many transactions need review; browsers without the Badging API ignore it.
 async function setBadge(count) {
   try {

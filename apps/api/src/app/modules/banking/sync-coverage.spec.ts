@@ -12,7 +12,7 @@ import {
 const TODAY = '2026-11-14';
 
 function rows(...dates: Array<Partial<EnableBankingTransaction>>): EnableBankingTransaction[] {
-	return dates.map((fields) => ({amount: '1.00', currency: 'EUR', ...fields}));
+	return dates.map((fields) => ({amount: '1.00', currency: 'EUR', creditDebitIndicator: 'DBIT', ...fields}));
 }
 
 describe('extendSyncCoverage', () => {

@@ -115,7 +115,7 @@ export class BankingFixtures {
 					bankAccountId: bankAccount.id,
 					amount: '-1.00',
 					currency: 'EUR',
-					creditDebitIndicator: 'DBIT',
+					creditDebitIndicator: 'DBIT' as const,
 					transactionStatus: 'BOOK',
 					...overrideValues,
 				};

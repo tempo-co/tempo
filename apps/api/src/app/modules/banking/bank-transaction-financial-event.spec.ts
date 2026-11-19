@@ -154,8 +154,7 @@ describe('bank transaction financial events', () => {
 	it.each([
 		['INCOME', BANK_TRANSACTION_CASH_FLOW_TREATMENTS.INCOME],
 		['EXPENSE', BANK_TRANSACTION_CASH_FLOW_TREATMENTS.EXPENSE],
-		['UNKNOWN', BANK_TRANSACTION_CASH_FLOW_TREATMENTS.UNKNOWN],
-	] as const)('keeps the existing %s direction treatment when no event is present', (direction, treatment) => {
+	] as const)('treats a %s row without an event by its direction', (direction, treatment) => {
 		expect(getBankTransactionCashFlowTreatment(null, direction)).toBe(treatment);
 	});
 });

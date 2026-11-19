@@ -3,7 +3,6 @@ import {getBankTransactionMerchantKey, parseMerchantKey} from './bank-transactio
 it.each<[string, {direction: string; name: string}]>([
 	['EXPENSE:example shop', {direction: 'EXPENSE', name: 'example shop'}],
 	['INCOME:example payer', {direction: 'INCOME', name: 'example payer'}],
-	['UNKNOWN:example name', {direction: 'UNKNOWN', name: 'example name'}],
 	['EXPENSE:automatic-recurring:example', {direction: 'EXPENSE', name: 'automatic-recurring:example'}],
 ])('parses the direction and full name of %s', (key, expected) => {
 	expect(parseMerchantKey(key)).toEqual(expected);
@@ -24,7 +23,7 @@ describe('getBankTransactionMerchantKey', () => {
 	it.each([
 		['DBIT', 'Transfer to ALEX-SAM EXAMPLE', 'Alex-Sam Exämple', 'EXPENSE:alex-sam example'],
 		['CRDT', 'Transfer from ALEX SAM EXAMPLE', 'Alex Sam Exämple', 'INCOME:alex sam example'],
-	])(
+	] as const)(
 		'keys %s transfers by their full payee name',
 		(creditDebitIndicator, description, counterpartyName, expected) => {
 			expect(getBankTransactionMerchantKey({description, counterpartyName: null, creditDebitIndicator})).toBe(
@@ -54,9 +53,12 @@ describe('getBankTransactionMerchantKey', () => {
 		['Transfer to Example', 'DBIT', 'EXPENSE:transfer to example'],
 		['Transfer from Alex Example', 'DBIT', 'EXPENSE:transfer from alex example'],
 		['Transfer to Alex Example', 'CRDT', 'INCOME:transfer to alex example'],
-	])('keeps the ambiguous transfer text %s in direction %s', (description, creditDebitIndicator, expected) => {
-		expect(getBankTransactionMerchantKey({description, creditDebitIndicator})).toBe(expected);
-	});
+	] as const)(
+		'keeps the ambiguous transfer text %s in direction %s',
+		(description, creditDebitIndicator, expected) => {
+			expect(getBankTransactionMerchantKey({description, creditDebitIndicator})).toBe(expected);
+		},
+	);
 
 	it('gives no key to a transfer that names only a payment processor', () => {
 		expect(
@@ -208,7 +210,7 @@ describe('getBankTransactionMerchantKey', () => {
 		const transactions = ['Example Fitness', 'Example Music'].map((business) => ({
 			description: `SEPA Incasso algemeen doorlopend Naam: Adyen N.V. Machtiging: example-mandate Omschrijving: ${business} B.V. Example City: example-invoice 03/05/26 - 31/05/26 Example plan`,
 			counterpartyName: 'Adyen N.V.',
-			creditDebitIndicator: 'DBIT',
+			creditDebitIndicator: 'DBIT' as const,
 		}));
 		expect(transactions.map(getBankTransactionMerchantKey)).toEqual([
 			'EXPENSE:example fitness',

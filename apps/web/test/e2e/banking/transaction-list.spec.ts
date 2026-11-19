@@ -67,7 +67,7 @@ const history = (): Row[] =>
               : index < 50
                 ? '2025-12-31'
                 : '2025-06-01',
-      // Three rows need the owner: one to review, one that failed and one without a direction.
+      // Three rows need the owner: two to review, one of them income, and one that failed.
       index === 1
         ? {category: 'NEEDS_REVIEW', toReview: true}
         : index === 4
@@ -76,8 +76,10 @@ const history = (): Row[] =>
             ? {
                 amount: '25.00',
                 amountInBaseCurrency: '25.00',
-                creditDebitIndicator: null,
-                category: 'INCOME',
+                creditDebitIndicator: 'CRDT',
+                direction: 'INCOME',
+                cashFlowTreatment: 'INCOME',
+                category: 'NEEDS_REVIEW',
                 toReview: true,
               }
             : index % 3 === 0
@@ -152,7 +154,6 @@ async function mockLedger(
       net: (sum(1) - sum(-1)).toFixed(2),
       count: selected.length,
       excluded: {
-        unknownDirection: 0,
         missingBaseAmount: selected.filter((candidate) => candidate.amountInBaseCurrency === null)
           .length,
       },

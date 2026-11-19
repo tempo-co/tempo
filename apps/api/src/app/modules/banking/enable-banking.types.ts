@@ -1,3 +1,4 @@
+import type {CreditDebitIndicator} from './bank-transaction-direction';
 import type {BankTransactionLocation} from './bank-transaction-location';
 
 export type EnableBankingPsuContext = {
@@ -71,7 +72,7 @@ export type EnableBankingTransaction = {
 	merchantCategoryCode?: string;
 	amount: string;
 	currency: string;
-	creditDebitIndicator?: string;
+	creditDebitIndicator: CreditDebitIndicator;
 	status?: string;
 	transactionDate?: string;
 	bookingDate?: string;

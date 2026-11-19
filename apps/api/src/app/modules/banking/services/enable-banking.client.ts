@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 
 import {ConfigurationService} from '@core/config/config.service';
 
+import {isCreditDebitIndicator} from '../bank-transaction-direction';
 import {normalizeBankTransactionLocation} from '../bank-transaction-location';
 import {
 	EnableBankingAccount,
@@ -475,24 +476,16 @@ export class EnableBankingClient {
 		const currency = this.asCurrency(amountRecord?.currency);
 		if (!amount || !currency) return [];
 
+		// Required by the provider: without it the row counts as neither spending nor income.
 		const creditDebitIndicator = this.asOptionalString(record?.credit_debit_indicator)?.trim().toUpperCase();
+		if (!isCreditDebitIndicator(creditDebitIndicator)) return [];
 		// The other party is the creditor of a debit and the debtor of a credit. The opposite party may be the
-		// account holder, so a missing counterparty or an unknown direction leaves the name and location empty.
-		const counterparty =
-			creditDebitIndicator === 'DBIT'
-				? this.asRecord(record?.creditor)
-				: creditDebitIndicator === 'CRDT'
-					? this.asRecord(record?.debtor)
-					: undefined;
+		// account holder, so a missing counterparty leaves the name and location empty.
+		const counterparty = this.asRecord(creditDebitIndicator === 'DBIT' ? record?.creditor : record?.debtor);
 		const counterpartyName = this.asString(counterparty?.name);
 		const counterpartyLocation = this.parseCounterpartyLocation(counterparty);
 		const remittanceInformation = this.parseRemittanceInformation(record?.remittance_information);
-		const counterpartyAccount =
-			creditDebitIndicator === 'DBIT'
-				? record?.creditor_account
-				: creditDebitIndicator === 'CRDT'
-					? record?.debtor_account
-					: undefined;
+		const counterpartyAccount = creditDebitIndicator === 'DBIT' ? record?.creditor_account : record?.debtor_account;
 		const bankTransactionCode = this.asRecord(record?.bank_transaction_code);
 		const balanceAfter = this.parseAmountAndCurrency(record?.balance_after_transaction);
 		const exchangeRate = this.asRecord(record?.exchange_rate);

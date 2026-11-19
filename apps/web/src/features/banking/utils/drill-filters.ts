@@ -15,7 +15,6 @@ export const CASH_FLOW_LABELS: Record<BankTransactionCashFlowFilterValue, string
   INTERNAL: 'Internal movements',
   CURRENCY_EXCHANGE: 'Currency exchange',
   OWN_TRANSFER: 'Own transfer',
-  UNKNOWN: 'Unknown direction',
 };
 
 export const CATEGORY_STATUS_LABELS: Record<BankTransactionCategoryStatusFilterValue, string> = {

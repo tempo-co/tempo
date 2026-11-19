@@ -47,7 +47,6 @@ import {
 	SQL_MISSING_BASE_AMOUNT,
 	SQL_PERIOD_START,
 	SQL_SPENDING,
-	SQL_UNKNOWN_DIRECTION,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
 	findFirstBookingDate,
@@ -68,7 +67,6 @@ type VariantRow = {
 	received: string;
 	count: number;
 	paymentCount: number;
-	unknownDirection: number;
 	missingBaseAmount: number;
 	firstDate: string | null;
 	lastDate: string | null;
@@ -289,7 +287,6 @@ export class MerchantSpendingService {
 				`COUNT(*) FILTER (WHERE ${SQL_SPENDING} AND ${DEBIT} AND ${SQL_BASE_AMOUNT} IS NOT NULL)::int`,
 				'paymentCount',
 			)
-			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_UNKNOWN_DIRECTION})::int`, 'unknownDirection')
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
 			.addSelect(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'firstDate')
 			.addSelect(`to_char(MAX("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'lastDate')
@@ -417,7 +414,6 @@ function toGroup(id: string, rows: VariantRow[], brandName: string | undefined):
 		averagePayment: paymentCount > 0 ? formatCents(divideRounded(paid, BigInt(paymentCount))) : null,
 		firstDate: firstDates[0] ?? null,
 		excluded: {
-			unknownDirection: count((row) => row.unknownDirection),
 			missingBaseAmount: count((row) => row.missingBaseAmount),
 		},
 		variants: variants.map(({spentCents: _spentCents, ...variant}) => variant),

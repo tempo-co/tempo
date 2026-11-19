@@ -11,7 +11,7 @@ import {
 function createTransaction(overrides: Partial<BankTransaction> = {}): BankTransaction {
 	return createBankTransaction({
 		currency: 'eur',
-		creditDebitIndicator: 'dbit',
+		creditDebitIndicator: 'DBIT',
 		bankTransactionDescription: ' Card payment ',
 		description: ' Coffee shop ',
 		counterpartyName: ' Cafe ',
@@ -99,7 +99,6 @@ describe('bank transaction categorization input', () => {
 		const first = createTransaction();
 		const second = createTransaction({
 			currency: ' EUR ',
-			creditDebitIndicator: ' DBIT ',
 			description: '  Coffee shop  ',
 			counterpartyName: ' Cafe ',
 			bankTransactionDescription: 'Card payment ',
