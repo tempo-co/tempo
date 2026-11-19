@@ -60,19 +60,20 @@ export class CategorizationPipeline {
 	private async categorizeClaimedBatch(claimedBatch: readonly ClaimedTransaction[]): Promise<void> {
 		// The owner's history for the same merchant is only a hint for the model, never applied on its own: one payee
 		// can receive different kinds of payments, such as rent and small shared costs.
-		const [manualHistory, sameAmounts] = await Promise.all([
+		const [manualHistory, paymentHistory] = await Promise.all([
 			this.contextLoader.loadManualCategoryHistory(claimedBatch),
-			this.contextLoader.loadSameAmountPayments(claimedBatch),
+			this.contextLoader.loadPaymentHistory(claimedBatch),
 		]);
 		const batch = claimedBatch.map((claimed): ClaimedTransaction => {
+			const connection = claimed.transaction.bankAccount?.bankConnection;
 			const previousManualCategories = manualHistory.get(claimed.transaction.id);
-			const sameAmountPayments = sameAmounts.get(claimed.transaction.id);
 			return {
 				...claimed,
 				input: {
 					...claimed.input,
-					...(previousManualCategories ? {previousManualCategories} : {}),
-					...(sameAmountPayments ? {sameAmountPayments} : {}),
+					...(connection && {ownerBank: {name: connection.aspspName, country: connection.aspspCountry}}),
+					...(previousManualCategories && {previousManualCategories}),
+					...paymentHistory.get(claimed.transaction.id),
 				},
 			};
 		});

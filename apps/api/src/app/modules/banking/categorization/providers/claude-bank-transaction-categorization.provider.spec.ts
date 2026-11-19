@@ -168,7 +168,27 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 	])('uses the configured %s model at %s effort and maps compact IDs back to the caller', async (model, effort) => {
 		const {provider, create} = setup({AI_CATEGORIZATION_MODEL: model, AI_CATEGORIZATION_EFFORT: effort});
 		create.mockResolvedValue(response([classification()]));
-		await expect(provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
+		const transaction = {
+			...input(),
+			ownerBank: {name: 'Example Bank', country: 'NL'},
+			counterpartyHistory: [
+				{
+					date: '2026-08-01',
+					amount: '-10.00',
+					currency: 'EUR',
+					direction: 'EXPENSE' as const,
+					category: 'FOOD_AND_DRINK' as const,
+				},
+				{
+					date: '2026-07-15',
+					amount: '4.50',
+					currency: 'EUR',
+					direction: 'INCOME' as const,
+					category: 'REFUND' as const,
+				},
+			],
+		};
+		await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
 			{
 				correlationId: 'transaction-1',
 				category: 'FOOD_AND_DRINK',
@@ -190,16 +210,38 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(request.tools[0].input_schema.properties.classifications.items.properties.category.enum).toEqual(
 			BANK_TRANSACTION_CATEGORIES,
 		);
+		// Tools, instructions and categories form the cached prefix; the breakpoint sits on its last system block.
+		expect(request.system).toEqual([
+			{type: 'text', text: contract.instructions},
+			{type: 'text', text: expect.any(String), cache_control: {type: 'ephemeral'}},
+		]);
+		expect(JSON.parse(request.system[1].text)).toEqual({categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS});
 		expect(JSON.parse(request.messages[0].content)).toEqual({
-			categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-			transactions: [{...input(), correlationId: '0'}],
+			transactions: [{...transaction, correlationId: '0'}],
 		});
-		expect(request.system).toContain('Use OTHER only when the evidence names a kind of spending');
-		expect(request.system).toContain(
+		expect(request.system[0].text).toContain('Use OTHER only when the evidence names a kind of spending');
+		expect(request.system[0].text).toContain(
 			'when previousManualCategories holds a single category other than TRANSFER_OUT',
 		);
-		expect(request.system).toContain('identifies only a payment processor, payment terminal provider or acquirer');
-		expect(request).not.toHaveProperty('cache_control');
+		expect(request.system[0].text).toContain(
+			'identifies only a payment processor, payment terminal provider or acquirer',
+		);
+		expect(request.system[0].text).toContain(
+			'is REFUND only when counterpartyHistory lists an earlier payment by the owner to that body',
+		);
+	});
+
+	it('sends a byte-identical cached prefix on every categorizing call', async () => {
+		const {provider, create} = setup();
+		create.mockResolvedValue(response([classification()]));
+		await provider.categorize([input()], BANK_TRANSACTION_CATEGORY_DEFINITIONS);
+		await provider.categorize(
+			[{...input('transaction-2'), amount: '-99.00', ownerBank: {name: 'Example Bank', country: 'BE'}}],
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+		);
+		const [[first], [second]] = create.mock.calls;
+		expect(JSON.stringify([second.tools, second.system])).toBe(JSON.stringify([first.tools, first.system]));
+		expect(second.messages).not.toEqual(first.messages);
 	});
 
 	it('keeps the shared contract limits equal to the app limits', () => {
@@ -226,10 +268,10 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(result).not.toHaveProperty('searchTrace');
 		expect(create).toHaveBeenCalledTimes(1);
 		const [[request]] = create.mock.calls;
-		expect(request.system).toBe(contract.instructions);
+		expect(request.system[0].text).toBe(contract.instructions);
 		expect(request).toMatchObject(STRUCTURED_OUTPUT_REQUEST);
 		expect(request.tools).toHaveLength(1);
-		expect(Object.keys(JSON.parse(request.messages[0].content))).toEqual(['categories', 'transactions']);
+		expect(Object.keys(JSON.parse(request.messages[0].content))).toEqual(['transactions']);
 	});
 
 	it('searches for the merchant in a call that receives only the query, then categorizes with its finding', async () => {
@@ -290,10 +332,9 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(JSON.stringify(searchRequest)).not.toMatch(
 			/42\.17|9\.99|synthetic-private-note|synthetic-history-note|transaction-1|5814|2026-0/,
 		);
-		expect(categorizeRequest.system).toBe(contract.instructions);
+		expect(categorizeRequest.system[0].text).toBe(contract.instructions);
 		expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
 		expect(JSON.parse(categorizeRequest.messages[0].content)).toEqual({
-			categories: BANK_TRANSACTION_CATEGORY_DEFINITIONS,
 			transactions: [{...transaction, correlationId: '0'}],
 			searchFinding: {
 				query: SEARCH_QUERY,

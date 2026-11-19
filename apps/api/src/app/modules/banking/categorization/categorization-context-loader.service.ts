@@ -3,20 +3,58 @@ import {InjectRepository} from '@nestjs/typeorm';
 import type {BankTransactionCategory} from '@tempo/contracts';
 import {Repository, SelectQueryBuilder} from 'typeorm';
 
+import {CreditDebitIndicator, toBankTransactionDirection} from '../bank-transaction-direction';
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
 import {toHistoryNote} from './bank-transaction-categorization-input';
 import {
+	COUNTERPARTY_HISTORY_MONTHS,
+	MAX_COUNTERPARTY_HISTORY_OPPOSITE_DIRECTION,
+	MAX_COUNTERPARTY_HISTORY_SAME_DIRECTION,
 	MAX_MANUAL_CATEGORY_EXAMPLES,
 	MAX_SAME_AMOUNT_AI_PAYMENTS,
 	MAX_SAME_AMOUNT_MANUAL_PAYMENTS,
 	MIN_SAME_AMOUNT_PAYMENTS,
 } from './bank-transaction-categorization-input.schema';
-import {PreviousManualCategory, SameAmountPayment} from './bank-transaction-categorization.types';
+import {
+	CounterpartyHistoryEntry,
+	PreviousManualCategory,
+	SameAmountPayment,
+} from './bank-transaction-categorization.types';
+import {getMerchantKeyName, getMerchantKeysForName} from './bank-transaction-merchant-key';
 import type {ClaimedTransaction} from './categorization-row-store.service';
 import {ManualCategoryCounts, REUSABLE_MANUAL_CATEGORIES} from './manual-category-follow-up';
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
+
+/** An IBAN the owner's rows show under this many merchant names is a payment processor's collection account. */
+const MIN_COLLECTION_ACCOUNT_MERCHANTS = 2;
+
+/** The hints a transaction gets from the owner's earlier payments. */
+export type PaymentHistory = {
+	sameAmountPayments?: SameAmountPayment[];
+	counterpartyHistory?: CounterpartyHistoryEntry[];
+};
+
+type SameAmountRow = {
+	id: string;
+	category: BankTransactionCategory;
+	source: 'MANUAL' | 'AI';
+	description: string | null;
+	remittanceInformation: string | null;
+	date: string | null;
+};
+
+type CounterpartyRow = {
+	id: string;
+	merchantKey: string | null;
+	counterpartyIban: string | null;
+	amount: string;
+	currency: string;
+	creditDebitIndicator: CreditDebitIndicator;
+	category: BankTransactionCategory;
+	date: string;
+};
 
 /** The date a transaction is shown under: when it happened, else when it was booked, else its value date. */
 export function transactionDateSql(alias = 'transaction'): string {
@@ -74,93 +112,170 @@ export class CategorizationContextLoader {
 	}
 
 	/**
-	 * Returns, per outgoing batch transaction, the owner's earlier completed payments to the same payee with exactly the
-	 * same amount and currency, when there are enough of them. Like the manual history, a lookup failure only drops the
-	 * hint.
+	 * Returns, per batch transaction, the owner's earlier payments it sends as hints: `sameAmountPayments` for an
+	 * outgoing payment with enough earlier completed payments to the same payee of exactly its amount and currency, and
+	 * `counterpartyHistory` with the newest earlier categorized payments in either direction with the same counterparty,
+	 * leaving out the ones already in `sameAmountPayments`. Like the manual history, a lookup failure only drops the
+	 * hints.
 	 */
-	async loadSameAmountPayments(batch: readonly ClaimedTransaction[]): Promise<Map<string, SameAmountPayment[]>> {
+	async loadPaymentHistory(batch: readonly ClaimedTransaction[]): Promise<Map<string, PaymentHistory>> {
 		const batchByAccount = new Map<string, ClaimedTransaction[]>();
 		for (const claimed of batch) {
 			const accountId = claimed.transaction.bankAccount?.bankConnection?.accountId;
-			if (!accountId || !claimed.transaction.merchantKey || claimed.input.direction !== 'EXPENSE') continue;
+			if (!accountId) continue;
 			batchByAccount.set(accountId, [...(batchByAccount.get(accountId) ?? []), claimed]);
 		}
 
-		const paymentsByTransaction = new Map<string, SameAmountPayment[]>();
-		const date = transactionDateSql();
+		const historyByTransaction = new Map<string, PaymentHistory>();
 		try {
 			await Promise.all(
 				[...batchByAccount].map(async ([accountId, entries]) => {
-					const merchantKeys = [...new Set(entries.map(({transaction}) => transaction.merchantKey!))];
-					const amounts = [...new Set(entries.map(({transaction}) => transaction.amount))];
-					const rows = await this.merchantHistoryQuery(accountId, merchantKeys)
-						.select('transaction.id', 'id')
-						.addSelect('transaction.merchantKey', 'merchantKey')
-						.addSelect('transaction.amount', 'amount')
-						.addSelect('transaction.currency', 'currency')
-						.addSelect('transaction.category', 'category')
-						.addSelect('transaction.categorySource', 'source')
-						.addSelect('transaction.description', 'description')
-						.addSelect('transaction.remittanceInformation', 'remittanceInformation')
-						.addSelect(`${date}::text`, 'date')
-						.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
-						.andWhere('transaction."categorySource" IN (:...sources)', {sources: ['MANUAL', 'AI']})
-						.andWhere('transaction.amount IN (:...amounts)', {amounts})
-						.orderBy(date, 'DESC', 'NULLS LAST')
-						.addOrderBy('transaction.id', 'DESC')
-						.getRawMany<{
-							id: string;
-							merchantKey: string;
-							amount: string;
-							currency: string;
-							category: BankTransactionCategory;
-							source: 'MANUAL' | 'AI';
-							description: string | null;
-							remittanceInformation: string | null;
-							date: string | null;
-						}>();
-					for (const {transaction} of entries) {
-						const ownDate = transaction.transactionDate ?? transaction.bookingDate ?? transaction.valueDate;
-						const earlier = rows.filter(
-							(row) =>
-								row.id !== transaction.id &&
-								row.merchantKey === transaction.merchantKey &&
-								row.amount === transaction.amount &&
-								row.currency === transaction.currency &&
-								(!ownDate || !row.date || row.date <= ownDate),
-						);
-						// The owner's picks newest first. From AI rows, the two oldest per category: the payments that
-						// first stated a purpose stay in view when later rows carry the category without one.
-						const aiPerCategory = new Map<BankTransactionCategory, number>();
-						const payments = [
-							...earlier
-								.filter(({source}) => source === 'MANUAL')
-								.slice(0, MAX_SAME_AMOUNT_MANUAL_PAYMENTS),
-							...earlier
-								.filter(({source}) => source === 'AI')
-								.reverse()
-								.filter(({category}) => {
-									const count = aiPerCategory.get(category) ?? 0;
-									aiPerCategory.set(category, count + 1);
-									return count < 2;
-								})
-								.slice(0, MAX_SAME_AMOUNT_AI_PAYMENTS),
-						].map((row) => ({
-							date: row.date,
-							category: row.category,
-							source: row.source,
-							text: toHistoryNote(row),
-						}));
-						if (payments.length >= MIN_SAME_AMOUNT_PAYMENTS)
-							paymentsByTransaction.set(transaction.id, payments);
+					const [sameAmounts, counterparty] = await Promise.all([
+						this.loadSameAmountPayments(accountId, entries),
+						this.loadCounterpartyRows(accountId, entries),
+					]);
+					for (const claimed of entries) {
+						const sameAmountRows = sameAmounts.get(claimed.transaction.id);
+						const shown = new Set(sameAmountRows?.map(({id}) => id));
+						const counterpartyHistory = toCounterpartyHistory(claimed, counterparty, shown);
+						const history: PaymentHistory = {
+							...(sameAmountRows && {
+								sameAmountPayments: sameAmountRows.map((row) => ({
+									date: row.date,
+									category: row.category,
+									source: row.source,
+									text: toHistoryNote(row),
+								})),
+							}),
+							...(counterpartyHistory.length > 0 && {counterpartyHistory}),
+						};
+						if (history.sameAmountPayments || history.counterpartyHistory)
+							historyByTransaction.set(claimed.transaction.id, history);
 					}
 				}),
 			);
 		} catch (error) {
-			this.logger.warn(`Same-amount payment lookup failed: ${safeErrorName(error)}`);
+			this.logger.warn(`Payment history lookup failed: ${safeErrorName(error)}`);
 			return new Map();
 		}
+		return historyByTransaction;
+	}
+
+	/**
+	 * Per outgoing transaction, the owner's earlier completed payments to the same payee with exactly the same amount
+	 * and currency, when there are enough of them: the owner's picks newest first, then the two oldest AI rows per
+	 * category.
+	 */
+	private async loadSameAmountPayments(
+		accountId: string,
+		batch: readonly ClaimedTransaction[],
+	): Promise<Map<string, SameAmountRow[]>> {
+		const entries = batch.filter(
+			({transaction, input}) => transaction.merchantKey && input.direction === 'EXPENSE',
+		);
+		const paymentsByTransaction = new Map<string, SameAmountRow[]>();
+		if (entries.length === 0) return paymentsByTransaction;
+		const date = transactionDateSql();
+		const merchantKeys = [...new Set(entries.map(({transaction}) => transaction.merchantKey!))];
+		const amounts = [...new Set(entries.map(({transaction}) => transaction.amount))];
+		const rows = await this.merchantHistoryQuery(accountId, merchantKeys)
+			.select('transaction.id', 'id')
+			.addSelect('transaction.merchantKey', 'merchantKey')
+			.addSelect('transaction.amount', 'amount')
+			.addSelect('transaction.currency', 'currency')
+			.addSelect('transaction.category', 'category')
+			.addSelect('transaction.categorySource', 'source')
+			.addSelect('transaction.description', 'description')
+			.addSelect('transaction.remittanceInformation', 'remittanceInformation')
+			.addSelect(`${date}::text`, 'date')
+			.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
+			.andWhere('transaction."categorySource" IN (:...sources)', {sources: ['MANUAL', 'AI']})
+			.andWhere('transaction.amount IN (:...amounts)', {amounts})
+			.orderBy(date, 'DESC', 'NULLS LAST')
+			.addOrderBy('transaction.id', 'DESC')
+			.getRawMany<SameAmountRow & {merchantKey: string; amount: string; currency: string}>();
+		for (const {transaction} of entries) {
+			const ownDate = ownTransactionDate(transaction);
+			const earlier = rows.filter(
+				(row) =>
+					row.id !== transaction.id &&
+					row.merchantKey === transaction.merchantKey &&
+					row.amount === transaction.amount &&
+					row.currency === transaction.currency &&
+					(!ownDate || !row.date || row.date <= ownDate),
+			);
+			// The owner's picks newest first. From AI rows, the two oldest per category: the payments that first
+			// stated a purpose stay in view when later rows carry the category without one.
+			const aiPerCategory = new Map<BankTransactionCategory, number>();
+			const payments = [
+				...earlier.filter(({source}) => source === 'MANUAL').slice(0, MAX_SAME_AMOUNT_MANUAL_PAYMENTS),
+				...earlier
+					.filter(({source}) => source === 'AI')
+					.reverse()
+					.filter(({category}) => {
+						const count = aiPerCategory.get(category) ?? 0;
+						aiPerCategory.set(category, count + 1);
+						return count < 2;
+					})
+					.slice(0, MAX_SAME_AMOUNT_AI_PAYMENTS),
+			];
+			if (payments.length >= MIN_SAME_AMOUNT_PAYMENTS) paymentsByTransaction.set(transaction.id, payments);
+		}
 		return paymentsByTransaction;
+	}
+
+	/**
+	 * The owner's categorized rows that can be counterparty history for a batch row: the same counterparty IBAN or the
+	 * same merchant name in either direction, dated within the history window of the batch's rows, newest first. Own
+	 * transfers and financial events are not payments to a counterparty. A payment processor's collection account
+	 * names no counterparty, so rows on one match by merchant name only; it is returned with the rows.
+	 */
+	private async loadCounterpartyRows(
+		accountId: string,
+		batch: readonly ClaimedTransaction[],
+	): Promise<{rows: CounterpartyRow[]; collectionIbans: ReadonlySet<string>}> {
+		const entries = batch.flatMap(({transaction}) => {
+			const ownDate = ownTransactionDate(transaction);
+			return ownDate && (transaction.merchantKey || transaction.counterpartyIban) ? [{transaction, ownDate}] : [];
+		});
+		if (entries.length === 0) return {rows: [], collectionIbans: new Set()};
+		const merchantKeys = [...new Set(entries.flatMap(({transaction}) => counterpartyMerchantKeys(transaction)))];
+		const batchIbans = [
+			...new Set(
+				entries.flatMap(({transaction}) =>
+					transaction.counterpartyIban ? [transaction.counterpartyIban] : [],
+				),
+			),
+		];
+		const collectionIbans =
+			batchIbans.length > 0 ? await this.loadCollectionAccountIbans(accountId, batchIbans) : new Set<string>();
+		const ibans = batchIbans.filter((iban) => !collectionIbans.has(iban));
+		const matches = [
+			...(merchantKeys.length > 0 ? ['transaction."merchantKey" IN (:...historyMerchantKeys)'] : []),
+			...(ibans.length > 0 ? ['transaction."counterpartyIban" IN (:...historyIbans)'] : []),
+		];
+		if (matches.length === 0) return {rows: [], collectionIbans};
+		const ownDates = entries.map(({ownDate}) => ownDate).sort();
+		const date = transactionDateSql();
+		const rows = await this.ownerHistoryQuery(accountId)
+			.select('transaction.id', 'id')
+			.addSelect('transaction.merchantKey', 'merchantKey')
+			.addSelect('transaction.counterpartyIban', 'counterpartyIban')
+			.addSelect('transaction.amount', 'amount')
+			.addSelect('transaction.currency', 'currency')
+			.addSelect('transaction.creditDebitIndicator', 'creditDebitIndicator')
+			.addSelect('transaction.category', 'category')
+			.addSelect(`${date}::text`, 'date')
+			.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
+			.andWhere(`${date} BETWEEN :historyFrom AND :historyTo`, {
+				historyFrom: monthsBefore(ownDates[0], COUNTERPARTY_HISTORY_MONTHS),
+				historyTo: ownDates[ownDates.length - 1],
+			})
+			.andWhere(`(${matches.join(' OR ')})`, {historyMerchantKeys: merchantKeys, historyIbans: ibans})
+			.orderBy(date, 'DESC')
+			.addOrderBy('transaction.id', 'DESC')
+			.getRawMany<CounterpartyRow>();
+		return {rows, collectionIbans};
 	}
 
 	/**
@@ -208,15 +323,41 @@ export class CategorizationContextLoader {
 		merchantKeys: readonly string[],
 		category = 'transaction.category',
 	): SelectQueryBuilder<BankTransaction> {
+		return this.ownerHistoryQuery(accountId)
+			.andWhere(`${category} IN (:...reusableCategories)`, {reusableCategories: REUSABLE_MANUAL_CATEGORIES})
+			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys});
+	}
+
+	/**
+	 * The owner's rows that can be history for another row: payments to or from a counterparty, so not own transfers or
+	 * financial events. Every history lookup starts here.
+	 */
+	private ownerHistoryQuery(accountId: string): SelectQueryBuilder<BankTransaction> {
 		return this.repository
 			.createQueryBuilder('transaction')
 			.innerJoin('transaction.bankAccount', 'bankAccount')
 			.innerJoin('bankAccount.bankConnection', 'connection')
-			.where(`${category} IN (:...reusableCategories)`, {reusableCategories: REUSABLE_MANUAL_CATEGORIES})
+			.where('connection."accountId" = :accountId', {accountId})
 			.andWhere('transaction."ownTransferEvidence" IS NULL')
-			.andWhere('transaction."financialEventType" IS NULL')
-			.andWhere('transaction."merchantKey" IN (:...merchantKeys)', {merchantKeys})
-			.andWhere('connection."accountId" = :accountId', {accountId});
+			.andWhere('transaction."financialEventType" IS NULL');
+	}
+
+	/**
+	 * Of these IBANs, the ones the owner's rows show under at least {@link MIN_COLLECTION_ACCOUNT_MERCHANTS} merchant
+	 * names in either direction: a payment processor's collection account, which names no single counterparty.
+	 */
+	private async loadCollectionAccountIbans(accountId: string, ibans: readonly string[]): Promise<Set<string>> {
+		const merchantName = `SUBSTRING(transaction."merchantKey" FROM STRPOS(transaction."merchantKey", ':') + 1)`;
+		const rows = await this.ownerHistoryQuery(accountId)
+			.select('transaction.counterpartyIban', 'iban')
+			.addSelect(`COUNT(DISTINCT ${merchantName})::int`, 'merchants')
+			.andWhere('transaction."counterpartyIban" IN (:...ibans)', {ibans})
+			.andWhere('transaction."merchantKey" IS NOT NULL')
+			.groupBy('transaction."counterpartyIban"')
+			.getRawMany<{iban: string; merchants: number}>();
+		return new Set(
+			rows.filter(({merchants}) => Number(merchants) >= MIN_COLLECTION_ACCOUNT_MERCHANTS).map(({iban}) => iban),
+		);
 	}
 
 	/**
@@ -267,6 +408,69 @@ export class CategorizationContextLoader {
 		}
 		return examples;
 	}
+}
+
+/**
+ * The newest rows of `rows` with the transaction's counterparty (its IBAN unless that is a collection account, or its
+ * merchant name), dated on or before it and within the history window,
+ * up to the limit per direction relative to it, newest first. Rows in `shown` are already in the transaction's
+ * `sameAmountPayments`.
+ */
+function toCounterpartyHistory(
+	{transaction, input}: ClaimedTransaction,
+	{rows, collectionIbans}: {rows: readonly CounterpartyRow[]; collectionIbans: ReadonlySet<string>},
+	shown: ReadonlySet<string>,
+): CounterpartyHistoryEntry[] {
+	const ownDate = ownTransactionDate(transaction);
+	const iban =
+		transaction.counterpartyIban && !collectionIbans.has(transaction.counterpartyIban)
+			? transaction.counterpartyIban
+			: null;
+	if (!ownDate) return [];
+	const from = monthsBefore(ownDate, COUNTERPARTY_HISTORY_MONTHS);
+	const merchantKeys = new Set(counterpartyMerchantKeys(transaction));
+	const remaining = {
+		same: MAX_COUNTERPARTY_HISTORY_SAME_DIRECTION,
+		opposite: MAX_COUNTERPARTY_HISTORY_OPPOSITE_DIRECTION,
+	};
+	const history: CounterpartyHistoryEntry[] = [];
+	for (const row of rows) {
+		const sameCounterparty =
+			(!!iban && row.counterpartyIban === iban) || (!!row.merchantKey && merchantKeys.has(row.merchantKey));
+		if (!sameCounterparty || row.id === transaction.id || shown.has(row.id)) continue;
+		if (row.date > ownDate || row.date < from) continue;
+		const direction = toBankTransactionDirection(row.creditDebitIndicator);
+		const side = direction === input.direction ? 'same' : 'opposite';
+		if (remaining[side] === 0) continue;
+		remaining[side] -= 1;
+		history.push({
+			date: row.date,
+			amount: normalizeAmount(row.amount),
+			currency: row.currency,
+			direction,
+			category: row.category,
+		});
+	}
+	return history;
+}
+
+/** The transaction's merchant key in both directions, so payments to and from the counterparty both match. */
+function counterpartyMerchantKeys(transaction: BankTransaction): string[] {
+	const name = getMerchantKeyName(transaction.merchantKey);
+	return name ? getMerchantKeysForName(name) : [];
+}
+
+function ownTransactionDate(transaction: BankTransaction): string | null {
+	return transaction.transactionDate ?? transaction.bookingDate ?? transaction.valueDate;
+}
+
+/** The `YYYY-MM-DD` date `months` calendar months earlier, on the month's last day when it is shorter, as SQL does. */
+function monthsBefore(date: string, months: number): string {
+	const [year, month, day] = date.split('-').map(Number);
+	const target = new Date(Date.UTC(year, month - 1 - months, 1));
+	const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+	target.setUTCDate(Math.min(day, lastDay));
+	return target.toISOString().slice(0, 10);
 }
 
 function toPreviousManualCategories(

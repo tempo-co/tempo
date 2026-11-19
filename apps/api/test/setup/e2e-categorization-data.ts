@@ -4,6 +4,7 @@ import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BANK_TRANSACTION_TYPES} from '@modules/banking/bank-transaction-type';
+import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 
 import {BankingFixtures} from '../../scripts/seed-data/banking-fixtures';
 import {VERIFIED_ACCOUNT_EMAIL} from '../../scripts/seed-data/seed.constants';
@@ -18,6 +19,13 @@ export const CATEGORIZATION_E2E_ONE_OFF_MERCHANT_TRANSACTION_ID = '00000000-0000
 export const CATEGORIZATION_E2E_ONE_OFF_CHOICE_TRANSACTION_ID = '00000000-0000-4000-8000-000000000110';
 export const CATEGORIZATION_E2E_REPEAT_AMOUNT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000111';
 export const CATEGORIZATION_E2E_SINGLE_AMOUNT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000112';
+export const CATEGORIZATION_E2E_COUNTERPARTY_TRANSACTION_ID = '00000000-0000-4000-8000-000000000113';
+export const CATEGORIZATION_E2E_GOVERNMENT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000114';
+export const CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID = '00000000-0000-4000-8000-000000000115';
+export const CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000116';
+/** Published example IBANs: the gym's own account, and a payment processor's account that collects for two shops. */
+export const CATEGORIZATION_E2E_COUNTERPARTY_IBAN = 'DE89370400440532013000';
+const CATEGORIZATION_E2E_PROCESSOR_IBAN = 'GB82WEST12345698765432';
 const CATEGORIZATION_E2E_OTHER_ACCOUNT_EMAIL = 'categorization-other@test.com';
 
 export async function seedBankTransactionCategorizationData(app: INestApplicationContext): Promise<void> {
@@ -221,6 +229,116 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		},
 	]);
 
+	// A gym the owner pays monthly and that sometimes pays money back, and a council that refunds a tax bill.
+	const gym = {
+		transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
+		counterpartyName: 'Example Gym',
+		description: 'Example Gym',
+	};
+	const gymPayment = (transactionDate: string, amount: string, values: Partial<BankTransaction> = {}) => ({
+		...gym,
+		...completed('SUBSCRIPTIONS', 'AI'),
+		transactionDate,
+		amount,
+		...values,
+	});
+	const gymRefund = (transactionDate: string, amount: string) => ({
+		...gym,
+		...completed('REFUND', 'AI'),
+		transactionDate,
+		amount,
+		creditDebitIndicator: 'CRDT' as const,
+	});
+	const council = {
+		transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
+		counterpartyName: 'Example Council',
+		description: 'Example Council',
+	};
+	await fixtures.createTransactions(bankAccount, [
+		// Same amount as the September payment: shown as sameAmountPayments, so not again as counterparty history.
+		gymPayment('2026-09-01', '-30.00'),
+		gymPayment('2026-08-01', '-30.00'),
+		// Seven earlier payments in the same direction; the oldest falls outside the six newest. One names no merchant
+		// and is matched by the gym's IBAN alone.
+		gymPayment('2026-07-01', '-31.00'),
+		gymPayment('2026-06-01', '-32.00', {
+			counterpartyName: null,
+			description: null,
+			counterpartyIban: CATEGORIZATION_E2E_COUNTERPARTY_IBAN,
+		}),
+		gymPayment('2026-05-01', '-33.00'),
+		gymPayment('2026-04-01', '-34.00'),
+		gymPayment('2026-03-01', '-35.00'),
+		gymPayment('2026-02-01', '-36.00'),
+		gymPayment('2026-01-01', '-37.00'),
+		// Five payments back from the gym; only the four newest are shown.
+		gymRefund('2026-09-15', '12.00'),
+		gymRefund('2025-12-01', '13.00'),
+		gymRefund('2025-06-01', '14.00'),
+		gymRefund('2025-01-01', '15.00'),
+		gymRefund('2024-10-15', '16.00'),
+		// After the September payment, a row still waiting for a category, and an own transfer: none is history.
+		gymPayment('2026-10-01', '-38.00'),
+		gymPayment('2026-07-15', '-40.00', {...completed('TRANSFER_OUT', 'AI'), ownTransferEvidence: 'NAME'}),
+		{...gym, transactionDate: '2026-08-15', amount: '-39.00'},
+		{
+			...gym,
+			id: CATEGORIZATION_E2E_COUNTERPARTY_TRANSACTION_ID,
+			transactionDate: '2026-09-30',
+			amount: '-30.00',
+			counterpartyIban: CATEGORIZATION_E2E_COUNTERPARTY_IBAN,
+		},
+		// Two shops paid through one processor account: a payment at either matches that shop's rows by name only.
+		{
+			transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
+			...completed('FOOD_AND_DRINK', 'AI'),
+			counterpartyName: 'Example Bakery',
+			description: 'Example Bakery',
+			counterpartyIban: CATEGORIZATION_E2E_PROCESSOR_IBAN,
+			transactionDate: '2026-09-05',
+			amount: '-6.00',
+		},
+		{
+			transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
+			...completed('ENTERTAINMENT', 'AI'),
+			counterpartyName: 'Example Cinema',
+			description: 'Example Cinema',
+			counterpartyIban: CATEGORIZATION_E2E_PROCESSOR_IBAN,
+			transactionDate: '2026-09-10',
+			amount: '-14.00',
+		},
+		{
+			id: CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID,
+			transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
+			counterpartyName: 'Example Bakery',
+			description: 'Example Bakery',
+			counterpartyIban: CATEGORIZATION_E2E_PROCESSOR_IBAN,
+			transactionDate: '2026-09-30',
+			amount: '-7.00',
+		},
+		{
+			id: CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID,
+			transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
+			counterpartyName: 'Example Cinema',
+			description: 'Example Cinema',
+			counterpartyIban: CATEGORIZATION_E2E_PROCESSOR_IBAN,
+			transactionDate: '2026-09-30',
+			amount: '-15.00',
+		},
+		// Tax bills paid to the council, and its refund days after the gym payment: 24 months before the refund is the
+		// oldest day still in its history.
+		{...council, ...completed('TAXES_AND_GOVERNMENT', 'AI'), transactionDate: '2024-10-04', amount: '-118.00'},
+		{...council, ...completed('TAXES_AND_GOVERNMENT', 'AI'), transactionDate: '2024-10-05', amount: '-119.00'},
+		{...council, ...completed('TAXES_AND_GOVERNMENT', 'AI'), transactionDate: '2026-03-01', amount: '-120.00'},
+		{
+			...council,
+			id: CATEGORIZATION_E2E_GOVERNMENT_TRANSACTION_ID,
+			transactionDate: '2026-10-05',
+			amount: '120.00',
+			creditDebitIndicator: 'CRDT',
+		},
+	]);
+
 	// A second Tempo account with a conflicting manual category for the same merchant must never influence the first.
 	const accounts = app.get<Repository<Account>>(getRepositoryToken(Account));
 	const otherAccount = await accounts.save(
@@ -236,6 +354,14 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 	});
 	const otherBankAccount = await fixtures.createBankAccount(otherConnection, {name: 'Other categorization account'});
 	await fixtures.createTransactions(otherBankAccount, [
+		// The same gym, by name and IBAN, in another owner's account: never history for the first owner.
+		{
+			...gym,
+			...completed('ENTERTAINMENT', 'MANUAL'),
+			transactionDate: '2026-09-20',
+			amount: '-40.00',
+			counterpartyIban: CATEGORIZATION_E2E_COUNTERPARTY_IBAN,
+		},
 		{
 			...cardPurchase,
 			transactionDate: '2026-09-04',
