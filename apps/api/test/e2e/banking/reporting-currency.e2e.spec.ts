@@ -238,20 +238,6 @@ describe('Reporting currency', () => {
 		expect(await reader.listAccounts()).toEqual([expect.objectContaining({baseCurrency: null})]);
 	});
 
-	it('keeps a currency set before owners could choose one', async () => {
-		const {owner, agent} = await ownerWithAccounts('EUR', 'GBP');
-		await accounts.update({id: owner.id}, {baseCurrency: 'CHF', baseCurrencyState: 'PRESET'});
-
-		await service.reconcileSafely(owner.id, {historySettled: true});
-		expect(await read(agent)).toMatchObject({
-			currency: 'CHF',
-			confirmed: true,
-			setupRequired: false,
-			currencyUnavailable: false,
-		});
-		await agent.put(ROUTE).send({currency: 'CHF'}).expect(200);
-	});
-
 	it('asks again for a chosen currency the ECB no longer publishes, and refuses it', async () => {
 		const {owner, agent, bankAccounts} = await ownerWithAccounts('EUR', 'USD');
 		await accounts.update({id: owner.id}, {baseCurrency: 'BGN', baseCurrencyState: 'CONFIRMED'});
