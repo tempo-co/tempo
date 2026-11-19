@@ -7,7 +7,6 @@ import type {
 import {differenceInCalendarDays, parseISO} from 'date-fns';
 import {CheckCheck, CircleAlert, FilePlus, FileQuestion, Files} from 'lucide-react';
 import {type ReactNode, useEffect, useRef, useState} from 'react';
-import {toast} from 'sonner';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {PendingLabel} from '@/components/shared/pending-label';
@@ -158,17 +157,8 @@ export function DoubtfulRowsReview({
       if (latest && rows.every(({id}) => done[id])) onDone(latest);
       return;
     }
-    setFailed(new Set(failures.map(({id}) => id)));
-    if (failures.some(({failure}) => !wasToasted(failure)))
-      toast.error(
-        failures.length === 1
-          ? "Couldn't save your answer"
-          : `Couldn't save ${plural(failures.length, 'answer')}`,
-        {
-          description: 'Try again in a moment.',
-          id: `bank-import-resolve-failed-${summary.id}`,
-        },
-      );
+    // Each failed row says so itself. A failure the api wrapper toasted leaves its row waiting, unmarked.
+    setFailed(new Set(failures.filter(({failure}) => !wasToasted(failure)).map(({id}) => id)));
     // Another tab may have answered a row or the import may be gone: show what is still open.
     if (
       failures.some(
