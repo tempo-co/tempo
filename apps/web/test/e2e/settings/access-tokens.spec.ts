@@ -2,6 +2,7 @@ import {createAccount} from '../../data/account.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {createHookHarness} from '../../utils/hook-harness';
 import {boxOf, expectEvenRowActionSpacing, expectNoHorizontalOverflow} from '../../utils/layout';
+import {countAfterToasts} from '../../utils/toasts';
 
 const account = createAccount({
   id: '00000000-0000-4000-8000-000000000001',
@@ -363,10 +364,12 @@ test('validates names, keeps creation open while pending, and offers manual copy
 test('a failed creation preserves the name for retry and clears the error when dismissed', async ({
   page,
 }) => {
-  let fail = true;
+  let fail: 'rate-limit' | 'refused' | null = 'rate-limit';
   await page.route('**/personal-access-tokens', (route) => {
     if (route.request().method() !== 'POST') return route.fulfill({json: []});
-    return fail
+    if (fail === 'rate-limit')
+      return route.fulfill({status: 429, json: {message: 'Synthetic rate limit'}});
+    return fail === 'refused'
       ? route.fulfill({status: 400, json: {message: 'Synthetic failure'}})
       : route.fulfill({status: 201, json: {...tokenMetadata, token: secret}});
   });
@@ -376,14 +379,21 @@ test('a failed creation preserves the name for retry and clears the error when d
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name', {exact: true}).fill(tokenMetadata.name);
   await dialog.getByRole('button', {name: 'Create token', exact: true}).click();
+  // The shared rate-limit toast reports this failure; the dialog adds nothing.
+  await expect(page.locator('[data-sonner-toast]')).toHaveText(/^Rate limit exceeded/);
+  await expect(dialog.getByRole('button', {name: 'Create token', exact: true})).toBeEnabled();
+  expect(await countAfterToasts(page, page.getByText(/could not be created/))).toBe(0);
+  fail = 'refused';
+  await dialog.getByRole('button', {name: 'Create token', exact: true}).click();
   await expect(dialog.getByRole('alert')).toContainText('could not be created');
+  expect(await countAfterToasts(page, page.getByText(/could not be created/))).toBe(1);
   await expect(dialog.getByLabel('Name', {exact: true})).toHaveValue(tokenMetadata.name);
   await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
   await expect(dialog).toBeHidden();
   await trigger.click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
   await expect(dialog.getByLabel('Name', {exact: true})).toHaveValue('');
-  fail = false;
+  fail = null;
   await dialog.getByLabel('Name', {exact: true}).fill(tokenMetadata.name);
   await dialog.getByRole('button', {name: 'Create token', exact: true}).click();
   await expect(dialog.getByLabel('Access token', {exact: true})).toHaveValue(secret);
@@ -392,7 +402,7 @@ test('a failed creation preserves the name for retry and clears the error when d
 test('retries a failed list load and retains a token until revocation succeeds', async ({page}) => {
   test.setTimeout(20_000);
   let loadFails = true;
-  let revokeFails = true;
+  let revokeFails: 'rate-limit' | 'conflict' | null = 'rate-limit';
   const longName = 'W'.repeat(100);
   let tokens = [
     {
@@ -415,6 +425,8 @@ test('retries a failed list load and retains a token until revocation succeeds',
       : route.fulfill({json: tokens}),
   );
   await page.route('**/personal-access-tokens/*', (route) => {
+    if (revokeFails === 'rate-limit')
+      return route.fulfill({status: 429, json: {message: 'Synthetic rate limit'}});
     if (revokeFails) return route.fulfill({status: 409, json: {message: 'Synthetic conflict'}});
     tokens = tokens.slice(1);
     return route.fulfill({status: 204});
@@ -471,9 +483,16 @@ test('retries a failed list load and retains a token until revocation succeeds',
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', {name: 'Revoke token', exact: true}).click();
+  // The shared rate-limit toast reports this failure; the dialog adds nothing.
+  await expect(page.locator('[data-sonner-toast]')).toHaveText(/^Rate limit exceeded/);
+  await expect(dialog.getByRole('button', {name: 'Revoke token', exact: true})).toBeEnabled();
+  expect(await countAfterToasts(page, page.getByText(/could not be revoked/))).toBe(0);
+  revokeFails = 'conflict';
+  await dialog.getByRole('button', {name: 'Revoke token', exact: true}).click();
   await expect(dialog.getByRole('alert')).toContainText('could not be revoked');
+  expect(await countAfterToasts(page, page.getByText(/could not be revoked/))).toBe(1);
   await expect(row).toHaveCount(1);
-  revokeFails = false;
+  revokeFails = null;
   await dialog.getByRole('button', {name: 'Revoke token', exact: true}).focus();
   await page.keyboard.press('Enter');
   await expect(row).toHaveCount(0);
@@ -496,6 +515,7 @@ test('reports a revocation that fails after its confirmation was closed', async 
   await dialog.getByRole('button', {name: 'Close', exact: true}).first().click();
   await expect(dialog).toBeHidden();
   release();
-  await expect(page.getByText('The token could not be revoked.', {exact: true})).toBeVisible();
+  await expect(page.locator('[data-sonner-toast]')).toHaveText('The token could not be revoked.');
+  expect(await countAfterToasts(page, page.getByText(/could not be revoked/))).toBe(1);
   await expect(row).toContainText(tokenMetadata.name);
 });

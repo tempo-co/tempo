@@ -6,7 +6,7 @@ import type {
 } from '@tempo/contracts';
 import {toast} from 'sonner';
 
-import {HttpError, api, wasToasted} from '@/utils/api';
+import {HttpError, api} from '@/utils/api';
 
 const TOKENS_QUERY_KEY = ['personal-access-tokens'] as const;
 const RESOURCE = '/personal-access-tokens';
@@ -43,10 +43,6 @@ export function useRevokePersonalAccessToken() {
       queryClient.setQueryData<PersonalAccessToken[]>(TOKENS_QUERY_KEY, (tokens) =>
         tokens?.filter((token) => token.id !== id),
       );
-    },
-    onError: (error) => {
-      if (wasToasted(error)) return;
-      toast.error('The token could not be revoked.');
     },
   });
 }

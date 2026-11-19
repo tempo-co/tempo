@@ -1,6 +1,7 @@
 import type {PersonalAccessToken} from '@tempo/contracts';
 import {CircleAlert} from 'lucide-react';
-import {useState} from 'react';
+import {useRef, useState} from 'react';
+import {toast} from 'sonner';
 
 import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Button, ButtonProps} from '@/components/ui/button';
@@ -15,6 +16,7 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogTrigger,
 } from '@/components/ui/responsive-dialog';
+import {wasToasted} from '@/utils/api';
 
 import {useRevokePersonalAccessToken} from '../../api/use-personal-access-tokens';
 
@@ -25,13 +27,19 @@ type RevokeTokenDialogProps = {
 
 export function RevokeTokenDialog({token, triggerVariant = 'outline'}: RevokeTokenDialogProps) {
   const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
+  const changeOpen = (nextOpen: boolean) => {
+    openRef.current = nextOpen;
+    setOpen(nextOpen);
+  };
   const revoke = useRevokePersonalAccessToken();
   const confirm = async () => {
     try {
       await revoke.mutateAsync(token.id);
-      setOpen(false);
-    } catch {
-      // Keep the confirmation open and the token listed when revocation fails.
+      changeOpen(false);
+    } catch (error) {
+      // The token stays listed. An open confirmation shows the failure itself; a closed one toasts it.
+      if (!openRef.current && !wasToasted(error)) toast.error('The token could not be revoked.');
     }
   };
 
@@ -40,7 +48,7 @@ export function RevokeTokenDialog({token, triggerVariant = 'outline'}: RevokeTok
       open={open}
       onOpenChange={(nextOpen) => {
         if (!revoke.isPending) revoke.reset();
-        setOpen(nextOpen);
+        changeOpen(nextOpen);
       }}
     >
       <ResponsiveDialogTrigger asChild>
@@ -61,7 +69,7 @@ export function RevokeTokenDialog({token, triggerVariant = 'outline'}: RevokeTok
             using this token will lose access immediately.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        {revoke.isError && (
+        {revoke.isError && !wasToasted(revoke.error) && (
           <ResponsiveDialogBody>
             <Alert role='alert' variant='destructive'>
               <CircleAlert aria-hidden='true' />
