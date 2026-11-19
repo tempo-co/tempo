@@ -10,7 +10,7 @@ The build emits `manifest.webmanifest` from `pwaManifestPlugin` in `vite.config.
 
 `config/offline-shell.ts` emits `sw.js` at build time only (`apply: 'build'`). It caches `index.html`, the manifest, the hashed assets and every icon in `config/app-icons.ts`, under a cache name hashed from those files and the base path. It requires a base path that starts and ends with `/`. The bank picker's country flags (the `flag-icons` package, about 270 SVGs) are hashed assets left out of the cache: the browser downloads only the flags the picker shows, and connecting a bank needs the network anyway.
 
-`src/utils/register-offline-shell.ts` registers it only when `import.meta.env.PROD`, in a secure context. A build with `NODE_ENV=test` does not register it (see `docs/env-boundaries.md`), and the offline specs wait for `navigator.serviceWorker.controller`.
+`src/utils/register-offline-shell.ts` registers it only when `import.meta.env.PROD`, in a secure context. On activation the worker claims every open page. A page whose request started before activation but which opened after that claim is missed by it, so once a worker is active, a page it does not control sends it `claim` and the worker claims it. A build with `NODE_ENV=test` does not register it (see `docs/env-boundaries.md`), and the offline specs wait for `navigator.serviceWorker.controller`.
 
 A new file in `public/` that the app needs offline must be added to `config/app-icons.ts` or matched by the asset filter in `config/offline-shell.ts`.
 
