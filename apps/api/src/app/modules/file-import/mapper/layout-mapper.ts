@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {MessageCreateParamsNonStreaming} from '@anthropic-ai/sdk/resources/messages';
-import {Injectable, Optional} from '@nestjs/common';
+import {Injectable, Logger, Optional} from '@nestjs/common';
 
+import {formatClaudeUsage} from '@core/anthropic/claude-usage';
 import {ConfigurationService} from '@core/config/config.service';
 
 import {
@@ -32,6 +33,7 @@ type ClaudeClient = Pick<Anthropic, 'messages'>;
  */
 @Injectable()
 export class LayoutMapper {
+	private readonly logger = new Logger(LayoutMapper.name);
 	private client?: ClaudeClient;
 	private readonly apiKey?: string;
 	private readonly model: string;
@@ -64,12 +66,21 @@ export class LayoutMapper {
 			},
 		};
 		let response: Awaited<ReturnType<ClaudeClient['messages']['create']>>;
+		const startedAt = Date.now();
 		try {
 			response = await client.messages.create(request, {timeout: LAYOUT_MAPPER_TIMEOUT_MS, maxRetries: 0});
 		} catch {
 			throw new LayoutMapperError('unavailable');
 		}
 		const message = response as Anthropic.Message;
+		this.logger.log(
+			formatClaudeUsage(
+				{kind: 'layout mapping', items: input.rowCount},
+				request,
+				message,
+				Date.now() - startedAt,
+			),
+		);
 		if (
 			message.stop_reason !== 'end_turn' ||
 			message.content.some((block) => !['text', 'thinking', 'redacted_thinking'].includes(block.type))

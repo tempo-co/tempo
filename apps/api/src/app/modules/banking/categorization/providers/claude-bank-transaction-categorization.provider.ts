@@ -9,6 +9,7 @@ import {Injectable, Logger, Optional} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategoryDefinition} from '@tempo/contracts';
 import {z} from 'zod';
 
+import {formatClaudeUsage} from '@core/anthropic/claude-usage';
 import {ConfigurationService} from '@core/config/config.service';
 import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';
 
@@ -398,19 +399,9 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			}));
 		const startedAt = Date.now();
 		const response = await client.messages.create(request);
-		this.logUsage(call, request, response, Date.now() - startedAt);
+		this.logger.log(formatClaudeUsage(call, request, response, Date.now() - startedAt));
 		if (response.stop_reason !== stopReason) throw this.invalidResponseError();
 		return response;
-	}
-
-	private logUsage(call: ApiCall, request: MessageCreateParamsNonStreaming, response: Message, ms: number): void {
-		const {usage} = response;
-		this.logger.log(
-			`Claude ${call.kind} call: items ${call.items}, ${request.model} ${request.output_config?.effort ?? 'default'}, ` +
-				`${ms} ms, stop ${response.stop_reason}, input ${usage.input_tokens}, ` +
-				`cache read ${usage.cache_read_input_tokens ?? 0}, cache write ${usage.cache_creation_input_tokens ?? 0}, ` +
-				`output ${usage.output_tokens}, web searches ${usage.server_tool_use?.web_search_requests ?? 0}`,
-		);
 	}
 
 	private replyText(response: Message): string {
