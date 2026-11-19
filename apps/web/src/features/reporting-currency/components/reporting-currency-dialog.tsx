@@ -32,6 +32,15 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
     setIsOpen(open);
   };
 
+  // Land on the saved currency, not the search box, so opening shows no ring and no phone keyboard.
+  const focusSelected = (event: Event) => {
+    event.preventDefault();
+    const content = event.currentTarget as HTMLElement;
+    const current = content.querySelector<HTMLElement>('[aria-pressed="true"]');
+    (current ?? content).focus({preventScroll: true});
+    current?.scrollIntoView({block: 'center'});
+  };
+
   const save = async () => {
     if (!selected) return;
     if (!changes && settings.confirmed) {
@@ -59,7 +68,7 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
           Edit
         </Button>
       </ResponsiveDialogTrigger>
-      <ResponsiveDialogContent className='grid-cols-1 sm:max-w-lg'>
+      <ResponsiveDialogContent className='grid-cols-1 sm:max-w-lg' onOpenAutoFocus={focusSelected}>
         <ResponsiveDialogHeader className='px-4 text-start md:px-0'>
           <ResponsiveDialogTitle>Reporting currency</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
@@ -67,6 +76,7 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
             its own.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
+        {/* The hint takes its line from the list, so the buttons stay put and no empty line sits above them. */}
         <div className='flex h-[min(52dvh,24rem)] min-h-0 flex-col px-4 md:px-0'>
           <CurrencyList
             settings={settings}
@@ -74,14 +84,14 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
             onSelect={setSelected}
             disabled={isPending}
           />
+          <p className='text-sm text-muted-foreground not-empty:pt-3' aria-live='polite'>
+            {selected === null
+              ? 'Choose a currency before saving.'
+              : changes
+                ? 'Totals are recalculated in the new currency, which can take a minute.'
+                : null}
+          </p>
         </div>
-        <p className='min-h-5 px-4 text-sm text-muted-foreground md:px-0' aria-live='polite'>
-          {selected === null
-            ? 'Choose a currency before saving.'
-            : changes
-              ? 'Totals are recalculated in the new currency, which can take a minute.'
-              : null}
-        </p>
         <ResponsiveDialogFooter className='gap-2'>
           <Button
             type='button'

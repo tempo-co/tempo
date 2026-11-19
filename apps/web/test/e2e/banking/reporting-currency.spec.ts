@@ -600,6 +600,7 @@ test.describe('against the API', () => {
     const save = dialog.getByTestId('save-reporting-currency-button');
     await expect(save).toBeDisabled();
     await expect(dialog.getByText('Choose a currency before saving.')).toBeVisible();
+    await expect(dialog.getByTestId('currency-search')).not.toBeFocused();
     await dialog.getByTestId('currency-search').fill('pound');
     await dialog.getByRole('button', {name: 'GBP — British Pound'}).click();
     await expect(dialog.getByText('Totals are recalculated in the new currency')).toBeVisible();
@@ -619,6 +620,11 @@ test.describe('against the API', () => {
 
     await page.reload();
     await expect(value).toHaveText('GBP');
+    // Reopening lands on the saved currency, not the search.
+    await edit.click();
+    await expect(dialog.getByRole('button', {name: 'GBP — British Pound'})).toBeFocused();
+    await expect(dialog.getByTestId('currency-search')).not.toBeFocused();
+    await dialog.getByRole('button', {name: 'Cancel'}).click();
 
     const other = await browser.newContext({storageState: {cookies: [], origins: []}});
     try {
