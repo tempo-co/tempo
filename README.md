@@ -16,6 +16,6 @@ Tempo is a personal-finance app. It synchronizes real bank data through [Enable 
 | [`apps/api`](apps/api/README.md) | NestJS backend, including the hosted MCP endpoint |
 | [`apps/web`](apps/web/README.md) | React web app |
 | [`ops`](ops/README.md) | Deployment: deploy, install and backup scripts, host units, production and staging Compose files |
-| [`docs`](docs/ci-and-images.md) | CI and images for both apps |
+| [`docs`](docs/ci-and-images.md) | CI and images for both apps, decision records (`docs/adr/`), agent-skill settings (`docs/agents/`) |
 
 Each app has its own `package.json`, lockfile and tooling; run npm commands inside its directory (`cd apps/api && npm ci`). Both need Node.js 26.x and Docker.

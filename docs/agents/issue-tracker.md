@@ -5,20 +5,18 @@ Issues and specs for this repo live in the Linear project named **Tempo**. GitHu
 ## Conventions
 
 - **Team**: new issues go to the team that owns the Tempo project. Look it up with `list_projects` (query "Tempo", field `teams`) rather than hard-coding it.
-- **Create an issue**: `save_issue` with `team`, `project: "Tempo"`, `title` and a Markdown `description`. Check `list_issues` (project "Tempo", `query`) for a matching issue first.
+- **Create an issue**: `save_issue` with `team`, `project: "Tempo"`, `title` and a Markdown `description`.
 - **Read an issue**: `get_issue`, then `list_comments` for the discussion.
-- **List issues**: `list_issues` with `project: "Tempo"` and `label` / `state` filters. Follow `cursor` while `hasNextPage` is true.
+- **List issues**: `list_issues` with `project: "Tempo"` and `label` / `state` filters.
 - **Sub-issue**: `save_issue` with `parentId` set to the parent's identifier.
 - **Blocking**: `save_issue` with `blockedBy: [<identifier>, ...]`. An issue is unblocked when every blocker is Done or Canceled (`get_issue` with `includeRelations: true`).
 - **Comment**: `save_comment` on the issue.
-- **Apply / remove labels**: `save_issue` with `addLabels` / `removeLabels`. Never pass `labels`, which replaces the whole set.
+- **Apply / remove labels**: `save_issue` with `addLabels` / `removeLabels`.
 - **Close**: comment with the explanation, then set `state` to `Done`, or `Canceled` for won't-fix.
-
-Never put real personal or financial data in an issue; the rules in the root `AGENTS.md` Privacy section apply.
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.**
 
 ## When a skill says "publish to the issue tracker"
 

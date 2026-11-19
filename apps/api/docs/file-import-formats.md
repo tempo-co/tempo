@@ -10,7 +10,7 @@ The files `src/app/modules/file-import/parsers/` reads, for the import described
 | ABN AMRO TXT              | `src/app/modules/file-import/parsers/abn-amro-txt.ts`                |                                                                                 |
 | Revolut CSV and Excel     | `src/app/modules/file-import/parsers/revolut.ts`                     | Names no account; one statement per currency.                                   |
 | Bank CSV layouts          | `src/app/modules/file-import/parsers/csv-layout-reader.ts`, `src/app/modules/file-import/parsers/csv-layouts.ts` | The banks below. Layouts are data; every row must validate. |
-| The owner's saved layouts | the same reader                      | Learned by the mapper, tried after everything built in, for that owner only.    |
+| The user's saved layouts | the same reader                      | Learned by the mapper, tried after everything built in, for that user only.    |
 
 What the standard readers take from the text, by general rule and never per bank:
 
@@ -25,7 +25,7 @@ The built-in bank CSV layouts:
 | Bank                     | Layouts                                                                                    | Notes                                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
 | ING                      | `ing-nl` (comma, 9 columns), `ing-nl-11` (semicolon, 11 columns), `ing-en-11`, `ing-en`    | Dutch and English downloads. The 11-column export states the balance after each row.      |
-| Rabobank                 | `rabobank-nl`, `rabobank-en`, `rabobank-creditcard`                                        | The credit card export names no account: it goes by bank and currency, as Revolut does, and an owner's layout naming no account cannot be called Rabobank. Several cards in one export are one account. |
+| Rabobank                 | `rabobank-nl`, `rabobank-en`, `rabobank-creditcard`                                        | The credit card export names no account: it goes by bank and currency, as Revolut does, and a user's layout naming no account cannot be called Rabobank. Several cards in one export are one account. |
 | bunq                     | `bunq-nl`, `bunq-en` (6 columns), `bunq-en-7`, `bunq-en-7-semicolon` (with Interest Date)  | Amounts may group thousands with `.`.                                                     |
 | Knab                     | `knab-nl` (with the `KNAB EXPORT` line), `knab-nl-no-preamble`                             | Amounts may group thousands with `.`.                                                     |
 | ASN Bank, SNS, RegioBank | `asn-nl`                                                                                   | No header; the account is held at `ASNB`, `SNSB` or `RBRB`.                               |

@@ -15,13 +15,7 @@ Enable Banking, Claude and the browsers' push services are paid, credentialed or
 - **Cost limits are enforced in code.** Assert the number of provider requests per batch (one categorizing call per row group, offering only its `StructuredOutput` answer tool; at most one separate search call per group with a search query, its tool capped at one use). Prompt wording alone is not a cap.
 - **Separate gates.** A refusal verifies failure handling, not a successful call. Rows inserted by direct SQL bypass enqueue hooks; pending rows with no jobs mean the provider path never ran.
 - **Accuracy is a separate claim.** Schema validity and model confidence say nothing about correctness.
-
-## Recipe: one vertical path
-
-1. Read the provider interface, queue/worker path, config defaults and persistence; pick the smallest boundary to mock.
-2. Write a failing E2E: synthetic fixture (`BankingFixtures`), real enqueue, real worker, mocked provider, real database, authenticated HTTP read.
-3. Add provider-failure and manual-override race cases.
-4. Before promising automatic recovery, trace the stored failure status through queue-attempt exhaustion and the reconciliation sweep's selection predicate; a retryable error is useless if the worker stores a status the sweep skips.
+- **Trace recovery.** Before promising automatic recovery, trace the stored failure status through queue-attempt exhaustion and the reconciliation sweep's selection predicate; a retryable error is useless if the worker stores a status the sweep skips.
 
 ## Diagnosing a failing provider E2E
 
@@ -30,8 +24,6 @@ Enable Banking, Claude and the browsers' push services are paid, credentialed or
 3. Re-run the guarded SQL against real PostgreSQL; quote camelCase columns.
 4. Compare stored metadata lengths (prompt version, model) with the column widths in the migrations.
 5. Check affected-row guards and expected statuses before touching retries or timeouts.
-
-Never replace the queue or repository with mocks to make it pass.
 
 ## Provider qualification
 

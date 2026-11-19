@@ -1,6 +1,6 @@
 # Staging
 
-Staging is a separate copy of Tempo on this host, deployed with `tempo-deploy staging --api <tag> --web <tag>` (see [`../README.md`](../README.md)).
+Staging is a separate copy of Tempo on the production server, deployed with `tempo-deploy staging --api <tag> --web <tag>` (see [`../README.md`](../README.md)).
 
 ## Layout
 

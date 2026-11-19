@@ -2,21 +2,14 @@
 
 UI rules that the code follows but does not state. Formatting, lint and type settings live in `.prettierrc`, `eslint.config.js` and `tsconfig.app.json`; read those instead of copying them here.
 
-## Formatting
-
-- `npm run format` covers `src/**/*.{js,jsx,ts,tsx}` only. Do not run Prettier on `src/index.css` (it reflows the token comments) or on Markdown (it reflows unrelated lines); edit those by hand. `npx prettier --write src` touches CSS too, so run it on changed paths and check `git status` for collateral files.
-- `prettier-plugin-tailwindcss` must stay last in `plugins`.
-
 ## Feedback: confirm in place, toast the rest
 
 - An edit whose result shows where it was made (category select, inline fields) shows progress and outcome on the control and its status line, and toasts only on failure. `useUpdateBankTransactionCategory` is the reference: no `toast.promise`, `toast.error` for non-auth failures.
 - A message that stays on screen next to what it is about (a refusal, a bank needing attention, a failed save in a dialog) is an `Alert` from `src/components/ui/alert.tsx`; `DESIGN.md` (Alerts) says which variant and role. Do not hand-style bordered callouts or bare red lines for these.
-- Toast failures and outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
 - The `api` wrapper toasts offline writes, lost write connections, expired sessions, rate limits and unverified email, and marks those errors. A call site that toasts a failure skips errors where `wasToasted(error)` (`src/utils/api.ts`) is true; with a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
 - Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either.
-- The Toaster uses sonner's default lifetime and stacking. Sonner has no per-type duration, so split success/error lifetimes mean touching call sites.
 - When a hook changes which `sonner` methods it calls, update the `sonner` stub in hook-harness specs (see `docs/e2e-helpers.md`).
 
 ## Colour and theme
@@ -28,8 +21,8 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 ## Merchant logo tiles
 
 - Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Its Clay field, ink and edge tokens are defined in `src/index.css` and `DESIGN.md`; do not recolor the ordinary `BankTransactionCategoryIcon` globally.
-- DTOs retain the original `merchantLogoUrl`. The tile appends `/mask-v3` and loads the white RGBA derivative in an ordinary `img`, without `crossOrigin`. Development and E2E use a cross-origin API; anonymous CSS-mask requests omit the API session cookies. A per-tile SVG `SourceAlpha` filter applies the ink token directly in sRGB without changing alpha or fetching a second image on theme changes. Referencing the token in `floodColor` also invalidates the filter when the theme changes in WebKit; inherited `currentColor` can leave its rendered tint stale. Keep SVG definitions zero-sized and out of layout.
-- Missing or failed derivatives, including a 404 from an older API, show the fallback glyph. Failure state is keyed to the full source URL so a new version can recover. Never fall back to a full-color original or add merchant-specific artwork rules.
+- The tile loads `/mask-v3` as an ordinary `img` without `crossOrigin` (CSS masks would drop the API cookies) and tints it with an SVG `SourceAlpha` filter whose `floodColor` references the ink token; inherited `currentColor` leaves WebKit's tint stale after a theme change. Keep SVG definitions zero-sized and out of layout.
+- Missing or failed derivatives show the fallback glyph. Failure state is keyed to the full source URL so a new version can recover. Never fall back to a full-color original or add merchant-specific artwork rules.
 
 ## Phone layouts
 
@@ -95,9 +88,9 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Copy
 
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
-- Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The owner's own banks and their export formats may be named, because that is how the owner recognises them: connection cards show bank names, and the file-import Supported files list names the exports it reads ("ABN AMRO TXT", "Rabobank CSV").
+- Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The user's own banks and their export formats may be named, because that is how the user recognises them: connection cards show bank names, and the file-import Supported files list names the exports it reads ("ABN AMRO TXT", "Rabobank CSV").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
-- When something is briefly busy or failed for a moment, say what the owner can do, not which internal process is busy ("Tempo is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
+- When something is briefly busy or failed for a moment, say what the user can do, not which internal process is busy ("Tempo is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
 
 ## Routing and URL state
 
@@ -115,10 +108,9 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 
 ## Library traps
 
-- Tailwind `max-[N]:` variants apply below N (`width < N`), not at N.
 - Radix `ScrollArea` wraps its content in a `display: table` box with `min-width: 100%`. Inside a grid track with the default `min-width: auto`, wide content then widens the whole sheet; give the grid `grid-cols-1` and measure the ancestors, not only the scrolled element.
 - Capture a dialog's focus-return target from `event.currentTarget` in the click handler (the Details button in `src/features/banking/components/bank-connection-list.tsx`), never from `document.activeElement`: Safari on iPhone does not focus a tapped button.
 
 ## UI primitives
 
-`src/components/ui` holds application-owned shadcn-style wrappers over Radix, vaul (drawer), cmdk (command), react-day-picker (calendar) and input-otp. Changing `components.json` or a package is not a migration: wrappers, call sites and the adjacent packages all move. Keep the incumbent unless a candidate replaces a concrete dependency or fixes a demonstrated defect, migrate one component at a time, and verify each with `npm run build` plus the Playwright flows for that overlay, menu, form or date surface. Check focus return, portals, DOM selectors and animation state attributes; other libraries differ there (for example `render` instead of `asChild`).
+`src/components/ui` holds application-owned shadcn-style wrappers over Radix, vaul (drawer), cmdk (command), react-day-picker (calendar) and input-otp. When changing one, verify focus return, portals, DOM selectors and animation state attributes.

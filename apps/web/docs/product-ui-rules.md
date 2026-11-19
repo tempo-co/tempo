@@ -1,18 +1,17 @@
 # Product UI rules
 
-The owner's standing rules for what Tempo's screens show and how they behave, for new and changed screens. Tokens and components are in `DESIGN.md`; shared code rules are in `docs/frontend-conventions.md`.
+Standing rules for what Tempo's screens show and how they behave, for new and changed screens. Tokens and components are in `DESIGN.md`; shared code rules are in `docs/frontend-conventions.md`.
 
 ## Density and copy
 
-- A lean dashboard: each number is shown once, with no repeated or decorative content. A new summary widget needs the decision it helps the owner make.
+- A lean dashboard: each number is shown once, with no repeated or decorative content. A new summary widget needs the decision it helps the user make.
 - Glanceable headers use horizontal space: the headline on the left, a two-line comparison beside it.
-- No explanatory sentences under charts and cards. When one is removed from a view, remove it and its data plumbing everywhere that component renders.
+- No explanatory sentences under charts and cards.
 - An info icon only for a definition the screen cannot show (a formula, a computed rule such as "usual"), never to restate labels or the legend.
 - Hide an empty-state card that has nothing to act on. On phones, also hide all-clear status lines; problems and expiring-consent warnings still show.
 - Words over signed percentages: "€X now · €Y less than on <d Mon>", and nothing more. No caveats, not even conditional ones.
 - Before rewording a headline figure, read how it is computed and make the words match what the chart shows.
 - The offline indicator never covers UI: a small inline label with detail in a tooltip, never a floating or undismissable banner. No toast that blocks the screen or cannot be closed.
-- Everything works on both phone and desktop.
 
 ## Charts and periods
 
@@ -26,7 +25,7 @@ The owner's standing rules for what Tempo's screens show and how they behave, fo
 ## Lists and detail views
 
 - One row spec per entity: anything standing for transactions uses the transaction row's height and tile size on every surface. Layout specs measure rows and tiles at 1440 and 390 px on each surface.
-- The left tile shows the merchant logo when there is one; the category keeps its own small icon beside the label.
+- A category keeps its own small icon beside its label, even when the row's tile shows a merchant logo.
 - Fact grids are two lines: a label over one value. Fold secondary detail into the label ("Next · in 29 days"). A value that can grow without bound moves to a wrapping badge. Estimates are whole amounts.
 - Detail views list their items inline, newest first, with Load more and the shared row, and keep the open entity in the URL (with `replace`).
 - Optional columns keep their grid track: render an empty cell so the next column starts at the same x in every state.
@@ -38,7 +37,6 @@ The owner's standing rules for what Tempo's screens show and how they behave, fo
 - One-press filter shortcuts ("To review") sit in the toolbar, not alone in the chips row.
 - Long-list pickers (country, bank) on phones are one stepped bottom sheet with the likely value preselected and 56 px rows. Never auto-focus search, on any device.
 - Restyle, don't replace: flags stay flags (small 4:3, small radius) and badges keep the pill radius.
-- An underline marks navigation; a selected setting value needs a different cue (a ring plus a filled cell).
 
 ## Loading
 
@@ -48,4 +46,4 @@ First load shows skeleton rows shaped like the real list. A refetch keeps the ol
 
 - A managed list comes first and one-time setup steps below it; setup copy never refers to where the list sits.
 - Setup steps are terse, with only key terms in medium weight.
-- Pages with separate sections use in-page tabs on phones.
+- Pages with separate sections use in-page tabs (Settings at every width).

@@ -36,7 +36,7 @@ No copy calls import a fallback or assumes a bank is connected.
   whole amount on both lines. Rows on days bank sync is final for that the bank
   never sent sit under the counts as one bordered fold line ("Not added: 4 rows your bank never
   sent", `ChevronRight`), never in the attention tone and never counted as a look: nothing waits
-  for the owner. Opened, a muted line says the bank sent every transaction for those days, then the
+  for the user. Opened, a muted line says the bank sent every transaction for those days, then the
   rows grouped by counterparty (else description), largest group first: one bordered block per
   group (the `FileX` Clay tile, the name, its row count and **Add N** while more than one is open),
   its rows under it with **Add** each. Both are small outline buttons of one minimum width in one
