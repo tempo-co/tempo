@@ -10,8 +10,8 @@ import {MailpitMessageSummaryResponse, MailpitResponse} from '../types/mailpit';
 import {SIX_DIGIT_REGEX, UUID_REGEX} from '../types/regex.constants';
 import {waitFor} from './wait-utils';
 
-/** Mailpit's HTTP API, which `docker-compose.test.yml` publishes on `EMAIL_UI_PORT` (`.env.test`). */
-export const MAILPIT_API_URL = `http://localhost:${process.env.EMAIL_UI_PORT ?? '8025'}`;
+/** Mailpit's HTTP API on the host port `scripts/e2e-stack.mjs` passes as `EMAIL_UI_PORT`. */
+export const MAILPIT_API_URL = `http://127.0.0.1:${process.env.EMAIL_UI_PORT ?? '8025'}`;
 
 const EMAIL_FOOTER = 'Sent by Tempo because of activity on your account. Need help? Reply to this email.';
 
