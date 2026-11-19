@@ -9,6 +9,7 @@ const STORED_STATE = {
 	connectionId: 'connection-id',
 	aspspName: 'Example Bank',
 	aspspCountry: 'XX',
+	replacesConnectionId: null,
 };
 
 describe('BankingAuthorizationStateService', () => {

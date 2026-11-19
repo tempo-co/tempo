@@ -116,12 +116,14 @@ describe('AccountController - DELETE /accounts/me', () => {
 			connectionId: 'e2e-connection',
 			aspspName: 'ABN AMRO',
 			aspspCountry: 'NL',
+			replacesConnectionId: null,
 		});
 		const otherState = await authorizationStates.create({
 			accountId: 'someone-else',
 			connectionId: 'e2e-connection-2',
 			aspspName: 'Rabobank',
 			aspspCountry: 'NL',
+			replacesConnectionId: null,
 		});
 		const ownedStateKey = `banking:authorization:${ownedState}`;
 		const otherStateKey = `banking:authorization:${otherState}`;

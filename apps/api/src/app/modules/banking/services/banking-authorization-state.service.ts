@@ -53,7 +53,7 @@ export type BankingAuthorizationState = {
 	connectionId: string;
 	aspspName: string;
 	aspspCountry: string;
-	replacesConnectionId?: string | null;
+	replacesConnectionId: string | null;
 	authorizationId?: string;
 };
 
@@ -181,9 +181,7 @@ export class BankingAuthorizationStateService {
 				typeof parsed.connectionId !== 'string' ||
 				typeof parsed.aspspName !== 'string' ||
 				typeof parsed.aspspCountry !== 'string' ||
-				(parsed.replacesConnectionId !== undefined &&
-					parsed.replacesConnectionId !== null &&
-					typeof parsed.replacesConnectionId !== 'string') ||
+				(parsed.replacesConnectionId !== null && typeof parsed.replacesConnectionId !== 'string') ||
 				(parsed.authorizationId !== undefined && typeof parsed.authorizationId !== 'string')
 			) {
 				return null;

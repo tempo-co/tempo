@@ -21,7 +21,7 @@ From `src/app/modules/banking/services/enable-banking.client.ts` `parseAccount()
 
 `startAuthorization` always inserts a pending row, so failure and cancel semantics stay per attempt. `persistAuthorizedSession` then writes the new session, consent and accounts onto the user's existing AUTHORIZED/EXPIRED connection for the same provider + ASPSP and drops the pending row. Account upsert by hash rotates `providerAccountId` in place and keeps transaction history.
 
-- The authorization state records `replacesConnectionId`: an exact id must still exist and be eligible, otherwise the callback fails with `state_superseded`; `null` may pick the newest eligible connection under lock; a missing value (legacy state) fails closed.
+- The authorization state records `replacesConnectionId`: an exact id must still exist and be eligible, otherwise the callback fails with `state_superseded`; `null` may pick the newest eligible connection under lock.
 - Serialize first-time callbacks with the account/ASPSP scope lock before selecting a reusable connection, or two pending rows can each become an authorized connection.
 - In tests, the newest connection row may be CANCELLED under merge semantics: never look up "the" connection by `createdAt DESC`; filter by status.
 - Do not dedupe accounts globally per user by hash. It forces account re-parenting, and sync's authoritative-account reconciliation would then mark a borrowed account inactive (its `providerAccountId` is not in its own connection's session).
