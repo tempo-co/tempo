@@ -26,6 +26,12 @@ export async function openRemoval(page: Page, card: Locator) {
   return dialog;
 }
 
+/** Chooses to delete the bank's accounts and history in its removal step. */
+export async function chooseDeleteEverything(dialog: Locator) {
+  await dialog.getByText('Delete everything', {exact: true}).click();
+  await expect(dialog.getByRole('radio', {name: /^Delete everything/})).toBeChecked();
+}
+
 /** Signs in a mocked account and answers the app-wide API reads; any other non-app request fails the test. */
 export async function routeMockedBankApp(page: Page, baseURL: string | undefined) {
   // Every non-app request is intercepted; an incomplete mock must never reach a real bank/API.

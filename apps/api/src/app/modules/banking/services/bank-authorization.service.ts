@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {createHash} from 'node:crypto';
-import {DataSource, EntityManager, In, Repository} from 'typeorm';
+import {DataSource, EntityManager, In, Like, Not, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
@@ -319,7 +319,7 @@ export class BankAuthorizationService {
 					},
 				);
 
-				await this.upsertSessionAccounts(manager, targetConnection.id, session.accounts);
+				await this.upsertSessionAccounts(manager, accountId, targetConnection.id, session.accounts);
 
 				if (targetConnection.id !== pendingConnection.id) {
 					await connectionRepository.delete({id: pendingConnection.id});
@@ -346,13 +346,19 @@ export class BankAuthorizationService {
 		}
 	}
 
-	/** Matches each session account to a stored one by provider uid, then by identification hash; creates the rest. */
+	/**
+	 * Writes the session's accounts onto the connection: an account it already has (by `providerAccountId`, then
+	 * `identificationHash`) is updated, an imported-files account kept from a removed connection of this bank account
+	 * (same `identificationHash`, else same IBAN and currency) moves onto it with its history, and any other is created.
+	 */
 	private async upsertSessionAccounts(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		connectionId: BankConnection['id'],
 		accounts: EnableBankingAccount[],
 	): Promise<void> {
 		const bankAccountRepository = manager.getRepository(BankAccount);
+		let fileConnection: BankConnection | null | undefined;
 
 		for (const account of accounts) {
 			if (!account.uid) continue;
@@ -369,6 +375,38 @@ export class BankAuthorizationService {
 						identificationHash: account.identificationHash,
 					},
 				});
+			}
+
+			if (!bankAccount) {
+				// Locked after the connections, the order removal takes them in, so imports leave the account alone.
+				fileConnection ??= await manager.getRepository(BankConnection).findOne({
+					where: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+					lock: {mode: 'pessimistic_write'},
+				});
+				// A kept account carries its bank's hash; accounts made from files have a `file:` one.
+				const kept =
+					fileConnection &&
+					((await bankAccountRepository.findOne({
+						where: {
+							bankConnection: {id: fileConnection.id},
+							identificationHash: account.identificationHash,
+						},
+						order: {id: 'ASC'},
+					})) ??
+						(account.iban
+							? await bankAccountRepository.findOne({
+									where: {
+										bankConnection: {id: fileConnection.id},
+										iban: account.iban,
+										currency: values.currency,
+										identificationHash: Not(Like('file:%')),
+									},
+									order: {id: 'ASC'},
+								})
+							: null));
+				if (kept) {
+					bankAccount = Object.assign(kept, {bankConnection: {id: connectionId} as BankConnection});
+				}
 			}
 
 			if (!bankAccount) {

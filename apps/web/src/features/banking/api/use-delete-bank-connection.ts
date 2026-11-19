@@ -1,4 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
+import type {BankConnectionRemoveRequest} from '@tempo/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {HttpError, api} from '@/utils/api';
@@ -13,13 +14,13 @@ export const useDeleteBankConnection = () => {
   const {mutateAsync: deleteMutation, isPending} = useMutation<
     void,
     HttpError,
-    {connectionId: string; confirmation?: string}
+    {connectionId: string} & BankConnectionRemoveRequest
   >({
     mutationKey: DELETE_BANK_CONNECTION_KEY,
-    mutationFn: async ({connectionId, confirmation}) => {
+    mutationFn: async ({connectionId, ...body}) => {
       await api.delete<void>(
         `/bank-connections/${connectionId}`,
-        confirmation ? {confirmation} : undefined,
+        Object.keys(body).length > 0 ? (body satisfies BankConnectionRemoveRequest) : undefined,
       );
     },
     onSuccess: async () => {
@@ -32,8 +33,8 @@ export const useDeleteBankConnection = () => {
     },
   });
 
-  const deleteBankConnection = (connectionId: string, confirmation?: string) =>
-    deleteMutation({connectionId, confirmation});
+  const deleteBankConnection = (connectionId: string, removal: BankConnectionRemoveRequest = {}) =>
+    deleteMutation({connectionId, ...removal});
 
   return {deleteBankConnection, isPending};
 };

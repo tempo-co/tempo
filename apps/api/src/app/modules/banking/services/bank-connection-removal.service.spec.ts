@@ -90,9 +90,9 @@ describe('BankConnectionRemovalService', () => {
 			connectionLockService,
 		});
 
-		await expect(service.removeConnection('owner-account-id', connection.id, 'DELETE')).rejects.toThrow(
-			'deletion failed',
-		);
+		await expect(
+			service.removeConnection('owner-account-id', connection.id, {confirmation: 'DELETE'}),
+		).rejects.toThrow('deletion failed');
 		expect(connectionLockService.acquire).toHaveBeenCalledWith(connection.id);
 		expect(connectionLock.stop).toHaveBeenCalledTimes(1);
 		expect(connectionLock.release).toHaveBeenCalledTimes(1);
@@ -157,7 +157,7 @@ describe('BankConnectionRemovalService', () => {
 			consentRevocationService,
 		});
 
-		await service.removeConnection('account-id', connection.id, 'DELETE');
+		await service.removeConnection('account-id', connection.id, {confirmation: 'DELETE'});
 
 		expect(events).toEqual(['revoke', 'transaction-start', 'transaction-commit', 'cleanup']);
 		expect(consentRevocationService.revokeSessions).toHaveBeenCalledWith([connection]);

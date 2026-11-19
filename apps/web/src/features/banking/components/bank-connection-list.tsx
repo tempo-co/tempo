@@ -12,7 +12,6 @@ import {TextAction} from '@/components/shared/text-action';
 import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
-import {Input} from '@/components/ui/input';
 import {
   ResponsiveDialog,
   ResponsiveDialogBody,
@@ -683,7 +682,7 @@ function RemoveStep({
   onBack: () => void;
   onRemoved: () => void;
 }) {
-  const [confirmation, setConfirmation] = useState('');
+  const [keepAccounts, setKeepAccounts] = useState(true);
   const {deleteBankConnection, isPending: isDeleting} = useDeleteBankConnection();
   // A removal started before the dialog was closed and reopened is still this connection's.
   const isPending =
@@ -696,13 +695,24 @@ function RemoveStep({
   const destructive = (DESTRUCTIVE_CONNECTION_STATUSES as readonly string[]).includes(
     connection.status,
   );
+  const accountCount = connection.bankAccounts.length;
+  const accountsPhrase =
+    accountCount === 1 ? 'account and its' : `${accountCount} accounts and their`;
+  // Keeping is a choice only for a bank with accounts; imported files have nowhere else to go.
+  // Choosing to delete confirms it.
+  const choosing = destructive && accountCount > 0 && !isFileConnection(connection);
+  const keeping = choosing && keepAccounts;
+  const confirmingDelete = destructive && !keeping;
   const blocked = isRefreshing || isSyncInProgress(connection);
-  const canConfirm = (!destructive || confirmation === 'DELETE') && !isPending && !blocked;
+  const canConfirm = !isPending && !blocked;
 
   const remove = async () => {
     if (!canConfirm) return;
     try {
-      await deleteBankConnection(connection.id, destructive ? 'DELETE' : undefined);
+      await deleteBankConnection(
+        connection.id,
+        keeping ? {keepAccounts: true} : confirmingDelete ? {confirmation: 'DELETE'} : {},
+      );
       toast.success('Bank connection removed', {id: `bank-connection-removed-${connection.id}`});
       onRemoved();
     } catch (error) {
@@ -714,14 +724,29 @@ function RemoveStep({
     }
   };
 
+  const choices = [
+    {
+      keep: true,
+      title: 'Keep accounts and history',
+      detail: `Syncing stops. Your ${accountsPhrase} transactions stay, and you can add statement files.`,
+    },
+    {
+      keep: false,
+      title: 'Delete everything',
+      detail: `Permanently deletes the ${accountsPhrase} transactions. This cannot be undone.`,
+    },
+  ];
+
   return (
     <>
       <ResponsiveDialogHeader className='text-start'>
         <ResponsiveDialogTitle>Remove {connectionName(connection)}?</ResponsiveDialogTitle>
         <ResponsiveDialogDescription className='pt-2'>
-          This permanently deletes the connection, its {connection.bankAccounts.length}{' '}
-          {connection.bankAccounts.length === 1 ? 'account' : 'accounts'} and all their
-          transactions. This cannot be undone.
+          {choosing
+            ? 'The bank’s access ends. Choose what happens to its accounts.'
+            : accountCount > 0
+              ? `This permanently deletes the connection and the ${accountsPhrase} transactions. This cannot be undone.`
+              : 'This permanently deletes the connection. This cannot be undone.'}
         </ResponsiveDialogDescription>
       </ResponsiveDialogHeader>
       <ResponsiveDialogBody>
@@ -732,23 +757,45 @@ function RemoveStep({
             void remove();
           }}
         >
-          {destructive && (
-            <div className='grid gap-2'>
-              <label
-                htmlFor={`remove-bank-confirmation-${connection.id}`}
-                className='text-sm font-medium'
-              >
-                Type DELETE to confirm
-              </label>
-              <Input
-                id={`remove-bank-confirmation-${connection.id}`}
-                data-testid={`remove-bank-confirmation-${connection.id}`}
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-                autoComplete='off'
-                disabled={isPending}
-              />
-            </div>
+          {choosing && (
+            <fieldset className='grid min-w-0 gap-2' disabled={isPending}>
+              <legend className='sr-only'>What happens to the accounts</legend>
+              <div className='divide-y overflow-hidden rounded-md border'>
+                {choices.map((choice) => {
+                  const checked = keepAccounts === choice.keep;
+                  return (
+                    <label
+                      key={choice.title}
+                      className={cn(
+                        'grid min-h-15 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-3 py-3 hover:bg-accent/60 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring',
+                        checked && 'bg-accent/60',
+                      )}
+                    >
+                      <input
+                        type='radio'
+                        name={`remove-bank-choice-${connection.id}`}
+                        checked={checked}
+                        onChange={() => setKeepAccounts(choice.keep)}
+                        className='sr-only'
+                      />
+                      <span
+                        aria-hidden='true'
+                        className={cn(
+                          'mt-0.5 grid size-4 place-items-center rounded-full border border-muted-foreground',
+                          checked && 'border-primary',
+                        )}
+                      >
+                        {checked && <span className='size-2 rounded-full bg-primary' />}
+                      </span>
+                      <span className='min-w-0'>
+                        <span className='block text-sm font-medium'>{choice.title}</span>
+                        <span className='block text-sm text-muted-foreground'>{choice.detail}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
           )}
           {blocked && !isPending && (
             <p role='status' className='text-sm text-muted-foreground'>
@@ -758,12 +805,18 @@ function RemoveStep({
           <div className='mt-2 flex flex-col justify-end gap-4 pb-4 md:flex-row md:pb-0'>
             <Button
               type='submit'
-              variant='destructive'
+              variant={keeping ? 'default' : 'destructive'}
               disabled={!canConfirm}
               data-testid={`remove-bank-confirm-${connection.id}`}
               className='order-1 md:order-2'
             >
-              {isPending ? <PendingLabel>Removing...</PendingLabel> : 'Remove permanently'}
+              {isPending ? (
+                <PendingLabel>Removing...</PendingLabel>
+              ) : keeping ? (
+                'Remove connection'
+              ) : (
+                'Remove permanently'
+              )}
             </Button>
             <Button variant='outline' type='button' onClick={onBack} className='order-2 md:order-1'>
               Back
