@@ -16,7 +16,12 @@ import {
   mockMerchantRanking,
   routeBankConnectionsApi,
 } from '../../utils/api-mocks';
-import {openDetails, openRemoval, routeMockedBankApp} from '../../utils/bank-connections';
+import {
+  chooseDeleteEverything,
+  openDetails,
+  openRemoval,
+  routeMockedBankApp,
+} from '../../utils/bank-connections';
 import {createHookHarness} from '../../utils/hook-harness';
 
 test.describe('mocked Enable Banking bank connection', () => {
@@ -140,7 +145,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
     let dialog = await openRemoval(page, card);
-    await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+    await chooseDeleteEverything(dialog);
     await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
     try {
       await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
@@ -176,7 +181,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     try {
       await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, first.id]);
       dialog = await openRemoval(page, card);
-      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+      await chooseDeleteEverything(dialog);
       await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
       await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
       // Another bank opened meanwhile stays open when this removal completes.
