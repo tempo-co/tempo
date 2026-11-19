@@ -78,7 +78,7 @@ export const useUpdateBankTransactionCategory = () => {
       return await mutateAsync(input);
     } catch (error) {
       if (!wasToasted(error)) {
-        toast.error('Transaction category could not be saved. Please try again.');
+        toast.error('Transaction category could not be saved. Try again.');
       }
       throw error;
     }

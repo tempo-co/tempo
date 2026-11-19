@@ -150,7 +150,7 @@ function VerifyEmailIndex() {
           className='flex w-full flex-col gap-4 text-center text-sm text-muted-foreground'
         >
           <p>You&apos;re trying to verify your email too often.</p>
-          <p>Please try again later.</p>
+          <p>Try again later.</p>
           <div className='text-foreground'>
             <Button variant='link' asChild>
               <Link to='/'>Go home</Link>
@@ -171,7 +171,7 @@ function VerifyEmailIndex() {
           className='flex w-full flex-col gap-4 text-center text-sm'
         >
           <p className='leading-6 text-muted-foreground'>
-            We couldn&apos;t verify your email right now. Please try again.
+            We couldn&apos;t verify your email right now. Try again.
           </p>
           <Button
             type='button'

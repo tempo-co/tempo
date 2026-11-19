@@ -40,7 +40,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     {
       name: 'an unavailable API',
       status: 503,
-      message: 'Tempo is temporarily unavailable. Please try again.',
+      message: 'Tempo is temporarily unavailable. Try again.',
     },
   ]) {
     test(`keeps ${name} quiet without automatically retrying the refresh`, async ({page}) => {
@@ -234,7 +234,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
     await expect(page.locator('[data-sonner-toast]')).toContainText(
-      'Please try again in about 2 minutes.',
+      'Try again in about 2 minutes.',
     );
   });
 
@@ -243,13 +243,13 @@ test.describe('mocked Enable Banking bank connection', () => {
       name: 'uses a readable Retry-After header before JSON retry timing',
       body: '{"retryAfterSeconds":90}',
       headers: {'Retry-After': '30', 'Access-Control-Expose-Headers': 'Retry-After'},
-      guidance: 'Please try again in about 30 seconds.',
+      guidance: 'Try again in about 30 seconds.',
     },
     {
       name: 'uses zero JSON retry timing',
       body: '{"retryAfterSeconds":0}',
       headers: undefined,
-      guidance: 'Please try again in about 1 second.',
+      guidance: 'Try again in about 1 second.',
     },
     ...[
       {
@@ -266,7 +266,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       name: `uses generic retry guidance for ${name}`,
       body,
       headers: undefined,
-      guidance: 'Please try again later.',
+      guidance: 'Try again later.',
     })),
   ]) {
     test(`${name} for a rate-limited refresh`, async ({page}) => {

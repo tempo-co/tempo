@@ -42,7 +42,7 @@ function showBankConnectionResult(result: BankConnectionResult) {
     toast.info('Bank connection cancelled', {id: 'bank-connection-cancelled'});
   } else {
     toast.error('Bank connection failed', {
-      description: 'No bank account data was changed. Please try again.',
+      description: 'No bank account data was changed. Try again.',
       id: 'bank-connection-error',
     });
   }

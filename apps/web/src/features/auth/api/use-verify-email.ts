@@ -9,22 +9,32 @@ import {HttpError, api} from '@/utils/api';
 
 export const VERIFY_EMAIL_MUTATION_KEY = ['verify-email'];
 
-/** Takes the signed-in browser whose email is now verified into the app. */
+/**
+ * Takes the signed-in browser whose email is now verified into the app. `alreadyVerified` is for a
+ * request this tab made after the email was verified elsewhere.
+ */
 export const useContinueVerified = () => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const navigate = useNavigate();
 
-  return useCallback(async () => {
-    router.update({context: {isAuthenticated: true, isEmailVerified: true}});
-    await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
+  return useCallback(
+    async ({alreadyVerified = false} = {}) => {
+      router.update({context: {isAuthenticated: true, isEmailVerified: true}});
+      await queryClient.invalidateQueries({queryKey: CURRENT_ACCOUNT_KEY});
 
-    await navigate({to: '/', replace: true});
-    toast.success('Welcome to Tempo!', {
-      description: 'Your email has been verified.',
-      id: 'welcome',
-    });
-  }, [navigate, queryClient, router]);
+      await navigate({to: '/', replace: true});
+      if (alreadyVerified) {
+        toast.info('Your email has already been verified.', {id: 'email-already-verified'});
+        return;
+      }
+      toast.success('Welcome to Tempo!', {
+        description: 'Your email has been verified.',
+        id: 'welcome',
+      });
+    },
+    [navigate, queryClient, router],
+  );
 };
 
 /**
