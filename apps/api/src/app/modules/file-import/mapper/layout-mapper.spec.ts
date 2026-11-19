@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import {Logger} from '@nestjs/common';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -73,9 +74,20 @@ const input = () => toMapperInput(sampleTable(FIXTURE)!);
 describe('LayoutMapper', () => {
 	it('asks once, without tools and within 30 seconds, sending the header and nothing else of the file as written', async () => {
 		const {mapper, create} = setup();
-		create.mockResolvedValue(reply(JSON.stringify(ANSWER)));
+		const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+		create.mockResolvedValue(
+			reply(JSON.stringify(ANSWER), {usage: {input_tokens: 1200, output_tokens: 90, cache_read_input_tokens: 0}}),
+		);
 
 		await expect(mapper.mapLayout(input())).resolves.toEqual(ANSWER);
+		// One usage line with counts only.
+		const lines = log.mock.calls.map(([message]) => String(message));
+		log.mockRestore();
+		expect(lines).toEqual([
+			expect.stringMatching(
+				/^Claude layout mapping call: items 4, claude-sonnet-5-5 low, \d+ ms, stop end_turn, input 1200, cache read 0, cache write 0, output 90, web searches 0$/,
+			),
+		]);
 
 		expect(create).toHaveBeenCalledTimes(1);
 		const [request, options] = create.mock.calls[0] as [Record<string, unknown>, Record<string, unknown>];
@@ -99,6 +111,7 @@ describe('LayoutMapper', () => {
 		expect(sent.columns[6]).toEqual({shapes: ['AAA'], sameValue: true});
 		expect(LAYOUT_MAPPER_INSTRUCTIONS).toMatch(/columns lists/);
 		for (const value of FIXTURE_CONTENT) expect(body).not.toContain(value);
+		for (const value of FIXTURE_CONTENT) expect(lines.join('\n')).not.toContain(value);
 	});
 
 	it.each([
