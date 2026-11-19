@@ -31,6 +31,7 @@ Paths are relative to `apps/api` unless they start at the repository root.
 - Unit tests of services with many dependencies use named-dependency builders, not positional `{} as never` lists. Use `it.each` tables for validation cases.
 - A TypeORM `select: false` column is `undefined` on every plain find, so asserting it is `undefined` proves nothing; assert a selected companion column or `addSelect` it.
 - Compare database read-backs, not the object `save` returned: `numeric` columns change string scale on the first read.
+- Dates a test compares with the run date (sync windows, "more than N days back") derive from it: `addDays(dateInAppTimeZone(new Date()), -n)`. A fixed date passes until the calendar reaches it, then fails every PR at once.
 
 ## Code rules
 
