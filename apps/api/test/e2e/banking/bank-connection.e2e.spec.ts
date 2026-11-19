@@ -733,6 +733,55 @@ describe('BankConnectionController', () => {
 		await bankConnectionRepository.delete(pendingConnection.id);
 	});
 
+	it('refuses a re-authorization whose connection is removed while the bank creates its session', async () => {
+		await bankConnectionRepository
+			.createQueryBuilder()
+			.delete()
+			.where('accountId = :accountId', {accountId: account.id})
+			.execute();
+		const {connection} = await createAuthorizedConnection('reauthorization-removed-during-session');
+		const state = await authorize();
+		const pendingConnection = await bankConnectionRepository.findOne({
+			where: {account: {id: account.id}, status: 'PENDING_AUTHORIZATION'},
+			order: {createdAt: 'DESC'},
+		});
+		if (!pendingConnection) throw new Error('Pending connection was not persisted.');
+		createSession.mockImplementationOnce(async () => {
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+			return {
+				sessionId: 'provider-session-superseded',
+				consentValidUntil: '2031-06-01T00:00:00.000Z',
+				aspsp: {name: 'ABN AMRO', country: 'NL'},
+				accounts: [
+					{uid: 'provider-account-superseded', identificationHash: 'hash-superseded', currency: 'EUR'},
+				],
+			};
+		});
+		const warn = jest.spyOn(Logger.prototype, 'warn');
+
+		try {
+			await callback({state, code: 'superseded-code'}, 'error');
+
+			expect(warn.mock.calls.map(([message]) => String(message))).toContain(
+				'Enable Banking authorization failed: authorization_state_state_superseded',
+			);
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			expect(await bankConnectionRepository.findOneBy({id: pendingConnection.id})).toMatchObject({
+				status: 'CANCELLED',
+				providerSessionId: null,
+			});
+			expect(
+				await bankConnectionRepository.count({where: {account: {id: account.id}, status: 'AUTHORIZED'}}),
+			).toBe(0);
+			expect(await bankAccountRepository.count({where: {providerAccountId: 'provider-account-superseded'}})).toBe(
+				0,
+			);
+		} finally {
+			warn.mockRestore();
+			await bankConnectionRepository.delete(pendingConnection.id);
+		}
+	});
+
 	it('cleans all pending reauthorizations when removing an existing connection', async () => {
 		const {connection} = await createAuthorizedConnection('delete-multiple-reauthorizations');
 		const states: string[] = [];
@@ -794,36 +843,43 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('revokes the bank consent, then permanently removes an authorized connection and cascades its bank data', async () => {
-		const {connection, bankAccount} = await createAuthorizedConnection('delete-authorized-cascade');
-		await fixtures.createTransaction(bankAccount, {providerTransactionId: 'delete-authorized-transaction'});
-		const syncRun = await fixtures.createSyncRun(connection);
-		deleteSession.mockClear();
+	it.each(['AUTHORIZED', 'EXPIRED'] as const)(
+		'revokes the bank consent, then permanently removes an %s connection and cascades its bank data',
+		async (status) => {
+			const providerSessionId = `delete-${status.toLowerCase()}-cascade`;
+			const providerTransactionId = `delete-${status.toLowerCase()}-transaction`;
+			const {connection, bankAccount} = await createAuthorizedConnection(providerSessionId);
+			await bankConnectionRepository.update({id: connection.id}, {status});
+			await fixtures.createTransaction(bankAccount, {providerTransactionId});
+			const syncRun = await fixtures.createSyncRun(connection);
+			deleteSession.mockClear();
 
-		await otherVerifiedAgent.delete(`/bank-connections/${connection.id}`).expect(404);
-		await verifiedAgent.delete(`/bank-connections/${connection.id}`).expect(400);
-		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE ME'}).expect(400);
-		expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
-		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).not.toBeNull();
-		expect(deleteSession).not.toHaveBeenCalled();
+			await otherVerifiedAgent.delete(`/bank-connections/${connection.id}`).expect(404);
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).expect(400);
+			for (const confirmation of ['DELETE ME', 'delete', ' DELETE', 'DELETE '])
+				await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation}).expect(400);
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
+			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).not.toBeNull();
+			expect(await bankTransactionRepository.findOneBy({providerTransactionId})).not.toBeNull();
+			expect(deleteSession).not.toHaveBeenCalled();
 
-		let connectionExistedAtRevocation = false;
-		deleteSession.mockImplementationOnce(async () => {
-			connectionExistedAtRevocation = (await bankConnectionRepository.findOneBy({id: connection.id})) !== null;
-		});
-		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+			let connectionExistedAtRevocation = false;
+			deleteSession.mockImplementationOnce(async () => {
+				connectionExistedAtRevocation =
+					(await bankConnectionRepository.findOneBy({id: connection.id})) !== null;
+			});
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
 
-		expect(deleteSession).toHaveBeenCalledTimes(1);
-		expect(deleteSession).toHaveBeenCalledWith('delete-authorized-cascade', expect.any(AbortSignal));
-		expect(connectionExistedAtRevocation).toBe(true);
+			expect(deleteSession).toHaveBeenCalledTimes(1);
+			expect(deleteSession).toHaveBeenCalledWith(providerSessionId, expect.any(AbortSignal));
+			expect(connectionExistedAtRevocation).toBe(true);
 
-		expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
-		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
-		expect(
-			await bankTransactionRepository.findOneBy({providerTransactionId: 'delete-authorized-transaction'}),
-		).toBeNull();
-		expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
-	});
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
+			expect(await bankTransactionRepository.findOneBy({providerTransactionId})).toBeNull();
+			expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
+		},
+	);
 
 	it('removes the connection when the provider fails to revoke its consent', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('delete-provider-failure');
