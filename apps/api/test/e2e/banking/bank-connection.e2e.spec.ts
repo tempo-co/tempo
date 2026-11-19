@@ -11,6 +11,7 @@ import {DataSource, In, Repository} from 'typeorm';
 
 import {BANK_CONNECTION_SYNC_QUEUE, SYNC_BANK_CONNECTION_JOB} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
+import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
@@ -1825,6 +1826,9 @@ describe('BankConnectionController', () => {
 
 	it('removes pending rows a complete fetch no longer returns and keeps pending own transfers out of totals, so totals count each payment once', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-lifecycle-session');
+		// Dates follow the run date: a start more than 90 days back would turn the incremental fetch into a longest one.
+		const firstDay = addDays(dateInAppTimeZone(new Date()), -30);
+		const day = (offset: number) => addDays(firstDay, offset);
 		// The owner's savings account at another bank, which that bank's transfers name by IBAN and holder name.
 		const savingsIban = 'GB33BUKB20201555555555';
 		const holderName = 'Example Savings Holder';
@@ -1844,7 +1848,7 @@ describe('BankConnectionController', () => {
 			providerTransactionId: 'pending-lifecycle-savings-leg',
 			amount: '40.00',
 			creditDebitIndicator: 'CRDT',
-			bookingDate: '2026-08-21',
+			bookingDate: day(1),
 			description: null,
 		});
 		// Answers a pending transfer that the bank later drops; it has no evidence of its own.
@@ -1852,7 +1856,7 @@ describe('BankConnectionController', () => {
 			providerTransactionId: 'pending-lifecycle-savings-released-leg',
 			amount: '60.00',
 			creditDebitIndicator: 'CRDT',
-			bookingDate: '2026-08-21',
+			bookingDate: day(1),
 			description: null,
 		});
 		const row = (
@@ -1866,15 +1870,15 @@ describe('BankConnectionController', () => {
 			transaction_amount: {amount, currency: 'EUR'},
 			credit_debit_indicator: 'DBIT',
 			status,
-			transaction_date: '2026-08-20',
+			transaction_date: firstDay,
 			...(bookingDate ? {booking_date: bookingDate, value_date: bookingDate} : {}),
 			...fields,
 		});
-		const booked = row('lifecycle-booked', '10.00', 'BOOK', '2026-08-20');
+		const booked = row('lifecycle-booked', '10.00', 'BOOK', firstDay);
 		const hold = row('lifecycle-hold', '50.00', 'PDNG');
 		const tipPending = row('lifecycle-tip', '20.00', 'PDNG');
 		// The final amount differs from the pending one, so the booked row is a new row, not the pending one updated.
-		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', '2026-08-22');
+		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', day(2));
 		const transferPending = row('lifecycle-transfer', '40.00', 'PDNG', undefined, {
 			creditor_account: {iban: savingsIban},
 			remittance_information: ['Example savings top-up'],
@@ -1884,8 +1888,8 @@ describe('BankConnectionController', () => {
 			...transferPending,
 			entry_reference: 'lifecycle-transfer-booked',
 			status: 'BOOK',
-			booking_date: '2026-08-21',
-			value_date: '2026-08-21',
+			booking_date: day(1),
+			value_date: day(1),
 		};
 		const releasedTransferPending = row('lifecycle-released-transfer', '60.00', 'PDNG', undefined, {
 			creditor_account: {iban: savingsIban},
@@ -1894,7 +1898,7 @@ describe('BankConnectionController', () => {
 		const namedTransferPending = row('lifecycle-named-transfer', '15.00', 'PDNG', undefined, {
 			creditor: {name: holderName},
 		});
-		const namedTransferBooked = {...namedTransferPending, status: 'BOOK', booking_date: '2026-08-21'};
+		const namedTransferBooked = {...namedTransferPending, status: 'BOOK', booking_date: day(1)};
 		// A card payment is never an own transfer, even when the merchant name is the holder's.
 		const cardPending = row('lifecycle-card', '5.00', 'PDNG', undefined, {
 			creditor: {name: holderName},
@@ -1936,8 +1940,8 @@ describe('BankConnectionController', () => {
 				});
 				return [syncCoveredFrom, syncCoveredThrough];
 			};
-			// The pending rows carry only their transaction date, so the earliest row is on 2026-08-20.
-			expect(await coverage()).toEqual(['2026-08-21', firstRun!.requestedTo]);
+			// The pending rows carry only their transaction date, so the earliest row is on the first day.
+			expect(await coverage()).toEqual([day(1), firstRun!.requestedTo]);
 			// Pending payments count, as in the bank's own app; pending own transfers are internal until they book.
 			expect(await totals()).toMatchObject({count: 7, spending: '85.00', income: '0.00'});
 			const releasedTransfer = await bankTransactionRepository.findOneByOrFail({
@@ -1981,13 +1985,13 @@ describe('BankConnectionController', () => {
 
 			// A fetch with a row the client cannot read is incomplete, so it removes nothing and covers nothing.
 			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
-			await bankAccountRepository.update(bankAccount.id, {syncCoveredThrough: '2026-08-30'});
+			await bankAccountRepository.update(bankAccount.id, {syncCoveredThrough: day(10)});
 			expect(await synchronizeProviderRows(connection.id, [booked, unreadable])).toMatchObject({
 				status: 'PARTIAL',
 				transactionsAdded: 0,
 			});
 			expect(await totals()).toMatchObject({count: 7, spending: '85.00'});
-			expect(await coverage()).toEqual(['2026-08-21', '2026-08-30']);
+			expect(await coverage()).toEqual([day(1), day(10)]);
 
 			// The hold and the second transfer were released, the tip and the IBAN transfer booked as new rows, the named
 			// transfer booked into its pending row and the card payment is still pending.
@@ -2004,8 +2008,8 @@ describe('BankConnectionController', () => {
 				transactionsAdded: 2,
 			});
 			// The window reaches back to the oldest pending row, so the fetch covers every row it removes.
-			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: '2026-08-20'});
-			expect(await coverage()).toEqual(['2026-08-20', firstRun!.requestedTo]);
+			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: firstDay});
+			expect(await coverage()).toEqual([firstDay, firstRun!.requestedTo]);
 			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 			expect(rows.map(({amount, transactionStatus}) => [amount, transactionStatus]).sort()).toEqual([
 				['-10.00000000', 'BOOK'],
