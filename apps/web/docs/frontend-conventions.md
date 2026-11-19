@@ -7,12 +7,19 @@ UI rules that the code follows but does not state. Formatting, lint and type set
 - `npm run format` covers `src/**/*.{js,jsx,ts,tsx}` only. Do not run Prettier on `src/index.css` (it reflows the token comments) or on Markdown (it reflows unrelated lines); edit those by hand. `npx prettier --write src` touches CSS too, so run it on changed paths and check `git status` for collateral files.
 - `prettier-plugin-tailwindcss` must stay last in `plugins`.
 
-## Feedback: confirm in place, toast the rest
+## Feedback: one message per event
 
-- An edit whose result shows where it was made (category select, inline fields) shows progress and outcome on the control and its status line, and toasts only on failure. `useUpdateBankTransactionCategory` is the reference: no `toast.promise`, `toast.error` for non-auth failures.
-- A message that stays on screen next to what it is about (a refusal, a bank needing attention, a failed save in a dialog) is an `Alert` from `src/components/ui/alert.tsx`; `DESIGN.md` (Alerts) says which variant and role. Do not hand-style bordered callouts or bare red lines for these.
-- Toast failures and outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
-- The `api` wrapper toasts offline writes, lost write connections, expired sessions, rate limits and unverified email, and marks those errors. A call site that toasts a failure skips errors where `wasToasted(error)` (`src/utils/api.ts`) is true; with a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`.
+Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
+
+- Errors: an `Alert` when the surface the failure belongs to stays open and is where the retry happens (a dialog, form, page or import step). A toast when that surface has closed or never existed (inline edits, background saves, a dialog that closed while saving). A row that failed may carry its own short line instead of a toast when the line says which row failed.
+- Failures the `api` wrapper already toasted (offline writes, lost connections, expired sessions, rate limits, unverified email) get no `Alert` or toast at the call site: check `wasToasted(error)` (`src/utils/api.ts`) and leave the control ready to retry. With a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`.
+- Warnings: an `Alert` for a lasting state that needs action (a bank needing attention). A toast only for a passing condition with no place on screen (offline storage unavailable, keep Tempo open until logout is confirmed).
+- Info: neither by default. A toast only to explain a redirect (email already verified, log in to finish).
+- Success: neither when the screen shows the result where it was made. A toast for outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
+- Retry copy says what failed and "Try again", without "Please".
+- An edit whose result shows where it was made (category select, inline fields) shows progress and outcome on the control and its status line. `useUpdateBankTransactionCategory` is the reference: no `toast.promise`, `toast.error` for non-wrapper failures.
+- `Alert` comes from `src/components/ui/alert.tsx`; `DESIGN.md` (Alerts) says which variant and role. Do not hand-style bordered callouts or bare red lines for these.
+- A flow that can fail asserts its failure message appears exactly once.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
 - Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either.
