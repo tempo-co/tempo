@@ -319,9 +319,11 @@ describe('chooseMerchantLogos', () => {
 		brand: string | null,
 		logo: Partial<NonNullable<MerchantLogoCandidate['logo']>> | null,
 		domainConfident = false,
+		company: string | null = null,
 	): MerchantLogoCandidate => ({
 		key,
 		brand,
+		company,
 		domain: logo ? `${key.replace(/\W/g, '')}.test` : null,
 		domainConfident,
 		logo: logo && {
@@ -374,7 +376,41 @@ describe('chooseMerchantLogos', () => {
 			{...merchant('xyz', 'Xyz Bikes', {siteNames: ['Xavier Yellow Zebra']}, true), domain: 'xyz.gov.test'},
 			{...merchant('eg guess', 'EG Market', {siteNames: ['Example Group']}, false), domain: 'eg.test'},
 			{...merchant('suffix', 'Sure Shop', {siteNames: ['Casino Online']}, true), domain: 'unrelated.co.test'},
+			// A product on its company's site, which a merchant of the company's own brand confirmed.
+			{...merchant('maker', 'Maker', {homepageLoaded: false, siteNames: []}, true), domain: 'maker.test'},
+			{
+				...merchant(
+					'maker plus',
+					'Maker Plus',
+					{id: 'logo-maker', version: 'v-maker', homepageLoaded: false, siteNames: []},
+					false,
+					'MAKER',
+				),
+				domain: 'maker.test',
+			},
+			merchant('maker elsewhere', 'Maker Go', {homepageLoaded: false, siteNames: []}, false, 'Maker'),
+			{...merchant('guess', 'Guess', {homepageLoaded: false, siteNames: []}), domain: 'guess.test'},
+			{
+				...merchant(
+					'guess plus',
+					'Guess Plus',
+					{id: 'logo-guess', version: 'v-guess', homepageLoaded: false, siteNames: []},
+					false,
+					'Guess',
+				),
+				domain: 'guess.test',
+			},
 		]);
-		expect([...chosen.keys()]).toEqual(['unnamed sure', 'unnamedhost', 'blocked sure', 'egroup', 'eg', 'xyz']);
+		expect([...chosen.keys()]).toEqual([
+			'unnamed sure',
+			'unnamedhost',
+			'blocked sure',
+			'egroup',
+			'eg',
+			'xyz',
+			'maker',
+			'maker plus',
+		]);
+		expect(chosen.get('maker plus')).toEqual({id: 'logo-maker', version: 'v-maker'});
 	});
 });

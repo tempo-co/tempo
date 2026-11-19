@@ -300,6 +300,7 @@ function isConfirmed(
 export type MerchantLogoCandidate = {
 	key: string;
 	brand: string | null;
+	company: string | null;
 	domain: string | null;
 	domainConfident: boolean;
 	logo: {
@@ -317,19 +318,27 @@ export type MerchantLogoCandidate = {
  * The logo each merchant key shows. A merchant's own logo counts when its site's homepage confirmed the brand, or,
  * for a site whose homepage would not load or named nothing, when the model was sure of the domain. A domain the model
  * was sure of also counts when its homepage names the domain itself rather than the brand, as a sub-brand on its
- * parent's site does ("Example to go" on a site named after the parent). Merchants of one
- * brand show the same logo, the best any of them has (a colour one before a one-colour version, then the largest),
+ * parent's site does ("Example to go" on a site named after the parent). A product also shows its site's logo when a
+ * merchant of its company's own brand confirmed that site ("Example Plus" sold by Example, on Example's site). Merchants
+ * of one brand show the same logo, the best any of them has (a colour one before a one-colour version, then the largest),
  * so a chain's country sites look alike and a branch without a site of its own still shows its brand.
  */
 export function chooseMerchantLogos(
 	merchants: readonly MerchantLogoCandidate[],
 ): Map<string, {id: string; version: string}> {
-	const trusted = ({brand, domain, domainConfident, logo}: MerchantLogoCandidate) =>
-		!!brand &&
-		!!domain &&
-		logo?.status === 'READY' &&
-		!!logo.version &&
-		isConfirmed(brand, domain, domainConfident, logo);
+	const usable = ({brand, domain, logo}: MerchantLogoCandidate) =>
+		!!brand && !!domain && logo?.status === 'READY' && !!logo.version;
+	const confirmed = (merchant: MerchantLogoCandidate) =>
+		usable(merchant) && isConfirmed(merchant.brand!, merchant.domain!, merchant.domainConfident, merchant.logo!);
+	// A brand's spelling with the logo's id: the sites each brand's own merchants confirmed.
+	const brandSite = (brand: string, logoId: string) => `${tokens(brand).join('')} ${logoId}`;
+	const confirmedSites = new Set(merchants.filter(confirmed).map(({brand, logo}) => brandSite(brand!, logo!.id)));
+	const trusted = (merchant: MerchantLogoCandidate) =>
+		confirmed(merchant) ||
+		(usable(merchant) &&
+			!!merchant.company &&
+			tokens(merchant.company).length > 0 &&
+			confirmedSites.has(brandSite(merchant.company, merchant.logo!.id)));
 	// Colour counts before size: a brand's one-colour logo is a variant, not the logo people know.
 	const rankOf = (merchant: MerchantLogoCandidate | undefined) =>
 		merchant?.logo ? (merchant.logo.monochrome ? 0 : 1_000_000) + (merchant.logo.sourceSize ?? 0) : -1;
