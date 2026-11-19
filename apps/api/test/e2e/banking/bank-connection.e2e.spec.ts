@@ -1330,6 +1330,7 @@ describe('BankConnectionController', () => {
 			connectionId: randomUUID(),
 			aspspName: 'ABN AMRO',
 			aspspCountry: 'NL',
+			replacesConnectionId: null,
 		});
 		const stateKey = `banking:authorization:${state}`;
 
@@ -1350,6 +1351,7 @@ describe('BankConnectionController', () => {
 			connectionId: randomUUID(),
 			aspspName: 'ABN AMRO',
 			aspspCountry: 'NL',
+			replacesConnectionId: null,
 		});
 		const stateKey = `banking:authorization:${state}`;
 

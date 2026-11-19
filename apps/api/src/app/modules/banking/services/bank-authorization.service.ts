@@ -228,7 +228,7 @@ export class BankAuthorizationService {
 		accountId: Account['id'],
 		connectionId: string,
 		authorizationStateHash: string,
-		replacesConnectionId: string | null | undefined,
+		replacesConnectionId: string | null,
 		session: EnableBankingSession,
 	): Promise<void> {
 		const consentValidUntil = new Date(session.consentValidUntil);
@@ -276,10 +276,6 @@ export class BankAuthorizationService {
 					lock: {mode: 'pessimistic_write'},
 				});
 				if (!pendingConnection) {
-					throw new BankingAuthorizationStateError('state_superseded');
-				}
-
-				if (replacesConnectionId === undefined) {
 					throw new BankingAuthorizationStateError('state_superseded');
 				}
 
