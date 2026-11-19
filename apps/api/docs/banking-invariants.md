@@ -40,8 +40,6 @@ Treat a connection as a concurrent lifecycle: provider callbacks, background syn
 - Delete, then remove Redis authorization state for every invalidated connection after commit. Release the lease in `finally`; a cleanup or logging failure must not turn a committed deletion into a reported failure.
 - FKs from `bank_accounts`, `bank_transactions`, `bank_account_balances` and `bank_sync_runs` cascade on delete. Expired consent or an inactive account keeps rows; only explicit DELETE erases them.
 
-No E2E covers these removal cases; add one when changing removal: lowercase or padded confirmation → 400 and nothing removed; deleting an EXPIRED connection → 204 with cascade; a superseded state at the callback → error, no second persistence.
-
 ## Background and foreground sync
 
 - Data reads return Tempo's saved database state and never call the provider. Opening the authenticated app in the foreground can separately initiate an online refresh mutation while cached data remains visible. Unattended background sync never sends PSU presence headers.
