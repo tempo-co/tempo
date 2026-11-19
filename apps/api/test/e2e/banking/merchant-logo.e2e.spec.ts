@@ -15,10 +15,7 @@ import {ConfigurationService} from '@core/config/config.service';
 import {MERCHANT_LOGO_QUEUE, MERCHANT_LOGO_RECONCILE_SCHEDULER_ID} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {
-	BankTransactionCategorizationProviderError,
-	BankTransactionCategorizationUnavailableError,
-} from '@modules/banking/categorization/bank-transaction-categorization.provider';
+import {BankTransactionCategorizationUnavailableError} from '@modules/banking/categorization/bank-transaction-categorization.provider';
 import {
 	MerchantIdentification,
 	MerchantIdentificationInput,
@@ -95,14 +92,6 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 		domain: null,
 		domainConfident: false,
 	},
-	// Another key of the product, which the model now names differently.
-	'Example Tunes Plus': {
-		kind: 'BUSINESS',
-		brand: 'Example Tunes Premium',
-		company: 'Example Tunes Premium',
-		domain: null,
-		domainConfident: false,
-	},
 	// A payment service sharing the product's brand.
 	'Example Tunes Pay': {
 		kind: 'PAYMENT_SERVICE',
@@ -161,8 +150,6 @@ describe('Merchant logos', () => {
 	let fetchSpy: jest.SpyInstance;
 	let queue: Queue;
 	let routesUnavailable = false;
-	/** Whether the model answers with an unusable reply, which counts as a failed attempt. */
-	let routesFail = false;
 	/** Hostnames whose pages and icons currently fail to load. */
 	const unreachable = new Set<string>();
 	/** Hostnames whose homepage refuses the server while their other files still load, like a bot wall. */
@@ -204,7 +191,6 @@ describe('Merchant logos', () => {
 			.spyOn(app.get(ClaudeBankTransactionCategorizationProvider), 'identifyMerchants')
 			.mockImplementation(async (inputs: readonly MerchantIdentificationInput[]) => {
 				if (routesUnavailable) throw new BankTransactionCategorizationUnavailableError();
-				if (routesFail) throw new BankTransactionCategorizationProviderError('synthetic', true);
 				return inputs.map(({correlationId, name}) => ({
 					correlationId,
 					...(IDENTITIES[name.replace(/\s+\d+$/, '')] ?? {
@@ -271,7 +257,6 @@ describe('Merchant logos', () => {
 
 	afterEach(() => {
 		routesUnavailable = false;
-		routesFail = false;
 		unreachable.clear();
 		walledHomepages.clear();
 		logoDevNow.clear();
@@ -742,7 +727,7 @@ describe('Merchant logos', () => {
 		expect(guessedResponse.body.merchantLogoUrl).toBeNull();
 	});
 
-	it('keeps merchants pending while both model routes are unavailable, identifies them once one recovers, and asks earlier merchants for their company only', async () => {
+	it('keeps merchants pending while both model routes are unavailable, identifies them once one recovers, and records the company of each business', async () => {
 		const account = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
 		const connection = await fixtures.createConnection({id: account.id});
 		const bankAccount = await fixtures.createBankAccount(connection);
@@ -780,8 +765,7 @@ describe('Merchant logos', () => {
 		expect(response.body.merchantLogoUrl).toMatch(/^\/merchant-logos\//);
 		expect(await logos.countBy({domain: 'shop.example.test'})).toBe(1);
 
-		// Merchants identified before companies existed are asked once more, for their company only. One the model
-		// now names differently keeps its brand, logo and grouping.
+		// A product its business sells under a separate name groups under that business.
 		await fixtures.createTransaction(
 			bankAccount,
 			bookedRow('2026-10-07', '-9.99', {description: 'Example Tunes', transactionType: 'CARD_PAYMENT'}),
@@ -791,32 +775,7 @@ describe('Merchant logos', () => {
 			() => merchants.findOneBy({accountId: account.id, key: 'example tunes'}),
 			(merchant) => merchant?.status === 'IDENTIFIED',
 		);
-		const shop = await merchants.findOneByOrFail({accountId: account.id, key: 'example shop'});
-		await merchants.update({id: tunes!.id}, {company: null});
-		await merchants.update({id: shop.id}, {brand: 'Example Market', company: null});
-		identifySpy.mockClear();
-
-		await app.get(MerchantLogoService).reconcile();
-		await waitFor(
-			() => merchants.findBy({accountId: account.id}),
-			(rows) => rows.every(({company}) => company !== null),
-		);
-		expect(
-			identifySpy.mock.calls
-				.flatMap(([inputs]: [MerchantIdentificationInput[]]) => inputs.map(({name}) => name))
-				.sort(),
-		).toEqual(['Example Shop', 'Example Tunes']);
-		expect(await merchants.findOneByOrFail({id: tunes!.id})).toMatchObject({
-			status: 'IDENTIFIED',
-			brand: 'Example Tunes',
-			company: 'Example Media',
-		});
-		expect(await merchants.findOneByOrFail({id: shop.id})).toMatchObject({
-			status: 'IDENTIFIED',
-			brand: 'Example Market',
-			company: 'Example Market',
-			logoId: shop.logoId,
-		});
+		expect(tunes).toMatchObject({brand: 'Example Tunes', company: 'Example Media'});
 
 		// One brand groups under one company: another key of it takes the company recorded first.
 		await fixtures.createTransaction(
@@ -830,25 +789,6 @@ describe('Merchant logos', () => {
 		);
 		expect(online).toMatchObject({brand: 'Example Tunes', company: 'Example Media'});
 
-		// A merchant identified before companies existed follows its stored brand's company, even when the model now
-		// names a different brand, and keeps that brand.
-		await fixtures.createTransaction(
-			bankAccount,
-			bookedRow('2026-10-08', '-5.99', {description: 'Example Tunes Plus', transactionType: 'CARD_PAYMENT'}),
-		);
-		await merchants.save({
-			accountId: account.id,
-			key: 'example tunes plus',
-			status: 'IDENTIFIED',
-			brand: 'Example Tunes',
-		});
-		await app.get(MerchantLogoService).reconcile();
-		const plus = await waitFor(
-			() => merchants.findOneByOrFail({accountId: account.id, key: 'example tunes plus'}),
-			(merchant) => merchant.company !== null,
-		);
-		expect(plus).toMatchObject({status: 'IDENTIFIED', brand: 'Example Tunes', company: 'Example Media'});
-
 		// A payment service never takes another business's company, even one recorded for its brand.
 		await fixtures.createTransaction(
 			bankAccount,
@@ -860,52 +800,5 @@ describe('Merchant logos', () => {
 			(merchant) => merchant?.status === 'IDENTIFIED',
 		);
 		expect(pay).toMatchObject({brand: 'Example Tunes', company: 'Example Tunes'});
-		// Nor when it is asked once more for its company, also when the model names its brand differently.
-		await merchants.update({id: pay!.id}, {brand: 'Example Tunes Wallet', company: null});
-		await merchants.save({
-			accountId: account.id,
-			key: 'example tunes wallet shop',
-			status: 'IDENTIFIED',
-			brand: 'Example Tunes Wallet',
-			company: 'Example Media',
-		});
-		await app.get(MerchantLogoService).reconcile();
-		await waitFor(
-			() => merchants.findOneByOrFail({id: pay!.id}),
-			(merchant) => merchant.company !== null,
-		);
-		expect(await merchants.findOneByOrFail({id: pay!.id})).toMatchObject({company: 'Example Tunes Wallet'});
-
-		// A failed company lookup keeps the merchant's identity and logo, groups it by its brand and is not retried,
-		// even when another merchant of its brand recorded another company: it may be a payment service.
-		await merchants.update({id: shop.id}, {company: null});
-		await merchants.save({
-			accountId: account.id,
-			key: 'example market app',
-			status: 'IDENTIFIED',
-			brand: 'Example Market',
-			company: 'Example Group',
-		});
-		routesFail = true;
-		identifySpy.mockClear();
-		await app.get(MerchantLogoService).reconcile();
-		await waitFor(
-			() => merchants.findOneByOrFail({id: shop.id}),
-			(merchant) => merchant.company !== null,
-		);
-		expect(await merchants.findOneByOrFail({id: shop.id})).toMatchObject({
-			status: 'IDENTIFIED',
-			brand: 'Example Market',
-			company: 'Example Market',
-			logoId: shop.logoId,
-		});
-		routesFail = false;
-		identifySpy.mockClear();
-		await app.get(MerchantLogoService).reconcile();
-		await waitFor(
-			() => queue.getJobCounts('waiting', 'active', 'delayed', 'prioritized'),
-			(counts) => Object.values(counts).every((count) => count === 0),
-		);
-		expect(identifySpy).not.toHaveBeenCalled();
 	});
 });
