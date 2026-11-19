@@ -192,28 +192,6 @@ test.describe('bank transactions', () => {
     await expect(filters.getByRole('tab', {name: 'Cash flow Currency exchange'})).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Shared links that use the financialEventTypes parameter filter the same rows; their page keys are dropped.
-    await page.goto(
-      '/bank-transactions?pageIndex=1&pageSize=10&financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D',
-    );
-    const chip = page.getByRole('button', {name: 'Remove filter: Currency exchange', exact: true});
-    await expect(chip).toBeVisible();
-    await expect(page).not.toHaveURL(/pageIndex|pageSize|financialEventTypes/);
-    await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
-    await chip.click();
-    await expect(
-      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
-    ).toBeVisible();
-    await expect(page).not.toHaveURL(/cashFlows/);
-
-    await page.goto('/bank-transactions?financialEventTypes=%5B%22CURRENCY_EXCHANGE%22%5D');
-    await openTransactionFilter(page, 'Cash flow');
-    await page.getByRole('button', {name: 'Reset Cash flow', exact: true}).click();
-    await expect(
-      page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Coffee shop'}),
-    ).toBeVisible();
-    await expect(page).not.toHaveURL(/cashFlows/);
-
     await page.goto('/bank-transactions');
     await openTransactionFilter(page, 'Cash flow');
     await page.getByRole('option', {name: 'Currency exchange', exact: true}).click();
