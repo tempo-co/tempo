@@ -18,8 +18,8 @@ Paths are relative to `apps/api` unless they start at the repository root.
 ## Commands and traps
 
 - `lint` and `format` rewrite files. Run Prettier only on files you changed; edit Markdown by hand.
-- Jest unit tests match `src/**/*.spec.ts` and E2E tests `test/**/*.e2e.spec.ts`; a spec named any other way silently never runs. Run known files with `npx jest --runTestsByPath <file> --runInBand`: a plain path pattern is a regex over absolute paths, so a word in the worktree path can select the whole suite.
-- The API E2E stack is shared by every worktree on a host: fixed project `tempo-api-test`, container names and ports, one `tempo_test` database, and its schema is dropped each time a test API starts. `npm run test:e2e` also runs `down -v` first, so check `docker compose ls --all` for another run before starting one, and never point `.env.test` at a database you care about.
+- Jest unit tests match `src/**/*.spec.ts` and E2E tests `test/**/*.e2e.spec.ts`; a spec named any other way silently never runs. Run known unit files with `npx jest --runTestsByPath <file> --runInBand` and E2E files with `npm run test:e2e -- --runTestsByPath <file>`: a plain path pattern is a regex over absolute paths, so a word in the worktree path can select the whole suite.
+- `npm run test:e2e*` gives each checkout its own Compose stack on Docker-assigned ports and removes it when Jest exits, so worktrees run in parallel; two runs in one checkout still share it. Each spec file's boot drops the test schema, so never point `.env.test` at a database you care about.
 - `npm run db:seed` truncates and recreates the `public` schema: run it only against a disposable database.
 - The `input` sections of `src/app/modules/banking/categorization/providers/claude-categorization-contract.json` are generated (`npm run contract:input`); see `docs/categorization.md` before editing it.
 
