@@ -202,9 +202,11 @@ outcomes. A skeleton keeps its section's loaded size and static labels, and each
 when its own data arrives, so nothing on screen moves as a page loads. An inline control whose
 result shows where it was edited confirms in place (its own pending state and status line);
 toasts carry failures, saves finished after a dialog closed, and outcomes the screen does not show.
-They stack collapsed and use the library's default lifetime. Distinct states get distinct copy;
-never imply data changed before the server confirms it. Motion is brief (about 150–300 ms), subtle,
-reduced-motion aware; never animate financial values continuously.
+They stack collapsed and use the library's default lifetime. A toast is Inter `text-sm` with a
+medium title, a muted description and the card radius; its action and cancel buttons are
+`rounded-md` `text-sm` medium, 36px tall with the 44px phone target. Distinct states get distinct
+copy; never imply data changed before the server confirms it. Motion is brief (about 150–300 ms),
+subtle, reduced-motion aware; never animate financial values continuously.
 
 ### Alerts
 

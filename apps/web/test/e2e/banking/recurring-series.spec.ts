@@ -233,6 +233,28 @@ async function backToList(page: Page, direction: 'bills' | 'income' = 'bills') {
   await expect(detail(page)).toBeHidden();
 }
 
+/** The toast uses the app's type and card radius, and its action is a full-size touch target. */
+async function expectToastStyle(page: Page, action: string, width: number) {
+  const toast = page.locator('[data-sonner-toast]').filter({hasText: action}).last();
+  const style = await toast.evaluate((element) => {
+    const button = element.querySelector('[data-button]')!;
+    return {
+      font: getComputedStyle(element).fontFamily.split(',')[0].replace(/"/g, ''),
+      size: getComputedStyle(element).fontSize,
+      radius: getComputedStyle(element).borderRadius,
+      buttonSize: getComputedStyle(button).fontSize,
+      buttonHeight: button.getBoundingClientRect().height,
+    };
+  });
+  expect(style).toEqual({
+    font: 'Inter Variable',
+    size: '14px',
+    radius: '12px',
+    buttonSize: '14px',
+    buttonHeight: width < 640 ? 44 : 36,
+  });
+}
+
 /** Each fact is a label over one value: two text lines, never a third, and neither cut off. */
 async function expectFactsOnTwoLines(page: Page) {
   const facts = detail(page).getByTestId('recurring-fact');
@@ -340,6 +362,7 @@ for (const viewport of [
     await backToList(page);
     await expect(summaryOf(page)).toContainText('€46a month · 3 bills');
     await expect(page.getByRole('region', {name: 'Late'})).toBeHidden();
+    await expectToastStyle(page, 'Undo', viewport.width);
     await page.getByRole('button', {name: 'Undo'}).click();
     await expect(page.getByRole('region', {name: 'Late'})).toContainText('Example Energy');
     await expect(summaryOf(page)).toContainText('€131a month · 4 bills');
