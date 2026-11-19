@@ -15,7 +15,6 @@ import {SQL_INTERNAL} from './bank-transaction-filters';
 export const SUGGESTION_WINDOW_DAYS = 90;
 
 const SUPPORTED: ReadonlySet<string> = new Set(REPORTING_CURRENCIES);
-const CHOSEN_STATES: ReadonlySet<BaseCurrencyState | null> = new Set(['CONFIRMED', 'PRESET']);
 
 /** Booked transactions per currency in the window, leaving out own transfers and currency exchanges. */
 const SUGGESTION_SQL = `
@@ -40,8 +39,8 @@ const SUGGESTION_SQL = `
  * - Once accounts hold several and a sync or import has finished, the owner is asked once (`SETUP_PENDING`) and
  *   nothing is guessed: an automatic currency stays meanwhile, and without one, the currency most recent transactions
  *   are in is only suggested.
- * - A chosen currency (`CONFIRMED`, or `PRESET` from before owners could choose) never changes by itself. Once Tempo
- *   can no longer convert into the current currency (it left {@link REPORTING_CURRENCIES}), the owner is asked again.
+ * - A chosen currency (`CONFIRMED`) never changes by itself. Once Tempo can no longer convert into the current
+ *   currency (it left {@link REPORTING_CURRENCIES}), the owner is asked again.
  *
  * Changing it clears every converted amount in the same transaction and lets the conversion job convert them again.
  */
@@ -58,7 +57,7 @@ export class ReportingCurrencyService {
 		const manager = this.dataSource.manager;
 		const account = await manager.getRepository(Account).findOneByOrFail({id: ownerId});
 		const connectedCurrencies = await findConnectedCurrencies(manager, ownerId);
-		const state = stateOf(account);
+		const state = account.baseCurrencyState;
 		const currencyUnavailable = account.baseCurrency !== null && !SUPPORTED.has(account.baseCurrency);
 		const setupRequired = state === 'SETUP_PENDING' || currencyUnavailable;
 		const suggestion =
@@ -70,7 +69,7 @@ export class ReportingCurrencyService {
 		);
 		return {
 			currency: account.baseCurrency,
-			confirmed: CHOSEN_STATES.has(state) && !currencyUnavailable,
+			confirmed: state === 'CONFIRMED' && !currencyUnavailable,
 			setupRequired,
 			currencyUnavailable,
 			suggestion,
@@ -121,8 +120,8 @@ export class ReportingCurrencyService {
 					.getRepository(Account)
 					.findOne({where: {id: ownerId}, lock: {mode: 'pessimistic_write'}});
 				if (!account) return null;
-				const state = stateOf(account);
-				if (CHOSEN_STATES.has(state)) return null;
+				const state = account.baseCurrencyState;
+				if (state === 'CONFIRMED') return null;
 				const currencies = await findConnectedCurrencies(manager, ownerId);
 				// Unchosen, the currency follows the accounts' only one, also once others are gone and nothing is left to ask.
 				if (currencies.length === 1) {
@@ -178,11 +177,6 @@ export class ReportingCurrencyService {
 			this.logger.warn(`Amount conversion enqueue failed: ${safeErrorName(error)}`);
 		}
 	}
-}
-
-/** A currency stored without a state was set before owners could choose one (`PRESET`). */
-function stateOf({baseCurrency, baseCurrencyState}: Account): BaseCurrencyState | null {
-	return baseCurrencyState ?? (baseCurrency === null ? null : 'PRESET');
 }
 
 async function findConnectedCurrencies(manager: EntityManager, ownerId: string): Promise<string[]> {
