@@ -6,7 +6,7 @@ export class AddRecurringContinuationUnlinks20261021120000 implements MigrationI
 	name = 'AddRecurringContinuationUnlinks20261021120000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
-		if (await queryRunner.hasTable(UNLINKS_TABLE)) return;
+		if (!(await queryRunner.hasTable('accounts')) || (await queryRunner.hasTable(UNLINKS_TABLE))) return;
 
 		await queryRunner.createTable(
 			new Table({
