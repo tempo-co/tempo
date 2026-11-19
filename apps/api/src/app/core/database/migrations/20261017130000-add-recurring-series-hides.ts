@@ -6,7 +6,7 @@ export class AddRecurringSeriesHides20261017130000 implements MigrationInterface
 	name = 'AddRecurringSeriesHides20261017130000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
-		if (await queryRunner.hasTable(HIDES_TABLE)) return;
+		if (!(await queryRunner.hasTable('accounts')) || (await queryRunner.hasTable(HIDES_TABLE))) return;
 
 		await queryRunner.createTable(
 			new Table({

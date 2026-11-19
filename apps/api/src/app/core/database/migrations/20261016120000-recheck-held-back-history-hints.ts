@@ -12,6 +12,7 @@ export class RecheckHeldBackHistoryHints20261016120000 implements MigrationInter
 	name = 'RecheckHeldBackHistoryHints20261016120000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
+		if (!(await queryRunner.hasTable('bank_transactions'))) return;
 		await queryRunner.query(
 			`UPDATE "bank_transactions" AS t
 			SET "categoryStatus" = 'PENDING', "categoryUpdatedAt" = now()
