@@ -41,6 +41,7 @@ export function SessionRevokeDialog({
       confirmTestId='revoke-session-button-confirm'
       isPending={isPending}
       onConfirm={() => revokeSession({id: session.id})}
+      failureMessage='The session could not be revoked. Try again.'
     />
   );
 }
