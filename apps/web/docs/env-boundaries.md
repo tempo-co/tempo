@@ -38,7 +38,7 @@ Rules:
 
 ## E2E stack
 
-`docker-compose.e2e.yml` (project `tempo-web` in the npm scripts) runs Mailpit (1025/8025), Redis (6379), Postgres (5432) and the API (3000) with synthetic configuration. Host ports and the `api` container name are fixed, so one web E2E stack runs per host and it collides with anything else on those ports. The API E2E stack takes Docker-assigned ports and runs alongside it. Check `docker compose ls --all` and `docker ps` before `docker:test:up`/`down`; `docker:test:down` runs `down -v --remove-orphans` and deletes the database volume.
+`docker-compose.e2e.yml` (project `tempo-web` in the npm scripts) runs Mailpit (1025/8025), Redis, Postgres and the API (3000) with synthetic configuration. Redis and Postgres are reached only inside the stack, so they take no host port. The published host ports and the `api` container name are fixed, so one web E2E stack runs per host and it collides with anything else on those ports. The API E2E stack takes Docker-assigned ports and runs alongside it. Check `docker compose ls --all` and `docker ps` before `docker:test:up`/`down`; `docker:test:down` runs `down -v --remove-orphans` and deletes the database volume.
 
 - The API runs with `NODE_ENV=test`, which drops and recreates the schema on boot. Seed only after the API is healthy: `docker:test:up` waits (`--wait`), then `db:seed:e2e` runs the seed inside the `api` container. A seed run before the API started is wiped, and logins then fail with "Invalid email or password".
 - The API's only CORS origin is `WEB_BASE_URL=http://localhost:5173`, and the bank callback redirect is fixed to the same origin. Serving the app on another port or as `127.0.0.1` needs those changed too, so keep the preview on `localhost:5173`.
