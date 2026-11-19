@@ -39,12 +39,22 @@ test.describe('Alerts from the service worker', () => {
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
     await worker.evaluate(() => {
-      const scope = self as unknown as {badges: number[]; navigator: Record<string, unknown>};
+      const scope = self as unknown as WorkerScope & {
+        badges: number[];
+        shownTags: string[];
+        navigator: Record<string, unknown>;
+      };
       scope.badges = [];
       Object.defineProperty(scope.navigator, 'setAppBadge', {
         configurable: true,
         value: (count: number) => Promise.resolve(void scope.badges.push(count)),
       });
+      scope.shownTags = [];
+      const showNotification = scope.registration.showNotification.bind(scope.registration);
+      scope.registration.showNotification = async (title, options) => {
+        await showNotification(title, options);
+        scope.shownTags.push(options.tag);
+      };
     });
 
     const cdp = await context.newCDPSession(page);
@@ -75,10 +85,12 @@ test.describe('Alerts from the service worker', () => {
     });
 
     // Reading notifications while the worker is still showing this one can lose it in headless
-    // Chromium, so wait for the badge the same push sets first.
+    // Chromium, so wait until showing it has finished.
     await expect
-      .poll(() => worker.evaluate(() => (self as unknown as {badges: number[]}).badges))
-      .toEqual([4]);
+      .poll(() => worker.evaluate(() => (self as unknown as {shownTags: string[]}).shownTags))
+      .toEqual(['bank-connections']);
+    const badges = await worker.evaluate(() => (self as unknown as {badges: number[]}).badges);
+    expect(badges).toEqual([4]);
     const shown = await worker.evaluate(async () =>
       (await (self as unknown as WorkerScope).registration.getNotifications()).map(
         (notification) => {
