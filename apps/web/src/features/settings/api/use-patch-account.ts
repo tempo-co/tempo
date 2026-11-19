@@ -26,7 +26,7 @@ export const usePatchAccount = () => {
     return toastRequest(mutateAsync(dto), {
       loading: 'Saving name...',
       success: 'Name saved.',
-      error: 'Your name could not be saved. Please try again',
+      error: 'Your name could not be saved. Try again',
     });
   };
 
@@ -41,7 +41,7 @@ export const useUpdateTimeZone = () => {
     try {
       return await mutateAsync({timeZone});
     } catch (error) {
-      if (!wasToasted(error)) toast.error('Your time zone could not be saved. Please try again.');
+      if (!wasToasted(error)) toast.error('Your time zone could not be saved. Try again.');
       throw error;
     }
   };

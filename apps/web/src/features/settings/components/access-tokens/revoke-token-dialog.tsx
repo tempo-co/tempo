@@ -66,7 +66,7 @@ export function RevokeTokenDialog({token, triggerVariant = 'outline'}: RevokeTok
             <Alert role='alert' variant='destructive'>
               <CircleAlert aria-hidden='true' />
               <AlertDescription className='text-foreground'>
-                The token could not be revoked. Please try again.
+                The token could not be revoked. Try again.
               </AlertDescription>
             </Alert>
           </ResponsiveDialogBody>

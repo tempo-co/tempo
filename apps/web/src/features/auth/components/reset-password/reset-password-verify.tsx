@@ -44,7 +44,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
           message:
             submitError.code === ('password_unchanged' satisfies PasswordResetErrorCode)
               ? 'Choose a different password from your current one.'
-              : "We couldn't reset your password. Please try again.",
+              : "We couldn't reset your password. Try again.",
         });
       }
     }

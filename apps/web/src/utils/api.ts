@@ -23,7 +23,7 @@ export class HttpError extends Error {
 
 export class NetworkError extends HttpError {
   constructor() {
-    super(0, 'Cannot reach Tempo. Please try again when the connection returns.');
+    super(0, 'Cannot reach Tempo. Try again when the connection returns.');
   }
 }
 
@@ -185,9 +185,7 @@ async function request<T = unknown>(
       throw error;
     onlineManager.setOnline(false);
     if (!isWrite) throw new NetworkError();
-    toast.error(
-      'Cannot reach Tempo. Your change was not confirmed. Please check before trying again.',
-    );
+    toast.error('Cannot reach Tempo. Your change was not confirmed. Check before trying again.');
     throw toasted(new NetworkError());
   });
   // Any reply, including an error status, proves Tempo is reachable. The API itself answers 502/503
@@ -244,7 +242,7 @@ async function request<T = unknown>(
     if (response.status >= 500) {
       const unavailable = new HttpError(
         response.status,
-        'Tempo is temporarily unavailable. Please try again.',
+        'Tempo is temporarily unavailable. Try again.',
       );
       // A busy refusal is a 503 with a typed body the caller can tell apart from an outage.
       unavailable.body = await response.json().catch(() => undefined);

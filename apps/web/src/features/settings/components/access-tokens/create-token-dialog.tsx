@@ -166,7 +166,7 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
                   <Alert role='alert' variant='destructive'>
                     <CircleAlert aria-hidden='true' />
                     <AlertDescription className='text-foreground'>
-                      Your token could not be created. Please try again.
+                      Your token could not be created. Try again.
                     </AlertDescription>
                   </Alert>
                 )}

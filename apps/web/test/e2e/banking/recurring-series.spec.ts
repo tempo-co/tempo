@@ -474,7 +474,7 @@ test('says so when hiding could not be saved', async ({page}) => {
   await page.goto('/?recurring=open');
   await openSeries(page, GYM_KEY);
   await detail(page).getByRole('button', {name: 'Not recurring'}).click();
-  await expect(page.getByText('Could not save. Please try again.')).toBeVisible();
+  await expect(page.getByText('Could not save. Try again.')).toBeVisible();
   await expect(detail(page).getByRole('button', {name: 'Not recurring'})).toBeEnabled();
 });
 
