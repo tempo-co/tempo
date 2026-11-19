@@ -5,7 +5,7 @@ Issues and specs for this repo live in the Linear project named **Tempo**. GitHu
 ## Conventions
 
 - **Team**: new issues go to the team that owns the Tempo project. Look it up with `list_projects` (query "Tempo", field `teams`) rather than hard-coding it.
-- **Create an issue**: `save_issue` with `team`, `project: "Tempo"`, `title` and a Markdown `description`.
+- **Create an issue**: `save_issue` with `team`, `project: "Tempo"`, `title`, a Markdown `description`, a `priority` and one triage label. Priority: 1 Urgent when production is broken or data is at risk; 2 High when it blocks merges or a main flow; 3 Medium for a real defect with a workaround; 4 Low for polish or a known exception. The label is `needs-triage` unless the issue is specified enough for `ready-for-agent` or `ready-for-human`. Report the chosen priority and the reason with the issue link.
 - **Read an issue**: `get_issue`, then `list_comments` for the discussion.
 - **List issues**: `list_issues` with `project: "Tempo"` and `label` / `state` filters.
 - **Sub-issue**: `save_issue` with `parentId` set to the parent's identifier.
