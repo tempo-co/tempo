@@ -7,13 +7,14 @@ CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/
 | `deploy.sh` | Deploy script for both targets |
 | `targets/production.env`, `targets/staging.env` | Non-secret per-target settings |
 | `backup.sh` | Validated `pg_dump`, scheduled and pre-deploy |
-| `install.sh` | Copies the above to the production server |
+| `install.sh` | Copies the above to the production server; `--check` lists installed files that differ from the checkout |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
+| `tempo-api-egress.sh` | Egress firewall for the API uid and Tempo's container networks (see Egress firewall) |
 | `test-deploy.sh`, `test-sync-pins.sh` | Offline tests of `deploy.sh` and `sync-pins.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or installed file |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API and web |
 | `tailscale.compose.yml` | Tailscale sidecar giving production its own tailnet device |
 | `ghcr-retention.sh` | Weekly GHCR cleanup of both packages (`.github/workflows/ghcr-retention.yml`): keeps `main`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the images of the last 5 `main` commits that changed the app as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |
-| `systemd/` | Production deploy and backup timers (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
+| `systemd/` | Production deploy and backup timers and the egress firewall (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
 | `staging/` | Staging Compose files (stack and Tailscale sidecar), env template, database refresh |
 
 ## Production
@@ -35,6 +36,8 @@ After changing anything else in `ops/`, install from a clean `main` checkout:
 git fetch && git checkout --detach origin/main
 sudo ops/install.sh production
 ```
+
+To see whether the server runs what a checkout holds, run `sudo ops/install.sh production --check` (`ops/install.sh staging --check` for staging). It renders the same files the install would, prints a diff for each installed file that differs, is missing or has another mode, and exits 1 if any does. It writes nothing. The installed version it prints is informational: `main` moves on without ops changes.
 
 Production secrets live in the production env file (path set by `install.sh`, mode 600), outside the repository. Email goes through authenticated SMTP with STARTTLS required.
 
@@ -63,6 +66,10 @@ The `tailscale` network has a fixed subnet so the sidecar gets the static addres
 ### Container privileges
 
 Every production container runs with `no-new-privileges` and drops all Linux capabilities. The API runs as uid and gid 10001, set by number in the host-owned Compose file so an image cannot switch itself to root. Production uses the root Docker daemon without user namespaces, so a container uid is the same host uid: 10001 belongs to no host account, while the image's own `node` user (1000) would be the production server's admin user, who can use sudo. The API reads the banking key as that uid, so the key file at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` belongs to that admin user and group 10001, mode 0440, which also keeps it readable for uid 1000 during a switch or rollback. A uid change goes into the Compose file and the key's group together. The official PostgreSQL, Redis and Nginx images start as root to fix ownership and switch to their service user, so they keep only `CHOWN`, `SETUID` and `SETGID` (PostgreSQL also `DAC_OVERRIDE` and `FOWNER`). The Tailscale sidecar uses userspace networking and needs none. Like network changes, these settings reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate PostgreSQL, Redis, API and web, then the sidecar. Set the key's group before the API moves to a new uid; it also works for the old one, so a rollback only reinstalls the previous Compose file.
+
+### Egress firewall
+
+`tempo-api-egress.service` runs `tempo-api-egress.sh` (installed as `/usr/local/sbin/tempo-api-egress`) at boot, after Docker. It loads the nftables table `tempo_api_egress`, which keeps the API reaching only DNS and the internet even if code escapes the container. Processes running as uid 10001 on the host may use the local DNS resolver and public addresses, but nothing on loopback, private or link-local ranges, or the tailnet. New connections from the `default` and `ingress` networks to private, link-local and tailnet addresses or to the host itself are refused; traffic within one network is untouched, and the `tailscale` network is left alone because the sidecar needs its peers. The script finds the networks' bridges each run and fails if one is missing, so after `sudo ops/install.sh production` changes the script or its unit, or after either network is recreated, run `sudo systemctl reload tempo-api-egress`. A new server enables it once with `sudo systemctl enable --now tempo-api-egress`.
 
 ## Staging
 
