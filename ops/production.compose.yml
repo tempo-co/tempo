@@ -30,6 +30,24 @@ services:
     <<: *no-new-privileges
     cap_drop: [ALL]
     cap_add: [CHOWN, SETGID, SETUID]
+    # tempo_readonly reads banking:* keys and lists or counts key names; it cannot write, run scripts
+    # or read sessions. See "Read-only Redis access" in ops/README.md.
+    command:
+      [
+        'redis-server',
+        '--user',
+        'tempo_readonly',
+        'on',
+        'nopass',
+        'resetchannels',
+        '%R~banking:*',
+        '-@all',
+        '+@read',
+        '-@dangerous',
+        '+scan',
+        '+dbsize',
+        '+ping',
+      ]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
