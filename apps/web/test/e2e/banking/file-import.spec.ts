@@ -18,6 +18,7 @@ import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 import {openDetails, routeMockedBankApp} from '../../utils/bank-connections';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+import {countAfterToasts} from '../../utils/toasts';
 
 const TODAY = new Date('2026-11-12T10:00:00+01:00');
 const CHECKING = MOCK_CONNECTION.bankAccounts[0];
@@ -1619,13 +1620,13 @@ test.describe('statement file import on Connections', () => {
     ].map((row) => ({...row, bankAccountId: FILE_ACCOUNT_ID}));
     await mockBankConnections(page, [MOCK_CONNECTION, IMPORTED_FILES]);
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
-    let failRefund = true;
+    const refundFailures = [429, 500];
     await page.route(
       `${API_URL}/bank-imports/*/doubtful-rows/00000000-0000-4000-8000-000000000612/resolve`,
       (route) => {
-        if (!failRefund) return route.fallback();
-        failRefund = false;
-        return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+        const status = refundFailures.shift();
+        if (!status) return route.fallback();
+        return fulfillJson(route, {statusCode: status, message: 'Synthetic failure'}, status);
       },
     );
     await page.goto('/bank-connections');
@@ -1654,13 +1655,20 @@ test.describe('statement file import on Connections', () => {
       'Marked as the same as Example Grocer on 1 Oct',
     );
     await expect(grocer.getByRole('radio')).toHaveCount(0);
+    // A failure the shared rate-limit toast reports holds the rest with their choices, and no row repeats it.
+    await expect(page.locator('[data-sonner-toast]')).toHaveText(/^Rate limit exceeded/);
+    await expect(dialog.getByRole('button', {name: 'Save 2 answers'})).toBeEnabled();
+    await expect(refund.getByRole('alert')).toHaveCount(0);
+    await expect(bakery.getByRole('radio', {name: "It's a new transaction"})).toBeChecked();
+
+    await dialog.getByRole('button', {name: 'Save 2 answers'}).click();
     // A failure does not stop the rows after it.
     await expect(bakery.getByRole('status')).toHaveText('Kept as new');
     await expect(refund.getByRole('alert')).toHaveText(
       "Couldn't save this answer. Save to try again.",
     );
+    expect(await countAfterToasts(page, page.getByText(/Couldn.t save/))).toBe(1);
     await expect(refund.getByRole('radio', {name: "It's a new transaction"})).toBeChecked();
-    await expect(page.locator('[data-sonner-toast]')).toContainText("Couldn't save your answer");
     for (const choice of await florist.getByRole('radio').all())
       await expect(choice).not.toBeChecked();
     await expect(dialog.getByRole('heading', {name: 'Check 4 transactions'})).toBeVisible();
