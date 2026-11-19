@@ -140,7 +140,7 @@ const burger: MerchantGroup = {
   paymentCount: 40,
   averagePayment: '8.01',
   firstDate: '2025-10-20',
-  excluded: {unknownDirection: 0, missingBaseAmount: 2},
+  excluded: {missingBaseAmount: 2},
   variants: [
     {
       key: 'example burger online ordering platform example city central',
@@ -572,7 +572,7 @@ test('merchant details show all-time totals, periods, grouped names and transact
     'How oftenAbout weekly',
   ]);
   await expect(
-    details.getByText('2 transactions without a converted amount or direction are not counted.'),
+    details.getByText('2 transactions without a converted amount are not counted.'),
   ).toBeVisible();
 
   const overTime = details.getByRole('region', {name: 'Spending over time'});

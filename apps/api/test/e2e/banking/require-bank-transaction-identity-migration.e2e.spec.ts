@@ -24,7 +24,7 @@ describe('RequireBankTransactionIdentity migration', () => {
 				transactionDate: '2026-09-02',
 				amount: '7',
 				currency: 'eur',
-				creditDebitIndicator: 'crdt',
+				creditDebitIndicator: 'CRDT',
 			},
 			{bookingDate: '2026-09-03', amount: '-3.00'},
 			{bookingDate: '2026-09-04', amount: '-4.00'},

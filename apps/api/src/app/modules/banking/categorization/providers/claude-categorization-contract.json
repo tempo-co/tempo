@@ -133,19 +133,12 @@
 					"maxLength": 8192
 				},
 				"creditDebitIndicator": {
-					"anyOf": [
-						{
-							"type": "string",
-							"maxLength": 8192
-						},
-						{
-							"type": "null"
-						}
-					]
+					"type": "string",
+					"enum": ["CRDT", "DBIT"]
 				},
 				"direction": {
 					"type": "string",
-					"enum": ["INCOME", "EXPENSE", "UNKNOWN"]
+					"enum": ["INCOME", "EXPENSE"]
 				},
 				"transactionType": {
 					"type": "string",

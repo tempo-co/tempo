@@ -89,7 +89,6 @@ describe('BankTransactionSummary', () => {
 			bookedRow('2026-10-09', '-100.00', {category: null, ownTransferEvidence: 'IBAN'}),
 			bookedRow('2026-10-09', '100.00', {category: null, ownTransferEvidence: 'IBAN'}),
 			bookedRow('2026-10-10', '-40.00', exchange),
-			bookedRow('2026-10-11', '-1.00', {creditDebitIndicator: null}),
 			bookedRow('2026-10-12', '-9.99', {amountInBaseCurrency: null}),
 			// After the cut-off day, and not booked yet.
 			bookedRow('2026-10-19', '-1000.00', {category: 'FOOD_AND_DRINK'}),
@@ -124,7 +123,7 @@ describe('BankTransactionSummary', () => {
 			daysInMonth: 31,
 			baseCurrency: 'EUR',
 			totals: {spending: '79.60', income: '2000.00', net: '1920.40', ownTransfers: '100.00'},
-			excluded: {unknownDirection: 1, missingBaseAmount: 1},
+			excluded: {missingBaseAmount: 1},
 		});
 		expect(body.daily).toHaveLength(18);
 		expect(body.daily.slice(0, 7)).toEqual([
@@ -250,9 +249,6 @@ describe('BankTransactionSummary', () => {
 					);
 			const nonInternal = rows.filter((row) => row.cashFlowTreatment !== 'INTERNAL');
 			expect(totals.excluded).toEqual({
-				unknownDirection: nonInternal.filter(
-					(row) => !['DBIT', 'CRDT'].includes(row.creditDebitIndicator ?? ''),
-				).length,
 				missingBaseAmount: nonInternal.filter((row) => row.amountInBaseCurrency === null).length,
 			});
 			const spending = -sum('SPENDING');
@@ -283,7 +279,7 @@ describe('BankTransactionSummary', () => {
 			spending: '79.60',
 			income: '2000.00',
 			net: '1920.40',
-			excluded: {unknownDirection: 1, missingBaseAmount: 1},
+			excluded: {missingBaseAmount: 1},
 		});
 		const {body: summary} = await ownerAgent.get(SUMMARY).query(OCTOBER).expect(200);
 		const from = '2026-10-01';
@@ -423,8 +419,7 @@ describe('BankTransactionSummary', () => {
 
 	it('counts transactions that need attention across all months', async () => {
 		const extra = await fixtures.createTransactions(ownerBankAccount, [
-			// To review and without a direction: one row in two counts, and once in what needs the owner.
-			bookedRow('2026-07-15', '-5.00', {category: 'NEEDS_REVIEW', creditDebitIndicator: null}),
+			bookedRow('2026-07-15', '-5.00', {category: 'NEEDS_REVIEW'}),
 			bookedRow(null, '-6.00', {category: null, categoryStatus: 'FAILED', amountInBaseCurrency: null}),
 			bookedRow('2026-08-03', '-7.00', {category: null, categoryStatus: 'PROCESSING'}),
 		]);
@@ -439,12 +434,11 @@ describe('BankTransactionSummary', () => {
 				needsReview: 1,
 				categorizationFailed: 1,
 				categorizing: 1,
-				unknownDirection: 2,
 				missingBaseAmount: 2,
-				needsAttention: 3,
+				needsAttention: 2,
 			});
 
-			// Each count opens a list with exactly that many rows, the overlapping row once in what needs the owner.
+			// Each count opens a list with exactly that many rows.
 			const listTotal = async (filter: Record<string, string | string[]>, agent = ownerAgent) =>
 				(await agent.get('/bank-transactions').query(filter).expect(200)).body.total;
 			expect({
@@ -452,10 +446,9 @@ describe('BankTransactionSummary', () => {
 				needsReview: await listTotal({'filter[categories][]': 'NEEDS_REVIEW'}),
 				categorizationFailed: await listTotal({'filter[categoryStatuses][]': 'FAILED'}),
 				categorizing: await listTotal({'filter[categoryStatuses][]': 'CATEGORIZING'}),
-				unknownDirection: await listTotal({'filter[cashFlows][]': 'UNKNOWN'}),
 				missingBaseAmount: await listTotal({
 					'filter[baseAmount]': 'MISSING',
-					'filter[cashFlows][]': ['SPENDING', 'INCOME', 'UNKNOWN'],
+					'filter[cashFlows][]': ['SPENDING', 'INCOME'],
 				}),
 			} satisfies BankTransactionReviewCounts).toEqual(body);
 			const {body: totals} = await ownerAgent

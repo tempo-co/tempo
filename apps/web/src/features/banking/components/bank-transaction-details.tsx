@@ -254,9 +254,7 @@ function Movement({
           ? 'Excluded from income and spending'
           : transaction.cashFlowTreatment === 'INCOME'
             ? 'Counts toward income'
-            : transaction.cashFlowTreatment === 'EXPENSE'
-              ? 'Counts toward spending'
-              : 'Cash-flow treatment unknown'}
+            : 'Counts toward spending'}
       </p>
       {isExchange && transaction.categorySource === 'MANUAL' && (
         <dl className='mt-4'>

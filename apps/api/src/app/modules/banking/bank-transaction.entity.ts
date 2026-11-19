@@ -1,5 +1,6 @@
 import type {BankTransactionBaseAmountMethod} from '@tempo/contracts';
 import {
+	Check,
 	Column,
 	CreateDateColumn,
 	Entity,
@@ -13,6 +14,7 @@ import {
 import type {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankAccount} from './bank-account.entity';
+import type {CreditDebitIndicator} from './bank-transaction-direction';
 import type {
 	BankTransactionFinancialEventSource,
 	BankTransactionFinancialEventType,
@@ -26,6 +28,7 @@ import type {OwnTransferEvidence, OwnTransferOverride} from './own-transfer/own-
 export type {BankTransactionBaseAmountMethod};
 
 @Entity('bank_transactions')
+@Check('chk_bank_transactions_credit_debit_indicator', `"creditDebitIndicator" IN ('CRDT', 'DBIT')`)
 @Index('idx_bank_transactions_own_transfer_counterpart', ['ownTransferCounterpartId'])
 @Index('idx_bank_transactions_currency_exchange_counterpart', ['currencyExchangeCounterpartId'])
 @Index('idx_bank_transactions_account_stable_identity', ['bankAccountId', 'stableIdentityKey'], {unique: true})
@@ -94,8 +97,8 @@ export class BankTransaction {
 	@Column({type: 'varchar', length: 3})
 	currency: string;
 
-	@Column({type: 'varchar', length: 8, nullable: true})
-	creditDebitIndicator: string | null;
+	@Column({type: 'varchar', length: 8})
+	creditDebitIndicator: CreditDebitIndicator;
 
 	@Column({type: 'varchar', length: 32, nullable: true})
 	transactionType: BankTransactionType | null;

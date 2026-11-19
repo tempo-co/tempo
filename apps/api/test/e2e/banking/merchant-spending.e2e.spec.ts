@@ -199,7 +199,7 @@ describe('Merchant spending', () => {
 			averagePayment: '10.33',
 			firstDate: '2026-09-10',
 			lastDate: '2026-10-14',
-			excluded: {unknownDirection: 0, missingBaseAmount: 0},
+			excluded: {missingBaseAmount: 0},
 			variants: [
 				{
 					key: 'example burger online',

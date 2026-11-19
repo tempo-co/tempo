@@ -629,7 +629,7 @@ describe('EnableBankingClient', () => {
 								transaction_id: 'transaction-1',
 								entry_reference: 'entry-1',
 								transaction_amount: {currency: 'EUR', amount: '2.50'},
-								credit_debit_indicator: 'DBIT',
+								credit_debit_indicator: ' dbit ',
 								status: 'BOOK',
 								transaction_date: '2026-08-24',
 								booking_date: '2026-08-26',
@@ -703,6 +703,15 @@ describe('EnableBankingClient', () => {
 								},
 							},
 							{transaction_id: 'transaction-without-currency', transaction_amount: {amount: '1.00'}},
+							{
+								transaction_id: 'transaction-without-direction',
+								transaction_amount: {currency: 'EUR', amount: '3.00'},
+							},
+							{
+								transaction_id: 'transaction-with-unknown-direction',
+								transaction_amount: {currency: 'EUR', amount: '3.00'},
+								credit_debit_indicator: 'UNKNOWN',
+							},
 						],
 					}),
 					{status: 200, headers: {'content-type': 'application/json'}},
@@ -713,13 +722,14 @@ describe('EnableBankingClient', () => {
 			strategy: 'longest',
 		});
 
-		// Rows without a usable amount or currency are counted, not returned.
-		expect(unparseableCount).toBe(2);
+		// Rows without a usable amount, currency or direction are counted, not returned.
+		expect(unparseableCount).toBe(4);
 		expect(transactions).toEqual([
 			expect.objectContaining({
 				providerTransactionId: 'transaction-1',
 				entryReference: 'entry-1',
 				currency: 'EUR',
+				creditDebitIndicator: 'DBIT',
 				counterpartyName: 'Shop',
 				counterpartyLocation: {
 					city: 'Exampletown',
@@ -870,19 +880,6 @@ describe('EnableBankingClient', () => {
 							},
 							bank_transaction_code: {code: 'RCDT', description: 'Example incoming transfer'},
 						},
-						{
-							transaction_id: 'unknown-direction',
-							transaction_amount: {currency: 'EUR', amount: '3.00'},
-							credit_debit_indicator: 'UNKNOWN',
-							creditor: {
-								name: 'Example Creditor',
-								postal_address: {town_name: 'Creditor Town', country: 'DE'},
-							},
-							debtor: {
-								name: 'Account Holder Example',
-								postal_address: {town_name: 'Account Holder Town', country: 'BE'},
-							},
-						},
 					],
 				}),
 				{status: 200, headers: {'content-type': 'application/json'}},
@@ -893,11 +890,7 @@ describe('EnableBankingClient', () => {
 
 		// The other party may be the account holder, so neither its name nor its address stands in. Without a note or
 		// remittance, the description is the bank transaction code's text.
-		expect(transactions.map(({description}) => description)).toEqual([
-			undefined,
-			'Example incoming transfer',
-			undefined,
-		]);
+		expect(transactions.map(({description}) => description)).toEqual([undefined, 'Example incoming transfer']);
 		for (const transaction of transactions) {
 			expect(transaction.counterpartyName).toBeUndefined();
 			expect(transaction).not.toHaveProperty('counterpartyLocation');
@@ -970,6 +963,7 @@ describe('EnableBankingClient', () => {
 					transactions: [
 						{
 							transaction_amount: {currency: 'EUR', amount: '4.00'},
+							credit_debit_indicator: 'DBIT',
 							transaction_date: 123,
 							balance_after_transaction: {currency: 'EUR', amount: 'not-a-number'},
 							exchange_rate: {

@@ -76,7 +76,6 @@ type BankTransactionCategorizationTransaction = Pick<
 export function toBankTransactionCategorizationInput(
 	transaction: BankTransactionCategorizationTransaction,
 ): BankTransactionCategorizationInput {
-	const creditDebitIndicator = normalizeUppercase(transaction.creditDebitIndicator);
 	const bankTransactionCode = normalizeUppercase(transaction.bankTransactionCode);
 	const bankTransactionSubCode = normalizeUppercase(transaction.bankTransactionSubCode);
 	const bankTransactionDescription = sanitizeCategorizationText(transaction.bankTransactionDescription);
@@ -94,8 +93,8 @@ export function toBankTransactionCategorizationInput(
 		valueDate: normalizeNullableText(transaction.valueDate),
 		amount: normalizeRequiredText(transaction.amount),
 		currency: normalizeUppercase(transaction.currency) ?? '',
-		creditDebitIndicator,
-		direction: toBankTransactionDirection(creditDebitIndicator),
+		creditDebitIndicator: transaction.creditDebitIndicator,
+		direction: toBankTransactionDirection(transaction.creditDebitIndicator),
 		transactionType,
 		bankTransactionCode,
 		bankTransactionSubCode,

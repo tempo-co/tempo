@@ -4,6 +4,7 @@ import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from '
 import type {NormalizedRow} from '@modules/file-import/parsers/parse-result';
 
 import {BankAccount} from '../bank-account.entity';
+import type {CreditDebitIndicator} from '../bank-transaction-direction';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 	detectCurrencyExchangeMarker,
@@ -119,7 +120,7 @@ export type BankTransactionInput = {
 	merchantCategoryCode?: string;
 	amount: string;
 	currency: string;
-	creditDebitIndicator?: string;
+	creditDebitIndicator: CreditDebitIndicator;
 	status?: string;
 	transactionDate?: string;
 	bookingDate?: string;
@@ -1018,7 +1019,7 @@ export class BankTransactionPersistenceService {
 	}
 
 	private toBankTransactionValues(bankAccount: BankAccount, transaction: BankTransactionInput, aspspName: string) {
-		const creditDebitIndicator = truncate(normalizeBankCode(transaction.creditDebitIndicator ?? ''), 8);
+		const creditDebitIndicator = transaction.creditDebitIndicator;
 		const amount = this.toSignedAmount(transaction.amount, creditDebitIndicator);
 		const currency = normalizeBankCode(transaction.currency);
 		const description = truncate(transaction.description, 500);
@@ -1158,7 +1159,7 @@ export class BankTransactionPersistenceService {
 		});
 	}
 
-	private toSignedAmount(amount: string, creditDebitIndicator: string | null): string {
+	private toSignedAmount(amount: string, creditDebitIndicator: CreditDebitIndicator): string {
 		const normalizedAmount = amount.trim();
 		const isNegative = normalizedAmount.startsWith('-');
 		const unsignedAmount = normalizedAmount.replace(/^[+-]/, '');

@@ -849,7 +849,6 @@ describe('BankTransactionController', () => {
 				categorySource: null,
 				...CURRENCY_EXCHANGE_EVENT,
 			}),
-			bookedRow(june(8), '-1.00', {valueDate: null, creditDebitIndicator: null}),
 			bookedRow(june(9), '-7.00', {valueDate: null, amountInBaseCurrency: null}),
 			bookedRow(june(10), '-3.00', {
 				valueDate: null,
@@ -864,19 +863,8 @@ describe('BankTransactionController', () => {
 				categorySource: null,
 			}),
 		]);
-		const [
-			expense,
-			transferOut,
-			refund,
-			salary,
-			ownOut,
-			ownIn,
-			currencyExchange,
-			unknown,
-			unconverted,
-			failed,
-			pending,
-		] = rows.map(({id}) => id);
+		const [expense, transferOut, refund, salary, ownOut, ownIn, currencyExchange, unconverted, failed, pending] =
+			rows.map(({id}) => id);
 		const idsFor = async (filter: Record<string, string | string[]>) => {
 			const response = await verifiedAgent
 				.get('/bank-transactions')
@@ -897,14 +885,12 @@ describe('BankTransactionController', () => {
 			);
 			expect(await idsFor({'filter[cashFlows][]': 'INCOME'})).toEqual([salary]);
 			expect(await idsFor({'filter[cashFlows][]': 'INTERNAL'})).toEqual(sorted(ownOut, ownIn, currencyExchange));
-			expect(await idsFor({'filter[cashFlows][]': 'UNKNOWN'})).toEqual([unknown]);
 			// The two kinds of internal movement, selectable on their own and alongside other cash flows.
 			expect(await idsFor({'filter[cashFlows][]': 'CURRENCY_EXCHANGE'})).toEqual([currencyExchange]);
 			expect(await idsFor({'filter[cashFlows][]': 'OWN_TRANSFER'})).toEqual(sorted(ownOut, ownIn));
 			expect(await idsFor({'filter[cashFlows][]': ['INCOME', 'CURRENCY_EXCHANGE']})).toEqual(
 				sorted(salary, currencyExchange),
 			);
-			expect(await idsFor({'filter[cashFlows][]': ['INCOME', 'UNKNOWN']})).toEqual(sorted(salary, unknown));
 			expect(await idsFor({'filter[cashFlows][]': 'SPENDING', 'filter[baseAmount]': 'PRESENT'})).toEqual(
 				sorted(expense, transferOut, refund, failed, pending),
 			);

@@ -103,7 +103,7 @@ export const bankTransactionSearchParamsSchema = z.object({
   merchantGroup: z.string().regex(new RegExp(MERCHANT_GROUP_ID_PATTERN)).optional(),
   /** Only one income source's rows, by its breakdown key, from Home. */
   incomeSource: z.string().max(BANK_TRANSACTION_SEARCH_MAX_LENGTH).optional(),
-  /** Only the rows the nav badge counts: to review, failed to categorize or without a direction. */
+  /** Only the rows the nav badge counts: to review or failed to categorize. */
   needsAttention: z.literal(true).optional(),
   transactionId: z.string().optional(),
   /** The orders the page offers; an older link's category or source order falls back to newest first. */

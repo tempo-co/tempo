@@ -96,13 +96,14 @@ export function formatOwnTransferEvidence(value: OwnTransferEvidence) {
   }
 }
 
-export function formatBankTransactionCashFlowTreatment(
-  value: BankTransactionCashFlowTreatment | null | undefined,
-) {
-  if (value === 'INCOME') return 'Income';
-  if (value === 'EXPENSE') return 'Expense';
-  if (value === 'INTERNAL') return 'Internal movement';
-  return 'Unknown';
+const CASH_FLOW_TREATMENT_LABELS: Record<BankTransactionCashFlowTreatment, string> = {
+  INCOME: 'Income',
+  EXPENSE: 'Expense',
+  INTERNAL: 'Internal movement',
+};
+
+export function formatBankTransactionCashFlowTreatment(value: BankTransactionCashFlowTreatment) {
+  return CASH_FLOW_TREATMENT_LABELS[value];
 }
 
 export function formatBankTransactionType(value: string | null) {

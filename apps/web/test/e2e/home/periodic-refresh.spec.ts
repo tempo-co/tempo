@@ -54,7 +54,6 @@ async function mockDerivedData(page: Page) {
             ...HOME_REVIEW_COUNTS,
             needsReview: 0,
             categorizationFailed: 0,
-            unknownDirection: 0,
             needsAttention: 0,
           }
         : HOME_REVIEW_COUNTS,
