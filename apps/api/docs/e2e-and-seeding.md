@@ -37,17 +37,16 @@ Consequences:
 ## Seeded data
 
 - API E2E setup boots the application and runs `seedAccounts` for each spec file. It does not load the full banking dataset: create the rows a spec depends on with `BankingFixtures`.
-- `scripts/seed-data/seed.constants.ts` holds the synthetic accounts. Tests that change account data use the account dedicated to that flow, not the shared `VERIFIED` one; scenarios that need their own banking totals use an isolated owner.
+- `scripts/seed-data/seed.constants.ts` holds the synthetic accounts. Tests that change account data use the account dedicated to that flow, not the shared `VERIFIED` one; scenarios that need their own banking totals use an isolated user.
 - `npm run db:seed` and API-backed web E2E run the full seed: accounts, banking and own transfers. `apps/web/test/auth.setup.ts` in the web app only logs those accounts in and saves their sessions; it does not seed.
-- `seedBankingData` is a full synthetic dataset with fixed row IDs, not a repeatable per-owner fixture factory. Do not make feature assertions depend on its exact contents. Account-deletion E2E uses it to exercise cascades through populated relationships.
-- Data a test counts as a whole goes under its own owner (see `scripts/seed-data/seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
-- Fixture text must be synthetic and must not be derived from real merchants, names or places.
+- `seedBankingData` is a full synthetic dataset with fixed row IDs, not a repeatable per-user fixture factory. Do not make feature assertions depend on its exact contents. Account-deletion E2E uses it to exercise cascades through populated relationships.
+- Data a test counts as a whole goes under its own user (see `scripts/seed-data/seed-own-transfer-data.ts`), so default pagination fixtures keep their counts.
 
 ## Reusing test setup
 
 - `test/setup/e2e.setup.ts`: `getApp`, `loginAgent`, and `enableAiCategorizationE2e()` or `enableMerchantLogosE2e()` at module scope. `test/utils/wait-utils.ts`: `waitFor` until background workers finish. `test/utils/auth-utils.ts`: `createVerifiedAccount`, `expectValidationMessage`. `test/utils/email-utils.ts`: Mailpit reads, taken once the email queue has no pending jobs, so an absent email is really absent.
 - Use `BankingFixtures` (`scripts/seed-data/banking-fixtures.ts`, valid defaults; pass only the fields a test depends on) for persisted connections, accounts and transactions. Use `test/fixtures/bank-transaction.fixture.ts` for an in-memory entity in unit tests; it does not set up database relationships or replace persisted fixtures.
-- Use `test/utils/banking-utils.ts` to create an isolated owner with real signup, verification and login, plus one connection and an empty bank account. Pass the base currency explicitly and keep scenario rows local:
+- Use `test/utils/banking-utils.ts` to create an isolated user with real signup, verification and login, plus one connection and an empty bank account. Pass the base currency explicitly and keep scenario rows local:
 
 ```ts
 import {createBankingOwner} from '../../utils/banking-utils';
@@ -66,7 +65,6 @@ const response = await agent.get('/bank-transactions').expect(200);
 Web E2E (`apps/web`) runs an API image and seeds it inside the container. In CI that image is built from the same commit whenever the change touches `apps/api`, so a seed or route change here reaches web E2E in the same PR.
 
 - If only the changed feature fails in web E2E while auth and unrelated pages pass, check the image first: inspect `dist` in the pulled image for the route, field or seed marker. A missing route is version skew; never weaken web assertions to match an older API.
-- To run the web suite locally against this checkout's API, build an image from `apps/api` and set `TEMPO_API_E2E_IMAGE` to it.
 - The runtime image ships no env files (`scripts/runtime-image-smoke.js` fails the build if one appears). Consumers that run it with `NODE_ENV=test` pass their own synthetic config; before dropping a file or default from the image, grep `apps/web/docker-compose.e2e.yml` and `.github/workflows/ci.yml` for what they rely on.
 
 ## Timeouts

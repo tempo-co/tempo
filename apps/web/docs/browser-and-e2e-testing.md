@@ -25,8 +25,7 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 
 ## Local runs and shared servers
 
-- The suite runs with one worker and `fullyParallel: false`; local runs do not retry. A pass that needed a retry is a flake; say so.
-- Every local worktree shares one E2E stack and port 5173. Start a local run only when `pgrep -af 'playwright test'` shows no other.
+- A pass that needed a retry is a flake; say so.
 - Parallel Playwright runs in one checkout overwrite `test-results/` and `playwright-report/`. Give each run its own `--output` directory and `PLAYWRIGHT_HTML_OUTPUT_DIR`.
 - Stop a background preview by PID or port. `pkill -f "<command line>"` also matches the shell running it.
 
@@ -44,7 +43,7 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 
 - A spec fixture that uses a field the client type lacks (`satisfies <Type>`) is a compile error, so the RED run fails on the build instead of on behaviour. Add the type field first, then run RED.
 - `test/` is compiled with `tsconfig.app.json` (`lib: ES2020`). Test code must fit that `lib`, not just the installed Node.
-- Prove RED by restoring the old source while keeping the new tests: `git checkout origin/main -- src`, run the spec, then `git checkout HEAD -- src`. Confirm `git status` shows `src` modified before trusting the run; a stash taken after committing the fix is empty and the "RED" run tests the fix. Order assertions so the one specific to the change fails first.
+- Prove RED in a separate worktree checked out at origin/main, with only the new or changed spec copied in; a spec that passes there is not testing the change. Order assertions so the one specific to the change fails first.
 - A RED run of a seeded spec leaves state behind (extra sessions, changed data). Reset the stack before the GREEN run.
 
 ## Route mocks
@@ -86,10 +85,10 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 
 ## WebKit project
 
-Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a second time in the `webkit` project, a new spec included without listing it. It uses the same desktop default viewport as Chromium; a spec reaches iPhone layouts by setting a phone width (390 or 320) itself, so a layout check belongs at those widths. Install the browsers locally with `npx playwright install chromium webkit` and run one spec with `--project=webkit`. CI adds `--with-deps`, which installs system packages as root.
+Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a second time in the `webkit` project, a new spec included without listing it. It uses the same desktop default viewport as Chromium; a spec reaches iPhone layouts by setting a phone width (390 or 320) itself, so a layout check belongs at those widths. Run one spec with `--project=webkit`.
 
 - WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
-- Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch, native drag-and-drop and the Android on-screen keyboard are not covered; the owner checks them by hand on a device.
+- Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch, native drag-and-drop and the Android on-screen keyboard are not covered; check them by hand on a device.
 - With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `test/e2e/home/where-you-stand.spec.ts` does.
 - WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
 - Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine.
@@ -98,7 +97,7 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 - `toBeVisible()` passes for `sr-only` content. Assert geometry and a real Tab/Enter path for anything revealed on focus.
 - Tailwind `outline-hidden` sets `--tw-outline-style: none`. Overriding only outline width or colour (for example on the Recharts surface in `src/components/ui/chart.tsx`) shows nothing; add `outline-solid` locally and check the computed style.
-- Recharts 3 axis labels are `.recharts-cartesian-axis-tick-value`; older tick-group selectors match nothing.
+- Select Recharts 3 axis labels by `.recharts-cartesian-axis-tick-value`; tick-group selectors match nothing.
 - A plain block `Card` ignores `gap-*` unless its caller makes it a grid or flex container.
 - For colour contracts, compare the element's computed colour with a temporary `<span class="text-<token>">` probe in the page instead of hard-coding RGB.
 
@@ -114,11 +113,6 @@ To change the transaction search cap (`BANK_TRANSACTION_SEARCH_MAX_LENGTH`, see 
 
 `INTERNAL` is a parent of the internal-movement kinds (`BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS`). The route schema normalizes subtypes and also accepts `financialEventTypes`, which older shared links use. When narrowing to a child, replace the parent rather than appending; the API treats the list as OR. Test Home drill navigation separately from direct `INTERNAL`, subtype and `financialEventTypes` URLs.
 
-## Standalone scripts against a build
+## Animation glitches
 
-For stress tests with synthetic data, screenshots or frame-by-frame animation probes, build once and drive the preview from a scratch script:
-
-1. `VITE_API_URL=http://api.example.test npx vite build --outDir <scratch>/dist --emptyOutDir`, then `npx vite preview --outDir <scratch>/dist --port <free> --strictPort`.
-2. In the script, import Playwright from this repo's `node_modules`, fulfil `/accounts/me`, `/bank-connections` and `/bank-transactions[/<id>]` (plus whatever the page requests) with `page.route`, and log unexpected API paths so a missing mock is visible.
-3. Phone context: 412x915, `isMobile`, `hasTouch`. Theme via `vite-ui-theme` in an init script.
-4. For an animation glitch, sample `getBoundingClientRect()`, the body background and overlay opacity on every `requestAnimationFrame` inside one `page.evaluate`, and print only changes. A value pinned for exactly a library's transition length names the culprit. Then turn it into assertions in the spec for that flow.
+Sample `getBoundingClientRect()`, the body background and overlay opacity on every `requestAnimationFrame` inside one `page.evaluate`, and print only changes. A value pinned for exactly a library's transition length names the culprit. Then turn it into assertions in the spec for that flow.

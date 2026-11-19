@@ -14,8 +14,8 @@ Paths are relative to `apps/web` unless they start at the repository root.
 ## Commands and traps
 
 - Fresh worktree: `npm ci`, `npx playwright install chromium webkit`, then `npm run generate-routes`. `src/routeTree.gen.ts` is generated and ignored by Git; when it is missing or stale (rerun after adding, renaming or deleting a route), `lint:check` shows dozens of `no-unsafe-*` or implicit-`any` errors in untouched files.
-- There is no unit-test runner; all tests are Playwright specs under `test/`. Find the specs for a change by grepping `test/e2e` for the route, component or label; `--only-changed` finds nothing because specs do not import `src`.
-- `npm run test:e2e:local` resets the Docker services (`down -v`), seeds and runs the whole suite on the stack every worktree shares. Locally, run only the specs for your change.
+- There is no unit-test runner; all tests are Playwright specs under `test/` (`test/unit` holds pure-module specs). Find the e2e specs for a change by grepping `test/e2e` for the route, component or label; most e2e specs do not import `src`, so `--only-changed` misses them.
+- `npm run test:e2e:local` resets the Docker services (`down -v`), seeds and runs the whole suite on the stack every worktree shares. Locally, run only the specs for your change, and start a run only when `pgrep -af 'playwright test'` shows no other.
 - `.env.*` is ignored, so a fresh worktree has no `VITE_*` values. Pass them inline for the process (`docs/env-boundaries.md`); do not create or edit env files for a run.
 - Leave `NODE_ENV` unset for builds and Playwright. Gate dev-only code on `import.meta.env.MODE === 'development'` or an explicit `VITE_*` flag, never on `import.meta.env.DEV`.
 - Playwright reuses any server already on `VITE_APP_URL` (`reuseExistingServer`). Another worktree's preview on port 5173 means you are testing the wrong build; check the listener first.
@@ -24,8 +24,8 @@ Paths are relative to `apps/web` unless they start at the repository root.
 
 ## Code conventions not enforced by tooling
 
-- Import `test` and `expect` from `test/fixtures.ts`, not `@playwright/test`. Tests that change account data use `freshAccount`, not a seeded account.
+- Specs that open a page import `test` and `expect` from `test/fixtures.ts`; pure-module specs in `test/unit` use `@playwright/test`. Tests that change account data use `freshAccount`, not a seeded account.
 - Filenames are kebab-case; hooks export `useX` from `use-x.ts`. DTO files in feature `types` directories define a Zod schema and infer the exported type from it.
 - API request and response types and the fixed value lists they use come from `@tempo/contracts` (root `packages/contracts`); pass them to `api.get<T>()` and check request bodies with `satisfies`. Labels and other UI copy for those values stay in the feature's `types` or `utils`.
 - JSON API hooks use the `api` wrapper in `src/utils/api.ts` with TanStack Query; it owns the shared auth/network toasts and redirects. Mutations never retry or queue for replay (`src/query-client.ts`).
-- Prettier covers `src/**/*.{js,jsx,ts,tsx}` only; edit `src/index.css` and Markdown by hand.
+- Prettier covers `src/**/*.{js,jsx,ts,tsx}` only; edit `src/index.css` and Markdown by hand. `npx prettier --write src` touches CSS too, so run it on changed paths and check `git status` for collateral files. `prettier-plugin-tailwindcss` stays last in `plugins`.

@@ -1,13 +1,13 @@
 # Tempo operations
 
-CI builds an image of each app a commit changes, publishes `ghcr.io/tempo-co/{api,web}:pr-<n>` for same-repo PRs, and tags `:main` after tests pass on `main` (`docs/ci-and-images.md`). `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back.
+CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/{api,web}` tags for same-repo PRs and `main` (`docs/ci-and-images.md`). `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back.
 
 | File | Purpose |
 |---|---|
 | `deploy.sh` | Deploy script for both targets |
 | `targets/production.env`, `targets/staging.env` | Non-secret per-target settings |
 | `backup.sh` | Validated `pg_dump`, scheduled and pre-deploy |
-| `install.sh` | Copies the above to the host |
+| `install.sh` | Copies the above to the production server |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
 | `test-deploy.sh`, `test-sync-pins.sh` | Offline tests of `deploy.sh` and `sync-pins.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or installed file |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API and web |
@@ -40,7 +40,7 @@ Production secrets live in the production env file (path set by `install.sh`, mo
 
 ### Claude categorization
 
-The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env file; there is no other route. While the API is unavailable (rate limit, overload, an exhausted credit balance, a refused key, no connection), transactions stay pending and queue retries, then hourly reconciliation, retry them.
+The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env file. While the API is unavailable (rate limit, overload, an exhausted credit balance, a refused key, no connection), transactions stay pending and queue retries, then hourly reconciliation, retry them.
 
 ### Merchant logos
 
@@ -62,11 +62,11 @@ The `tailscale` network has a fixed subnet so the sidecar gets the static addres
 
 ### Container privileges
 
-Every production container runs with `no-new-privileges` and drops all Linux capabilities. The API runs as uid and gid 10001, set by number in the host-owned Compose file so an image cannot switch itself to root. Production uses the root Docker daemon without user namespaces, so a container uid is the same host uid: 10001 belongs to no host account, while the image's own `node` user (1000) would be the host user, who can use sudo. The API reads the banking key as that uid, so the key file at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` belongs to the host user and group 10001, mode 0440, which also keeps it readable for uid 1000 during a switch or rollback. A uid change goes into the Compose file and the key's group together. The official PostgreSQL, Redis and Nginx images start as root to fix ownership and switch to their service user, so they keep only `CHOWN`, `SETUID` and `SETGID` (PostgreSQL also `DAC_OVERRIDE` and `FOWNER`). The Tailscale sidecar uses userspace networking and needs none. Like network changes, these settings reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate PostgreSQL, Redis, API and web, then the sidecar. Set the key's group before the API moves to a new uid; it also works for the old one, so a rollback only reinstalls the previous Compose file.
+Every production container runs with `no-new-privileges` and drops all Linux capabilities. The API runs as uid and gid 10001, set by number in the host-owned Compose file so an image cannot switch itself to root. Production uses the root Docker daemon without user namespaces, so a container uid is the same host uid: 10001 belongs to no host account, while the image's own `node` user (1000) would be the production server's admin user, who can use sudo. The API reads the banking key as that uid, so the key file at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` belongs to that admin user and group 10001, mode 0440, which also keeps it readable for uid 1000 during a switch or rollback. A uid change goes into the Compose file and the key's group together. The official PostgreSQL, Redis and Nginx images start as root to fix ownership and switch to their service user, so they keep only `CHOWN`, `SETUID` and `SETGID` (PostgreSQL also `DAC_OVERRIDE` and `FOWNER`). The Tailscale sidecar uses userspace networking and needs none. Like network changes, these settings reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate PostgreSQL, Redis, API and web, then the sidecar. Set the key's group before the API moves to a new uid; it also works for the old one, so a rollback only reinstalls the previous Compose file.
 
 ## Staging
 
-An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://tempo-staging.<tailnet>.ts.net/` for testing from a phone. Deploy any API/web pair with one command; an omitted component keeps its current image:
+An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://tempo-staging.<tailnet>.ts.net/` for testing on mobile devices. Deploy any API/web pair with one command; an omitted component keeps its current image:
 
 ```bash
 ops/install.sh staging                         # after changing ops/

@@ -1,172 +1,3 @@
----
-version: alpha
-name: Tempo
-description: A calm, considered interface for a personal-finance overview and bank account tracker.
-colors:
-  # Brand palette (hex) + semantic tokens consumed by the app (HSL, theme-switched in src/index.css)
-  ink: "#28252B"
-  clay: "#BD654B"
-  clay-strong: "#8F4032"
-  paper: "#F6F1E8"
-  fold-shadow: "#D9D2C6"
-  night: "#17161B"
-  clay-on-dark: "#E59A7B"
-  primary: "hsl(17.5 67.1% 69%)"
-  primary-foreground: "hsl(252 10.2% 9.6%)"
-  light-primary: "hsl(9 48.2% 37.8%)"
-  light-primary-foreground: "hsl(38.6 43.8% 93.7%)"
-  background: "hsl(252 10.2% 9.6%)"
-  surface: "hsl(260 9.1% 12.9%)"
-  foreground: "hsl(38.6 31.8% 91.4%)"
-  muted: "hsl(266.7 8.7% 20.2%)"
-  muted-foreground: "hsl(36 9.2% 68%)"
-  accent: "hsl(262.5 9.1% 17.3%)"
-  border: "hsl(270 6.9% 22.7%)"
-  secondary: "hsl(265.7 8.2% 16.7%)"
-  secondary-foreground: "hsl(17.5 67.1% 69%)"
-  success: "hsl(148 40% 55%)"
-  success-foreground: "hsl(148 30% 12%)"
-  warning: "hsl(36 70% 58%)"
-  warning-foreground: "hsl(36 40% 12%)"
-  info: "hsl(200 55% 62%)"
-  info-foreground: "hsl(200 35% 12%)"
-  destructive: "hsl(4 70% 66%)"
-  destructive-foreground: "hsl(4 40% 12%)"
-  chart-primary: "hsl(38 28% 80%)"
-  chart-secondary: "hsl(36 6% 48%)"
-  chart-secondary-edge: "hsl(36 6% 48%)"
-  transaction-tile-field: "#352A28"
-  transaction-tile-ink: "#E59A7B"
-  transaction-tile-edge: "#59413A"
-  light-transaction-tile-field: "#F1E3D8"
-  light-transaction-tile-ink: "#8F4032"
-  light-transaction-tile-edge: "#D0B8A9"
-  scrim: "hsl(252 12% 3%)"
-  light-scrim: "hsl(252 10.2% 9.6%)"
-  light-background: "hsl(38.6 43.8% 93.7%)"
-  light-surface: "hsl(42 55.6% 96.5%)"
-  light-foreground: "hsl(270 7.5% 15.7%)"
-  light-muted: "hsl(37.9 20% 81.4%)"
-  light-muted-foreground: "hsl(33.7 7.8% 40%)"
-  light-accent: "hsl(37.1 36.8% 88.8%)"
-  light-border: "hsl(39.1 19.7% 77.1%)"
-  light-secondary: "hsl(34.3 38.2% 89.2%)"
-  light-secondary-foreground: "hsl(9 48.2% 37.8%)"
-  light-success: "hsl(150 50% 27%)"
-  light-success-foreground: "hsl(145 40% 95%)"
-  light-warning: "hsl(34 80% 30%)"
-  light-warning-foreground: "hsl(38 70% 95%)"
-  light-info: "hsl(200 60% 33%)"
-  light-info-foreground: "hsl(200 50% 96%)"
-  light-destructive: "hsl(6 62% 42%)"
-  light-destructive-foreground: "hsl(8 60% 96%)"
-  light-chart-primary: "hsl(270 7% 30%)"
-  light-chart-secondary: "hsl(37 16% 74%)"
-  light-chart-secondary-edge: "hsl(37 12% 48%)"
-typography:
-  page-title:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 600
-    lineHeight: "2rem"
-    letterSpacing: "-0.025em"
-  section-title:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "1.125rem"
-    fontWeight: 600
-    lineHeight: 1.35
-  card-title:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 600
-    lineHeight: 1.5
-  body:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.5
-  body-sm:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "0.875rem"
-    fontWeight: 400
-    lineHeight: 1.5
-  label:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "0.75rem"
-    fontWeight: 500
-    lineHeight: 1.333
-  caption:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontSize: "0.6875rem"
-    fontWeight: 400
-    lineHeight: 1
-  numeric:
-    fontFamily: "Inter Variable, Inter, sans-serif"
-    fontFeature: "tabular-nums"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.5
-rounded:
-  control: "6px"
-  surface: "12px"
-  pill: "9999px"
-spacing:
-  xs: "4px"
-  sm: "8px"
-  control: "12px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
-  2xl: "40px"
-  3xl: "48px"
-components:
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
-    rounded: "{rounded.control}"
-    padding: "8px 16px"
-  button-secondary:
-    backgroundColor: "{colors.secondary}"
-    textColor: "{colors.secondary-foreground}"
-    rounded: "{rounded.control}"
-    padding: "8px 16px"
-  button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
-    padding: "8px 16px"
-  input:
-    backgroundColor: "{colors.background}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
-    padding: "8px 12px"
-  card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.surface}"
-    padding: "20px; 24px from sm"
-  badge:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
-    rounded: "{rounded.pill}"
-    padding: "2px 10px"
-  status-badge:
-    backgroundColor: "transparent"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.pill}"
-    padding: "1px 10px"
-  alert:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.control}"
-    padding: "10px 12px"
-  state-message:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.surface}"
-    padding: "20px; 24px from sm"
----
-
 # Design System: Tempo
 
 ## Overview
@@ -176,13 +7,18 @@ transactions, categories, and cash movement in one calm view. The interface is q
 trustworthy, data-forward without density for its own sake, and distinctive through
 proportion, spacing, and a small number of deliberate forms — never through effects.
 
-The authenticated product is primarily an **Operate** experience: a screen should make the
+A screen in the signed-in app should make the
 current financial state, the next useful action, and the path to inspect detail obvious.
 Make state, task, and next action clear before adding visual personality.
 
-**The Quiet Signal Rule.** Tempo earns attention with hierarchy and relevance first. Color,
+Tempo earns attention with hierarchy and relevance first. Color,
 motion, and ornament are supporting signals, never the content of the screen.
 What screens show: `docs/product-ui-rules.md`.
+
+Verify dark, light, and system themes, keyboard focus, reduced motion, and narrow widths
+before calling a surface finished, and don't change typography, the radius vocabulary, or
+theme behavior as a side effect. Never fabricate balances, transactions or sync outcomes, label
+synthetic data as synthetic, and use no decorative gradients.
 
 ## Colors
 
@@ -208,10 +44,10 @@ the uses listed above.
 
 ### Semantic status colors
 
-- **Success** (`{colors.success}`): confirmed positive outcomes and positive monetary values.
-- **Warning** (`{colors.warning}`): partial synchronization, expiring consent, non-failure attention.
-- **Info** (`{colors.info}`): neutral progress or explanatory status.
-- **Destructive** (`{colors.destructive}`): failed operations and irreversible actions.
+- **Success** (`--success`): confirmed positive outcomes and positive monetary values.
+- **Warning** (`--warning`): partial synchronization, expiring consent, non-failure attention.
+- **Info** (`--info`): neutral progress or explanatory status.
+- **Destructive** (`--destructive`): failed operations and irreversible actions.
 
 Semantic colors are separate from the brand palette and must be paired with text, an icon, or
 another non-color cue. They are tuned like the category palette, earthy and moderately
@@ -220,7 +56,7 @@ The `*-foreground` tokens are the pale (light) or deep (dark) grounds of status 
 label on a destructive fill; never put a fixed white on a status fill. Never communicate
 transaction direction, synchronization state, or error state by hue alone.
 
-Every color pair the app renders clears WCAG AA in both themes: 4.5:1 for text, 3:1 for focus
+Every color pair the app renders must clear WCAG AA in both themes: 4.5:1 for text, 3:1 for focus
 rings, chart marks and category chip icons.
 
 ### Charts
@@ -235,7 +71,7 @@ For transaction categorization, the category label, source (`Suggested by AI` or
 pending/failed status are secondary text signals. Always render those cues as
 understandable text; never communicate a category or categorization state through color alone.
 
-**The One Accent Rule.** Clay is scarce enough to remain meaningful. A screen has a clear
+Clay is scarce enough to remain meaningful. A screen has a clear
 primary action or active state, not a clay wash.
 
 ## Typography
@@ -264,8 +100,6 @@ and don't introduce sizes outside this scale.
 - **Numeric** (`numeric`: Inter with tabular figures): currency amounts and rates, so digits
   line up in columns and look the same on every device.
 
-**The Plain Number Rule.** Monetary values and dates stay easy to scan, compare, and copy.
-
 ## Layout
 
 The authenticated shell is a sticky `48px` header aligned to the ~`80rem` content column;
@@ -283,7 +117,7 @@ that open in place into the rest), rows stay understandable without hover.
 Empty, loading, error, syncing, and filtered-empty states belong to the layout with a clear
 next step.
 
-**The Record Before Ornament Rule.** The financial record is the visual subject. No
+The financial record is the visual subject. No
 decorative headers, metric-tile mosaics, or hero space before the data.
 
 ## Elevation & Depth
@@ -305,18 +139,9 @@ improves scanning. Keep corners consistent within a component family.
 
 ## Logo
 
-The logo is the icon-only Tempo mark in `src/assets/logo.tsx`: a faceted crown with three points
-over a band, a small cut gem set in an Ink diamond at its centre, on an Ink tile. The crown is
-straight-edged flat planes lit from the upper left: Clay on dark (`#E59A7B`) on lit faces, Clay on
-shadowed faces, Clay strong (`#8F4032`) on the deepest faces and the band's underside, and one
-Paper facet on the gem. On a 24-unit grid the tile is 19×19 with radius 4.16. The layers paint over
-a Clay strong underlay so facet joins never show the tile. It is flat: no gradients, shadows or outlines,
-and the tile is the same in light and dark themes. Do not add text to the mark, recolor it per
-theme, or decorate it. Every icon uses the same drawing: the PWA icons on the inset tile;
-`favicon.svg` and the 16–48 px favicons on a larger 23-unit tab tile so the crown still reads at
-16 px; `apple-touch-icon` and the maskable icons full-bleed, with the maskable glyph kept inside
-the 40% safe circle. All icons live under `public/` with
-`manifest.webmanifest`; see `index.html` for the wiring.
+The logo is the icon-only Tempo mark in `src/assets/logo.tsx`, the same in light and dark
+themes. Do not add text to the mark, recolor it per theme, or decorate it. Every icon under
+`public/` uses the same drawing; `manifest.webmanifest` and `index.html` wire them.
 
 ## Components
 
@@ -339,8 +164,8 @@ mode. A box-shadow ring marks a selected value (the theme picker's clay ring), n
 ### Cards and grouped surfaces
 
 Cards group information that belongs together — a bank connection or a transaction detail
-reads as one record. `rounded-card`, surface color, quiet rule, `shadow-xs`, 20px padding
-(24px from `sm`), with a `text-card-title` heading. Avoid statistic-tile collections.
+reads as one record. `Card` gives `rounded-card`, `bg-card`, a quiet rule and `shadow-xs` but no padding;
+card content uses `p-5 sm:p-6`, with a `text-card-title` heading. Avoid statistic-tile collections.
 
 ### Inputs and fields
 
@@ -365,11 +190,7 @@ inspector keeps its `40px` tile. All leading tiles share these theme tokens:
 | `transaction-tile-ink` | `#8F4032` | `#E59A7B` |
 | `transaction-tile-edge` | `#D0B8A9` | `#59413A` |
 
-The API's `mask-v2` derivative supplies a centred mark of at most `104px` on a `128px` canvas.
-The shared `MerchantLogoTile` tints its continuous alpha with the ink token; theme changes reuse
-the loaded image. Missing or failed derivatives fall back to the matching Clay glyph, including
-when an older API does not expose the derivative. A changed source version retries the image.
-Small text or fine detail can be lost in monochrome at tile size; there are no per-merchant
+Logo loading, tinting and fallbacks: `docs/frontend-conventions.md`. There are no per-merchant
 exceptions. Logos are display only: names, identification and sourcing stay unchanged.
 Ordinary category metadata, labels and filters keep their category colors; financial-status
 colors keep their semantics.
@@ -382,7 +203,7 @@ when its own data arrives, so nothing on screen moves as a page loads. An inline
 result shows where it was edited confirms in place (its own pending state and status line);
 toasts carry failures, saves finished after a dialog closed, and outcomes the screen does not show.
 They stack collapsed and use the library's default lifetime. Distinct states get distinct copy;
-never imply data changed before the server confirms it. Motion is brief (0.2–0.3s), subtle,
+never imply data changed before the server confirms it. Motion is brief (about 150–300 ms), subtle,
 reduced-motion aware; never animate financial values continuously.
 
 ### Alerts
@@ -398,7 +219,7 @@ a muted `text-sm` description, actions under the text on phones and to the right
   stays foreground and muted; the glyph and the edge carry the tone.
 - **Glyph.** Names the subject (`FileX` a refused file, `Clock` consent ending, `CloudOff` a
   failed load), not the tone alone.
-- **Announcing.** `role='alert'` for a message that appears in answer to the owner,
+- **Announcing.** `role='alert'` for a message that appears in answer to the user,
   `role='status'` for a quiet update, none for a notice present from the start.
 - A message about one field stays on the field; a failed list or section load is a
   `StateMessage` (below).
@@ -457,31 +278,3 @@ responsive overlay with an explicit Save: a bottom drawer on phones and a dialog
 Session and access-token details use the same responsive presentation. Account deletion is its
 own one-row group with an outline button; destructive actions use the shared destructive
 variant. Selected values (the theme picker) use a clay ring, never the navigation underline.
-
-### File import
-
-Import shows on Connections only while the deployment has it on, and bank sync stays the
-primary action: **Import a file** is the outline button beside **Connect a bank**, and no copy
-calls import a fallback. Every step is one `ResponsiveDialog` that never closes by itself;
-closing it does not cancel an upload. A refusal is a `destructive` `Alert` ending "Nothing was
-imported." Questions are native radio rows, nothing preselected. Rows the bank never sent are
-never in the attention tone: nothing waits for the owner. The imported-files connection never
-shows consent or sync states. Each screen's layout and copy: `docs/file-import.md`.
-
-## Do's and Don'ts
-
-### Do:
-
-- Make state, task, and next action clear before visual personality.
-- Treat Clay as a scarce, meaningful signal on a paper/ink field.
-- Verify dark, light, and system themes, keyboard focus, reduced motion, and narrow widths
-  before calling a surface finished.
-- Use real product terminology and honest data states; label synthetic data as synthetic.
-
-### Don't:
-
-- Don't use blue/violet gradients, glassmorphism, glowing borders, or metric-tile rows.
-- Don't make every section a card or every action a pill.
-- Don't introduce a second accent color or decorative gradients without a product reason.
-- Don't fabricate balances, transactions, financial claims, or synchronization outcomes.
-- Don't change typography, the radius vocabulary, or theme behavior as a side effect.

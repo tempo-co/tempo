@@ -34,10 +34,7 @@ The build reads the ambient `NODE_ENV`. With `NODE_ENV=test` (or anything other 
 
 Rules:
 
-- Leave `NODE_ENV` unset for `npm run build`, `npm run preview` and Playwright. CI does not set it.
-- Gate dev-only behaviour on `import.meta.env.MODE === 'development'` or an explicit `VITE_*` flag, never on `import.meta.env.DEV`; a shell that exports `NODE_ENV=test` flips `DEV` in a production build.
 - If a shell exports `NODE_ENV=production`, `vite` dev can crash before any request with `_jsxDEV is not a function` (mixed JSX runtimes). Set `NODE_ENV=development` for `npm run dev`; that is a harness failure, not a test result.
-- When a spec passes locally and fails in CI with a different but valid label/variant in the snapshot, grep both strings in `src`. If neither is in the source, the variant is chosen at build time; reproduce with the CI environment before changing assertions.
 
 ## E2E stack
 
@@ -53,8 +50,6 @@ Rules:
 
 E2E runs the API image named in `docker-compose.e2e.yml`: `${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/api:main}`. A local run proves nothing about an unmerged API change unless `TEMPO_API_E2E_IMAGE` points at an image that contains it: build one from this checkout (`docker build -t tempo-api:local -f apps/api/Dockerfile .` at the repository root) or use a PR's `ghcr.io/tempo-co/api:pr-<n>`.
 
-In CI, the `Select API image` step uses the API image built in the same run when the change touches `apps/api` or `packages/contracts`, otherwise API `:main`, pinned by digest either way; the run summary records the image and revision used (root `docs/ci-and-images.md`). If only the feature that changed fails while unrelated pages pass, check that image for the route before suspecting the spec; never weaken an assertion to match an older API.
-
 ## Seeded preview for manual review
 
 1. Confirm the worktree, branch and `HEAD` you intend to show. `vite preview` and `vite` on 5173 may belong to another checkout; check the listener's working directory before reusing it.
@@ -64,4 +59,4 @@ In CI, the `Select API image` step uses the API image built in the same run when
 
 ## Production image
 
-`Dockerfile.production` builds with `VITE_API_URL=/api` and `VITE_BASE_PATH=/`, then serves `dist` from Nginx on port 8080 with `nginx/tempo.conf`. `nginx/tempo.conf` proxies `/api/` and `/bank-connections/callback` to `api:3000` and applies `nginx/security-headers.conf` to the SPA. The exact `/api/mcp` endpoint uses HTTP/1.1, disables response buffering, has a 60-second upstream read timeout and limits request bodies to 100 KiB. Integrations derives the absolute MCP server URL from `VITE_API_URL` and the browser origin. `scripts/tempo-web-security-headers-test.sh` builds the image and probes both the SPA and the API proxy, including MCP event delivery and the request limit; update it with any `nginx/` change.
+`Dockerfile.production` builds with `VITE_API_URL=/api` and `VITE_BASE_PATH=/`, then serves `dist` from Nginx on port 8080 with `nginx/tempo.conf`. `nginx/tempo.conf` proxies `/api/` and `/bank-connections/callback` to `api:3000` and applies `nginx/security-headers.conf` to the SPA. The exact `/api/mcp` endpoint uses HTTP/1.1, disables response buffering, has a 60-second upstream read timeout and limits request bodies to 100 KiB. Integrations derives the absolute MCP server URL from `VITE_API_URL` and the browser origin.

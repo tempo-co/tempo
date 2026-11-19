@@ -28,14 +28,11 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 - `API image` and `Web image`: build `apps/api/Dockerfile` and `apps/web/Dockerfile.production` with the repository root as context, so both can copy `packages/contracts`. The root `.dockerignore` allowlists the two apps and that package and keeps `node_modules`, `dist` and env files out. The API Dockerfile runs a runtime smoke check, so a built API image is a smoke-tested image. Both Dockerfiles pin their base images (Node, and Nginx for the web) by tag and digest; Dependabot checks them daily, Node without the cooldown, so a Node security release reaches a PR within a day. Same-repo, non-Dependabot PRs and pushes to `main` publish `ghcr.io/<owner>/api` and `ghcr.io/<owner>/web` as `:sha-<sha>` and `:pr-<n>`. Images carry `org.opencontainers.image.source` (this repository) and `org.opencontainers.image.revision` (the commit).
 - `Web build`: `npm --prefix apps/web run build` plus `apps/web/scripts/tempo-web-security-headers-test.sh`, which builds the production web image and probes Nginx.
 - `Web E2E shard n/8`: the Playwright suite against the Docker stack in `apps/web/docker-compose.e2e.yml`. The API image is this run's `API image` when `api` is set (pinned by digest; a Dependabot or fork PR, which publishes nothing, passes it as a run artifact instead), otherwise `ghcr.io/tempo-co/api:main` pinned by digest. The run summary records the image and its revision. Every spec runs in Chromium and WebKit when `web` is set; an API-only change runs Chromium only, since WebKit catches browser-engine differences only a web change can introduce. `Web E2E tests` merges the shard reports, lists the tests that passed only on a retry in the run summary, and fails unless every shard passed.
-- `Release main images`: on `main` only, after `CI` passed, retags `sha-<sha>` as `:main` with `docker buildx imagetools create` (no rebuild), for each app whose flag is set, API before web. It is serialized and skips when `main` has moved on, so `:main` never moves backwards. Production deploys `:main` (`ops/README.md`), so an app a commit did not touch keeps running its previous image.
+- `Release main images`: on `main` only, after `CI` passed, retags `sha-<sha>` as `:main` with `docker buildx imagetools create` (no rebuild), for each app whose flag is set, API before web. It is serialized and skips when `main` has moved on, so `:main` never moves backwards. An app a commit did not touch keeps its previous `:main` image.
 
 ## Rules
 
-- Never publish a tag deployments track from a pre-test job.
-- An API contract change and the web code that uses it belong in one PR, so web E2E runs against the API that serves it.
-- No CI run after a push usually means the PR conflicts with main; merge main into the branch rather than pushing empty commits.
-- When two PRs both edit an `AGENTS.md` or the same docs, simulate the second merge (`git merge-tree --write-tree`) before handing them over.
+- Publish a tag that deployments track (`:main`) only after `CI` passed; production deploys whatever it points at.
 - Image cleanup on a host must filter on `org.opencontainers.image.source` and pass `--all`; tagged leftovers are never dangling.
 
 ## ECB currencies

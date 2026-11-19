@@ -8,7 +8,7 @@ CI builds and releases this image; see the root `docs/ci-and-images.md`.
 - The runtime stage sets `NODE_ENV=production` and ships only `dist/` and production dependencies. The Claude contract JSON files sit under `src/` and are imported, so the build emits them into `dist/`.
 - The `Dockerfile` runs `scripts/runtime-image-smoke.js` (no dev dependencies, no env files, email templates present), so a built image is a smoke-tested image.
 - Email `.hbs` templates are copied to `dist/` by `nest-cli.json` assets and checked by the smoke script; keep templates under `src/app/core/email/templates`.
-- The API's build, start, seed/schema, lint and E2E npm hooks run `npm run contracts:build`, which compiles `@tempo/contracts`. Direct TypeScript invocations need it first, and so does a new script that a CI job runs right after `npm ci`: give it a `pre<script>` hook, or it sees every contracts type as an error. Jest needs no build: both Jest configs map `@tempo/contracts` to its source, and ts-jest type-checks through `tsconfig.jest.json`, which does the same.
+- A new script that a CI job runs right after `npm ci` needs a `pre<script>` hook that runs `npm run contracts:build`, or it sees every contracts type as an error.
 
 ## Migrations
 
