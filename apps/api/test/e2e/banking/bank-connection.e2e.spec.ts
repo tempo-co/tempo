@@ -11,6 +11,7 @@ import {DataSource, In, Repository} from 'typeorm';
 
 import {BANK_CONNECTION_SYNC_QUEUE, SYNC_BANK_CONNECTION_JOB} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
+import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
@@ -733,6 +734,55 @@ describe('BankConnectionController', () => {
 		await bankConnectionRepository.delete(pendingConnection.id);
 	});
 
+	it('refuses a re-authorization whose connection is removed while the bank creates its session', async () => {
+		await bankConnectionRepository
+			.createQueryBuilder()
+			.delete()
+			.where('accountId = :accountId', {accountId: account.id})
+			.execute();
+		const {connection} = await createAuthorizedConnection('reauthorization-removed-during-session');
+		const state = await authorize();
+		const pendingConnection = await bankConnectionRepository.findOne({
+			where: {account: {id: account.id}, status: 'PENDING_AUTHORIZATION'},
+			order: {createdAt: 'DESC'},
+		});
+		if (!pendingConnection) throw new Error('Pending connection was not persisted.');
+		createSession.mockImplementationOnce(async () => {
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+			return {
+				sessionId: 'provider-session-superseded',
+				consentValidUntil: '2031-06-01T00:00:00.000Z',
+				aspsp: {name: 'ABN AMRO', country: 'NL'},
+				accounts: [
+					{uid: 'provider-account-superseded', identificationHash: 'hash-superseded', currency: 'EUR'},
+				],
+			};
+		});
+		const warn = jest.spyOn(Logger.prototype, 'warn');
+
+		try {
+			await callback({state, code: 'superseded-code'}, 'error');
+
+			expect(warn.mock.calls.map(([message]) => String(message))).toContain(
+				'Enable Banking authorization failed: authorization_state_state_superseded',
+			);
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			expect(await bankConnectionRepository.findOneBy({id: pendingConnection.id})).toMatchObject({
+				status: 'CANCELLED',
+				providerSessionId: null,
+			});
+			expect(
+				await bankConnectionRepository.count({where: {account: {id: account.id}, status: 'AUTHORIZED'}}),
+			).toBe(0);
+			expect(await bankAccountRepository.count({where: {providerAccountId: 'provider-account-superseded'}})).toBe(
+				0,
+			);
+		} finally {
+			warn.mockRestore();
+			await bankConnectionRepository.delete(pendingConnection.id);
+		}
+	});
+
 	it('cleans all pending reauthorizations when removing an existing connection', async () => {
 		const {connection} = await createAuthorizedConnection('delete-multiple-reauthorizations');
 		const states: string[] = [];
@@ -794,36 +844,43 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('revokes the bank consent, then permanently removes an authorized connection and cascades its bank data', async () => {
-		const {connection, bankAccount} = await createAuthorizedConnection('delete-authorized-cascade');
-		await fixtures.createTransaction(bankAccount, {providerTransactionId: 'delete-authorized-transaction'});
-		const syncRun = await fixtures.createSyncRun(connection);
-		deleteSession.mockClear();
+	it.each(['AUTHORIZED', 'EXPIRED'] as const)(
+		'revokes the bank consent, then permanently removes an %s connection and cascades its bank data',
+		async (status) => {
+			const providerSessionId = `delete-${status.toLowerCase()}-cascade`;
+			const providerTransactionId = `delete-${status.toLowerCase()}-transaction`;
+			const {connection, bankAccount} = await createAuthorizedConnection(providerSessionId);
+			await bankConnectionRepository.update({id: connection.id}, {status});
+			await fixtures.createTransaction(bankAccount, {providerTransactionId});
+			const syncRun = await fixtures.createSyncRun(connection);
+			deleteSession.mockClear();
 
-		await otherVerifiedAgent.delete(`/bank-connections/${connection.id}`).expect(404);
-		await verifiedAgent.delete(`/bank-connections/${connection.id}`).expect(400);
-		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE ME'}).expect(400);
-		expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
-		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).not.toBeNull();
-		expect(deleteSession).not.toHaveBeenCalled();
+			await otherVerifiedAgent.delete(`/bank-connections/${connection.id}`).expect(404);
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).expect(400);
+			for (const confirmation of ['DELETE ME', 'delete', ' DELETE', 'DELETE '])
+				await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation}).expect(400);
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).not.toBeNull();
+			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).not.toBeNull();
+			expect(await bankTransactionRepository.findOneBy({providerTransactionId})).not.toBeNull();
+			expect(deleteSession).not.toHaveBeenCalled();
 
-		let connectionExistedAtRevocation = false;
-		deleteSession.mockImplementationOnce(async () => {
-			connectionExistedAtRevocation = (await bankConnectionRepository.findOneBy({id: connection.id})) !== null;
-		});
-		await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
+			let connectionExistedAtRevocation = false;
+			deleteSession.mockImplementationOnce(async () => {
+				connectionExistedAtRevocation =
+					(await bankConnectionRepository.findOneBy({id: connection.id})) !== null;
+			});
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({confirmation: 'DELETE'}).expect(204);
 
-		expect(deleteSession).toHaveBeenCalledTimes(1);
-		expect(deleteSession).toHaveBeenCalledWith('delete-authorized-cascade', expect.any(AbortSignal));
-		expect(connectionExistedAtRevocation).toBe(true);
+			expect(deleteSession).toHaveBeenCalledTimes(1);
+			expect(deleteSession).toHaveBeenCalledWith(providerSessionId, expect.any(AbortSignal));
+			expect(connectionExistedAtRevocation).toBe(true);
 
-		expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
-		expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
-		expect(
-			await bankTransactionRepository.findOneBy({providerTransactionId: 'delete-authorized-transaction'}),
-		).toBeNull();
-		expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
-	});
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
+			expect(await bankTransactionRepository.findOneBy({providerTransactionId})).toBeNull();
+			expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
+		},
+	);
 
 	it('removes the connection when the provider fails to revoke its consent', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('delete-provider-failure');
@@ -1825,6 +1882,9 @@ describe('BankConnectionController', () => {
 
 	it('removes pending rows a complete fetch no longer returns and keeps pending own transfers out of totals, so totals count each payment once', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('pending-lifecycle-session');
+		// Dates follow the run date: a start more than 90 days back would turn the incremental fetch into a longest one.
+		const firstDay = addDays(dateInAppTimeZone(new Date()), -30);
+		const day = (offset: number) => addDays(firstDay, offset);
 		// The owner's savings account at another bank, which that bank's transfers name by IBAN and holder name.
 		const savingsIban = 'GB33BUKB20201555555555';
 		const holderName = 'Example Savings Holder';
@@ -1844,7 +1904,7 @@ describe('BankConnectionController', () => {
 			providerTransactionId: 'pending-lifecycle-savings-leg',
 			amount: '40.00',
 			creditDebitIndicator: 'CRDT',
-			bookingDate: '2026-08-21',
+			bookingDate: day(1),
 			description: null,
 		});
 		// Answers a pending transfer that the bank later drops; it has no evidence of its own.
@@ -1852,7 +1912,7 @@ describe('BankConnectionController', () => {
 			providerTransactionId: 'pending-lifecycle-savings-released-leg',
 			amount: '60.00',
 			creditDebitIndicator: 'CRDT',
-			bookingDate: '2026-08-21',
+			bookingDate: day(1),
 			description: null,
 		});
 		const row = (
@@ -1866,15 +1926,15 @@ describe('BankConnectionController', () => {
 			transaction_amount: {amount, currency: 'EUR'},
 			credit_debit_indicator: 'DBIT',
 			status,
-			transaction_date: '2026-08-20',
+			transaction_date: firstDay,
 			...(bookingDate ? {booking_date: bookingDate, value_date: bookingDate} : {}),
 			...fields,
 		});
-		const booked = row('lifecycle-booked', '10.00', 'BOOK', '2026-08-20');
+		const booked = row('lifecycle-booked', '10.00', 'BOOK', firstDay);
 		const hold = row('lifecycle-hold', '50.00', 'PDNG');
 		const tipPending = row('lifecycle-tip', '20.00', 'PDNG');
 		// The final amount differs from the pending one, so the booked row is a new row, not the pending one updated.
-		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', '2026-08-22');
+		const tipBooked = row('lifecycle-tip', '23.00', 'BOOK', day(2));
 		const transferPending = row('lifecycle-transfer', '40.00', 'PDNG', undefined, {
 			creditor_account: {iban: savingsIban},
 			remittance_information: ['Example savings top-up'],
@@ -1884,8 +1944,8 @@ describe('BankConnectionController', () => {
 			...transferPending,
 			entry_reference: 'lifecycle-transfer-booked',
 			status: 'BOOK',
-			booking_date: '2026-08-21',
-			value_date: '2026-08-21',
+			booking_date: day(1),
+			value_date: day(1),
 		};
 		const releasedTransferPending = row('lifecycle-released-transfer', '60.00', 'PDNG', undefined, {
 			creditor_account: {iban: savingsIban},
@@ -1894,7 +1954,7 @@ describe('BankConnectionController', () => {
 		const namedTransferPending = row('lifecycle-named-transfer', '15.00', 'PDNG', undefined, {
 			creditor: {name: holderName},
 		});
-		const namedTransferBooked = {...namedTransferPending, status: 'BOOK', booking_date: '2026-08-21'};
+		const namedTransferBooked = {...namedTransferPending, status: 'BOOK', booking_date: day(1)};
 		// A card payment is never an own transfer, even when the merchant name is the holder's.
 		const cardPending = row('lifecycle-card', '5.00', 'PDNG', undefined, {
 			creditor: {name: holderName},
@@ -1936,8 +1996,8 @@ describe('BankConnectionController', () => {
 				});
 				return [syncCoveredFrom, syncCoveredThrough];
 			};
-			// The pending rows carry only their transaction date, so the earliest row is on 2026-08-20.
-			expect(await coverage()).toEqual(['2026-08-21', firstRun!.requestedTo]);
+			// The pending rows carry only their transaction date, so the earliest row is on the first day.
+			expect(await coverage()).toEqual([day(1), firstRun!.requestedTo]);
 			// Pending payments count, as in the bank's own app; pending own transfers are internal until they book.
 			expect(await totals()).toMatchObject({count: 7, spending: '85.00', income: '0.00'});
 			const releasedTransfer = await bankTransactionRepository.findOneByOrFail({
@@ -1981,13 +2041,13 @@ describe('BankConnectionController', () => {
 
 			// A fetch with a row the client cannot read is incomplete, so it removes nothing and covers nothing.
 			const unreadable = {entry_reference: 'lifecycle-unreadable', transaction_amount: {currency: 'EUR'}};
-			await bankAccountRepository.update(bankAccount.id, {syncCoveredThrough: '2026-08-30'});
+			await bankAccountRepository.update(bankAccount.id, {syncCoveredThrough: day(10)});
 			expect(await synchronizeProviderRows(connection.id, [booked, unreadable])).toMatchObject({
 				status: 'PARTIAL',
 				transactionsAdded: 0,
 			});
 			expect(await totals()).toMatchObject({count: 7, spending: '85.00'});
-			expect(await coverage()).toEqual(['2026-08-21', '2026-08-30']);
+			expect(await coverage()).toEqual([day(1), day(10)]);
 
 			// The hold and the second transfer were released, the tip and the IBAN transfer booked as new rows, the named
 			// transfer booked into its pending row and the card payment is still pending.
@@ -2004,8 +2064,8 @@ describe('BankConnectionController', () => {
 				transactionsAdded: 2,
 			});
 			// The window reaches back to the oldest pending row, so the fetch covers every row it removes.
-			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: '2026-08-20'});
-			expect(await coverage()).toEqual(['2026-08-20', firstRun!.requestedTo]);
+			expect(getAccountTransactions.mock.lastCall?.[1]).toMatchObject({dateFrom: firstDay});
+			expect(await coverage()).toEqual([firstDay, firstRun!.requestedTo]);
 			const rows = await bankTransactionRepository.findBy({bankAccountId: bankAccount.id});
 			expect(rows.map(({amount, transactionStatus}) => [amount, transactionStatus]).sort()).toEqual([
 				['-10.00000000', 'BOOK'],

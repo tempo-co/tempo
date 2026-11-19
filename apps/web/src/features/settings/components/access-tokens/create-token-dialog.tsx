@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {wasToasted} from '@/utils/api';
 
 import {useCreatePersonalAccessToken} from '../../api/use-personal-access-tokens';
 import {
@@ -70,7 +71,7 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
     try {
       await create.mutateAsync(dto);
     } catch {
-      // Keep the entered name available for retry; the error is shown inside the dialog.
+      // Keep the entered name available for retry. The dialog shows the failure unless the api wrapper toasted it.
     }
   };
 
@@ -162,7 +163,7 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
                     Keep this dialog open while your token is being created.
                   </p>
                 )}
-                {create.isError && (
+                {create.isError && !wasToasted(create.error) && (
                   <Alert role='alert' variant='destructive'>
                     <CircleAlert aria-hidden='true' />
                     <AlertDescription className='text-foreground'>

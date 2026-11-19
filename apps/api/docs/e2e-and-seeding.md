@@ -24,17 +24,15 @@ Consequences:
 
 ## Disposable stacks
 
-`docker-compose.test.yml` uses fixed container names (`postgres_test`, `redis_test`, `mailpit_test`), and `docker-compose.dev.yml` uses its own (`postgres`, `redis`, `mailpit`, ...); both use env-interpolated host ports. `npm run test:e2e*` runs `docker compose -p tempo-api-test ... down -v` first.
+`npm run test:e2e*` runs Jest through `scripts/e2e-stack.mjs`. It starts `docker-compose.test.yml` as a project named after the checkout's path (`tempo-api-test-<hash>`, printed as `E2E stack: ...`), lets Docker pick free host ports on `127.0.0.1`, passes them to Jest as `DB_PORT`, `REDIS_URL`, `EMAIL_PORT` and `EMAIL_UI_PORT` (these win over `.env.test` and `.env.test.local`), and removes the stack with `down -v` when Jest exits, fails or is interrupted. Each worktree therefore has its own database, and runs in different worktrees do not interfere; two runs in the same checkout still share one project.
 
-Every worktree on a host shares the one API E2E stack: the same project, container names, host ports and `tempo_test` database, and each spec file's boot drops the schema. Two runs at once wipe each other's data, and `down -v` from one deletes the other's volume. Web E2E (`apps/web/docker-compose.e2e.yml`, project `tempo-web`) uses the same three container names, so the two stacks cannot exist at the same time.
-
-- Before starting or tearing down, check `docker compose ls --all`, container names and listening ports. Never run `down` on a project you did not start.
-- For a parallel stack (another worktree, a host-run API for browser tests), use a unique project name, container names and host ports through a temporary override file kept outside the repo (`ports: !override`). A unique project name alone does not prevent port or container-name collisions.
-- On alternate ports, override `REDIS_URL` as well as `REDIS_PORT`: the app and BullMQ read only `REDIS_URL` (`src/app/core/redis/redis.module.ts`, `src/app/core/queue/queue.module.ts`), while `REDIS_PORT`, `DB_PORT`, `EMAIL_PORT` and `EMAIL_UI_PORT` set the Compose port mappings. The Mailpit helper derives its URL from `EMAIL_UI_PORT` (`test/utils/email-utils.ts`).
+- Run single files through the stack: `npm run test:e2e -- --runTestsByPath <file>`. A bare `npx jest` on an E2E spec has no stack to reach.
+- `docker-compose.dev.yml` uses fixed container names (`postgres`, `redis`, `mailpit`, ...) and env-interpolated host ports. Web E2E (`apps/web/docker-compose.e2e.yml`, project `tempo-web`) publishes fixed ports 5432, 6379, 1025, 8025 and 3000, so only one web E2E stack runs per host.
+- For any other parallel stack (a host-run API for browser tests), use a unique project name and host ports through a temporary override file kept outside the repo (`ports: !override`). Override `REDIS_URL` as well as `REDIS_PORT`: the app and BullMQ read only `REDIS_URL` (`src/app/core/redis/redis.module.ts`, `src/app/core/queue/queue.module.ts`). The Mailpit helper derives its URL from `EMAIL_UI_PORT` (`test/utils/email-utils.ts`).
 - Host-run processes reach Compose services through `127.0.0.1` and the published ports; service names resolve only inside the Compose network. Set host-facing values after sourcing every env file, since a `.local` file can replace them.
 - Repeated auth setup can exhaust the login rate limit or leave sessions behind; reset only the disposable Redis (`FLUSHDB` on that container) or wait for the TTL.
 - A "started" log line proves only that bootstrap happened once. Before reporting a background API live, check the PID, the listener and `GET /health`.
-- Tear down only your own project, remove generated auth state and confirm the ports are free.
+- Before tearing anything down, check `docker compose ls --all`; never run `down` on a project you did not start.
 
 ## Seeded data
 
