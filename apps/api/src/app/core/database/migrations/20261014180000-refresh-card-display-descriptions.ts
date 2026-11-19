@@ -15,6 +15,7 @@ export class RefreshCardDisplayDescriptions20261014180000 implements MigrationIn
 	name = 'RefreshCardDisplayDescriptions20261014180000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
+		if (!(await queryRunner.hasTable('bank_transactions'))) return;
 		const rows = (await queryRunner.query(
 			`SELECT "id", "description", "counterpartyName", "displayDescription"
 			FROM "bank_transactions"

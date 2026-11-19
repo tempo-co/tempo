@@ -14,6 +14,7 @@ export class RecheckHistoryFilledCategories20261015200000 implements MigrationIn
 	name = 'RecheckHistoryFilledCategories20261015200000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
+		if (!(await queryRunner.hasTable('bank_transactions'))) return;
 		await queryRunner.query(
 			`UPDATE "bank_transactions" AS t
 			SET "categoryStatus" = 'PENDING', "categoryUpdatedAt" = now()
