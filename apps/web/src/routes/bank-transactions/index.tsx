@@ -26,7 +26,7 @@ import {BankTransactionLedger} from '@/features/banking/components/bank-transact
 import {BankTransactionSortMenu} from '@/features/banking/components/bank-transaction-sort-menu';
 import {
   BANK_TRANSACTION_FILTER_KEYS,
-  bankTransactionRouteSearchSchema,
+  bankTransactionSearchParamsSchema,
 } from '@/features/banking/types/bank-transaction';
 import {
   Bone,
@@ -43,11 +43,10 @@ import {savedDataStatus} from '@/utils/query-status';
 
 export const Route = createFileRoute('/bank-transactions/')({
   component: BankTransactionsIndex,
-  validateSearch: zodValidator(bankTransactionRouteSearchSchema),
-  // The schema folds the former Activity filter into Cash flow; drop its key so clearing Cash flow clears it.
-  // The list loads more in place, so page keys from older links are dropped too.
+  validateSearch: zodValidator(bankTransactionSearchParamsSchema),
+  // The list loads more in place, so page keys from older links are dropped.
   search: {
-    middlewares: [stripSearchParams(['financialEventTypes', 'pageIndex', 'pageSize'] as never)],
+    middlewares: [stripSearchParams(['pageIndex', 'pageSize'] as never)],
   },
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);

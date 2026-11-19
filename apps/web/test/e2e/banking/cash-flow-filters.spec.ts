@@ -118,8 +118,14 @@ test('a link to the rows a total leaves out lists them under its other filters u
 });
 
 test('cash flow picker applies the real spending predicate from the first page', async ({page}) => {
-  // Older links carry page keys; the list loads more in place, so they are dropped.
-  await page.goto('/bank-transactions?pageIndex=2&pageSize=10');
+  // Older links carry page keys; the list loads more in place, so they are dropped. Unknown keys are ignored.
+  const firstPage = page.waitForResponse((response) =>
+    response.url().startsWith(`${API_URL}/bank-transactions?`),
+  );
+  await page.goto('/bank-transactions?pageIndex=2&pageSize=10&view=%22compact%22');
+  const first = await firstPage;
+  expect(first.ok()).toBe(true);
+  expect(first.url()).not.toContain('filter');
   await expect(page).not.toHaveURL(/pageIndex|pageSize/);
   await openTransactionFilter(page, 'Cash flow');
   const responsePromise = page.waitForResponse(
@@ -206,7 +212,6 @@ for (const mobile of [false, true]) {
     ['cashFlows', ['CURRENCY_EXCHANGE', 'OWN_TRANSFER'], 'OWN_TRANSFER'],
     ['cashFlows', ['INTERNAL', 'CURRENCY_EXCHANGE'], 'OWN_TRANSFER'],
     ['cashFlows', ['CURRENCY_EXCHANGE'], 'OWN_TRANSFER'],
-    ['financialEventTypes', ['OWN_TRANSFER'], 'CURRENCY_EXCHANGE'],
   ] as [string, string[], string][]) {
     test(`internal URL ${key} ${values.join('+')} can be narrowed and cleared (${mobile ? 'mobile' : 'desktop'})`, async ({
       page,
@@ -246,7 +251,6 @@ for (const mobile of [false, true]) {
       const search = new URL(page.url()).searchParams;
       expect(search.get('baseAmount')).toBe('PRESENT');
       expect(JSON.parse(search.get('categoryStatuses')!)).toEqual(['FAILED']);
-      expect(search.has('financialEventTypes')).toBe(false);
       await page
         .getByRole('option', {
           name: remaining === 'OWN_TRANSFER' ? 'Own transfer' : 'Currency exchange',

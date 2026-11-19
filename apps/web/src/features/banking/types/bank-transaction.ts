@@ -118,19 +118,6 @@ export const bankTransactionSearchParamsSchema = z.object({
 
 export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchParamsSchema>;
 
-/**
- * The route schema. It also accepts `financialEventTypes`, which older shared links use for the cash-flow filter,
- * and merges its values into `cashFlows` so those links filter the same rows.
- */
-export const bankTransactionRouteSearchSchema = z.preprocess((search) => {
-  if (!search || typeof search !== 'object' || !('financialEventTypes' in search)) return search;
-  const {financialEventTypes, ...rest} = search as Record<string, unknown>;
-  const legacy: unknown[] = Array.isArray(financialEventTypes) ? financialEventTypes : [];
-  const current: unknown[] = Array.isArray(rest.cashFlows) ? rest.cashFlows : [];
-  const cashFlows = [...new Set([...current, ...legacy])];
-  return cashFlows.length > 0 ? {...rest, cashFlows} : rest;
-}, bankTransactionSearchParamsSchema) as unknown as typeof bankTransactionSearchParamsSchema;
-
 /** The search params that filter the transaction list; `search` is the free-text query. */
 export const BANK_TRANSACTION_FILTER_KEYS = [
   'bookingDate',
