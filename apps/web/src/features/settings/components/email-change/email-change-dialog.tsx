@@ -71,7 +71,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
           const message =
             error.status === 409
               ? 'Another account already uses this email.'
-              : 'Something went wrong. Please try again.';
+              : 'Something went wrong. Try again.';
           form.setError('newEmail', {message}, {shouldFocus: true});
         },
       },

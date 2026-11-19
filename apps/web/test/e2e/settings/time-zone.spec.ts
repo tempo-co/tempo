@@ -85,9 +85,7 @@ test.describe('Account Settings: Time zone', () => {
 
       await accountSettingsPage.chooseTimeZone('helsinki', 'Europe/Helsinki');
 
-      await expect(
-        page.getByText('Your time zone could not be saved. Please try again.'),
-      ).toBeVisible();
+      await expect(page.getByText('Your time zone could not be saved. Try again.')).toBeVisible();
       await expect(page.getByRole('dialog')).toBeVisible();
       await expect(accountSettingsPage.timeZone).toHaveText('Europe/Amsterdam');
     });
