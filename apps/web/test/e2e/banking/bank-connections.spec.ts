@@ -13,7 +13,12 @@ import {
   routeBankConnectionsApi,
   transformBankConnections,
 } from '../../utils/api-mocks';
-import {openDetails, openRemoval, routeMockedBankApp} from '../../utils/bank-connections';
+import {
+  chooseDeleteEverything,
+  openDetails,
+  openRemoval,
+  routeMockedBankApp,
+} from '../../utils/bank-connections';
 import {connectThroughPicker} from '../../utils/bank-picker';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
@@ -429,7 +434,7 @@ test.describe('bank connections', () => {
 
     const dialog = await openRemoval(page, connectedCard);
     await expect(dialog.getByRole('heading', {name: 'Remove ABN AMRO?'})).toBeVisible();
-    await expect(dialog.getByText(/its 1 account and all their transactions/)).toBeVisible();
+    await expect(dialog.getByRole('radio', {name: /^Keep accounts and history/})).toBeChecked();
     // Back returns to the bank's details in the same dialog.
     await dialog.getByRole('button', {name: 'Back'}).click();
     await expect(dialog.getByRole('heading', {name: 'ABN AMRO'})).toBeVisible();
@@ -443,8 +448,14 @@ test.describe('bank connections', () => {
     expect(deleteCalled).toBe(false);
 
     const confirmButton = page.getByTestId(`remove-bank-confirm-${connectedConnectionId}`);
-    await expect(confirmButton).toBeDisabled();
-    await page.getByTestId(`remove-bank-confirmation-${connectedConnectionId}`).fill('DELETE');
+    await expect(confirmButton).toHaveText('Remove connection');
+    await chooseDeleteEverything(dialog);
+    await expect(
+      dialog.getByText(
+        'Permanently deletes the account and its transactions. This cannot be undone.',
+      ),
+    ).toBeVisible();
+    await expect(confirmButton).toHaveText('Remove permanently');
     await expect(confirmButton).toBeEnabled();
     await confirmButton.click();
 
@@ -663,6 +674,87 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test('removes a connected bank and keeps its accounts and history as imported files', async ({
+    page,
+  }) => {
+    const imported: BankConnection = {
+      ...MOCK_CONNECTION,
+      id: '00000000-0000-4000-8000-000000000400',
+      provider: 'file',
+      aspspName: 'Imported files',
+      aspspCountry: 'ZZ',
+      consentValidUntil: null,
+      lastSyncedAt: null,
+      lastSuccessfulSyncAt: null,
+      nextSyncAt: null,
+      syncStatus: 'IDLE',
+    };
+    let removal: unknown = null;
+    await mockBankConnections(page, () => (removal ? [imported] : [MOCK_CONNECTION]));
+    await page.route(`**/bank-connections/${MOCK_CONNECTION.id}`, async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      removal = route.request().postDataJSON();
+      await route.fulfill({status: 204, body: ''});
+    });
+    await page.goto('/bank-connections');
+
+    const dialog = await openRemoval(
+      page,
+      page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`),
+    );
+    await expect(dialog.getByRole('radio', {name: /^Keep accounts and history/})).toBeChecked();
+    await expect(
+      dialog.getByText(
+        'Syncing stops. Your 2 accounts and their transactions stay, and you can add statement files.',
+      ),
+    ).toBeVisible();
+    const confirm = dialog.getByRole('button', {name: 'Remove connection', exact: true});
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+
+    await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
+    expect(removal).toEqual({keepAccounts: true});
+    await expect(page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`)).toHaveCount(0);
+    const importedCard = page.getByTestId(`bank-connection-${imported.id}`);
+    await expect(importedCard).toContainText('Imported files');
+    await expect(importedCard).toContainText('Mock ASPSP checking account');
+  });
+
+  test('removes imported files permanently, without a choice to keep them', async ({page}) => {
+    const imported: BankConnection = {
+      ...MOCK_CONNECTION,
+      id: '00000000-0000-4000-8000-000000000400',
+      provider: 'file',
+      aspspName: 'Imported files',
+      aspspCountry: 'ZZ',
+      consentValidUntil: null,
+      lastSyncedAt: null,
+      lastSuccessfulSyncAt: null,
+      nextSyncAt: null,
+      syncStatus: 'IDLE',
+    };
+    let removal: unknown = null;
+    await mockBankConnections(page, () => (removal ? [] : [imported]));
+    await page.route(`**/bank-connections/${imported.id}`, async (route) => {
+      if (route.request().method() !== 'DELETE') return route.continue();
+      removal = route.request().postDataJSON();
+      await route.fulfill({status: 204, body: ''});
+    });
+    await page.goto('/bank-connections');
+
+    const dialog = await openRemoval(page, page.getByTestId(`bank-connection-${imported.id}`));
+    await expect(
+      dialog.getByText(
+        'This permanently deletes the connection and the 2 accounts and their transactions. This cannot be undone.',
+      ),
+    ).toBeVisible();
+    await expect(dialog.getByRole('radio')).toHaveCount(0);
+    await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+
+    await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
+    expect(removal).toEqual({confirmation: 'DELETE'});
+  });
+
   test('explains a synchronization conflict that arrives while the removal dialog is open', async ({
     page,
   }) => {
@@ -672,8 +764,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     ]);
     await page.goto('/bank-connections');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await openRemoval(page, card);
-    await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+    await chooseDeleteEverything(await openRemoval(page, card));
     const confirm = page.getByRole('button', {name: 'Remove permanently', exact: true});
     await expect(confirm).toBeEnabled();
     running = true;
@@ -706,10 +797,10 @@ test.describe('mocked Enable Banking bank connection', () => {
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       const dialog = await openRemoval(page, card);
       await expect(dialog.getByRole('status')).toHaveText(SYNC_IN_PROGRESS_REMOVAL);
-      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+      await chooseDeleteEverything(dialog);
       const confirm = dialog.getByRole('button', {name: 'Remove permanently'});
       await expect(confirm).toBeDisabled();
-      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).press('Enter');
+      await dialog.locator('form').evaluate((form: HTMLFormElement) => form.requestSubmit());
       await expect(dialog).toBeVisible();
       expect(removals).toBe(0);
     });
@@ -730,7 +821,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       const box = await boxOf(reason);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(390);
-      await expect(drawer.getByRole('button', {name: 'Remove permanently'})).toBeDisabled();
+      await expect(drawer.getByTestId(`remove-bank-confirm-${MOCK_CONNECTION.id}`)).toBeDisabled();
     });
   });
 
@@ -932,7 +1023,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         dialog.getByText('Consent until', {exact: true}).locator('xpath=..'),
       ).toContainText('1 Jan 2030');
       await dialog.getByRole('button', {name: 'Remove connection'}).click();
-      await page.getByTestId(`remove-bank-confirmation-${MOCK_CONNECTION.id}`).fill('DELETE');
+      await chooseDeleteEverything(dialog);
       const confirm = page.getByTestId(`remove-bank-confirm-${MOCK_CONNECTION.id}`);
       try {
         await expect.poll(() => refreshRequests).toBe(1);

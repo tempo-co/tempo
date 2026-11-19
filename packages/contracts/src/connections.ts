@@ -70,8 +70,11 @@ export type BankConnectionAuthorizationRequest = {
 /** `POST /bank-connections/authorize`: where to send the owner to approve access. */
 export type BankConnectionAuthorizationResponse = {authorizationUrl: string};
 
-/** `DELETE /bank-connections/:connectionId` body. */
-export type BankConnectionRemoveRequest = {confirmation?: string};
+/**
+ * `DELETE /bank-connections/:connectionId` body. `keepAccounts` keeps the connection's accounts and their history as
+ * imported-files accounts; otherwise they are deleted, which a connected bank confirms with `confirmation: 'DELETE'`.
+ */
+export type BankConnectionRemoveRequest = {confirmation?: string; keepAccounts?: boolean};
 
 export type BankAccountBalance = {
 	name: string | null;

@@ -43,9 +43,13 @@ import {
 	VERIFIED_ACCOUNT_EMAIL,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {camt053} from '../../fixtures/statement-file.fixture';
+import {enableFileImportE2e, getApp, loginAgent} from '../../setup/e2e.setup';
 import {fetchedTransactions} from '../../utils/banking-utils';
 import {waitFor} from '../../utils/wait-utils';
+
+// Kept accounts take statement files.
+enableFileImportE2e();
 
 // The concrete adapter is exercised below against a mocked transport, never a live provider.
 process.env.ENABLE_BANKING_API_URL = 'https://provider.example.test';
@@ -879,6 +883,188 @@ describe('BankConnectionController', () => {
 			expect(await bankAccountRepository.findOneBy({id: bankAccount.id})).toBeNull();
 			expect(await bankTransactionRepository.findOneBy({providerTransactionId})).toBeNull();
 			expect(await bankSyncRunRepository.findOneBy({id: syncRun.id})).toBeNull();
+		},
+	);
+
+	it.each([
+		['the same bank account identity', {identificationHash: 'stable-account-kept'}],
+		[
+			'another identity but the same IBAN',
+			{identificationHash: 'stable-account-kept-new', iban: 'NL91ABNA0417164300'},
+		],
+	])(
+		'keeps a removed bank’s accounts and history as imported files, and connecting the bank again with %s syncs into them',
+		async (_, reconnectedAccount) => {
+			await bankConnectionRepository
+				.createQueryBuilder()
+				.delete()
+				.where('accountId = :accountId', {accountId: account.id})
+				.execute();
+			const iban = 'NL91ABNA0417164300';
+			const [booked, other, , , later] = makeTransactions('kept').map((row) => ({
+				...row,
+				balanceAfterAmount: undefined,
+				balanceAfterCurrency: undefined,
+			}));
+			const pending = {
+				...other,
+				providerTransactionId: 'provider-transaction-kept-pending',
+				entryReference: 'provider-entry-kept-pending',
+				amount: '9.99',
+				description: 'Pending card payment',
+				status: 'PDNG',
+			};
+			sessionAccountIdsBySession.set('provider-session-kept-first', ['provider-account-kept-first']);
+			sessionAccountIdsBySession.set('provider-session-kept-again', ['provider-account-kept-again']);
+			getAccountBalances.mockResolvedValue(makeBalances());
+			getAccountTransactions.mockReset();
+			getAccountTransactions.mockResolvedValue(fetchedTransactions([booked, other, pending]));
+
+			const firstState = await authorize();
+			createSession.mockResolvedValueOnce({
+				sessionId: 'provider-session-kept-first',
+				consentValidUntil: '2030-01-01T00:00:00.000Z',
+				aspsp: {name: 'ABN AMRO', country: 'NL'},
+				accounts: [
+					{
+						uid: 'provider-account-kept-first',
+						identificationHash: 'stable-account-kept',
+						iban,
+						currency: 'EUR',
+					},
+				],
+			});
+			await callback({state: firstState, code: 'kept-first-code'}, 'connected');
+			const [connection] = await bankConnectionRepository.findBy({
+				account: {id: account.id},
+				status: 'AUTHORIZED',
+			});
+			await waitFor(
+				() => bankSyncRunRepository.findOneBy({bankConnection: {id: connection.id}, status: 'SUCCEEDED'}),
+				(run) => run !== null,
+			);
+			const synced = await bankAccountRepository.findOneByOrFail({bankConnection: {id: connection.id}});
+			const bookedRow = await bankTransactionRepository.findOneByOrFail({
+				providerTransactionId: booked.providerTransactionId,
+			});
+			await bankTransactionRepository.update(bookedRow.id, {category: 'GROCERIES', categorySource: 'MANUAL'});
+			expect(synced.currentBalanceAmount).not.toBeNull();
+			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id})).toBe(3);
+			const dropStatement = (amount: string, bookingDate: string) =>
+				verifiedAgent
+					.post('/bank-imports')
+					.set('Origin', 'http://localhost:5173')
+					.attach(
+						'files',
+						Buffer.from(
+							camt053([
+								{iban, entries: [{amount, indicator: 'DBIT', bookingDate, info: 'Example Shop'}]},
+							]),
+						),
+						'statement.xml',
+					)
+					.expect(201);
+			// A statement imported while the bank synced is kept with the account.
+			const earlier = (await dropStatement('3.00', '2026-08-20')).body as {id: string};
+			deleteSession.mockClear();
+
+			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
+
+			expect(deleteSession).toHaveBeenCalledWith('provider-session-kept-first', expect.any(AbortSignal));
+			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
+			const kept = await bankAccountRepository.findOneOrFail({
+				where: {id: synced.id},
+				relations: {bankConnection: true},
+			});
+			expect(kept).toMatchObject({
+				bankConnection: {provider: 'file'},
+				currentBalanceAmount: synced.currentBalanceAmount,
+			});
+			// Every row stays, with its edits, the imported one included.
+			const keptRows = await bankTransactionRepository.findBy({bankAccountId: synced.id});
+			expect(keptRows.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
+				[booked.providerTransactionId, other.providerTransactionId, pending.providerTransactionId, null].sort(),
+			);
+			expect(keptRows.find(({id}) => id === bookedRow.id)).toMatchObject({
+				category: 'GROCERIES',
+				categorySource: 'MANUAL',
+			});
+			expect(await bankAccountBalanceRepository.countBy({bankAccountId: synced.id})).toBe(0);
+			const listed = (await verifiedAgent.get('/bank-connections').expect(200)).body as Array<{
+				provider: string;
+				bankAccounts: Array<{id: string; currentBalanceAmount: string | null; balanceSource: string | null}>;
+			}>;
+			expect(listed).toEqual([
+				expect.objectContaining({
+					provider: 'file',
+					bankAccounts: [
+						expect.objectContaining({
+							id: synced.id,
+							currentBalanceAmount: synced.currentBalanceAmount,
+							balanceSource: 'stated',
+						}),
+					],
+				}),
+			]);
+
+			const listedImports = (await verifiedAgent.get('/bank-imports').expect(200)).body as {
+				imports: Array<{id: string}>;
+			};
+			expect(listedImports.imports.map(({id}) => id)).toContain(earlier.id);
+			// It can still be undone.
+			await verifiedAgent
+				.delete(`/bank-imports/${earlier.id}`)
+				.set('Origin', 'http://localhost:5173')
+				.expect(204);
+			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id, importId: earlier.id})).toBe(0);
+
+			// A statement of the account goes to it.
+			const dropped = await dropStatement('7.00', '2026-09-01');
+			expect((dropped.body as {accounts: Array<{id: string}>}).accounts.map(({id}) => id)).toEqual([synced.id]);
+			const importedRow = await bankTransactionRepository.findOneByOrFail({
+				bankAccountId: synced.id,
+				importId: (dropped.body as {id: string}).id,
+			});
+
+			// The bank sends the kept rows again with a new one, and no longer the pending one; the account picks up
+			// where it was.
+			getAccountTransactions.mockResolvedValue(fetchedTransactions([booked, other, later]));
+			const secondState = await authorize();
+			createSession.mockResolvedValueOnce({
+				sessionId: 'provider-session-kept-again',
+				consentValidUntil: '2031-01-01T00:00:00.000Z',
+				aspsp: {name: 'ABN AMRO', country: 'NL'},
+				accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
+			});
+			await callback({state: secondState, code: 'kept-again-code'}, 'connected');
+			const [reconnected] = await bankConnectionRepository.findBy({
+				account: {id: account.id},
+				provider: 'enable-banking',
+				status: 'AUTHORIZED',
+			});
+			await waitFor(
+				() => bankSyncRunRepository.findOneBy({bankConnection: {id: reconnected.id}, status: 'SUCCEEDED'}),
+				(run) => run !== null,
+			);
+			expect(await bankAccountRepository.countBy({bankConnection: {accountId: account.id}})).toBe(1);
+			expect(
+				await bankAccountRepository.findOneOrFail({where: {id: synced.id}, relations: {bankConnection: true}}),
+			).toMatchObject({
+				bankConnection: {id: reconnected.id},
+				iban,
+			});
+			const resynced = await bankTransactionRepository.findBy({bankAccountId: synced.id});
+			expect(resynced.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
+				[booked.providerTransactionId, other.providerTransactionId, later.providerTransactionId, null].sort(),
+			);
+			expect(resynced.map(({id}) => id)).toContain(importedRow.id);
+			expect(resynced.find(({id}) => id === bookedRow.id)).toMatchObject({categorySource: 'MANUAL'});
+			getAccountTransactions.mockReset();
+			await bankConnectionRepository
+				.createQueryBuilder()
+				.delete()
+				.where('accountId = :accountId', {accountId: account.id})
+				.execute();
 		},
 	);
 

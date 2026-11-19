@@ -143,7 +143,10 @@ export class BankConnectionController {
 		@Body() dto: BankConnectionRemoveDto,
 		@CurrentAccount() account: Account,
 	) {
-		await this.bankConnectionRemovalService.removeConnection(account.id, connectionId, dto.confirmation);
+		await this.bankConnectionRemovalService.removeConnection(account.id, connectionId, {
+			confirmation: dto.confirmation,
+			keepAccounts: dto.keepAccounts === true,
+		});
 	}
 
 	@Public()
