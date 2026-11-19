@@ -449,13 +449,16 @@ jobs:
             - name: Install npm dependencies
               run: npm ci
 
-            - name: Install Playwright browsers
+            # The official image ships the browsers and their system packages for this exact
+            # Playwright version, so no shard installs them from Ubuntu mirrors.
+            - name: Pull Playwright image
+              id: playwright
               run: |
-                  if [[ $WEB_CHANGED == true ]]; then
-                      npx playwright install chromium webkit --with-deps
-                  else
-                      npx playwright install chromium --with-deps
-                  fi
+                  set -euo pipefail
+                  version=$(node -p "require('@playwright/test/package.json').version")
+                  image="mcr.microsoft.com/playwright:v${version}-noble"
+                  docker pull --quiet "$image"
+                  echo "image=$image" >> "$GITHUB_OUTPUT"
 
             - name: Wait for and seed Docker E2E environment
               env:
@@ -464,15 +467,28 @@ jobs:
                   docker compose -f docker-compose.e2e.yml up -d --wait
                   npm run db:seed:e2e
 
+            # Runs in the Playwright image on the host network, so the app, the API and Mailpit
+            # keep their localhost origins. The job's Node is mounted in, so the build and the
+            # runner use the version the app requires rather than the image's own.
             - name: Run E2E tests
               env:
-                  VITE_API_URL: http://localhost:3000
-                  VITE_APP_URL: http://localhost:5173
-                  VITE_EMAIL_UI_URL: http://localhost:8025
+                  PLAYWRIGHT_IMAGE: ${{ steps.playwright.outputs.image }}
                   SHARD: ${{ matrix.shard }}/${{ matrix.total }}
               run: |
+                  set -euo pipefail
                   if [[ $WEB_CHANGED == true ]]; then set --; else set -- --project=chromium; fi
-                  npx playwright test --shard="$SHARD" --reporter=list,blob "$@"
+                  node_home=$(dirname "$(dirname "$(command -v node)")")
+                  docker run --rm --network host --ipc host \
+                      --user "$(id -u):$(id -g)" \
+                      -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$PWD" \
+                      -v "$node_home:/opt/node:ro" \
+                      -e PATH="/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+                      -e HOME=/tmp -e CI \
+                      -e VITE_API_URL=http://localhost:3000 \
+                      -e VITE_APP_URL=http://localhost:5173 \
+                      -e VITE_EMAIL_UI_URL=http://localhost:8025 \
+                      "$PLAYWRIGHT_IMAGE" \
+                      npx playwright test --shard="$SHARD" --reporter=list,blob "$@"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               if: ${{ !cancelled() }}
