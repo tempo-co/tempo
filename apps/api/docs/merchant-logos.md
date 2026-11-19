@@ -52,6 +52,7 @@ The model can name a plausible domain that belongs to someone else, so only the 
 - Names (title, `og:site_name`, `application-name`, `apple-mobile-web-app-title`) come from the same homepage fetch as the image.
 - If the site states names, one must spell the brand in whole tokens: a run of consecutive tokens, joined, equals the brand's joined tokens ("Example Shop" matches "ExampleShop Online", "Example Mart" not "Example Martin Plumbing"). Brands of six+ letters also accept a trailing `s`. Never prefix or substring matching.
 - Sub-brand on a parent's site: confident domain and a site name spelling the domain's **first** label, joined or as initials. Later labels can be a public suffix (`co` in `.co.uk`) any two-word name's initials spell.
+- Product on its company's site: the merchant's `company` spells (joined tokens) the brand of another merchant whose own rules confirmed the same logo, however the product's own check went. A company whose merchant points at another site lends nothing.
 - Loaded, no names: hostname spelling or a confident domain. Homepage not loaded: confident domain only. A site naming itself something else never confirms, however confident the domain (a lapsed domain serving spam).
 - Token-run scans stop as soon as no spelling starts with the run; otherwise a long title costs quadratic time on the event loop.
 - A refresh without the homepage keeps the stored logo and its confirming names, replacing it only with one at least as sharp. Never overwrite them with an error page's names.
