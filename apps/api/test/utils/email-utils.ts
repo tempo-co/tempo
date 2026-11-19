@@ -1,9 +1,14 @@
+import {getQueueToken} from '@nestjs/bullmq';
+import {Queue} from 'bullmq';
 import ms from 'ms';
 
+import {EMAIL_QUEUE} from '@core/queue/queue.constants';
 import {Account} from '@modules/account/account.entity';
 
+import {getApp} from '../setup/e2e.setup';
 import {MailpitMessageSummaryResponse, MailpitResponse} from '../types/mailpit';
 import {SIX_DIGIT_REGEX, UUID_REGEX} from '../types/regex.constants';
+import {waitFor} from './wait-utils';
 
 /** Mailpit's HTTP API on the host port `scripts/e2e-stack.mjs` passes as `EMAIL_UI_PORT`. */
 export const MAILPIT_API_URL = `http://127.0.0.1:${process.env.EMAIL_UI_PORT ?? '8025'}`;
@@ -16,27 +21,29 @@ export class EmailUtils {
 	}
 
 	static async findEmailByRecipient(recipientEmail: string, apiUrl: string, subject?: string) {
-		let retries = 10;
-		const delayMs = 200;
+		await this.waitForEmailQueue();
+		const res = await fetch(`${apiUrl}/api/v1/messages`);
+		const data = (await res.json()) as MailpitResponse;
+		const email = data.messages.find((msg) => {
+			const isRecipient = msg.To.some((r) => r.Address.toLowerCase() === recipientEmail.toLowerCase());
+			return isRecipient && (!subject || msg.Subject === subject);
+		});
+		if (!email) return undefined;
 
-		// retry briefly to allow BullMQ to process the job and send email to Mailpit
-		while (retries > 0) {
-			const res = await fetch(`${apiUrl}/api/v1/messages`);
-			const data = (await res.json()) as MailpitResponse;
-			const email = data.messages.find((msg) => {
-				const isRecipient = msg.To.some((r) => r.Address.toLowerCase() === recipientEmail.toLowerCase());
-				return isRecipient && (!subject || msg.Subject === subject);
-			});
+		const fullEmail = await fetch(`${apiUrl}/api/v1/message/${email.ID}`);
+		return (await fullEmail.json()) as MailpitMessageSummaryResponse;
+	}
 
-			if (email) {
-				const res = await fetch(`${apiUrl}/api/v1/message/${email.ID}`);
-				const fullEmail = (await res.json()) as MailpitMessageSummaryResponse;
-				return fullEmail;
-			}
-
-			retries--;
-			if (retries > 0) await this._sleep(delayMs);
-		}
+	/**
+	 * Resolves once the email queue has sent, or given up on, every email queued so far, so Mailpit holds every email
+	 * the earlier requests asked for.
+	 */
+	private static async waitForEmailQueue() {
+		const queue = getApp().get<Queue>(getQueueToken(EMAIL_QUEUE));
+		await waitFor(
+			() => queue.getJobCounts('waiting', 'active', 'delayed', 'prioritized', 'waiting-children'),
+			(counts) => Object.values(counts).every((count) => count === 0),
+		);
 	}
 
 	static async getVerificationCode(recipientEmail: string, apiUrl: string) {
@@ -126,9 +133,5 @@ ${EMAIL_FOOTER}`;
 You now sign in with ${newEmail} instead of ${oldEmail}.
 If you didn't make this change, reset your password and reply to this email right away.
 ${EMAIL_FOOTER}`;
-	}
-
-	private static _sleep(ms: number = 250) {
-		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }
