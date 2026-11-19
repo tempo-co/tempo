@@ -2,6 +2,7 @@ import {getQueueToken} from '@nestjs/bullmq';
 import {Queue} from 'bullmq';
 import ms from 'ms';
 
+import type {EmailJobData} from '@core/email/email.service';
 import {EMAIL_QUEUE} from '@core/queue/queue.constants';
 import {Account} from '@modules/account/account.entity';
 
@@ -12,6 +13,13 @@ import {waitFor} from './wait-utils';
 
 /** Mailpit's HTTP API on the host port `scripts/e2e-stack.mjs` passes as `EMAIL_UI_PORT`. */
 export const MAILPIT_API_URL = `http://127.0.0.1:${process.env.EMAIL_UI_PORT ?? '8025'}`;
+
+const PENDING_EMAIL_STATES = ['waiting', 'active', 'delayed', 'prioritized', 'waiting-children'] as const;
+
+/** A single email normally leaves the queue in under 100 ms; past this, the wait is logged, early enough to fit Jest's 5 s timeout. */
+const SLOW_EMAIL_QUEUE_MS = 1_000;
+
+const isEmpty = (counts: Record<string, number>) => Object.values(counts).every((count) => count === 0);
 
 const EMAIL_FOOTER = 'Sent by Tempo because of activity on your account. Need help? Reply to this email.';
 
@@ -39,10 +47,39 @@ export class EmailUtils {
 	 * the earlier requests asked for.
 	 */
 	private static async waitForEmailQueue() {
-		const queue = getApp().get<Queue>(getQueueToken(EMAIL_QUEUE));
-		await waitFor(
-			() => queue.getJobCounts('waiting', 'active', 'delayed', 'prioritized', 'waiting-children'),
-			(counts) => Object.values(counts).every((count) => count === 0),
+		const queue = getApp().get<Queue<EmailJobData>>(getQueueToken(EMAIL_QUEUE));
+		const startedAt = Date.now();
+		let reported = false;
+		await waitFor(async () => {
+			const counts = await queue.getJobCounts(...PENDING_EMAIL_STATES);
+			if (!reported && !isEmpty(counts) && Date.now() - startedAt > SLOW_EMAIL_QUEUE_MS) {
+				reported = true;
+				await this.reportPendingEmails(queue);
+			}
+			return counts;
+		}, isEmpty);
+	}
+
+	/**
+	 * Logs the jobs still holding the queue, so a slow run's CI log shows whether a send is stuck, retrying or not
+	 * picked up, even when Jest's timeout ends the test first.
+	 */
+	private static async reportPendingEmails(queue: Queue<EmailJobData>) {
+		const now = Date.now();
+		const jobs = await queue.getJobs([...PENDING_EMAIL_STATES]);
+		const details = await Promise.all(
+			jobs.map(async (job) => ({
+				state: await job.getState(),
+				subject: job.data.subject,
+				attemptsMade: job.attemptsMade,
+				failedReason: job.failedReason,
+				queuedMsAgo: now - job.timestamp,
+				startedMsAgo: job.processedOn ? now - job.processedOn : undefined,
+			})),
+		);
+		console.warn(
+			`${expect.getState().currentTestName}: email queue still busy after ${SLOW_EMAIL_QUEUE_MS} ms`,
+			JSON.stringify(details),
 		);
 	}
 
