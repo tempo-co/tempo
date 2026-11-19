@@ -27,6 +27,7 @@ export class ClearAccountHolderCounterpartyNames20261113130000 implements Migrat
 	name = 'ClearAccountHolderCounterpartyNames20261113130000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
+		if (!(await queryRunner.hasTable('bank_transactions'))) return;
 		const rows = (await queryRunner.query(
 			`SELECT t."id", t."description", t."counterpartyName", t."creditDebitIndicator", t."remittanceInformation",
 				t."bankTransactionDescription", t."ownTransferEvidence", a."name" AS "holderName"

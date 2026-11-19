@@ -16,6 +16,7 @@ export class RefreshProcessorCollectedBusinessIdentity20261026120000 implements 
 	name = 'RefreshProcessorCollectedBusinessIdentity20261026120000';
 
 	public async up(queryRunner: QueryRunner): Promise<void> {
+		if (!(await queryRunner.hasTable('bank_transactions'))) return;
 		const rows = (await queryRunner.query(
 			`SELECT "id", "description", "counterpartyName", "creditDebitIndicator"
 			FROM "bank_transactions" WHERE "description" ILIKE '%incasso%'`,
