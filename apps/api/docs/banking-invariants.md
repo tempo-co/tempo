@@ -64,7 +64,7 @@ Treat a connection as a concurrent lifecycle: provider callbacks, background syn
 - Keep provider calls outside database transactions; enqueue categorization only after the rows commit.
 - Once the sync transaction commits, the run is reported as finished: lease loss or a disconnect after that point does not fail it. The fencing inside the transaction protects the write.
 - Every failed or partial run stores why in `bank_sync_runs.failures` (`src/app/modules/banking/bank-sync-failure.ts`) and logs the same summary at WARN with the run id: per failed provider call its kind (`session`, `balances`, `transactions`), Tempo's bank account id, the provider error code, HTTP status and whether `Retry-After` came back; `internal` for an unexpected exception (logged with its name and stack frames); `cancelled` for an aborted foreground refresh; `interrupted` for a run a crashed process left RUNNING. Never store or log provider messages, response bodies, provider ids or exception messages. The user-facing `errorMessage` stays generic.
-- Transactions the provider sends without a usable amount, currency or direction (`CRDT` or `DBIT`) are not imported. The rest of the page is, the count is recorded as an `unparseable_transactions` failure for that account, and the run is PARTIAL. A page with no usable row fails that account's transactions call. Every stored row is a credit or a debit; the database refuses one without (`chk_bank_transactions_credit_debit_indicator`).
+- Transactions the provider sends without a usable amount, currency or direction (which the database requires) are not imported. The rest of the page is, the count is recorded as an `unparseable_transactions` failure for that account, and the run is PARTIAL. A page with no usable row fails that account's transactions call.
 
 ## Transaction identity
 
@@ -83,7 +83,7 @@ Treat a connection as a concurrent lifecycle: provider callbacks, background syn
 ## Provider field normalization
 
 - Normalize currency and debit/credit codes at the authorization/sync persistence boundary.
-- The counterparty is the party the direction names: creditor for `DBIT`, debtor for `CRDT` (Enable Banking: the creditor receives the funds, the debtor sends them). Its name and locality come only from that party. If it is missing, store no name and no location; the other party may be the account holder. Keep only city, region and a valid two-letter country.
+- The counterparty is the party the direction names: creditor for `DBIT`, debtor for `CRDT` (Enable Banking: the creditor receives the funds, the debtor sends them). Its name and locality come only from that party. If it is missing, store neither name nor location; the other party may be the account holder. Keep only city, region and a valid two-letter country.
 - `description` is bank text: the PSU note, else the remittance, else the bank transaction code's description. It never falls back to the counterparty name; display and merchant identity read that field themselves.
 
 ## Totals and financial events
