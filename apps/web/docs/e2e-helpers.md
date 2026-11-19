@@ -13,6 +13,7 @@ The shared helpers of the Playwright suite under `test/`, and the rules for reus
 - `test/utils/url.ts`: `withSearchParams(path, params)` builds URLs for the invalid-search-param cases in `test/data`.
 - `test/utils/email-utils.ts`: `EmailUtils.getVerificationCode(email)` reads a verification code from Mailpit; `ResetPasswordPage.openResetLink(email)` requests a reset and opens the emailed link.
 - `test/utils/hook-harness.ts`: `createHookHarness(stubs)` runs a real hook against a real `QueryClient` with whole modules stubbed (see Hook harness below).
+- `test/utils/toasts.ts`: `countAfterToasts(page, locator)` counts matches once, after the toasts already raised have rendered. Use it to assert a message appears exactly once; a retrying `toHaveCount` would wait an extra toast out.
 
 ## Reusing fixtures
 

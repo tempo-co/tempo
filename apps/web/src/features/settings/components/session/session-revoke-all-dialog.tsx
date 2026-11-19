@@ -26,6 +26,7 @@ export function SessionRevokeAllDialog() {
       confirmTestId='revoke-all-sessions-button-confirm'
       isPending={isPending}
       onConfirm={revokeAllSessions}
+      failureMessage='Other sessions could not be revoked. Try again.'
     />
   );
 }

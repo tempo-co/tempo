@@ -3,9 +3,10 @@ import {faker} from '@faker-js/faker';
 import {UNVERIFIED_USER_AUTH_FILE, VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {UNVERIFIED_ACCOUNT_EMAIL} from '../../constants/seed.constants';
 import {invalidEmailVerifySearchParams} from '../../data/verify-email-params.data';
-import {expect, test} from '../../fixtures';
+import {API_URL, APP_ORIGIN_HEADERS, expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 import {EmailUtils} from '../../utils/email-utils';
+import {countAfterToasts} from '../../utils/toasts';
 import {withSearchParams} from '../../utils/url';
 
 const verifyEmailUrl = (params: object) => withSearchParams('/verify-email', params);
@@ -47,6 +48,50 @@ test.describe('Email Verification', () => {
       await verifyEmailPage.inputCodeAndSubmit(wrongCode);
       await expect(verifyEmailPage.invalidOrExpiredCodeError).toBeVisible();
     });
+  });
+
+  test('resending after the email was verified elsewhere shows it is verified and goes home', async ({
+    page,
+    signupPage,
+    verifyEmailPage,
+    homePage,
+  }) => {
+    const pageErrors: Error[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error));
+    await signupPage.navigate();
+    const email = await signupPage.fillAndSubmitForm();
+    await verifyEmailPage.expectToBeOnPage();
+
+    // The tab's own check still sees the account unverified until the resend has been answered.
+    let resendAnswered = false;
+    await page.route('**/accounts/me', async (route) => {
+      const response = await route.fetch();
+      if (resendAnswered) return await route.fulfill({response});
+      const account = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({response, json: {...account, isEmailVerified: false}});
+    });
+    await page.route('**/auth/signup/resend', async (route) => {
+      const response = await route.fetch();
+      resendAnswered = true;
+      await route.fulfill({response});
+    });
+
+    const code = await EmailUtils.getVerificationCode(email);
+    const verify = await page.request.post(`${API_URL}/auth/signup/verify`, {
+      data: {email, code},
+      headers: APP_ORIGIN_HEADERS,
+    });
+    expect(verify.status()).toBe(200);
+
+    await verifyEmailPage.resendCodeButton.click();
+
+    await homePage.expectToBeOnPage();
+    await homePage.expectUserLoggedIn();
+    await expect(homePage.alreadyVerifiedToastTitle).toBeVisible();
+    expect(
+      await countAfterToasts(page, page.locator('[data-sonner-toast][data-type="error"]')),
+    ).toBe(0);
+    expect(pageErrors).toEqual([]);
   });
 
   test.describe('Invalid URL Search Params', () => {

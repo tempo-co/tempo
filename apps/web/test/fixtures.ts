@@ -18,7 +18,7 @@ import {EmailUtils} from './utils/email-utils';
 const env = loadEnv('development', process.cwd(), '');
 export const API_URL = env.VITE_API_URL;
 /** The API refuses login, signup and other changes without the app's Origin, which browsers send. */
-const APP_ORIGIN_HEADERS = {Origin: new URL(env.VITE_APP_URL).origin};
+export const APP_ORIGIN_HEADERS = {Origin: new URL(env.VITE_APP_URL).origin};
 
 export type TestAccount = {name: string; email: string; password: string};
 

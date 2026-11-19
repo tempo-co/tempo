@@ -25,10 +25,19 @@ export const useRevokeSession = () => {
       if (error.status === 404) {
         toast.error('Session not found or expired.');
         await queryClient.invalidateQueries({queryKey: SESSIONS_QUERY_KEY});
-        throw error;
       }
     },
   });
 
-  return {revokeSession: mutateAsync, isPending};
+  // A session that is already gone needs no retry: its toast says so and the list refreshes.
+  const revokeSession = async (input: {id: Session['id']}) => {
+    try {
+      await mutateAsync(input);
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404) return;
+      throw error;
+    }
+  };
+
+  return {revokeSession, isPending};
 };

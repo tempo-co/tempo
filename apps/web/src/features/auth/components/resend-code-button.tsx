@@ -29,8 +29,9 @@ export function ResendCodeButton({variant = 'ghost', className, onSuccess}: Rese
   }, [cooldown]);
 
   const handleResendClick = async () => {
-    await resendVerificationEmail({onSuccess});
-    setCooldown(60);
+    // A failure has already been toasted; the button stays ready for another try.
+    const result = await resendVerificationEmail({onSuccess}).catch(() => null);
+    if (result === 'sent') setCooldown(60);
   };
 
   const isDisabled = isPending || cooldown > 0;
