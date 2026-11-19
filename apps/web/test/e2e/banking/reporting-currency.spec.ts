@@ -13,7 +13,11 @@ import {expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
-import {openRemoval, routeMockedBankApp} from '../../utils/bank-connections';
+import {
+  chooseDeleteEverything,
+  openRemoval,
+  routeMockedBankApp,
+} from '../../utils/bank-connections';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const QUESTION = 'Which currency should Tempo use for totals?';
@@ -374,8 +378,9 @@ test.describe('fully mocked', () => {
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toBeVisible();
 
-    await openRemoval(page, page.getByTestId(`bank-connection-${gbpBank.id}`));
-    await page.getByTestId(`remove-bank-confirmation-${gbpBank.id}`).fill('DELETE');
+    await chooseDeleteEverything(
+      await openRemoval(page, page.getByTestId(`bank-connection-${gbpBank.id}`)),
+    );
     await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
 
     await expect(page.getByTestId(`bank-connection-${gbpBank.id}`)).toHaveCount(0);
