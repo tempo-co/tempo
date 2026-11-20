@@ -1,20 +1,31 @@
+import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
+import {JobType, Queue} from 'bullmq';
 import {DeepPartial, Repository} from 'typeorm';
 
+import {
+	BANK_TRANSACTION_CATEGORIZATION_QUEUE,
+	CATEGORIZE_BANK_TRANSACTIONS_JOB,
+	IDENTIFY_MERCHANTS_JOB,
+	MERCHANT_LOGO_QUEUE,
+} from '@core/queue/queue.constants';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import * as exchangeRecompute from '@modules/banking/currency-exchange/currency-exchange-recompute';
-import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
+import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
 import * as ownTransferRecompute from '@modules/banking/own-transfer/own-transfer-recompute';
 import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
-import {getApp} from '../../setup/e2e.setup';
+import {enableAiCategorizationE2e, enableMerchantLogosE2e, getApp} from '../../setup/e2e.setup';
 import {createBankingOwner} from '../../utils/banking-utils';
+
+enableAiCategorizationE2e();
+enableMerchantLogosE2e();
 
 const HOLDER = 'Jane Example';
 const EUR_IBAN = 'NL91ABNA0417164300';
@@ -25,23 +36,55 @@ describe('DerivedDataRefreshService', () => {
 	let app: INestApplication;
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
+	let merchants: Repository<Merchant>;
 	let service: DerivedDataRefreshService;
-	let enqueueCategorization: jest.SpyInstance;
-	let enqueueLogos: jest.SpyInstance;
+	let categorizationQueue: Queue;
+	let logoQueue: Queue;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		app = getApp();
 		fixtures = new BankingFixtures(app);
 		accounts = app.get(getRepositoryToken(Account));
+		merchants = app.get(getRepositoryToken(Merchant));
 		service = app.get(DerivedDataRefreshService);
+		categorizationQueue = app.get(getQueueToken(BANK_TRANSACTION_CATEGORIZATION_QUEUE));
+		logoQueue = app.get(getQueueToken(MERCHANT_LOGO_QUEUE));
+		// The workers stay idle, so each test reads exactly the jobs its refresh queued.
+		await Promise.all([categorizationQueue.pause(), logoQueue.pause()]);
 	});
 
-	beforeEach(() => {
-		enqueueCategorization = jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions');
-		enqueueLogos = jest.spyOn(app.get(MerchantLogoService), 'enqueueForOwnerSafely');
+	afterEach(async () => {
+		jest.restoreAllMocks();
+		await Promise.all([categorizationQueue.drain(true), logoQueue.drain(true)]);
 	});
 
-	afterEach(() => jest.restoreAllMocks());
+	afterAll(async () => {
+		await Promise.all([categorizationQueue.resume(), logoQueue.resume()]);
+	});
+
+	const QUEUED_STATES: JobType[] = ['waiting', 'prioritized', 'delayed'];
+
+	/** The rows queued for categorization, sorted. */
+	const queuedForCategorization = async () =>
+		(await categorizationQueue.getJobs(QUEUED_STATES))
+			.filter(({name}) => name === CATEGORIZE_BANK_TRANSACTIONS_JOB)
+			.flatMap(({data}) => (data as {transactionIds: string[]}).transactionIds)
+			.sort();
+
+	/** The owner's merchants, by key, and whether each is queued for identification. */
+	const ownerMerchants = async (owner: {id: string}) => {
+		const queued = new Set(
+			(await logoQueue.getJobs(QUEUED_STATES))
+				.filter(({name}) => name === IDENTIFY_MERCHANTS_JOB)
+				.flatMap(({data}) => (data as {merchantIds: string[]}).merchantIds),
+		);
+		return (await merchants.find({where: {accountId: owner.id}, order: {key: 'ASC'}})).map(({id, key}) => ({
+			key,
+			queued: queued.has(id),
+		}));
+	};
+
+	const sortedIds = (...transactions: Array<{id: string}>) => transactions.map(({id}) => id).sort();
 
 	/**
 	 * An owner who has not chosen a reporting currency, with a EUR current account, a EUR savings account and a USD
@@ -96,6 +139,18 @@ describe('DerivedDataRefreshService', () => {
 		] as const;
 	}
 
+	/** A card payment at a shop, which merchant logos identify. */
+	async function createPurchase(account: BankAccount, shop: string, day: string) {
+		return fixtures.createTransaction(account, {
+			bookingDate: day,
+			valueDate: day,
+			amount: '-7.50',
+			creditDebitIndicator: 'DBIT',
+			counterpartyName: shop,
+			description: shop,
+		});
+	}
+
 	const labels = async (...transactions: Array<{id: string}>) =>
 		(
 			await fixtures.transactions.find({
@@ -137,7 +192,9 @@ describe('DerivedDataRefreshService', () => {
 		);
 		// Untouched by the sync, so its own-transfer labels wait for the daily whole-history recompute.
 		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
-		const writtenIds = [exchangeDebit.id, exchangeCredit.id, writtenDebit.id, writtenCredit.id];
+		const writtenPurchase = await createPurchase(current, 'Example Shop', '2026-01-17');
+		await createPurchase(current, 'Other Example Shop', '2026-01-18');
+		const writtenIds = [exchangeDebit.id, exchangeCredit.id, writtenDebit.id, writtenCredit.id, writtenPurchase.id];
 
 		await service.refresh(owner.id, {
 			kind: 'sync-write',
@@ -157,8 +214,9 @@ describe('DerivedDataRefreshService', () => {
 		expect(await labels(untouchedDebit, untouchedCredit)).toEqual([unlabelled, unlabelled]);
 		// The history is settled and holds two currencies, so the owner is asked to choose.
 		expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: 'SETUP_PENDING'});
-		expect(enqueueCategorization).toHaveBeenCalledWith(writtenIds);
-		expect(enqueueLogos).toHaveBeenCalledWith(owner.id, writtenIds);
+		// Exchange legs take no category; the untouched purchase waits for the hourly logo reconcile.
+		expect(await queuedForCategorization()).toEqual(sortedIds(writtenDebit, writtenCredit, writtenPurchase));
+		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 	});
 
 	it('after a sync write whose exchange recompute fails, labels own transfers over the whole history', async () => {
@@ -182,7 +240,30 @@ describe('DerivedDataRefreshService', () => {
 			ownTransferLeg(untouchedCredit),
 			ownTransferLeg(untouchedDebit),
 		]);
-		expect(enqueueCategorization).toHaveBeenCalledWith([writtenDebit.id, writtenCredit.id]);
+		expect(await queuedForCategorization()).toEqual(sortedIds(writtenDebit, writtenCredit));
+	});
+
+	it('after a sync write that unpaired an exchange, labels the leg it did not write as an own transfer and queues both legs for categorization', async () => {
+		const {owner, current, savings, usd} = await createOwner();
+		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
+		await service.refresh(owner.id, {kind: 'failed-sync-write'});
+		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
+		// The sync rewrote the credit, which no longer pairs with the debit it did not write.
+		await fixtures.transactions.update(exchangeCredit.id, {description: 'Corrected provider description'});
+
+		await service.refresh(owner.id, {
+			kind: 'sync-write',
+			writtenIds: [exchangeCredit.id],
+			formerCounterpartIds: [],
+		});
+
+		expect(await labels(exchangeDebit, exchangeCredit, untouchedDebit, untouchedCredit)).toEqual([
+			{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+			unlabelled,
+			unlabelled,
+			unlabelled,
+		]);
+		expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
 	});
 
 	it('after a file write, settles the reporting currency, labels the whole history and queues the written rows for categorization and the owner for logos', async () => {
@@ -190,6 +271,9 @@ describe('DerivedDataRefreshService', () => {
 		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
 		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
 		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
+		await createPurchase(current, 'Example Shop', '2026-01-17');
+		const other = await createOwner();
+		await createPurchase(other.current, 'Other Example Shop', '2026-01-17');
 		const writtenIds = [writtenDebit.id, writtenCredit.id];
 
 		await service.refresh(owner.id, {kind: 'file-write', writtenIds});
@@ -206,21 +290,24 @@ describe('DerivedDataRefreshService', () => {
 		]);
 		// The import's history is complete once it commits and holds two currencies, so the owner is asked to choose.
 		expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: 'SETUP_PENDING'});
-		expect(enqueueCategorization).toHaveBeenCalledWith(writtenIds);
-		expect(enqueueLogos).toHaveBeenCalledWith(owner.id, undefined);
+		expect(await queuedForCategorization()).toEqual(sortedIds(writtenDebit, writtenCredit));
+		// Every merchant of the owner's history is queued for identification, and no other owner's.
+		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
+		expect(await ownerMerchants(other.owner)).toEqual([]);
 	});
 
 	it('queues the written rows for logos when queueing them for categorization fails', async () => {
-		const {owner, current, savings} = await createOwner();
-		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
-		const writtenIds = [writtenDebit.id, writtenCredit.id];
-		enqueueCategorization.mockRejectedValueOnce(new Error('Synthetic categorization enqueue failure'));
+		const {owner, current} = await createOwner();
+		const writtenPurchase = await createPurchase(current, 'Example Shop', '2026-01-17');
+		jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions').mockRejectedValueOnce(
+			new Error('Synthetic categorization enqueue failure'),
+		);
 
 		await expect(
-			service.refresh(owner.id, {kind: 'sync-write', writtenIds, formerCounterpartIds: []}),
+			service.refresh(owner.id, {kind: 'sync-write', writtenIds: [writtenPurchase.id], formerCounterpartIds: []}),
 		).resolves.toBeUndefined();
 
-		expect(enqueueLogos).toHaveBeenCalledWith(owner.id, writtenIds);
+		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 	});
 
 	it.each([
@@ -237,6 +324,7 @@ describe('DerivedDataRefreshService', () => {
 				'55.00',
 				'2026-01-16',
 			);
+			await createPurchase(current, 'Example Shop', '2026-01-17');
 
 			await service.refresh(owner.id, {kind});
 
@@ -249,8 +337,9 @@ describe('DerivedDataRefreshService', () => {
 			]);
 			// No history has been fetched yet, so the owner is not asked to choose among the two currencies.
 			expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: null});
-			expect(enqueueCategorization).not.toHaveBeenCalled();
-			expect(enqueueLogos).not.toHaveBeenCalled();
+			// No row was written, so nothing is queued.
+			expect(await queuedForCategorization()).toEqual([]);
+			expect(await ownerMerchants(owner)).toEqual([]);
 		},
 	);
 
@@ -270,6 +359,15 @@ describe('DerivedDataRefreshService', () => {
 				'2026-01-16',
 			);
 			await fixtures.transactions.update(exchangeCredit.id, {description: 'Corrected provider description'});
+			// What is queued for categorization when the own-transfer recompute starts.
+			let queuedBeforeOwnTransfers: string[] | undefined;
+			const recompute = ownTransferRecompute.recomputeOwnTransfers;
+			jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers').mockImplementation(
+				async (executor, ownerId, scope) => {
+					queuedBeforeOwnTransfers ??= await queuedForCategorization();
+					return recompute(executor, ownerId, scope);
+				},
+			);
 
 			await service.refresh(owner.id, {kind: 'converted-amounts', ...changed});
 
@@ -280,11 +378,10 @@ describe('DerivedDataRefreshService', () => {
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);
-			expect(enqueueCategorization).toHaveBeenCalledTimes(1);
-			expect([...enqueueCategorization.mock.calls[0][0]].sort()).toEqual(
-				[exchangeDebit.id, exchangeCredit.id].sort(),
-			);
-			expect(enqueueLogos).not.toHaveBeenCalled();
+			// The former legs are queued only once the debit is labelled an own transfer, so no worker claims it before.
+			expect(queuedBeforeOwnTransfers).toEqual([]);
+			expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
+			expect(await ownerMerchants(owner)).toEqual([]);
 		},
 	);
 
@@ -306,7 +403,7 @@ describe('DerivedDataRefreshService', () => {
 			unlabelled,
 			unlabelled,
 		]);
-		expect(enqueueCategorization).not.toHaveBeenCalled();
+		expect(await queuedForCategorization()).toEqual([]);
 	});
 
 	it('after a conversion pass that changed nothing, recomputes nothing', async () => {
@@ -385,7 +482,7 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('daily, labels every owner’s own transfers over the whole history, one owner’s failure not stopping the rest', async () => {
+	it('daily, recomputes every owner’s exchanges and then own transfers over the whole history, one owner’s failure not stopping the rest', async () => {
 		// Owners are recomputed in id order, so the failing one comes first.
 		const [failing, other] = [await createOwner(), await createOwner()].sort((a, b) =>
 			a.owner.id < b.owner.id ? -1 : 1,
@@ -396,26 +493,43 @@ describe('DerivedDataRefreshService', () => {
 			'25.00',
 			'2026-01-12',
 		);
+		const [exchangeDebit, exchangeCredit] = await createExchange(other.current, other.usd);
+		await service.refresh(other.owner.id, {kind: 'failed-sync-write'});
 		const [otherDebit, otherCredit] = await createSavingsTransfer(
 			other.current,
 			other.savings,
 			'55.00',
 			'2026-01-16',
 		);
-		const recompute = ownTransferRecompute.recomputeOwnTransfers;
+		// A change no refresh saw: the exchange no longer pairs.
+		await fixtures.transactions.update(exchangeCredit.id, {description: 'Corrected provider description'});
+		const recomputeExchanges = exchangeRecompute.recomputeCurrencyExchanges;
+		jest.spyOn(exchangeRecompute, 'recomputeCurrencyExchanges').mockImplementation((executor, ownerId) =>
+			ownerId === failing.owner.id
+				? Promise.reject(new Error('Synthetic exchange recompute failure'))
+				: recomputeExchanges(executor, ownerId),
+		);
+		const recomputeOwnTransfers = ownTransferRecompute.recomputeOwnTransfers;
 		jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers').mockImplementation((executor, ownerId, scope) =>
 			ownerId === failing.owner.id
 				? Promise.reject(new Error('Synthetic own-transfer recompute failure'))
-				: recompute(executor, ownerId, scope),
+				: recomputeOwnTransfers(executor, ownerId, scope),
 		);
 
-		await service.recomputeAllOwnTransfers();
+		await service.recomputeAllExchangesAndOwnTransfers();
 
-		expect(await labels(failingDebit, failingCredit, otherDebit, otherCredit)).toEqual([
+		// The debit stopped being an exchange leg before own transfers were recomputed, so it reads as a one-sided own
+		// transfer by the holder's name.
+		expect(
+			await labels(failingDebit, failingCredit, exchangeDebit, exchangeCredit, otherDebit, otherCredit),
+		).toEqual([
 			unlabelled,
+			unlabelled,
+			{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
 			unlabelled,
 			ownTransferLeg(otherCredit),
 			ownTransferLeg(otherDebit),
 		]);
+		expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
 	});
 });

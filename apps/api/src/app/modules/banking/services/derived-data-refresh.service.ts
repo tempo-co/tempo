@@ -33,8 +33,6 @@ export type DerivedDataChange =
 type RefreshPlan = {
 	/** Reconcile the reporting currency, telling it whether the history is settled; null skips the reconcile. */
 	reconcile: {historySettled: boolean} | null;
-	/** Whether to recompute currency exchanges before own transfers. */
-	exchanges: boolean;
 	/**
 	 * The rows own transfers can have changed around besides the reclassified exchanges; null is the whole history, and
 	 * `if-reclassified` the whole history only when the exchange recompute reclassified a row or failed.
@@ -53,18 +51,16 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// The run finished, so the owner can be asked to choose among several currencies now.
 				reconcile: {historySettled: true},
-				exchanges: true,
 				ownTransferIds: [...change.writtenIds, ...change.formerCounterpartIds],
 				writtenIds: change.writtenIds,
 				logoIds: change.writtenIds,
 			};
 		case 'failed-sync-write':
-			return {reconcile: null, exchanges: true, ownTransferIds: null, writtenIds: [], logoIds: []};
+			return {reconcile: null, ownTransferIds: null, writtenIds: [], logoIds: []};
 		case 'file-write':
 			return {
 				// An import can add accounts in another currency, and its history is complete once it commits.
 				reconcile: {historySettled: true},
-				exchanges: true,
 				ownTransferIds: null,
 				writtenIds: change.writtenIds,
 				logoIds: null,
@@ -75,7 +71,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 				// Accounts that all hold one currency set it right away; a choice among several waits for a sync.
 				reconcile: {historySettled: false},
 				// Moved accounts change which legs share a connection, so exchanges can pair or part.
-				exchanges: true,
 				ownTransferIds: null,
 				writtenIds: [],
 				logoIds: [],
@@ -87,7 +82,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			if (!change.amountsConverted && !change.reportingCurrencyChanged) return null;
 			return {
 				reconcile: null,
-				exchanges: true,
 				ownTransferIds: 'if-reclassified',
 				writtenIds: [],
 				logoIds: [],
@@ -129,43 +123,55 @@ export class DerivedDataRefreshService {
 		const plan = planRefresh(change);
 		if (!plan) return;
 		if (plan.reconcile) await this.reportingCurrencyService.reconcileSafely(ownerId, plan.reconcile);
-		// Exchanges go first: own-transfer detection skips exchange legs. Both run before the enqueues, so new exchanges
-		// and own transfers are marked before the worker can claim them.
-		const reclassifiedIds = plan.exchanges ? await this.recomputeExchanges(ownerId) : null;
-		// Own transfers can only change around the given rows and the rows whose exchange classification changed, so a
-		// write that changed none of them does no own-transfer work.
-		const scope = ownTransferScope(plan.ownTransferIds, reclassifiedIds);
-		if (scope !== 'skip') await this.recomputeOwnTransfers(ownerId, scope);
+		await this.recomputeLabels(ownerId, plan.ownTransferIds, plan.writtenIds);
 		if (plan.writtenIds.length === 0) return;
-		await this.enqueueCategorization(plan.writtenIds, 'Transaction');
 		await this.merchantLogoService.enqueueForOwnerSafely(ownerId, plan.logoIds ?? undefined);
 	}
 
 	/**
-	 * Daily safety net: recomputes every owner's own transfers over the whole history, so a change no scoped recompute
-	 * saw (a crash between a sync's commit and its refresh, a write whose commit was not acknowledged) is corrected
-	 * within a day.
+	 * Daily safety net: recomputes every owner's exchanges and then own transfers over the whole history, so a change
+	 * no refresh saw or a recompute that failed (a crash between a sync's commit and its refresh, a write whose commit
+	 * was not acknowledged) is corrected within a day.
 	 */
-	async recomputeAllOwnTransfers(): Promise<void> {
+	async recomputeAllExchangesAndOwnTransfers(): Promise<void> {
 		const owners: Array<{accountId: string}> = await this.dataSource.query(
 			'SELECT DISTINCT "accountId" FROM "bank_connections" ORDER BY "accountId"',
 		);
-		for (const {accountId} of owners) await this.recomputeOwnTransfers(accountId);
+		for (const {accountId} of owners) await this.recomputeLabels(accountId, null, []);
 	}
 
 	/**
-	 * Returns the rows that became or stopped being exchanges, or null when the recompute failed: it may still have
-	 * committed, so which rows changed is unknown.
+	 * Recomputes exchanges, then own transfers, then queues the written rows and the former exchange legs for
+	 * categorization. Exchanges go first: own-transfer detection skips exchange legs. Both run before the enqueue, so
+	 * new exchanges and own transfers are labelled before the worker can claim a row.
 	 */
-	private async recomputeExchanges(ownerId: Account['id']): Promise<string[] | null> {
+	private async recomputeLabels(
+		ownerId: Account['id'],
+		ownTransferIds: RefreshPlan['ownTransferIds'],
+		writtenIds: readonly string[],
+	): Promise<void> {
+		const exchanges = await this.recomputeExchanges(ownerId);
+		// Own transfers can only change around the given rows and the rows whose exchange classification changed, so a
+		// write that changed none of them does no own-transfer work.
+		const scope = ownTransferScope(ownTransferIds, exchanges?.reclassifiedIds ?? null);
+		if (scope !== 'skip') await this.recomputeOwnTransfers(ownerId, scope);
+		// Rows that stopped being exchanges go back to the model.
+		await this.enqueueCategorization([...writtenIds, ...(exchanges?.requeuedIds ?? [])], 'Transaction');
+	}
+
+	/**
+	 * Returns the rows that became or stopped being exchanges (`reclassifiedIds`) and those that need a category again
+	 * (`requeuedIds`), or null when the recompute failed: it may still have committed, so which rows changed is unknown.
+	 */
+	private async recomputeExchanges(
+		ownerId: Account['id'],
+	): Promise<{reclassifiedIds: string[]; requeuedIds: string[]} | null> {
 		try {
 			const result = await this.dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, ownerId));
 			if (result.transactionsChanged > 0) {
 				this.logger.log(`Currency exchanges recomputed: ${result.transactionsChanged} transactions changed`);
 			}
-			// Rows that stopped being exchanges go back to the model once the transaction has committed.
-			await this.enqueueCategorization(result.requeuedIds, 'Former currency exchange');
-			return result.reclassifiedIds;
+			return {reclassifiedIds: result.reclassifiedIds, requeuedIds: result.requeuedIds};
 		} catch (error) {
 			this.logger.warn(`Currency exchange recompute failed: ${safeErrorName(error)}`);
 			return null;

@@ -10,6 +10,7 @@ import {
 } from '@modules/banking/bank-transaction-financial-event';
 import {BANK_TRANSACTION_TYPES} from '@modules/banking/bank-transaction-type';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {recomputeCurrencyExchanges} from '@modules/banking/currency-exchange/currency-exchange-recompute';
 import {recomputeOwnTransfersAndCategories} from '@modules/banking/own-transfer/own-transfer-category';
 
@@ -176,8 +177,14 @@ export async function seedOwnTransferData(
 	);
 
 	const dataSource = app.get(DataSource);
-	await dataSource.transaction((manager) => recomputeOwnTransfersAndCategories(manager, account.id));
-	await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
+	const ownTransfers = await dataSource.transaction((manager) =>
+		recomputeOwnTransfersAndCategories(manager, account.id),
+	);
+	const exchanges = await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
+	// Rows that stopped being own transfers or exchanges go back to the model, when categorization is enabled.
+	await app
+		.get(CategorizationScheduler)
+		.enqueueForTransactions([...ownTransfers.requeuedIds, ...exchanges.requeuedIds]);
 	return {abnConnection, abnAccount, revolutConnection, revolutAccount, revolutUsdAccount};
 }
 

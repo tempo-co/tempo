@@ -735,7 +735,7 @@ describe('BankTransactionController', () => {
 			category: 'HOUSING_AND_UTILITIES',
 			categorySource: 'MANUAL',
 		});
-		await app.get(DerivedDataRefreshService).recomputeAllOwnTransfers();
+		await app.get(DerivedDataRefreshService).recomputeAllExchangesAndOwnTransfers();
 		const categoryOf = async (id: string) =>
 			bankTransactionRepository.findOneOrFail({
 				where: {id},

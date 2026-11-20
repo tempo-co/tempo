@@ -45,7 +45,9 @@ import {
 } from '../../../scripts/seed-data/seed.constants';
 import {camt053} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp, loginAgent} from '../../setup/e2e.setup';
+import {createVerifiedAccount} from '../../utils/auth-utils';
 import {fetchedTransactions} from '../../utils/banking-utils';
+import {MAILPIT_API_URL} from '../../utils/email-utils';
 import {waitFor} from '../../utils/wait-utils';
 
 // Kept accounts take statement files.
@@ -895,11 +897,8 @@ describe('BankConnectionController', () => {
 	])(
 		'keeps a removed bank’s accounts and history as imported files, and connecting the bank again with %s syncs into them',
 		async (_, reconnectedAccount) => {
-			await bankConnectionRepository
-				.createQueryBuilder()
-				.delete()
-				.where('accountId = :accountId', {accountId: account.id})
-				.execute();
+			// The flow's own user: its dollar statement changes the owner's reporting currency.
+			const owner = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
 			const iban = 'NL91ABNA0417164300';
 			const [booked, other, , , later] = makeTransactions('kept').map((row) => ({
 				...row,
@@ -933,7 +932,7 @@ describe('BankConnectionController', () => {
 			getAccountTransactions.mockReset();
 			getAccountTransactions.mockResolvedValue(fetchedTransactions([booked, other, pending, exchangeDebit]));
 
-			const firstState = await authorize();
+			const firstState = await authorize(owner.agent);
 			createSession.mockResolvedValueOnce({
 				sessionId: 'provider-session-kept-first',
 				consentValidUntil: '2030-01-01T00:00:00.000Z',
@@ -949,7 +948,7 @@ describe('BankConnectionController', () => {
 			});
 			await callback({state: firstState, code: 'kept-first-code'}, 'connected');
 			const [connection] = await bankConnectionRepository.findBy({
-				account: {id: account.id},
+				account: {id: owner.id},
 				status: 'AUTHORIZED',
 			});
 			await waitFor(
@@ -958,13 +957,14 @@ describe('BankConnectionController', () => {
 			);
 			const synced = await bankAccountRepository.findOneByOrFail({bankConnection: {id: connection.id}});
 			const bookedRow = await bankTransactionRepository.findOneByOrFail({
+				bankAccountId: synced.id,
 				providerTransactionId: booked.providerTransactionId,
 			});
 			await bankTransactionRepository.update(bookedRow.id, {category: 'GROCERIES', categorySource: 'MANUAL'});
 			expect(synced.currentBalanceAmount).not.toBeNull();
 			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id})).toBe(4);
 			const dropStatement = (amount: string, bookingDate: string) =>
-				verifiedAgent
+				owner.agent
 					.post('/bank-imports')
 					.set('Origin', 'http://localhost:5173')
 					.attach(
@@ -979,7 +979,7 @@ describe('BankConnectionController', () => {
 					.expect(201);
 			// A statement imported while the bank synced is kept with the account.
 			const earlier = (await dropStatement('3.00', '2026-08-20')).body as {id: string};
-			const dollars = await verifiedAgent
+			const dollars = await owner.agent
 				.post('/bank-imports')
 				.set('Origin', 'http://localhost:5173')
 				.attach(
@@ -1007,6 +1007,7 @@ describe('BankConnectionController', () => {
 			const exchangeRows = async () =>
 				Promise.all([
 					bankTransactionRepository.findOneByOrFail({
+						bankAccountId: synced.id,
 						providerTransactionId: exchangeDebit.providerTransactionId,
 					}),
 					bankTransactionRepository.findOneByOrFail({bankAccountId: dollarAccount.id}),
@@ -1021,7 +1022,7 @@ describe('BankConnectionController', () => {
 			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
 			deleteSession.mockClear();
 
-			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
+			await owner.agent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
 
 			expect(deleteSession).toHaveBeenCalledWith('provider-session-kept-first', expect.any(AbortSignal));
 			expect(await bankConnectionRepository.findOneBy({id: connection.id})).toBeNull();
@@ -1061,7 +1062,7 @@ describe('BankConnectionController', () => {
 				categorySource: 'MANUAL',
 			});
 			expect(await bankAccountBalanceRepository.countBy({bankAccountId: synced.id})).toBe(0);
-			const listed = (await verifiedAgent.get('/bank-connections').expect(200)).body as Array<{
+			const listed = (await owner.agent.get('/bank-connections').expect(200)).body as Array<{
 				provider: string;
 				bankAccounts: Array<{id: string; currentBalanceAmount: string | null; balanceSource: string | null}>;
 			}>;
@@ -1079,15 +1080,12 @@ describe('BankConnectionController', () => {
 				}),
 			]);
 
-			const listedImports = (await verifiedAgent.get('/bank-imports').expect(200)).body as {
+			const listedImports = (await owner.agent.get('/bank-imports').expect(200)).body as {
 				imports: Array<{id: string}>;
 			};
 			expect(listedImports.imports.map(({id}) => id)).toContain(earlier.id);
 			// It can still be undone.
-			await verifiedAgent
-				.delete(`/bank-imports/${earlier.id}`)
-				.set('Origin', 'http://localhost:5173')
-				.expect(204);
+			await owner.agent.delete(`/bank-imports/${earlier.id}`).set('Origin', 'http://localhost:5173').expect(204);
 			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id, importId: earlier.id})).toBe(0);
 
 			// A statement of the account goes to it.
@@ -1107,19 +1105,23 @@ describe('BankConnectionController', () => {
 				await syncReleased;
 				return fetchedTransactions([booked, other, later, exchangeDebit]);
 			});
-			const secondState = await authorize();
-			createSession.mockResolvedValueOnce({
-				sessionId: 'provider-session-kept-again',
-				consentValidUntil: '2031-01-01T00:00:00.000Z',
-				aspsp: {name: 'ABN AMRO', country: 'NL'},
-				accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
-			});
-			await callback({state: secondState, code: 'kept-again-code'}, 'connected');
-			// The EUR account is the bank's again and the USD one stays an imported file, so the exchange no longer pairs.
-			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
-			releaseSync();
+			try {
+				const secondState = await authorize(owner.agent);
+				createSession.mockResolvedValueOnce({
+					sessionId: 'provider-session-kept-again',
+					consentValidUntil: '2031-01-01T00:00:00.000Z',
+					aspsp: {name: 'ABN AMRO', country: 'NL'},
+					accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
+				});
+				await callback({state: secondState, code: 'kept-again-code'}, 'connected');
+				// The EUR account is the bank's again and the USD one stays an imported file, so the exchange no longer
+				// pairs.
+				expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			} finally {
+				releaseSync();
+			}
 			const [reconnected] = await bankConnectionRepository.findBy({
-				account: {id: account.id},
+				account: {id: owner.id},
 				provider: 'enable-banking',
 				status: 'AUTHORIZED',
 			});
@@ -1127,7 +1129,7 @@ describe('BankConnectionController', () => {
 				() => bankSyncRunRepository.findOneBy({bankConnection: {id: reconnected.id}, status: 'SUCCEEDED'}),
 				(run) => run !== null,
 			);
-			expect(await bankAccountRepository.countBy({bankConnection: {accountId: account.id}})).toBe(2);
+			expect(await bankAccountRepository.countBy({bankConnection: {accountId: owner.id}})).toBe(2);
 			expect(
 				await bankAccountRepository.findOneOrFail({where: {id: synced.id}, relations: {bankConnection: true}}),
 			).toMatchObject({
@@ -1150,7 +1152,7 @@ describe('BankConnectionController', () => {
 			await bankConnectionRepository
 				.createQueryBuilder()
 				.delete()
-				.where('accountId = :accountId', {accountId: account.id})
+				.where('accountId = :accountId', {accountId: owner.id})
 				.execute();
 		},
 	);
@@ -3824,11 +3826,8 @@ describe('BankConnectionController', () => {
 	};
 
 	/** Starts an ABN AMRO authorization and returns the state the provider would echo back to the callback. */
-	async function authorize(): Promise<string> {
-		await verifiedAgent
-			.post('/bank-connections/authorize')
-			.send({aspspName: 'ABN AMRO', aspspCountry: 'NL'})
-			.expect(201);
+	async function authorize(agent: TestAgent = verifiedAgent): Promise<string> {
+		await agent.post('/bank-connections/authorize').send({aspspName: 'ABN AMRO', aspspCountry: 'NL'}).expect(201);
 		const state = startAuthorization.mock.calls.at(-1)?.[0].state;
 		if (!state) throw new Error('Authorization state was not created.');
 		return state;
