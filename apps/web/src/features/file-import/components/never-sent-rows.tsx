@@ -46,12 +46,14 @@ export function NeverSentRows({
   summary,
   kind,
   added,
+  readAdded,
   onAdded,
 }: {
   summary: BankImportSummary;
   kind: BankImportNeverSentKind;
-  /** The rows added from this summary, in either kind's list. */
+  /** The rows added from this summary, in either kind's list, as last rendered and as of now. */
   added: ReadonlySet<string>;
+  readAdded: () => ReadonlySet<string>;
   onAdded: (ids: readonly string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -81,7 +83,13 @@ export function NeverSentRows({
       </Button>
       {open && (
         <div id={listId}>
-          <NeverSentList summary={summary} kind={kind} added={added} onAdded={onAdded} />
+          <NeverSentList
+            summary={summary}
+            kind={kind}
+            added={added}
+            readAdded={readAdded}
+            onAdded={onAdded}
+          />
         </div>
       )}
     </section>
@@ -92,11 +100,13 @@ function NeverSentList({
   summary,
   kind,
   added,
+  readAdded,
   onAdded,
 }: {
   summary: BankImportSummary;
   kind: BankImportNeverSentKind;
   added: ReadonlySet<string>;
+  readAdded: () => ReadonlySet<string>;
   onAdded: (ids: readonly string[]) => void;
 }) {
   const copy = NEVER_SENT_COPY[kind];
@@ -151,7 +161,7 @@ function NeverSentList({
         });
       // Another tab may have added a row or undone the import: show what is still open.
       if (failure instanceof HttpError && [404, 409].includes(failure.status))
-        void refreshRows(new Set([...added, ...landed])).catch(() => undefined);
+        void refreshRows(readAdded);
     } finally {
       setAdding(null);
     }

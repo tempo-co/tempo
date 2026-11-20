@@ -30,20 +30,22 @@ export function useBankImportNeverSentRows(importId: string, enabled: boolean) {
 
 /**
  * Reads the list again after an add was refused because another tab added a row or undid the import. The rows the
- * API no longer lists leave, except those in `added` (added from this summary), which stay shown as added.
+ * API no longer lists leave, except those `readAdded` names (added from this summary, read once the answer is in),
+ * which stay shown as added. A failed read leaves the list as it was: the refused add already said it failed.
  */
 export function useRefreshNeverSentRows(importId: string) {
   const queryClient = useQueryClient();
-  return (added: ReadonlySet<string>) =>
-    queryClient.fetchQuery({
-      queryKey: bankImportQueryKeys.neverSentRows(importId),
-      staleTime: 0,
-      queryFn: async () => {
-        const fresh = await readNeverSentRows(importId);
-        const previous =
-          queryClient.getQueryData<BankImportNeverSentRow[]>(
-            bankImportQueryKeys.neverSentRows(importId),
-          ) ?? [];
+  return async (readAdded: () => ReadonlySet<string>) => {
+    let fresh: BankImportNeverSentRow[];
+    try {
+      fresh = await readNeverSentRows(importId);
+    } catch {
+      return;
+    }
+    const added = readAdded();
+    queryClient.setQueryData<BankImportNeverSentRow[]>(
+      bankImportQueryKeys.neverSentRows(importId),
+      (previous = []) => {
         const listed = new Set(fresh.map(({id}) => id));
         const known = new Set(previous.map(({id}) => id));
         return [
@@ -51,7 +53,8 @@ export function useRefreshNeverSentRows(importId: string) {
           ...fresh.filter(({id}) => !known.has(id)),
         ];
       },
-    });
+    );
+  };
 }
 
 /**

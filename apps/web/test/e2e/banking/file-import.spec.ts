@@ -440,45 +440,54 @@ test.describe('statement file import on Connections', () => {
     expect(probes).toBe(1);
   });
 
-  test("shows file import while its route answers with the API's own error, and nothing while a proxy answers for it", async ({
-    page,
-  }) => {
-    await page.clock.install({time: TODAY});
-    let answer: 'api' | 'proxy' = 'api';
-    let probes = 0;
+  /**
+   * Answers the import list with `answer` every time, and returns a wait for its three retries, each after a longer
+   * wait on the page's installed clock, to be answered.
+   */
+  async function answerImportsWith(page: Page, answer: (route: Route) => Promise<void>) {
     let answered = 0;
-    // The list is asked three more times, each after a longer wait, before the page treats it as failed.
-    const waitOutRetries = async () => {
+    await page.route(`${API_URL}/bank-imports`, async (route) => {
+      await answer(route);
+      answered += 1;
+    });
+    return async () => {
       for (let retry = 1; retry <= 3; retry += 1) {
         await expect.poll(() => answered).toBe(retry);
         await page.clock.runFor(5_000);
       }
       await expect.poll(() => answered).toBe(4);
       await page.clock.runFor(1_000);
+      return answered;
     };
-    await page.route(`${API_URL}/bank-imports`, async (route) => {
-      probes += 1;
-      await (answer === 'api'
-        ? fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500)
-        : route.fulfill({status: 502, contentType: 'text/html', body: '<h1>502 Bad Gateway</h1>'}));
-      answered += 1;
-    });
+  }
+
+  test("shows file import while its route answers with the API's own error", async ({page}) => {
+    await page.clock.install({time: TODAY});
+    const waitOutRetries = await answerImportsWith(page, (route) =>
+      fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+    );
 
     await page.goto('/bank-connections');
     await waitOutRetries();
+
     await expect(page.getByRole('button', {name: 'Import a file'})).toBeVisible();
     await expect(page.getByText("Couldn't load your imports")).toBeVisible();
+  });
 
-    answer = 'proxy';
-    probes = 0;
-    answered = 0;
-    await page.reload();
-    await waitOutRetries();
+  test('shows nothing of file import while a proxy answers its route', async ({page}) => {
+    await page.clock.install({time: TODAY});
+    const waitOutRetries = await answerImportsWith(page, (route) =>
+      route.fulfill({status: 502, contentType: 'text/html', body: '<h1>502 Bad Gateway</h1>'}),
+    );
+
+    await page.goto('/bank-connections');
+    const answered = await waitOutRetries();
     // Nothing on screen marks a failure that leaves import unknown, so, as in the import-off test, the page gets a
     // moment after the last answer to show anything: a status-only check shows the button within that moment.
     await page.clock.resume();
     await page.waitForTimeout(300);
-    expect(probes).toBe(4);
+
+    expect(answered).toBe(4);
     await expect(page.getByRole('region', {name: 'Mock ASPSP'})).toBeVisible();
     expect(await page.getByRole('button', {name: 'Import a file'}).count()).toBe(0);
     expect(await page.getByRole('heading', {name: 'Imports'}).count()).toBe(0);
@@ -779,19 +788,33 @@ test.describe('statement file import on Connections', () => {
       id: '00000000-0000-4000-8000-100000000000',
       row: {...pocket[0].row, amount: '-30.00', counterpartyName: null, description: 'Example Fee'},
     };
-    const rows = [...pocket, fee];
+    const removed: BankImportNeverSentRow = {
+      ...pocket[0],
+      id: '00000000-0000-4000-8000-200000000000',
+      kind: 'removed_by_sync',
+      row: {...pocket[0].row, amount: '-12.00', counterpartyName: 'Example Gym', description: null},
+    };
+    const rows = [...pocket, fee, removed];
     const api = await mockFileImport(page, {
       uploads: [
-        created(importSummary({rowsAdded: 0, rowsDoubtful: 0, rowsNotInBank: rows.length})),
+        created(
+          importSummary({
+            rowsAdded: 0,
+            rowsDoubtful: 0,
+            rowsNotInBank: pocket.length + 1,
+            rowsRemovedBySync: 1,
+          }),
+        ),
       ],
       neverSentRows: rows,
-      failAdds: {1: 409},
+      // The group's second request reaches the mock after the add in the other list.
+      failAdds: {2: 409},
     });
-    // The second request waits, then is refused.
-    let addRequests = 0;
+    // The group's second request waits, then is refused.
+    const last = pocket[BANK_IMPORT_MAX_ROWS_PER_ADD].id;
     await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
-      addRequests += 1;
-      if (addRequests === 2) await held;
+      const request = route.request().postDataJSON() as AddBankImportNeverSentRowsRequest;
+      if (request.rowIds.includes(last)) await held;
       await route.fallback();
     });
     await page.goto('/bank-connections');
@@ -801,33 +824,93 @@ test.describe('statement file import on Connections', () => {
     await summaryBody
       .getByRole('button', {name: 'Not added: 502 rows your bank never sent'})
       .click();
-    const groups = summaryBody.getByTestId('bank-import-never-sent-group');
+    const groups = summaryBody
+      .getByTestId('bank-import-never-sent')
+      .getByTestId('bank-import-never-sent-group');
     const group = groups.first();
 
     await group.getByRole('button', {name: 'Add 501 from Example Pocket'}).click();
-    // The rows of the first request show as added while the group waits for the rest.
+    // The rows of the first request show as added while the group waits for the rest, and the other list adds a
+    // row back meanwhile.
+    const removedList = summaryBody.getByTestId('bank-import-removed-by-sync');
     try {
       await expect(group.getByRole('listitem').first().getByRole('status')).toHaveText('Added');
       await expect(group.getByRole('button', {name: 'Adding…'})).toBeDisabled();
+      await removedList.getByRole('button', {name: 'Removed: 1 row your bank never sent'}).click();
+      await removedList.getByRole('button', {name: /^Add back .* on 2 Jun$/}).click();
+      await expect(removedList.getByRole('status')).toHaveText('Added back');
     } finally {
-      // Another tab adds the row of the second request and the fee first.
-      api.added.add(pocket[BANK_IMPORT_MAX_ROWS_PER_ADD].id);
+      // Another tab adds the row of the group's second request and the fee first.
+      api.added.add(last);
       api.added.add(fee.id);
       release();
     }
     const toasts = page.locator('[data-sonner-toast]');
     await expect(toasts).toContainText("Couldn't add the transaction");
     expect(await countAfterToasts(page, toasts)).toBe(1);
-    // The list is read again: the rows added elsewhere leave, the rows added here stay as added.
+    // The list is read again: the rows added elsewhere leave, the rows added here, in either list, stay as added.
     await expect.poll(() => api.neverSentReads).toBe(2);
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
     await expect(groups).toHaveCount(1);
     await expect(group).toContainText('500 rows');
     await expect(group.getByRole('button', {name: /^Add /})).toHaveCount(0);
     await expect(group.getByRole('listitem').first().getByRole('status')).toHaveText('Added');
     expect(api.adds.map(({rowIds}) => rowIds)).toEqual([
       pocket.slice(0, BANK_IMPORT_MAX_ROWS_PER_ADD).map(({id}) => id),
-      [pocket[BANK_IMPORT_MAX_ROWS_PER_ADD].id],
+      [removed.id],
+      [last],
     ]);
+  });
+
+  test('a refused add whose list cannot be read again leaves the list as it was', async ({
+    page,
+  }) => {
+    const row = (id: number, description: string): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000090${id}`,
+      kind: 'not_in_bank',
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate: '2026-06-03',
+        valueDate: '2026-06-03',
+        amount: '-30.00',
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName: null,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const api = await mockFileImport(page, {
+      uploads: [created(importSummary({rowsAdded: 0, rowsDoubtful: 0, rowsNotInBank: 2}))],
+      neverSentRows: [row(1, 'Example Fee'), row(2, 'Example Charge')],
+      failAdds: {0: 409},
+    });
+    // Reading the list again hits the rate limit.
+    let reads = 0;
+    await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
+      reads += 1;
+      return reads === 2
+        ? fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429)
+        : route.fallback();
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    const list = dialog.getByTestId('bank-import-never-sent');
+    await list.getByRole('button', {name: 'Not added: 2 rows your bank never sent'}).click();
+
+    await list.getByRole('button', {name: 'Add Example Fee on 3 Jun'}).click();
+
+    const toasts = page.locator('[data-sonner-toast]');
+    await expect(toasts.filter({hasText: "Couldn't add the transaction"})).toHaveCount(1);
+    await expect(toasts.filter({hasText: 'Rate limit exceeded'})).toHaveCount(1);
+    await expect.poll(() => reads).toBe(2);
+    expect(await countAfterToasts(page, toasts)).toBe(2);
+    await expect(list.getByRole('alert')).toHaveCount(0);
+    await expect(list.getByRole('button', {name: 'Add Example Fee on 3 Jun'})).toBeEnabled();
+    await expect(list.getByRole('button', {name: 'Add Example Charge on 3 Jun'})).toBeEnabled();
+    expect(api.adds).toHaveLength(1);
   });
 
   test('shows the rows a later sync removed in the import summary only, and adds them back by row or by group', async ({

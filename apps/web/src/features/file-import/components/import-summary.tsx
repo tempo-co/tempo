@@ -1,6 +1,6 @@
 import type {BankImportSummary} from '@tempo/contracts';
 import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
-import {type ElementType, type ReactNode, useState} from 'react';
+import {type ElementType, type ReactNode, useRef, useState} from 'react';
 
 import {StateMessage} from '@/components/shared/state-message';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -40,12 +40,16 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
   const range = formatDateRange(summary.dateFrom, summary.dateTo);
   const undoneAt = summary.undoneAt;
   // The never-sent rows added from this summary, in either list: both read one list of rows, and an added row stays
-  // shown as added when a list folds or the list is read again.
+  // shown as added when a list folds or the list is read again. The ref holds them as they land, before React renders.
   const [neverSentAdded, setNeverSentAdded] = useState<ReadonlySet<string>>(new Set());
+  const neverSentAddedNow = useRef<ReadonlySet<string>>(neverSentAdded);
   const neverSent = {
     added: neverSentAdded,
-    onAdded: (ids: readonly string[]) =>
-      setNeverSentAdded((current) => new Set([...current, ...ids])),
+    readAdded: () => neverSentAddedNow.current,
+    onAdded: (ids: readonly string[]) => {
+      neverSentAddedNow.current = new Set([...neverSentAddedNow.current, ...ids]);
+      setNeverSentAdded(neverSentAddedNow.current);
+    },
   };
 
   return (
