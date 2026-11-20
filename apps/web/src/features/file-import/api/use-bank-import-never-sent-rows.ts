@@ -29,31 +29,37 @@ export function useBankImportNeverSentRows(importId: string, enabled: boolean) {
 }
 
 /**
- * Reads the list again after an add was refused because another tab added a row or undid the import. The rows the
- * API no longer lists leave, except those `readAdded` names (added from this summary, read once the answer is in),
- * which stay shown as added. A failed read leaves the list as it was: the refused add already said it failed.
+ * Reads the list again after an add failed, and answers with the rows it listed before that it no longer lists:
+ * they were added, here (whose answer may not have arrived) or in another tab. Every row stays on screen; rows
+ * that newly appeared join the list. A read that fails answers with none and leaves the list as it was. It reads
+ * through the query cache, so an expired session signs out as on any other read.
  */
 export function useRefreshNeverSentRows(importId: string) {
   const queryClient = useQueryClient();
-  return async (readAdded: () => ReadonlySet<string>) => {
+  return async (): Promise<string[]> => {
     let fresh: BankImportNeverSentRow[];
     try {
-      fresh = await readNeverSentRows(importId);
+      fresh = await queryClient.fetchQuery({
+        queryKey: [...bankImportQueryKeys.neverSentRows(importId), 'reread'],
+        queryFn: () => readNeverSentRows(importId),
+        staleTime: 0,
+        gcTime: 0,
+        retry: false,
+      });
     } catch {
-      return;
+      return [];
     }
-    const added = readAdded();
+    const listed = new Set(fresh.map(({id}) => id));
+    let gone: string[] = [];
     queryClient.setQueryData<BankImportNeverSentRow[]>(
       bankImportQueryKeys.neverSentRows(importId),
       (previous = []) => {
-        const listed = new Set(fresh.map(({id}) => id));
         const known = new Set(previous.map(({id}) => id));
-        return [
-          ...previous.filter(({id}) => listed.has(id) || added.has(id)),
-          ...fresh.filter(({id}) => !known.has(id)),
-        ];
+        gone = previous.filter(({id}) => !listed.has(id)).map(({id}) => id);
+        return [...previous, ...fresh.filter(({id}) => !known.has(id))];
       },
     );
+    return gone;
   };
 }
 

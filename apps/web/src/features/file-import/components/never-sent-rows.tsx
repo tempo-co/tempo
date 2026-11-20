@@ -13,7 +13,7 @@ import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
 import {TileRowsSkeleton} from '@/features/dashboard/components/loading';
-import {HttpError, wasToasted} from '@/utils/api';
+import {wasToasted} from '@/utils/api';
 
 import {
   useAddNeverSentRows,
@@ -46,14 +46,12 @@ export function NeverSentRows({
   summary,
   kind,
   added,
-  readAdded,
   onAdded,
 }: {
   summary: BankImportSummary;
   kind: BankImportNeverSentKind;
-  /** The rows added from this summary, in either kind's list, as last rendered and as of now. */
+  /** The rows added, in either kind's list. */
   added: ReadonlySet<string>;
-  readAdded: () => ReadonlySet<string>;
   onAdded: (ids: readonly string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -83,13 +81,7 @@ export function NeverSentRows({
       </Button>
       {open && (
         <div id={listId}>
-          <NeverSentList
-            summary={summary}
-            kind={kind}
-            added={added}
-            readAdded={readAdded}
-            onAdded={onAdded}
-          />
+          <NeverSentList summary={summary} kind={kind} added={added} onAdded={onAdded} />
         </div>
       )}
     </section>
@@ -100,13 +92,11 @@ function NeverSentList({
   summary,
   kind,
   added,
-  readAdded,
   onAdded,
 }: {
   summary: BankImportSummary;
   kind: BankImportNeverSentKind;
   added: ReadonlySet<string>;
-  readAdded: () => ReadonlySet<string>;
   onAdded: (ids: readonly string[]) => void;
 }) {
   const copy = NEVER_SENT_COPY[kind];
@@ -159,9 +149,9 @@ function NeverSentList({
           description: 'Try again in a moment.',
           id: `bank-import-add-failed-${summary.id}`,
         });
-      // Another tab may have added a row or undone the import: show what is still open.
-      if (failure instanceof HttpError && [404, 409].includes(failure.status))
-        void refreshRows(readAdded);
+      // Whatever the failure, rows of this add may have landed without their answer, or another tab may have added
+      // rows: the list is read again, and rows it no longer lists show as added.
+      void refreshRows().then(onAdded);
     } finally {
       setAdding(null);
     }

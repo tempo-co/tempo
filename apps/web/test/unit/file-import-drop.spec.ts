@@ -5,7 +5,7 @@ import {createHookHarness} from '../utils/hook-harness';
 
 type Controller = {importDropped: (files: File[]) => void};
 
-test('a drop while an import is starting waits for it instead of starting another', () => {
+test('two drops before the page renders start one upload, the first', () => {
   const uploads: string[][] = [];
   class HttpError extends Error {}
   const {renderHook} = createHookHarness({

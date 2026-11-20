@@ -759,7 +759,7 @@ test.describe('statement file import on Connections', () => {
     expect(api.neverSentReads).toBe(1);
   });
 
-  test('a group too large for one request refused partway keeps the rows that were added, and drops the rows added elsewhere', async ({
+  test('a group too large for one request refused partway shows every row the API has added as added, here or in another tab', async ({
     page,
   }) => {
     let release!: () => void;
@@ -848,13 +848,16 @@ test.describe('statement file import on Connections', () => {
     const toasts = page.locator('[data-sonner-toast]');
     await expect(toasts).toContainText("Couldn't add the transaction");
     expect(await countAfterToasts(page, toasts)).toBe(1);
-    // The list is read again: the rows added elsewhere leave, the rows added here, in either list, stay as added.
+    // The list is read again: rows it no longer lists show as added, whoever added them, in either list.
     await expect.poll(() => api.neverSentReads).toBe(2);
     await expect(removedList.getByRole('status')).toHaveText('Added back');
-    await expect(groups).toHaveCount(1);
-    await expect(group).toContainText('500 rows');
-    await expect(group.getByRole('button', {name: /^Add /})).toHaveCount(0);
-    await expect(group.getByRole('listitem').first().getByRole('status')).toHaveText('Added');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(1).getByRole('status')).toHaveText('Added');
+    await expect(
+      summaryBody.getByTestId('bank-import-never-sent').getByRole('button', {name: /^Add /}),
+    ).toHaveCount(0);
+    await group.getByRole('button', {name: 'Show all 501'}).click();
+    await expect(group.getByRole('listitem').last().getByRole('status')).toHaveText('Added');
     expect(api.adds.map(({rowIds}) => rowIds)).toEqual([
       pocket.slice(0, BANK_IMPORT_MAX_ROWS_PER_ADD).map(({id}) => id),
       [removed.id],
@@ -862,9 +865,11 @@ test.describe('statement file import on Connections', () => {
     ]);
   });
 
-  test('a refused add whose list cannot be read again leaves the list as it was', async ({
-    page,
-  }) => {
+  /**
+   * An import whose two never-sent rows are listed, where adding the first is refused and reading the list again
+   * answers `reread`. Answers with the list and the number of reads.
+   */
+  async function refuseAddThenReread(page: Page, reread: (route: Route) => Promise<void>) {
     const row = (id: number, description: string): BankImportNeverSentRow => ({
       id: `00000000-0000-4000-8000-00000000090${id}`,
       kind: 'not_in_bank',
@@ -886,31 +891,46 @@ test.describe('statement file import on Connections', () => {
       neverSentRows: [row(1, 'Example Fee'), row(2, 'Example Charge')],
       failAdds: {0: 409},
     });
-    // Reading the list again hits the rate limit.
     let reads = 0;
     await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
       reads += 1;
-      return reads === 2
-        ? fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429)
-        : route.fallback();
+      return reads === 2 ? reread(route) : route.fallback();
     });
     await page.goto('/bank-connections');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
     const list = dialog.getByTestId('bank-import-never-sent');
     await list.getByRole('button', {name: 'Not added: 2 rows your bank never sent'}).click();
-
     await list.getByRole('button', {name: 'Add Example Fee on 3 Jun'}).click();
+    return {api, list, reads: () => reads};
+  }
+
+  test('a refused add whose list cannot be read again leaves the list as it was', async ({
+    page,
+  }) => {
+    const {api, list, reads} = await refuseAddThenReread(page, (route) =>
+      fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429),
+    );
 
     const toasts = page.locator('[data-sonner-toast]');
     await expect(toasts.filter({hasText: "Couldn't add the transaction"})).toHaveCount(1);
     await expect(toasts.filter({hasText: 'Rate limit exceeded'})).toHaveCount(1);
-    await expect.poll(() => reads).toBe(2);
+    await expect.poll(reads).toBe(2);
     expect(await countAfterToasts(page, toasts)).toBe(2);
     await expect(list.getByRole('alert')).toHaveCount(0);
     await expect(list.getByRole('button', {name: 'Add Example Fee on 3 Jun'})).toBeEnabled();
     await expect(list.getByRole('button', {name: 'Add Example Charge on 3 Jun'})).toBeEnabled();
     expect(api.adds).toHaveLength(1);
+  });
+
+  test('a refused add whose list is read again after the session ended signs out', async ({
+    page,
+  }) => {
+    await refuseAddThenReread(page, (route) =>
+      fulfillJson(route, {statusCode: 401, message: 'Unauthorized'}, 401),
+    );
+
+    await expect(page).toHaveURL(/\/login$/);
   });
 
   test('shows the rows a later sync removed in the import summary only, and adds them back by row or by group', async ({
