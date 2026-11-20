@@ -1,5 +1,5 @@
 import {INestApplication} from '@nestjs/common';
-import {DeepPartial} from 'typeorm';
+import {DataSource, DeepPartial} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
@@ -8,24 +8,27 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
-import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
+import {recomputeCurrencyExchanges} from '@modules/banking/currency-exchange/currency-exchange-recompute';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {SESSION_TEST_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_EMAIL} from '../../../scripts/seed-data/seed.constants';
 import {getApp} from '../../setup/e2e.setup';
 
-describe('CurrencyExchangeService', () => {
+describe('Currency exchange recompute', () => {
 	let app: INestApplication;
 	let fixtures: BankingFixtures;
 	let owner: Account;
 	let otherOwner: Account;
-	let service: CurrencyExchangeService;
+	let dataSource: DataSource;
+	const recompute = (ownerId: string) =>
+		dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, ownerId));
+	/** How many rows' exchange classification or counterpart the recompute changed. */
+	const recomputeCount = async (ownerId: string) => (await recompute(ownerId)).transactionsChanged;
 
 	beforeAll(async () => {
 		app = getApp();
 		fixtures = new BankingFixtures(app);
-		service = app.get(CurrencyExchangeService);
+		dataSource = app.get(DataSource);
 		const accounts = app.get(AccountService);
 		owner = (await accounts.findByEmail(VERIFIED_ACCOUNT_EMAIL))!;
 		otherOwner = (await accounts.findByEmail(SESSION_TEST_ACCOUNT_EMAIL))!;
@@ -73,7 +76,7 @@ describe('CurrencyExchangeService', () => {
 	it('recognizes the exchange description at any bank once both legs answer each other', async () => {
 		const [debit, credit] = await createExchange(owner);
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
+		await expect(recomputeCount(owner.id)).resolves.toBe(2);
 
 		for (const [leg, counterpart] of [
 			[debit, credit],
@@ -98,7 +101,7 @@ describe('CurrencyExchangeService', () => {
 			{description: 'Conversion', bankTransactionCode: 'FORX-SPOT'},
 		);
 
-		await service.recomputeForOwner(owner.id);
+		await recomputeCount(owner.id);
 
 		expect(await stored(debit.id)).toMatchObject({
 			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -117,7 +120,7 @@ describe('CurrencyExchangeService', () => {
 			{description: 'Conversion', bankTransactionCode: 'EXCHANGE'},
 		);
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
+		await expect(recomputeCount(owner.id)).resolves.toBe(2);
 
 		expect(await stored(debit.id)).toMatchObject({
 			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -139,7 +142,7 @@ describe('CurrencyExchangeService', () => {
 			{description: 'Conversion', bankTransactionDescription: 'Exchange'},
 		);
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+		await expect(recomputeCount(owner.id)).resolves.toBe(0);
 
 		for (const leg of [debit, credit]) {
 			expect(await stored(leg.id)).toMatchObject({financialEventType: null, ...categorized});
@@ -153,7 +156,7 @@ describe('CurrencyExchangeService', () => {
 			{description: 'Exchange of keys', bankTransactionCode: 'CURRENCY_EXCHANGE'},
 		);
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+		await expect(recomputeCount(owner.id)).resolves.toBe(0);
 
 		for (const leg of [debit, credit]) {
 			expect(await stored(leg.id)).toMatchObject({financialEventType: null, ...categorized});
@@ -168,7 +171,7 @@ describe('CurrencyExchangeService', () => {
 			{description: 'Exchanged to USD'},
 		);
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+		await expect(recomputeCount(owner.id)).resolves.toBe(0);
 
 		for (const leg of [debit, credit]) {
 			expect(await stored(leg.id)).toMatchObject({
@@ -182,7 +185,7 @@ describe('CurrencyExchangeService', () => {
 	it('does not treat an unmarked same-day pair in two currencies as an exchange', async () => {
 		const [debit, credit] = await createLegs(owner, {description: 'Transfer'}, {description: 'Transfer'});
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+		await expect(recomputeCount(owner.id)).resolves.toBe(0);
 
 		expect(await stored(debit.id)).toMatchObject({financialEventType: null, ...categorized});
 		expect(await stored(credit.id)).toMatchObject({financialEventType: null, ...categorized});
@@ -195,7 +198,7 @@ describe('CurrencyExchangeService', () => {
 			{description: 'Exchanged to USD'},
 		);
 
-		await service.recomputeForOwner(owner.id);
+		await recomputeCount(owner.id);
 
 		expect(await stored(debit.id)).toMatchObject({
 			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
@@ -207,19 +210,14 @@ describe('CurrencyExchangeService', () => {
 
 	it('returns both legs to categorization when one loses its marker', async () => {
 		const [debit, credit] = await createExchange(owner);
-		await service.recomputeForOwner(owner.id);
+		await recomputeCount(owner.id);
 		await fixtures.transactions.update(debit.id, {description: 'Corrected provider description'});
-		const enqueue = jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions');
 
-		try {
-			// The legs come back for own-transfer recognition, which skips exchange legs.
-			expect((await service.recomputeForOwnerSafely(owner.id))?.sort()).toEqual([debit.id, credit.id].sort());
-			expect(enqueue).toHaveBeenCalledTimes(1);
-			expect([...enqueue.mock.calls[0][0]].sort()).toEqual([debit.id, credit.id].sort());
-		} finally {
-			enqueue.mockRestore();
-		}
+		const {reclassifiedIds, requeuedIds} = await recompute(owner.id);
 
+		// The legs come back for own-transfer recognition, which skips exchange legs.
+		expect(reclassifiedIds.sort()).toEqual([debit.id, credit.id].sort());
+		expect(requeuedIds.sort()).toEqual([debit.id, credit.id].sort());
 		for (const leg of [debit, credit]) {
 			expect(await stored(leg.id)).toMatchObject({
 				financialEventType: null,
@@ -234,7 +232,7 @@ describe('CurrencyExchangeService', () => {
 	it('uses the same normalized description as exchange classification', async () => {
 		const [debit, credit] = await createExchange(owner, '  Exchanged\t to  usd\n');
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
+		await expect(recomputeCount(owner.id)).resolves.toBe(2);
 
 		expect((await stored(debit.id)).currencyExchangeCounterpartId).toBe(credit.id);
 		expect((await stored(credit.id)).currencyExchangeCounterpartId).toBe(debit.id);
@@ -244,8 +242,8 @@ describe('CurrencyExchangeService', () => {
 		const [debit, credit] = await createExchange(owner);
 		const [otherDebit, otherCredit] = await createExchange(otherOwner);
 
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(2);
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(0);
+		await expect(recomputeCount(owner.id)).resolves.toBe(2);
+		await expect(recomputeCount(owner.id)).resolves.toBe(0);
 
 		expect((await stored(debit.id)).currencyExchangeCounterpartId).toBe(credit.id);
 		expect((await stored(credit.id)).currencyExchangeCounterpartId).toBe(debit.id);
@@ -261,12 +259,12 @@ describe('CurrencyExchangeService', () => {
 
 	it('returns the surviving leg to categorization when its counterpart is deleted', async () => {
 		const [debit, credit] = await createExchange(owner);
-		await service.recomputeForOwner(owner.id);
+		await recomputeCount(owner.id);
 
 		await fixtures.transactions.delete(credit.id);
 
 		expect((await stored(debit.id)).currencyExchangeCounterpartId).toBeNull();
-		await expect(service.recomputeForOwner(owner.id)).resolves.toBe(1);
+		await expect(recomputeCount(owner.id)).resolves.toBe(1);
 		expect(await stored(debit.id)).toMatchObject({financialEventType: null, categoryStatus: 'PENDING'});
 	});
 });

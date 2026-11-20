@@ -1,4 +1,9 @@
-import type {OwnTransferSqlExecutor} from './own-transfer-recompute';
+import {
+	OwnTransferRecomputeResult,
+	OwnTransferRecomputeScope,
+	OwnTransferSqlExecutor,
+	recomputeOwnTransfers,
+} from './own-transfer-recompute';
 
 export const OWN_TRANSFER_CATEGORY_PROVIDER = 'own-transfer';
 export const OWN_TRANSFER_CATEGORY_RULE_VERSION = 'own-transfer-category-v1';
@@ -83,4 +88,19 @@ export async function applyOwnTransferCategories(
 	)) as [Array<{id: string}>, number] | Array<{id: string}>;
 	const rows = Array.isArray(requeued[0]) ? (requeued[0] as Array<{id: string}>) : (requeued as Array<{id: string}>);
 	return rows.map(({id}) => id);
+}
+
+/**
+ * Recomputes the owner's own transfers and their categories inside the caller's transaction. In scope only the scoped
+ * rows and the rows whose evidence changed can need a new category. Returns the rows sent back to the model, which the
+ * caller enqueues after its transaction commits.
+ */
+export async function recomputeOwnTransfersAndCategories(
+	executor: OwnTransferSqlExecutor,
+	ownerId: string,
+	scope?: OwnTransferRecomputeScope,
+): Promise<{result: OwnTransferRecomputeResult; requeuedIds: string[]}> {
+	const result = await recomputeOwnTransfers(executor, ownerId, scope);
+	const categoryIds = scope && [...new Set([...scope.transactionIds, ...result.changedIds])];
+	return {result, requeuedIds: await applyOwnTransferCategories(executor, ownerId, categoryIds)};
 }

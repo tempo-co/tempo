@@ -15,7 +15,7 @@ import {
 	isAmountConversionEnabled,
 } from './bank-transaction-amount-conversion.queue.service';
 import {BankTransactionAmountConversionService} from './bank-transaction-amount-conversion.service';
-import {OwnTransferService} from './own-transfer.service';
+import {DerivedDataRefreshService} from './derived-data-refresh.service';
 
 /** Owner-wide derived amounts and classifications, one job at a time. */
 @Processor(BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE, {concurrency: 1})
@@ -23,7 +23,7 @@ export class BankTransactionAmountConversionProcessor extends WorkerHost {
 	constructor(
 		private readonly conversionService: BankTransactionAmountConversionService,
 		private readonly configurationService: ConfigurationService,
-		private readonly ownTransferService: OwnTransferService,
+		private readonly derivedDataRefreshService: DerivedDataRefreshService,
 		private readonly recurringSeriesService: RecurringSeriesService,
 	) {
 		super();
@@ -32,7 +32,7 @@ export class BankTransactionAmountConversionProcessor extends WorkerHost {
 	async process(job: Job<BankTransactionAmountConversionJobData>): Promise<void> {
 		if (!isAmountConversionEnabled(this.configurationService)) return;
 		if (job.name === RECOMPUTE_OWN_TRANSFERS_JOB) {
-			await this.ownTransferService.recomputeAllOwners();
+			await this.derivedDataRefreshService.recomputeAllOwnTransfers();
 			// After the recompute, so its own change notes are folded too.
 			await this.recurringSeriesService.foldAllChangeNotes();
 			return;

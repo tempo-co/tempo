@@ -1,10 +1,11 @@
 import {INestApplication} from '@nestjs/common';
 import {createHash} from 'node:crypto';
-import {DeepPartial, IsNull, Not} from 'typeorm';
+import {DataSource, DeepPartial, IsNull, Not} from 'typeorm';
 
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
+import {recomputeOwnTransfersAndCategories} from '@modules/banking/own-transfer/own-transfer-category';
+import type {OwnTransferRecomputeScope} from '@modules/banking/own-transfer/own-transfer-recompute';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
@@ -46,15 +47,18 @@ function random(seed: number) {
 	};
 }
 
-describe('OwnTransferService', () => {
+describe('Own-transfer recompute', () => {
 	let app: INestApplication;
 	let fixtures: BankingFixtures;
-	let service: OwnTransferService;
+	let dataSource: DataSource;
+	/** Recomputes own transfers and their categories in one transaction, as the derived-data refresh does. */
+	const recompute = async (ownerId: string, scope?: OwnTransferRecomputeScope) =>
+		(await dataSource.transaction((manager) => recomputeOwnTransfersAndCategories(manager, ownerId, scope))).result;
 
 	beforeAll(() => {
 		app = getApp();
 		fixtures = new BankingFixtures(app);
-		service = app.get(OwnTransferService);
+		dataSource = app.get(DataSource);
 	});
 
 	it('recomputes around changed rows with the same result as recomputing the whole history', async () => {
@@ -142,8 +146,8 @@ describe('OwnTransferService', () => {
 		});
 
 		const ids = await createRows(150);
-		await service.recomputeForOwner(owner.id);
-		await expect(service.recomputeForOwner(owner.id, {transactionIds: []})).resolves.toMatchObject({
+		await recompute(owner.id);
+		await expect(recompute(owner.id, {transactionIds: []})).resolves.toMatchObject({
 			transactionsChanged: 0,
 		});
 
@@ -225,9 +229,9 @@ describe('OwnTransferService', () => {
 			}
 			ids.push(...changed);
 
-			scopedChanges += (await service.recomputeForOwner(owner.id, {transactionIds: changed})).transactionsChanged;
+			scopedChanges += (await recompute(owner.id, {transactionIds: changed})).transactionsChanged;
 			const scoped = await snapshot();
-			await expect(service.recomputeForOwner(owner.id)).resolves.toEqual({
+			await expect(recompute(owner.id)).resolves.toEqual({
 				accountIbansAdded: 0,
 				transactionsChanged: 0,
 				changedIds: [],

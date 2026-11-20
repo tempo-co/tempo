@@ -53,7 +53,6 @@ import {
 	toDateOnly,
 	truncate,
 } from '../banking.utils';
-import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import {
 	EnableBankingBalance,
 	EnableBankingPsuContext,
@@ -64,7 +63,6 @@ import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
-import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
 import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
 import {AspspCatalogService} from './aspsp-catalog.service';
@@ -81,11 +79,9 @@ import {
 	rateLimitCooldownSeconds,
 	resolveDurationMs,
 } from './banking-sync.constants';
-import {CurrencyExchangeService} from './currency-exchange.service';
+import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {EnableBankingClient, EnableBankingClientError} from './enable-banking.client';
 import {findOwnedConnection} from './find-owned-connection';
-import {OwnTransferService} from './own-transfer.service';
-import {ReportingCurrencyService} from './reporting-currency.service';
 
 const SUCCEEDED = BANK_SYNC_STATUSES.SUCCEEDED;
 const FAILED = BANK_SYNC_STATUSES.FAILED;
@@ -150,14 +146,10 @@ export class BankingSyncService {
 		private readonly enableBankingClient: EnableBankingClient,
 		private readonly encryptionService: BankingEncryptionService,
 		private readonly connectionLockService: BankingConnectionLockService,
-		private readonly categorizationService: CategorizationScheduler,
 		private readonly configurationService: ConfigurationService,
-		private readonly ownTransferService: OwnTransferService,
-		private readonly currencyExchangeService: CurrencyExchangeService,
-		private readonly merchantLogoService: MerchantLogoService,
 		private readonly bankTransactionPersistenceService: BankTransactionPersistenceService,
 		private readonly aspspCatalogService: AspspCatalogService,
-		private readonly reportingCurrencyService: ReportingCurrencyService,
+		private readonly derivedDataRefresh: DerivedDataRefreshService,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -326,42 +318,16 @@ export class BankingSyncService {
 						syncStartedAt,
 					);
 				} catch (error) {
-					// The rows may have committed even so, and which ones is unknown: recompute the whole history.
-					await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-					await this.ownTransferService.recomputeForOwnerSafely(accountId);
+					await this.derivedDataRefresh.refresh(accountId, {kind: 'failed-sync-write'});
 					throw error;
 				}
 				committed = true;
 				this.logFailures(run.id, connection.id, status, failures);
-				// The run finished, so the owner can be asked to choose among several currencies now.
-				await this.reportingCurrencyService.reconcileSafely(accountId, {historySettled: true});
-				// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
-				// Exchanges go first: own-transfer detection skips exchange legs.
-				// Own transfers can only change around the rows this sync wrote, the rows whose exchange
-				// classification changed and the former counterparts of the pending rows it removed, so a sync that
-				// changed none of them does no own-transfer work. A failed exchange recompute leaves the changed rows
-				// unknown.
-				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-				await this.ownTransferService.recomputeForOwnerSafely(
-					accountId,
-					reclassifiedIds
-						? {
-								transactionIds: [
-									...new Set([
-										...persistenceResult.persistedTransactionIds,
-										...reclassifiedIds,
-										...persistenceResult.formerCounterpartIds,
-									]),
-								],
-							}
-						: undefined,
-				);
-				await this.enqueuePersistedTransactions(persistenceResult.persistedTransactionIds);
-				if (persistenceResult.persistedTransactionIds.length)
-					await this.merchantLogoService.enqueueForOwnerSafely(
-						accountId,
-						persistenceResult.persistedTransactionIds,
-					);
+				await this.derivedDataRefresh.refresh(accountId, {
+					kind: 'sync-write',
+					writtenIds: persistenceResult.persistedTransactionIds,
+					formerCounterpartIds: persistenceResult.formerCounterpartIds,
+				});
 
 				// The run is committed: a lease blip or a disconnect from here on must not report it as failed.
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});
@@ -983,15 +949,6 @@ export class BankingSyncService {
 
 	private getBackgroundIntervalMs(): number {
 		return resolveDurationMs(this.configurationService.get('BANKING_SYNC_INTERVAL'), 'BANKING_SYNC_INTERVAL');
-	}
-
-	private async enqueuePersistedTransactions(transactionIds: readonly string[]): Promise<void> {
-		if (transactionIds.length === 0) return;
-		try {
-			await this.categorizationService.enqueueForTransactions(transactionIds);
-		} catch (error) {
-			this.logger.warn(`Transaction categorization enqueue failed: ${safeErrorName(error)}`);
-		}
 	}
 
 	private logFailures(

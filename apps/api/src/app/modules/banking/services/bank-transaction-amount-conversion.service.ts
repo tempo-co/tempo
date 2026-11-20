@@ -15,9 +15,8 @@ import {
 	ecbRateSql,
 	latestExpectedEcbRateDate,
 } from './bank-transaction-amount-conversion.utils';
-import {CurrencyExchangeService} from './currency-exchange.service';
+import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {FxRateService} from './fx-rate.service';
-import {OwnTransferService} from './own-transfer.service';
 
 /** Dates are null only when no pending row of the currency has a date; such rows can only be copied. */
 type PendingCurrency = {
@@ -184,8 +183,7 @@ export class BankTransactionAmountConversionService {
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		private readonly fxRateService: FxRateService,
-		private readonly currencyExchangeService: CurrencyExchangeService,
-		private readonly ownTransferService: OwnTransferService,
+		private readonly derivedDataRefreshService: DerivedDataRefreshService,
 	) {}
 
 	/**
@@ -225,15 +223,11 @@ export class BankTransactionAmountConversionService {
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
 			converted += count;
 			const changed = owner.baseCurrencyRevision !== owner.baseAmountsRevision;
-			// Same-day exchanges are matched on base amounts, so new amounts can complete a pairing, and a currency change
-			// replaced them all. Own-transfer detection reads no converted amount, only whether a row is an exchange leg,
-			// so it follows over the whole history only when a row became or stopped being one, or when that is unknown
-			// because the recompute failed.
-			if (count > 0 || changed) {
-				const reclassifiedIds = await this.currencyExchangeService.recomputeForOwnerSafely(accountId);
-				if (reclassifiedIds === null || reclassifiedIds.length > 0)
-					await this.ownTransferService.recomputeForOwnerSafely(accountId);
-			}
+			await this.derivedDataRefreshService.refresh(accountId, {
+				kind: 'converted-amounts',
+				amountsConverted: count > 0,
+				reportingCurrencyChanged: changed,
+			});
 			// Every row this pass could convert is converted: totals are ready, and rows still without a rate (an
 			// unsupported currency, or none stored within a week before the row) are reported as left out of them.
 			if (changed) {
