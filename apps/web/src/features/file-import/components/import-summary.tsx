@@ -1,6 +1,6 @@
 import type {BankImportSummary} from '@tempo/contracts';
 import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
-import type {ElementType, ReactNode} from 'react';
+import {type ElementType, type ReactNode, useState} from 'react';
 
 import {StateMessage} from '@/components/shared/state-message';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -39,6 +39,14 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
   const known = useKnownAccounts();
   const range = formatDateRange(summary.dateFrom, summary.dateTo);
   const undoneAt = summary.undoneAt;
+  // The never-sent rows added, in either list: both read one list of rows, and an added row stays shown as added
+  // when a list folds or the list is read again.
+  const [neverSentAdded, setNeverSentAdded] = useState<ReadonlySet<string>>(new Set());
+  const neverSent = {
+    added: neverSentAdded,
+    onAdded: (ids: readonly string[]) =>
+      setNeverSentAdded((current) => new Set([...current, ...ids])),
+  };
 
   return (
     <div className='grid grid-cols-1 gap-5' data-testid='bank-import-summary'>
@@ -83,8 +91,8 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
         />
       )}
       {!undoneAt && <StatementGaps summary={summary} known={known} />}
-      {!undoneAt && <NeverSentRows summary={summary} kind='not_in_bank' />}
-      {!undoneAt && <NeverSentRows summary={summary} kind='removed_by_sync' />}
+      {!undoneAt && <NeverSentRows summary={summary} kind='not_in_bank' {...neverSent} />}
+      {!undoneAt && <NeverSentRows summary={summary} kind='removed_by_sync' {...neverSent} />}
       {(range || summary.accounts.length > 0) && (
         <dl className='grid grid-cols-1 gap-4'>
           {range && (

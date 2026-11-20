@@ -1,16 +1,17 @@
 import type {Locator, Page, Request, Route} from '@playwright/test';
-import type {
-  AddBankImportNeverSentRowsRequest,
-  BankConnection,
-  BankImportDoubtfulRow,
-  BankImportError,
-  BankImportLayout,
-  BankImportLayoutProposal,
-  BankImportNeverSentRow,
-  BankImportSummary,
-  ConfirmBankImportLayoutProposalRequest,
-  ResolveBankImportDoubtfulRowRequest,
-  SetBankAccountBalanceRequest,
+import {
+  type AddBankImportNeverSentRowsRequest,
+  BANK_IMPORT_MAX_ROWS_PER_ADD,
+  type BankConnection,
+  type BankImportDoubtfulRow,
+  type BankImportError,
+  type BankImportLayout,
+  type BankImportLayoutProposal,
+  type BankImportNeverSentRow,
+  type BankImportSummary,
+  type ConfirmBankImportLayoutProposalRequest,
+  type ResolveBankImportDoubtfulRowRequest,
+  type SetBankAccountBalanceRequest,
 } from '@tempo/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
@@ -148,6 +149,8 @@ type ImportApi = {
   /** The bodies of never-sent rows added, and how often the list of them was read. */
   adds: AddBankImportNeverSentRowsRequest[];
   neverSentReads: number;
+  /** The never-sent rows added, which the list of them no longer holds. */
+  added: Set<string>;
   undos: string[];
   proposals: Request[];
   confirms: ConfirmBankImportLayoutProposalRequest[];
@@ -168,6 +171,7 @@ async function mockFileImport(
     doubtfulRows = [],
     neverSentRows = [],
     holdAdd,
+    failAdds = {},
     mapper = false,
     proposals = [],
     layouts = [],
@@ -178,6 +182,8 @@ async function mockFileImport(
     neverSentRows?: BankImportNeverSentRow[];
     /** Holds each add of never-sent rows until it resolves. */
     holdAdd?: () => Promise<void>;
+    /** The status each add of never-sent rows that fails answers with, by the add's index from 0. */
+    failAdds?: Record<number, number>;
     /** Whether the deployment works out the columns of a table it does not know. */
     mapper?: boolean;
     /** The answer to each proposal in turn. */
@@ -186,6 +192,7 @@ async function mockFileImport(
   } = {},
 ) {
   const api: ImportApi = {
+    added: new Set(),
     imports: [...imports],
     uploads: [],
     resolves: [],
@@ -224,12 +231,19 @@ async function mockFileImport(
   });
   await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
     api.neverSentReads += 1;
-    return fulfillJson(route, neverSentRows);
+    // Like the API, the list holds only the rows not added yet.
+    return fulfillJson(
+      route,
+      neverSentRows.filter(({id}) => !api.added.has(id)),
+    );
   });
   await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
     const request = route.request().postDataJSON() as AddBankImportNeverSentRowsRequest;
     api.adds.push(request);
     await holdAdd?.();
+    const failure = failAdds[api.adds.length - 1];
+    if (failure) return fulfillJson(route, {statusCode: failure, message: 'Refused'}, failure);
+    for (const id of request.rowIds) api.added.add(id);
     const [current] = api.imports;
     const removed = request.rowIds.filter(
       (id) => neverSentRows.find((row) => row.id === id)?.kind === 'removed_by_sync',
@@ -424,6 +438,59 @@ test.describe('statement file import on Connections', () => {
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     // A 404 is the answer, so it is not asked again.
     expect(probes).toBe(1);
+  });
+
+  /**
+   * Answers the import list with `answer` every time, and returns a wait for its three retries, each after a longer
+   * wait on the page's installed clock, to be answered.
+   */
+  async function answerImportsWith(page: Page, answer: (route: Route) => Promise<void>) {
+    let answered = 0;
+    await page.route(`${API_URL}/bank-imports`, async (route) => {
+      await answer(route);
+      answered += 1;
+    });
+    return async () => {
+      for (let retry = 1; retry <= 3; retry += 1) {
+        await expect.poll(() => answered).toBe(retry);
+        await page.clock.runFor(5_000);
+      }
+      await expect.poll(() => answered).toBe(4);
+      await page.clock.runFor(1_000);
+      return answered;
+    };
+  }
+
+  test("shows file import while its route answers with the API's own error", async ({page}) => {
+    await page.clock.install({time: TODAY});
+    const waitOutRetries = await answerImportsWith(page, (route) =>
+      fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+    );
+
+    await page.goto('/bank-connections');
+    await waitOutRetries();
+
+    await expect(page.getByRole('button', {name: 'Import a file'})).toBeVisible();
+    await expect(page.getByText("Couldn't load your imports")).toBeVisible();
+  });
+
+  test('shows nothing of file import while a proxy answers its route', async ({page}) => {
+    await page.clock.install({time: TODAY});
+    const waitOutRetries = await answerImportsWith(page, (route) =>
+      route.fulfill({status: 502, contentType: 'text/html', body: '<h1>502 Bad Gateway</h1>'}),
+    );
+
+    await page.goto('/bank-connections');
+    const answered = await waitOutRetries();
+    // Nothing on screen marks a failure that leaves import unknown, so, as in the import-off test, the page gets a
+    // moment after the last answer to show anything: a status-only check shows the button within that moment.
+    await page.clock.resume();
+    await page.waitForTimeout(300);
+
+    expect(answered).toBe(4);
+    await expect(page.getByRole('region', {name: 'Mock ASPSP'})).toBeVisible();
+    expect(await page.getByRole('button', {name: 'Import a file'}).count()).toBe(0);
+    expect(await page.getByRole('heading', {name: 'Imports'}).count()).toBe(0);
   });
 
   test('imports chosen files and shows what they added, where they went and when', async ({
@@ -690,6 +757,195 @@ test.describe('statement file import on Connections', () => {
       {rowIds: [rows[0].id, rows[2].id, rows[3].id]},
     ]);
     expect(api.neverSentReads).toBe(1);
+  });
+
+  test('a group too large for one request refused partway shows every row the API has added as added, here or in another tab', async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const pocket = Array.from(
+      {length: BANK_IMPORT_MAX_ROWS_PER_ADD + 1},
+      (_, index): BankImportNeverSentRow => ({
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        kind: 'not_in_bank',
+        bankAccountId: CHECKING.id,
+        row: {
+          bookingDate: '2026-06-02',
+          valueDate: '2026-06-02',
+          amount: '-0.50',
+          currency: 'EUR',
+          balanceAfter: null,
+          bankReference: null,
+          counterpartyName: 'Example Pocket',
+          description: 'Round-up',
+          remittanceInformation: null,
+        },
+      }),
+    );
+    const fee: BankImportNeverSentRow = {
+      ...pocket[0],
+      id: '00000000-0000-4000-8000-100000000000',
+      row: {...pocket[0].row, amount: '-30.00', counterpartyName: null, description: 'Example Fee'},
+    };
+    const removed: BankImportNeverSentRow = {
+      ...pocket[0],
+      id: '00000000-0000-4000-8000-200000000000',
+      kind: 'removed_by_sync',
+      row: {...pocket[0].row, amount: '-12.00', counterpartyName: 'Example Gym', description: null},
+    };
+    const rows = [...pocket, fee, removed];
+    const api = await mockFileImport(page, {
+      uploads: [
+        created(
+          importSummary({
+            rowsAdded: 0,
+            rowsDoubtful: 0,
+            rowsNotInBank: pocket.length + 1,
+            rowsRemovedBySync: 1,
+          }),
+        ),
+      ],
+      neverSentRows: rows,
+      // The group's second request reaches the mock after the add in the other list.
+      failAdds: {2: 409},
+    });
+    // The group's second request waits, then is refused.
+    const last = pocket[BANK_IMPORT_MAX_ROWS_PER_ADD].id;
+    await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
+      const request = route.request().postDataJSON() as AddBankImportNeverSentRowsRequest;
+      if (request.rowIds.includes(last)) await held;
+      await route.fallback();
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    const summaryBody = dialog.getByTestId('bank-import-summary');
+    await summaryBody
+      .getByRole('button', {name: 'Not added: 502 rows your bank never sent'})
+      .click();
+    const groups = summaryBody
+      .getByTestId('bank-import-never-sent')
+      .getByTestId('bank-import-never-sent-group');
+    const group = groups.first();
+
+    await group.getByRole('button', {name: 'Add 501 from Example Pocket'}).click();
+    // The rows of the first request show as added while the group waits for the rest, and the other list adds a
+    // row back meanwhile.
+    const removedList = summaryBody.getByTestId('bank-import-removed-by-sync');
+    try {
+      await expect(group.getByRole('listitem').first().getByRole('status')).toHaveText('Added');
+      await expect(group.getByRole('button', {name: 'Adding…'})).toBeDisabled();
+      await removedList.getByRole('button', {name: 'Removed: 1 row your bank never sent'}).click();
+      await removedList.getByRole('button', {name: /^Add back .* on 2 Jun$/}).click();
+      await expect(removedList.getByRole('status')).toHaveText('Added back');
+    } finally {
+      // Another tab adds the row of the group's second request and the fee first.
+      api.added.add(last);
+      api.added.add(fee.id);
+      release();
+    }
+    const toasts = page.locator('[data-sonner-toast]');
+    await expect(toasts).toContainText("Couldn't add the transaction");
+    expect(await countAfterToasts(page, toasts)).toBe(1);
+    // The list is read again: rows it no longer lists show as added, whoever added them, in either list.
+    await expect.poll(() => api.neverSentReads).toBe(2);
+    await expect(removedList.getByRole('status')).toHaveText('Added back');
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(1).getByRole('status')).toHaveText('Added');
+    await expect(
+      summaryBody.getByTestId('bank-import-never-sent').getByRole('button', {name: /^Add /}),
+    ).toHaveCount(0);
+    await group.getByRole('button', {name: 'Show all 501'}).click();
+    await expect(group.getByRole('listitem').last().getByRole('status')).toHaveText('Added');
+    expect(api.adds.map(({rowIds}) => rowIds)).toEqual([
+      pocket.slice(0, BANK_IMPORT_MAX_ROWS_PER_ADD).map(({id}) => id),
+      [removed.id],
+      [last],
+    ]);
+  });
+
+  /**
+   * An import whose two never-sent rows are listed, where adding the first is refused with `refusal` and reading the
+   * list again answers `reread`. Answers with the list and the number of reads.
+   */
+  async function refuseAddThenReread(
+    page: Page,
+    reread: (route: Route) => Promise<void>,
+    refusal = 409,
+  ) {
+    const row = (id: number, description: string): BankImportNeverSentRow => ({
+      id: `00000000-0000-4000-8000-00000000090${id}`,
+      kind: 'not_in_bank',
+      bankAccountId: CHECKING.id,
+      row: {
+        bookingDate: '2026-06-03',
+        valueDate: '2026-06-03',
+        amount: '-30.00',
+        currency: 'EUR',
+        balanceAfter: null,
+        bankReference: null,
+        counterpartyName: null,
+        description,
+        remittanceInformation: null,
+      },
+    });
+    const api = await mockFileImport(page, {
+      uploads: [created(importSummary({rowsAdded: 0, rowsDoubtful: 0, rowsNotInBank: 2}))],
+      neverSentRows: [row(1, 'Example Fee'), row(2, 'Example Charge')],
+      failAdds: {0: refusal},
+    });
+    let reads = 0;
+    await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
+      reads += 1;
+      return reads === 2 ? reread(route) : route.fallback();
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    const list = dialog.getByTestId('bank-import-never-sent');
+    await list.getByRole('button', {name: 'Not added: 2 rows your bank never sent'}).click();
+    await list.getByRole('button', {name: 'Add Example Fee on 3 Jun'}).click();
+    return {api, list, reads: () => reads};
+  }
+
+  test('a refused add whose list cannot be read again leaves the list as it was', async ({
+    page,
+  }) => {
+    const {api, list, reads} = await refuseAddThenReread(page, (route) =>
+      fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429),
+    );
+
+    const toasts = page.locator('[data-sonner-toast]');
+    await expect(toasts.filter({hasText: "Couldn't add the transaction"})).toHaveCount(1);
+    await expect(toasts.filter({hasText: 'Rate limit exceeded'})).toHaveCount(1);
+    await expect.poll(reads).toBe(2);
+    expect(await countAfterToasts(page, toasts)).toBe(2);
+    await expect(list.getByRole('alert')).toHaveCount(0);
+    await expect(list.getByRole('button', {name: 'Add Example Fee on 3 Jun'})).toBeEnabled();
+    await expect(list.getByRole('button', {name: 'Add Example Charge on 3 Jun'})).toBeEnabled();
+    expect(api.adds).toHaveLength(1);
+  });
+
+  test('an add refused because the import is gone does not read the list again', async ({page}) => {
+    const {list, reads} = await refuseAddThenReread(page, (route) => fulfillJson(route, []), 404);
+
+    const toasts = page.locator('[data-sonner-toast]');
+    await expect(toasts).toContainText("Couldn't add the transaction");
+    expect(await countAfterToasts(page, toasts)).toBe(1);
+    expect(reads()).toBe(1);
+    await expect(list.getByRole('button', {name: 'Add Example Charge on 3 Jun'})).toBeEnabled();
+    await expect(list.getByRole('status')).toHaveCount(0);
+  });
+
+  test('a refused add whose list is read again after the session ended signs out', async ({
+    page,
+  }) => {
+    await refuseAddThenReread(page, (route) =>
+      fulfillJson(route, {statusCode: 401, message: 'Unauthorized'}, 401),
+    );
+
+    await expect(page).toHaveURL(/\/login$/);
   });
 
   test('shows the rows a later sync removed in the import summary only, and adds them back by row or by group', async ({
@@ -1771,7 +2027,7 @@ test.describe('statement file import on Connections', () => {
     ]);
   });
 
-  test('lists imports newest first, undoes one after confirming and keeps it listed as undone', async ({
+  test('lists imports newest first, undoes one after confirming, also on a second try, and keeps it listed as undone', async ({
     page,
   }) => {
     const imports = [
@@ -1806,6 +2062,12 @@ test.describe('statement file import on Connections', () => {
     ];
     await mockBankConnections(page, [MOCK_CONNECTION, IMPORTED_FILES]);
     const api = await mockFileImport(page, {imports});
+    let undoFails = true;
+    await page.route(`${API_URL}/bank-imports/*`, (route) => {
+      if (route.request().method() !== 'DELETE' || !undoFails) return route.fallback();
+      undoFails = false;
+      return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+    });
     await page.goto('/bank-connections');
 
     const list = page.getByTestId('bank-imports-list');
@@ -1829,6 +2091,14 @@ test.describe('statement file import on Connections', () => {
       'This removes the 212 transactions it added. Any that bank sync has picked up since then are kept. ' +
         'The account it created is removed too, unless another import also added transactions to it.',
     );
+    await confirm.getByRole('button', {name: 'Undo import'}).click();
+    // A failed try says so in the confirmation, which stays open for another.
+    await expect(confirm.getByRole('alert')).toHaveText(
+      "Couldn't undo the import. Try again in a moment.",
+    );
+    await expect(confirm.getByRole('heading', {name: 'Undo this import?'})).toBeVisible();
+    expect(await countAfterToasts(page, page.locator('[data-sonner-toast]'))).toBe(0);
+    expect(api.undos).toEqual([]);
     await confirm.getByRole('button', {name: 'Undo import'}).click();
     await expect(page.getByText('Import undone')).toBeVisible();
     await expect(confirm).toBeHidden();

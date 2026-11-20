@@ -2,6 +2,7 @@
 import {expect, test} from '@playwright/test';
 import type {BankImportError} from '@tempo/contracts';
 
+import {isApiServerError} from '../../src/features/file-import/utils/import-availability';
 import {
   formatDateRange,
   nameEndsWithCurrency,
@@ -194,6 +195,19 @@ test('only typed refusals and a proxy size limit count as refusals', () => {
   );
   expect(toBankImportError(400, {message: 'Choose at least one file to import.'})).toBeNull();
   expect(toBankImportError(422, {code: 'something_new'})).toBeNull();
+});
+
+test("a server error shows the import route is there only when the API's own error body answers it", () => {
+  for (const [status, body, fromApi] of [
+    [500, {statusCode: 500, message: 'Internal server error'}, true],
+    [503, {statusCode: 503, message: '', code: 'import_busy'}, true],
+    // A proxy's page while the API is down, or a body that is not the API's error.
+    [502, undefined, false],
+    [502, {statusCode: 502}, false],
+    [502, {statusCode: 500, message: 'Internal server error'}, false],
+    [404, {statusCode: 404, message: 'Not Found'}, false],
+  ] as const)
+    expect(isApiServerError(status, body), `${status} ${JSON.stringify(body)}`).toBe(fromApi);
 });
 
 test('a drop that added nothing says what it found', () => {

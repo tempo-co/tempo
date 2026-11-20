@@ -17,7 +17,7 @@ import {
 } from '../utils/import-format';
 import {IMPORT_TILE} from './file-choice';
 import {importAccountName, useKnownAccounts} from './use-known-accounts';
-import {useUndoImport} from './use-undo-import';
+import {UNDO_FAILED, useUndoImport} from './use-undo-import';
 
 /** How many imports show before Show all. */
 const SHOWN = 5;
@@ -102,7 +102,7 @@ function ImportsSection({children}: {children: React.ReactNode}) {
 
 function ImportRow({summary, onOpen}: {summary: BankImportSummary; onOpen: () => void}) {
   const known = useKnownAccounts();
-  const {undo, describe, isPending} = useUndoImport();
+  const {undoOrThrow, describe, isPending} = useUndoImport();
   const undone = !!summary.undoneAt;
   const day = formatShortDate(summary.createdAt);
   const details = undone
@@ -159,7 +159,8 @@ function ImportRow({summary, onOpen}: {summary: BankImportSummary; onOpen: () =>
             confirmVariant='destructive'
             confirmTestId={`bank-import-undo-confirm-${summary.id}`}
             isPending={isPending}
-            onConfirm={() => undo(summary)}
+            onConfirm={() => undoOrThrow(summary)}
+            failureMessage={`${UNDO_FAILED}. Try again in a moment.`}
           />
         )}
       </div>

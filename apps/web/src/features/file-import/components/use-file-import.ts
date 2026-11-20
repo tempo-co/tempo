@@ -6,7 +6,7 @@ import type {
   BankImportSummary,
   ConfirmBankImportLayoutProposalRequest,
 } from '@tempo/contracts';
-import {useCallback, useRef, useState} from 'react';
+import {type SetStateAction, useCallback, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import {HttpError, NetworkError, SessionChangedError} from '@/utils/api';
@@ -82,7 +82,13 @@ function toFailure(
  */
 export function useFileImport() {
   const [open, setOpenState] = useState(false);
-  const [step, setStep] = useState<ImportStep>(FRESH);
+  const [step, setStepState] = useState<ImportStep>(FRESH);
+  // The step as last set, before React renders it, so a drop sees an import that has only just started.
+  const stepRef = useRef<ImportStep>(FRESH);
+  const setStep = useCallback((next: SetStateAction<ImportStep>) => {
+    stepRef.current = typeof next === 'function' ? next(stepRef.current) : next;
+    setStepState(stepRef.current);
+  }, []);
   const openRef = useRef(false);
   const {importFiles} = useImportFiles();
   const {proposeLayout} = useProposeLayout();
@@ -96,27 +102,30 @@ export function useFileImport() {
   // The wait for a proposal, which Cancel or closing the dialog ends.
   const proposing = useRef<AbortController | null>(null);
 
-  const setOpen = useCallback((next: boolean) => {
-    openRef.current = next;
-    setOpenState(next);
-    // Closing the dialog stops waiting for columns; the files stay chosen.
-    if (!next && proposing.current) {
-      proposing.current.abort();
-      proposing.current = null;
-      setStep((current) =>
-        current.kind === 'proposing'
-          ? {kind: 'choose', files: current.files, failure: current.failure}
-          : current,
-      );
-    }
-  }, []);
+  const setOpen = useCallback(
+    (next: boolean) => {
+      openRef.current = next;
+      setOpenState(next);
+      // Closing the dialog stops waiting for columns; the files stay chosen.
+      if (!next && proposing.current) {
+        proposing.current.abort();
+        proposing.current = null;
+        setStep((current) =>
+          current.kind === 'proposing'
+            ? {kind: 'choose', files: current.files, failure: current.failure}
+            : current,
+        );
+      }
+    },
+    [setStep],
+  );
 
   const show = useCallback(
     (next: ImportStep) => {
       setStep(next);
       setOpen(true);
     },
-    [setOpen],
+    [setOpen, setStep],
   );
 
   const run = useCallback(
@@ -166,7 +175,7 @@ export function useFileImport() {
         showFailure(failure);
       }
     },
-    [importFiles, mapper, show],
+    [importFiles, mapper, setStep, show],
   );
 
   /** Works out the columns of the refused file `failure` offers, then previews them. */
@@ -192,7 +201,7 @@ export function useFileImport() {
         if (proposing.current === controller) proposing.current = null;
       }
     },
-    [mapper, proposeLayout],
+    [mapper, proposeLayout, setStep],
   );
 
   /** Stops waiting for a proposal: back to the refusal, with the files still chosen. */
@@ -204,7 +213,7 @@ export function useFileImport() {
         ? {kind: 'choose', files: current.files, failure: current.failure}
         : current,
     );
-  }, []);
+  }, [setStep]);
 
   /**
    * Saves the previewed layout, then sends the same drop again: it now reads like any known layout. A refusal of
@@ -225,7 +234,7 @@ export function useFileImport() {
       }
       await run(step.files);
     },
-    [confirmLayout, mapper, run],
+    [confirmLayout, mapper, run, setStep],
   );
 
   /** Not right: the proposal is discarded and nothing is imported. */
@@ -245,7 +254,7 @@ export function useFileImport() {
         },
       });
     },
-    [rejectLayout],
+    [rejectLayout, setStep],
   );
 
   /**
@@ -260,15 +269,15 @@ export function useFileImport() {
         : FRESH,
     );
     setOpen(true);
-  }, [setOpen]);
+  }, [setOpen, setStep]);
 
   /** Files dropped on the page start importing at once, unless an import is still running. */
   const importDropped = useCallback(
     (files: File[]) => {
       setOpen(true);
-      if (!BUSY.includes(step.kind)) void run(files);
+      if (!BUSY.includes(stepRef.current.kind)) void run(files);
     },
-    [run, setOpen, step.kind],
+    [run, setOpen],
   );
 
   return {

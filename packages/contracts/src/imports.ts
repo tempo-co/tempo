@@ -271,6 +271,17 @@ export type BankImportNeverSentRow = {
 	row: BankImportFileRow;
 };
 
+/**
+ * What one drop may hold, so the web refuses a choice before uploading it, and the archive limit its copy names. The
+ * API keeps its own copy in its parse limits, which its parse child loads alone; a unit test there compares the two.
+ */
+export const BANK_IMPORT_DROP_LIMITS = {
+	MAX_FILE_BYTES: 10 * 1024 * 1024,
+	MAX_FILES_PER_DROP: 20,
+	MAX_DROP_BYTES: 25 * 1024 * 1024,
+	MAX_ARCHIVE_ENTRIES: 500,
+};
+
 /** At most this many rows per `AddBankImportNeverSentRowsRequest`. */
 export const BANK_IMPORT_MAX_ROWS_PER_ADD = 500;
 
@@ -364,6 +375,9 @@ export type BankImportLayoutPreview = {
 	/** The IBANs the rows name; empty when the file names no account. */
 	accounts: string[];
 };
+
+/** Layout proposals (model calls) an owner may start in 24 hours, whatever their outcome; more are `mapper_limit_reached`. */
+export const BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY = 5;
 
 /**
  * `POST /bank-imports/layout-proposals` (201): one file, multipart field `files`. The file's columns as the model
