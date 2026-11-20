@@ -104,14 +104,6 @@ describe('DerivedDataRefreshService', () => {
 		expect(steps.slice(-3)).toEqual(['categorize written', 'categorize written, former-leg', 'logos written']);
 	});
 
-	it('queues the former exchange legs after own transfers when no row was written', async () => {
-		const {service, steps} = createRecordingRefresh();
-
-		await service.refresh('owner-id', convertedAmounts);
-
-		expect(steps).toEqual(['exchanges', 'own transfers whole history', 'categorize written, former-leg']);
-	});
-
 	it.each([
 		[
 			'a sync write',

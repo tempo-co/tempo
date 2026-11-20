@@ -341,7 +341,7 @@ describe('DerivedDataRefreshService', () => {
 		['converted amounts', {amountsConverted: true, reportingCurrencyChanged: false}],
 		['a reporting currency change', {amountsConverted: false, reportingCurrencyChanged: true}],
 	] as const)(
-		'after %s that unpaired an exchange, queues its legs for categorization and labels own transfers over the whole history',
+		'after %s, an exchange whose marker is gone is unpaired, its legs are queued for categorization and own transfers are labelled over the whole history',
 		async (_, changed) => {
 			const {owner, current, savings, usd} = await createOwner();
 			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
