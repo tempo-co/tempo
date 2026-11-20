@@ -33,6 +33,8 @@ export type DerivedDataChange =
 type RefreshPlan = {
 	/** Reconcile the reporting currency, telling it whether the history is settled; null skips the reconcile. */
 	reconcile: {historySettled: boolean} | null;
+	/** Recompute exchanges before own transfers; skipping it leaves them as they were. */
+	recomputeExchanges: boolean;
 	/**
 	 * The rows own transfers can have changed around besides the reclassified exchanges; null is the whole history, and
 	 * `if-reclassified` the whole history only when the exchange recompute reclassified a row or failed.
@@ -51,16 +53,24 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// The run finished, so the owner can be asked to choose among several currencies now.
 				reconcile: {historySettled: true},
+				recomputeExchanges: true,
 				ownTransferIds: [...change.writtenIds, ...change.formerCounterpartIds],
 				writtenIds: change.writtenIds,
 				logoTransactionIds: change.writtenIds,
 			};
 		case 'failed-sync-write':
-			return {reconcile: null, ownTransferIds: null, writtenIds: [], logoTransactionIds: []};
+			return {
+				reconcile: null,
+				recomputeExchanges: true,
+				ownTransferIds: null,
+				writtenIds: [],
+				logoTransactionIds: [],
+			};
 		case 'file-write':
 			return {
 				// An import can add accounts in another currency, and its history is complete once it commits.
 				reconcile: {historySettled: true},
+				recomputeExchanges: true,
 				ownTransferIds: null,
 				writtenIds: change.writtenIds,
 				logoTransactionIds: null,
@@ -70,7 +80,9 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// Accounts that all hold one currency set it right away; a choice among several waits for a sync.
 				reconcile: {historySettled: false},
-				// Moved accounts change which legs share a connection, so exchanges can pair or part.
+				// Moved accounts change which legs share a connection, so exchanges can pair or part. A removal leaves them
+				// as they were, since legs moved onto the imported-files connection do not pair reliably yet.
+				recomputeExchanges: change.kind === 'authorization',
 				ownTransferIds: null,
 				writtenIds: [],
 				logoTransactionIds: [],
@@ -82,6 +94,7 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			if (!change.amountsConverted && !change.reportingCurrencyChanged) return null;
 			return {
 				reconcile: null,
+				recomputeExchanges: true,
 				ownTransferIds: 'if-reclassified',
 				writtenIds: [],
 				logoTransactionIds: [],
@@ -124,7 +137,7 @@ export class DerivedDataRefreshService {
 		const plan = planRefresh(change);
 		if (!plan) return;
 		if (plan.reconcile) await this.reportingCurrencyService.reconcileSafely(ownerId, plan.reconcile);
-		await this.recomputeLabels(ownerId, plan.ownTransferIds, plan.writtenIds);
+		await this.recomputeLabels(ownerId, plan);
 		if (plan.writtenIds.length === 0) return;
 		await this.merchantLogoService.enqueueForOwnerSafely(ownerId, plan.logoTransactionIds ?? undefined);
 	}
@@ -142,16 +155,17 @@ export class DerivedDataRefreshService {
 	}
 
 	/**
-	 * Recomputes exchanges, then own transfers, then queues the written rows and the former exchange legs for
-	 * categorization. Exchanges go first: own-transfer detection skips exchange legs. Both run before the enqueues, so
-	 * new exchanges and own transfers are labelled before the worker can claim a row.
+	 * Recomputes exchanges when the plan asks, then own transfers, then queues the written rows and the former exchange
+	 * legs for categorization. Exchanges go first: own-transfer detection skips exchange legs. Both run before the
+	 * enqueues, so new exchanges and own transfers are labelled before the worker can claim a row.
 	 */
 	private async recomputeLabels(
 		ownerId: Account['id'],
-		ownTransferIds: RefreshPlan['ownTransferIds'],
-		writtenIds: readonly string[],
+		{recomputeExchanges, ownTransferIds, writtenIds}: RefreshPlan,
 	): Promise<void> {
-		const exchanges = await this.recomputeExchanges(ownerId);
+		const exchanges = recomputeExchanges
+			? await this.recomputeExchanges(ownerId)
+			: {reclassifiedIds: [], requeuedIds: []};
 		// Own transfers can only change around the given rows and the rows whose exchange classification changed, so a
 		// write that changed none of them does no own-transfer work.
 		const scope = ownTransferScope(ownTransferIds, exchanges?.reclassifiedIds ?? null);

@@ -343,11 +343,11 @@ describe('DerivedDataRefreshService', () => {
 	});
 
 	it.each([
-		['an authorization', 'authorization'],
-		['a removal', 'removal'],
+		['an authorization, labels exchanges and', 'authorization', true],
+		['a removal, leaves exchanges as they were and labels', 'removal', false],
 	] as const)(
-		'after %s, labels exchanges and own transfers over the whole history and leaves a choice among several currencies for the sync',
-		async (_, kind) => {
+		'after %s own transfers over the whole history and leaves a choice among several currencies for the sync',
+		async (_, kind, exchangesRecomputed) => {
 			const {owner, current, savings, usd} = await createOwner();
 			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
 			const [transferDebit, transferCredit] = await createSavingsTransfer(
@@ -360,10 +360,13 @@ describe('DerivedDataRefreshService', () => {
 
 			await service.refresh(owner.id, {kind});
 
-			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it.
+			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it. Left
+			// unpaired, the exchange debit reads as an own transfer by the holder's name.
 			expect(await labels(exchangeDebit, exchangeCredit, transferDebit, transferCredit)).toEqual([
-				exchangeLeg,
-				exchangeLeg,
+				exchangesRecomputed
+					? exchangeLeg
+					: {financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+				exchangesRecomputed ? exchangeLeg : unlabelled,
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);

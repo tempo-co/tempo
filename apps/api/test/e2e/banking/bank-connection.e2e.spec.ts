@@ -1033,18 +1033,8 @@ describe('BankConnectionController', () => {
 				bankConnection: {provider: 'file'},
 				currentBalanceAmount: synced.currentBalanceAmount,
 			});
-			// Both halves are now imported files, so they pair.
-			const [keptDebit, dollarCredit] = await exchangeRows();
-			expect(await exchangeLabels()).toEqual([
-				{
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-					currencyExchangeCounterpartId: dollarCredit.id,
-				},
-				{
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-					currencyExchangeCounterpartId: keptDebit.id,
-				},
-			]);
+			// Removal leaves exchanges as they were, so both halves stay apart until the next import.
+			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
 			// Every row stays, with its edits, the imported one included.
 			const keptRows = await bankTransactionRepository.findBy({bankAccountId: synced.id});
 			expect(keptRows.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
@@ -1094,6 +1084,18 @@ describe('BankConnectionController', () => {
 				bankAccountId: synced.id,
 				importId: (dropped.body as {id: string}).id,
 			});
+			// The import recomputes exchanges, and both halves are now imported files, so they pair.
+			const [keptDebit, dollarCredit] = await exchangeRows();
+			expect(await exchangeLabels()).toEqual([
+				{
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					currencyExchangeCounterpartId: dollarCredit.id,
+				},
+				{
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					currencyExchangeCounterpartId: keptDebit.id,
+				},
+			]);
 
 			// The bank sends the kept rows again with a new one, and no longer the pending one; the account picks up
 			// where it was.
@@ -1113,8 +1115,8 @@ describe('BankConnectionController', () => {
 					accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
 				});
 				await callback({state: secondState, code: 'kept-again-code'}, 'connected');
-				// The EUR account is the bank's again and the USD one stays an imported file, so the exchange no longer
-				// pairs.
+				// The EUR account is the bank's again and the USD one stays an imported file, so the authorization splits
+				// the exchange.
 				expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
 			} finally {
 				releaseSync();
