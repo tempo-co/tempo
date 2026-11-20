@@ -914,11 +914,24 @@ describe('BankConnectionController', () => {
 				description: 'Pending card payment',
 				status: 'PDNG',
 			};
+			// Half of a EUR to USD exchange, on the day of the earliest row so the bank's coverage stays as it is; the USD
+			// half arrives in a statement of an account the bank does not hold.
+			const exchangeDebit: EnableBankingTransaction = {
+				providerTransactionId: 'provider-transaction-kept-exchange',
+				entryReference: 'provider-entry-kept-exchange',
+				amount: '20.00',
+				currency: 'EUR',
+				creditDebitIndicator: 'DBIT',
+				status: 'BOOK',
+				bookingDate: '2026-08-25',
+				valueDate: '2026-08-25',
+				description: 'Exchanged to USD',
+			};
 			sessionAccountIdsBySession.set('provider-session-kept-first', ['provider-account-kept-first']);
 			sessionAccountIdsBySession.set('provider-session-kept-again', ['provider-account-kept-again']);
 			getAccountBalances.mockResolvedValue(makeBalances());
 			getAccountTransactions.mockReset();
-			getAccountTransactions.mockResolvedValue(fetchedTransactions([booked, other, pending]));
+			getAccountTransactions.mockResolvedValue(fetchedTransactions([booked, other, pending, exchangeDebit]));
 
 			const firstState = await authorize();
 			createSession.mockResolvedValueOnce({
@@ -949,7 +962,7 @@ describe('BankConnectionController', () => {
 			});
 			await bankTransactionRepository.update(bookedRow.id, {category: 'GROCERIES', categorySource: 'MANUAL'});
 			expect(synced.currentBalanceAmount).not.toBeNull();
-			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id})).toBe(3);
+			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id})).toBe(4);
 			const dropStatement = (amount: string, bookingDate: string) =>
 				verifiedAgent
 					.post('/bank-imports')
@@ -966,6 +979,46 @@ describe('BankConnectionController', () => {
 					.expect(201);
 			// A statement imported while the bank synced is kept with the account.
 			const earlier = (await dropStatement('3.00', '2026-08-20')).body as {id: string};
+			const dollars = await verifiedAgent
+				.post('/bank-imports')
+				.set('Origin', 'http://localhost:5173')
+				.attach(
+					'files',
+					Buffer.from(
+						camt053([
+							{
+								iban: 'GB82WEST12345698765432',
+								currency: 'USD',
+								entries: [
+									{
+										amount: '23.00',
+										indicator: 'CRDT',
+										bookingDate: '2026-08-25',
+										info: 'Exchanged to USD',
+									},
+								],
+							},
+						]),
+					),
+					'dollars.xml',
+				)
+				.expect(201);
+			const [dollarAccount] = (dollars.body as {accounts: Array<{id: string}>}).accounts;
+			const exchangeRows = async () =>
+				Promise.all([
+					bankTransactionRepository.findOneByOrFail({
+						providerTransactionId: exchangeDebit.providerTransactionId,
+					}),
+					bankTransactionRepository.findOneByOrFail({bankAccountId: dollarAccount.id}),
+				]);
+			const exchangeLabels = async () =>
+				(await exchangeRows()).map(({financialEventType, currencyExchangeCounterpartId}) => ({
+					financialEventType,
+					currencyExchangeCounterpartId,
+				}));
+			const unpaired = {financialEventType: null, currencyExchangeCounterpartId: null};
+			// An exchange pairs legs of one connection only, so the bank's half and the file's half stay apart.
+			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
 			deleteSession.mockClear();
 
 			await verifiedAgent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
@@ -980,10 +1033,28 @@ describe('BankConnectionController', () => {
 				bankConnection: {provider: 'file'},
 				currentBalanceAmount: synced.currentBalanceAmount,
 			});
+			// Both halves are now imported files, so they pair.
+			const [keptDebit, dollarCredit] = await exchangeRows();
+			expect(await exchangeLabels()).toEqual([
+				{
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					currencyExchangeCounterpartId: dollarCredit.id,
+				},
+				{
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					currencyExchangeCounterpartId: keptDebit.id,
+				},
+			]);
 			// Every row stays, with its edits, the imported one included.
 			const keptRows = await bankTransactionRepository.findBy({bankAccountId: synced.id});
 			expect(keptRows.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
-				[booked.providerTransactionId, other.providerTransactionId, pending.providerTransactionId, null].sort(),
+				[
+					booked.providerTransactionId,
+					other.providerTransactionId,
+					pending.providerTransactionId,
+					exchangeDebit.providerTransactionId,
+					null,
+				].sort(),
 			);
 			expect(keptRows.find(({id}) => id === bookedRow.id)).toMatchObject({
 				category: 'GROCERIES',
@@ -997,13 +1068,14 @@ describe('BankConnectionController', () => {
 			expect(listed).toEqual([
 				expect.objectContaining({
 					provider: 'file',
-					bankAccounts: [
+					bankAccounts: expect.arrayContaining([
 						expect.objectContaining({
 							id: synced.id,
 							currentBalanceAmount: synced.currentBalanceAmount,
 							balanceSource: 'stated',
 						}),
-					],
+						expect.objectContaining({id: dollarAccount.id}),
+					]),
 				}),
 			]);
 
@@ -1028,7 +1100,13 @@ describe('BankConnectionController', () => {
 
 			// The bank sends the kept rows again with a new one, and no longer the pending one; the account picks up
 			// where it was.
-			getAccountTransactions.mockResolvedValue(fetchedTransactions([booked, other, later]));
+			// The sync after the reconnection waits until the authorization's own follow-up has been checked.
+			let releaseSync = () => {};
+			const syncReleased = new Promise<void>((resolve) => (releaseSync = resolve));
+			getAccountTransactions.mockImplementation(async () => {
+				await syncReleased;
+				return fetchedTransactions([booked, other, later, exchangeDebit]);
+			});
 			const secondState = await authorize();
 			createSession.mockResolvedValueOnce({
 				sessionId: 'provider-session-kept-again',
@@ -1037,6 +1115,9 @@ describe('BankConnectionController', () => {
 				accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
 			});
 			await callback({state: secondState, code: 'kept-again-code'}, 'connected');
+			// The EUR account is the bank's again and the USD one stays an imported file, so the exchange no longer pairs.
+			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			releaseSync();
 			const [reconnected] = await bankConnectionRepository.findBy({
 				account: {id: account.id},
 				provider: 'enable-banking',
@@ -1046,7 +1127,7 @@ describe('BankConnectionController', () => {
 				() => bankSyncRunRepository.findOneBy({bankConnection: {id: reconnected.id}, status: 'SUCCEEDED'}),
 				(run) => run !== null,
 			);
-			expect(await bankAccountRepository.countBy({bankConnection: {accountId: account.id}})).toBe(1);
+			expect(await bankAccountRepository.countBy({bankConnection: {accountId: account.id}})).toBe(2);
 			expect(
 				await bankAccountRepository.findOneOrFail({where: {id: synced.id}, relations: {bankConnection: true}}),
 			).toMatchObject({
@@ -1055,7 +1136,13 @@ describe('BankConnectionController', () => {
 			});
 			const resynced = await bankTransactionRepository.findBy({bankAccountId: synced.id});
 			expect(resynced.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
-				[booked.providerTransactionId, other.providerTransactionId, later.providerTransactionId, null].sort(),
+				[
+					booked.providerTransactionId,
+					other.providerTransactionId,
+					later.providerTransactionId,
+					exchangeDebit.providerTransactionId,
+					null,
+				].sort(),
 			);
 			expect(resynced.map(({id}) => id)).toContain(importedRow.id);
 			expect(resynced.find(({id}) => id === bookedRow.id)).toMatchObject({categorySource: 'MANUAL'});
