@@ -40,7 +40,7 @@ const INVALID_INPUTS: ToolCase[] = [
 		{order: 'ASC'},
 		{by: 'id', order: 'ASC'},
 		{by: 'amount', order: 'asc'},
-		{by: 'bookingDate', order: 'DESC', accountId: ID},
+		{by: 'date', order: 'DESC', accountId: ID},
 		'amount',
 		null,
 	].map((sort): ToolCase => ['search_transactions', {sort}, 'complete strict API sort']),
@@ -106,7 +106,7 @@ const INVALID_INPUTS: ToolCase[] = [
 	['search_transactions', {filters: {search: '€'.repeat(1001)}}, 'search length'],
 	['search_transactions', {filters: {search: '😀'.repeat(1001)}}, 'search length in characters'],
 	['search_transactions', {filters: {search: 7}}, 'string search'],
-	['search_transactions', {filters: {bookingDate: {from: '2040-04-31'}}}, 'booking date'],
+	['search_transactions', {filters: {date: {from: '2040-04-31'}}}, 'calendar date'],
 	['search_transactions', {filters: {bankAccountIds: ['bad-id']}}, 'bank account UUID'],
 	['search_transactions', {filters: {categories: ['INVALID']}}, 'category enum'],
 	['search_transactions', {filters: {categorySources: ['INVALID']}}, 'source enum'],
@@ -119,7 +119,7 @@ const INVALID_INPUTS: ToolCase[] = [
 	['transaction_totals', {filters: {accountId: ID}}, 'no filter owner override'],
 	[
 		'search_transactions',
-		{filters: {bookingDate: {from: '2040-01-01', origin: 'https://example.test'}}},
+		{filters: {date: {from: '2040-01-01', origin: 'https://example.test'}}},
 		'strict nested date filter',
 	],
 ];
@@ -173,7 +173,7 @@ describe('MCP tool registration', () => {
 		const body = {total: '9007199254740993.01', unconverted: null};
 		respond = async () => body;
 		const filters = {
-			bookingDate: {from: '2040-01-01', to: '2040-02-01'},
+			date: {from: '2040-01-01', to: '2040-02-01'},
 			bankAccountIds: [ID],
 			search: 'Example € & Store',
 			categories: ['FOOD_AND_DRINK', 'UNCATEGORIZED'],

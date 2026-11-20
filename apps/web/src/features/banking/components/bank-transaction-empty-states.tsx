@@ -59,8 +59,7 @@ export function NoMatchingTransactions({
       : `Nothing matches ${quoted}.`;
   // Dropping only the date is a different way out when something else narrows the list too.
   const canWidenDates =
-    Boolean(filters.bookingDate?.from || filters.bookingDate?.to) &&
-    (Boolean(search) || filterCount > 1);
+    Boolean(filters.date?.from || filters.date?.to) && (Boolean(search) || filterCount > 1);
 
   return (
     <StateMessage icon={SearchX} title='No matching transactions' description={description}>
@@ -70,7 +69,7 @@ export function NoMatchingTransactions({
       {canWidenDates && (
         <Button
           variant='ghost'
-          onClick={() => void navigate({search: (prev) => ({...prev, bookingDate: undefined})})}
+          onClick={() => void navigate({search: (prev) => ({...prev, date: undefined})})}
         >
           {search ? 'Search all dates' : 'Show all dates'}
         </Button>

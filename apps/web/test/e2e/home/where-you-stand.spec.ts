@@ -44,7 +44,7 @@ test('shows the total, its change over each span, and the span’s money in and 
   }
   await expect(span.getByRole('link', {name: 'Transactions in this span'})).toHaveAttribute(
     'href',
-    /bookingDate/,
+    /[?&]date=/,
   );
 
   await card.getByRole('radio', {name: '6M'}).click();
@@ -80,7 +80,7 @@ test('shows the total, its change over each span, and the span’s money in and 
   const href = await span
     .getByRole('link', {name: 'Transactions in this span'})
     .getAttribute('href');
-  expect(JSON.parse(new URL(href!, 'http://app.test').searchParams.get('bookingDate')!)).toEqual({
+  expect(JSON.parse(new URL(href!, 'http://app.test').searchParams.get('date')!)).toEqual({
     from: '2026-10-06T22:00:00.000Z',
     to: '2026-11-04T23:00:00.000Z',
   });

@@ -62,6 +62,8 @@ export class BankTransactionPaginationQueryDto implements NonNullable<BankTransa
 }
 
 export class BankTransactionSortQueryDto implements NonNullable<BankTransactionsQuery['sort']> {
+	// Older clients sort by `bookingDate`.
+	@Transform(({value}: {value: unknown}) => (value === 'bookingDate' ? 'date' : value))
 	@IsIn(BANK_TRANSACTION_SORT_FIELDS)
 	by: BankTransactionSortField;
 
@@ -69,7 +71,7 @@ export class BankTransactionSortQueryDto implements NonNullable<BankTransactions
 	order: SortOrder;
 }
 
-export class BankTransactionBookingDateFilterDto implements NonNullable<BankTransactionFilter['bookingDate']> {
+export class BankTransactionDateFilterDto implements NonNullable<BankTransactionFilter['date']> {
 	@IsOptional()
 	@IsCalendarDate()
 	from?: string;
@@ -82,8 +84,13 @@ export class BankTransactionBookingDateFilterDto implements NonNullable<BankTran
 export class BankTransactionFilterQueryDto implements BankTransactionFilter {
 	@IsOptional()
 	@ValidateNested()
-	@Type(() => BankTransactionBookingDateFilterDto)
-	bookingDate?: BankTransactionBookingDateFilterDto;
+	@Type(() => BankTransactionDateFilterDto)
+	date?: BankTransactionDateFilterDto;
+
+	@IsOptional()
+	@ValidateNested()
+	@Type(() => BankTransactionDateFilterDto)
+	bookingDate?: BankTransactionDateFilterDto;
 
 	@IsOptional()
 	@IsArray()

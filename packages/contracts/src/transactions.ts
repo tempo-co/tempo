@@ -96,7 +96,7 @@ export type BankTransactionBaseAmountFilterValue = (typeof BANK_TRANSACTION_BASE
 export const BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES = ['FAILED', 'CATEGORIZING'] as const;
 export type BankTransactionCategoryStatusFilterValue = (typeof BANK_TRANSACTION_CATEGORY_STATUS_FILTER_VALUES)[number];
 
-export const BANK_TRANSACTION_SORT_FIELDS = ['bookingDate', 'amount', 'category', 'source'] as const;
+export const BANK_TRANSACTION_SORT_FIELDS = ['date', 'amount', 'category', 'source'] as const;
 export type BankTransactionSortField = (typeof BANK_TRANSACTION_SORT_FIELDS)[number];
 
 export const SORT_ORDERS = ['ASC', 'DESC'] as const;
@@ -126,6 +126,8 @@ export type BankTransactionOwnTransfer = {
 /** `GET /bank-transactions/:id`, and each row of the list. */
 export type BankTransaction = {
 	id: string;
+	/** The day the payment happened, which the list, its filter and every total date it by: the transaction date, else the booking date, else the value date. */
+	date: string | null;
 	transactionDate: string | null;
 	bookingDate: string | null;
 	valueDate: string | null;
@@ -188,6 +190,9 @@ export type BankTransactionsResponse = {
 
 /** The list's filters, sent as `filter[...]` query parameters. */
 export type BankTransactionFilter = {
+	/** By `date`, both ends included. */
+	date?: {from?: string; to?: string};
+	/** Older clients' name for `date`. */
 	bookingDate?: {from?: string; to?: string};
 	bankAccountIds?: string[];
 	search?: string;

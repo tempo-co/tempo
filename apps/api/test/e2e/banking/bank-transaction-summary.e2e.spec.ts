@@ -22,6 +22,7 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {getApp, loginAgent} from '../../setup/e2e.setup';
+import {createBankingOwner} from '../../utils/banking-utils';
 
 const SUMMARY = '/bank-transactions/summary';
 const CASH_FLOW = '/bank-transactions/cash-flow';
@@ -168,8 +169,8 @@ describe('BankTransactionSummary', () => {
 			.query({
 				'filter[cashFlows][]': cashFlow,
 				'filter[baseAmount]': 'PRESENT',
-				'filter[bookingDate][from]': from,
-				'filter[bookingDate][to]': to,
+				'filter[date][from]': from,
+				'filter[date][to]': to,
 				'pagination[pageSize]': '100',
 				...filter,
 			})
@@ -199,11 +200,11 @@ describe('BankTransactionSummary', () => {
 	it('reconciles totals and categories with the filtered transaction list', async () => {
 		for (const filter of [
 			{},
-			{'filter[bookingDate][from]': '2026-10-01', 'filter[bookingDate][to]': '2026-10-18'},
+			{'filter[date][from]': '2026-10-01', 'filter[date][to]': '2026-10-18'},
 			{'filter[search]': 'eXample filter'},
 			{
 				'filter[search]': 'Example filter',
-				'filter[bookingDate][from]': '2026-10-01',
+				'filter[date][from]': '2026-10-01',
 				'filter[categories][]': 'FOOD_AND_DRINK',
 			},
 			{'filter[categorySources][]': 'AI'},
@@ -267,13 +268,10 @@ describe('BankTransactionSummary', () => {
 			.expect(200);
 		const all = await ownerAgent.get('/bank-transactions/totals').expect(200);
 		expect(ignoredPage.body).toEqual(all.body);
-		await ownerAgent
-			.get('/bank-transactions/totals')
-			.query({'filter[bookingDate][from]': '2026-02-30'})
-			.expect(400);
+		await ownerAgent.get('/bank-transactions/totals').query({'filter[date][from]': '2026-02-30'}).expect(400);
 		const {body: totals} = await ownerAgent
 			.get('/bank-transactions/totals')
-			.query({'filter[bookingDate][from]': '2026-10-01', 'filter[bookingDate][to]': '2026-10-18'})
+			.query({'filter[date][from]': '2026-10-01', 'filter[date][to]': '2026-10-18'})
 			.expect(200);
 		expect(totals).toMatchObject({
 			spending: '79.60',
@@ -493,6 +491,30 @@ describe('BankTransactionSummary', () => {
 					period('2026-10-01', '2026-10-18', false, '79.60', '2000.00'),
 				],
 			});
+		});
+
+		it('counts each payment in the month it was made, as the list filtered to that month shows it', async () => {
+			const {agent, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const [paidInAugust] = await fixtures.createTransactions(bankAccount, [
+				bookedRow('2026-09-02', '-40.00', {transactionDate: '2026-08-31'}),
+				bookedRow('2026-09-05', '-10.00'),
+				bookedRow(null, '-5.00', {transactionDate: '2026-09-06', transactionStatus: 'PDNG'}),
+			]);
+
+			const {body} = await agent
+				.get(CASH_FLOW)
+				.query({interval: 'month', from: '2026-08-01', to: '2026-09-30', asOf: '2026-09-30'})
+				.expect(200);
+			expect(body.periods).toEqual([
+				period('2026-08-01', '2026-08-31', false, '40.00', '0.00'),
+				period('2026-09-01', '2026-09-30', false, '15.00', '0.00'),
+			]);
+
+			const august = await agent
+				.get('/bank-transactions')
+				.query({'filter[date][from]': '2026-08-01', 'filter[date][to]': '2026-08-31'})
+				.expect(200);
+			expect(august.body.transactions.map(({id}: {id: string}) => id)).toEqual([paidInAugust.id]);
 		});
 
 		it('matches the monthly summary totals for every month', async () => {

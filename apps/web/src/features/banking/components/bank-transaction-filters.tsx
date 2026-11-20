@@ -27,7 +27,7 @@ import {BankTransactionCategoryFilter} from './bank-transaction-category-filter'
 import {BankTransactionCategorySourceFilter} from './bank-transaction-category-source-filter';
 import {BankTransactionDateFilter} from './bank-transaction-date-filter';
 
-type FacetKey = 'bookingDate' | 'categories' | 'cashFlows' | 'bankAccountIds' | 'categorySources';
+type FacetKey = 'date' | 'categories' | 'cashFlows' | 'bankAccountIds' | 'categorySources';
 
 type Facet = {
   key: FacetKey;
@@ -52,9 +52,9 @@ function useFacets(filters: BankTransactionFilterParams, isMobile: boolean): Fac
   const {showsAccountFilter} = useActiveBankAccounts();
   const facets: (Omit<Facet, 'isSet'> | false)[] = [
     isMobile && {
-      key: 'bookingDate',
-      label: 'Booking date',
-      summary: summary('bookingDate'),
+      key: 'date',
+      label: 'Date',
+      summary: summary('date'),
       pane: <BankTransactionDateFilter filters={filters} variant='pane' />,
     },
     {

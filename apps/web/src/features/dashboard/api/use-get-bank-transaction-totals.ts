@@ -7,7 +7,7 @@ import {api} from '@/utils/api';
 import {HOME_REFRESH_INTERVAL_MS} from './refresh-interval';
 
 /**
- * Spending and income booked between two local dates (`YYYY-MM-DD`), on cash flow's definitions: the totals of
+ * Spending and income made between two local dates (`YYYY-MM-DD`), on cash flow's definitions: the totals of
  * every transaction in the range, as the transaction list shows them.
  */
 export const useGetBankTransactionTotals = (
@@ -19,8 +19,8 @@ export const useGetBankTransactionTotals = (
     queryKey: dashboardQueryKeys.totals(from, to),
     queryFn: () => {
       const params = new URLSearchParams({
-        'filter[bookingDate][from]': from,
-        'filter[bookingDate][to]': to,
+        'filter[date][from]': from,
+        'filter[date][to]': to,
       });
       return api.get<BankTransactionTotals>(`/bank-transactions/totals?${params.toString()}`);
     },

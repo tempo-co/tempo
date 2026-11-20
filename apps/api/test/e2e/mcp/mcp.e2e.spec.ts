@@ -293,7 +293,7 @@ describe('Hosted MCP', () => {
 					(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).currentBalanceAmount,
 				);
 				const filters = {
-					bookingDate: {from: '2026-01-01', to: '2026-01-31'},
+					date: {from: '2026-01-01', to: '2026-01-31'},
 					bankAccountIds: [bankAccount.id, otherBankAccount.id],
 					categories: ['SHOPPING'],
 					search: 'Example Shop',
@@ -492,7 +492,7 @@ describe('Hosted MCP', () => {
 					count: 6,
 					excluded: {missingBaseAmount: 0},
 				});
-				const narrowed = {...seriesFilters, bookingDate: {from: '2025-10-01'}};
+				const narrowed = {...seriesFilters, date: {from: '2025-10-01'}};
 				expect(await call('search_transactions', {filters: narrowed})).toMatchObject({total: 3});
 				expect(await call('transaction_totals', {filters: narrowed})).toMatchObject({
 					count: 3,
@@ -528,7 +528,7 @@ describe('Hosted MCP', () => {
 					bookedRow('2026-01-09', '-3.33', {category: 'FOOD_AND_DRINK'}),
 				);
 				const ownedRowIds = new Set([...savedRows.map(({id}) => id), alternateRow.id]);
-				for (const by of ['bookingDate', 'amount', 'category', 'source']) {
+				for (const by of ['date', 'amount', 'category', 'source']) {
 					for (const order of ['ASC', 'DESC']) {
 						const sortFilters = {bankAccountIds: [bankAccount.id, alternateBank.id, otherBankAccount.id]};
 						const sortQuery = new URLSearchParams({

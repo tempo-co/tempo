@@ -49,7 +49,7 @@ import {
 	SQL_SPENDING,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
-	findFirstBookingDate,
+	findFirstTransactionDate,
 	sqlMerchantGroupName,
 } from './bank-transaction-filters';
 
@@ -125,14 +125,14 @@ export class MerchantSpendingService {
 		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(MERCHANT_PERIODS_RANGE);
-		const [exists, firstBookingDate] = await Promise.all([
+		const [exists, firstTransactionDate] = await Promise.all([
 			this.groupExists(accountId, groupId),
-			findFirstBookingDate(this.bankTransactionRepository, accountId),
+			findFirstTransactionDate(this.bankTransactionRepository, accountId),
 		]);
 		if (!exists) throw new NotFoundException(MERCHANT_NOT_FOUND);
 
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
-		applyBankTransactionFilters(query, {bookingDate: {from: starts[0], to}, merchantGroup: groupId});
+		applyBankTransactionFilters(query, {date: {from: starts[0], to}, merchantGroup: groupId});
 		const rows = await query
 			.select(SQL_PERIOD_START, 'start')
 			.addSelect(`COALESCE(SUM(-${CENTS}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spent')
@@ -143,7 +143,7 @@ export class MerchantSpendingService {
 			.getRawMany<{start: string; spent: string; received: string; count: number}>();
 		const totals = new Map(rows.map((row) => [row.start, row]));
 
-		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+		const periods = periodWindows(interval, starts, to, asOf, firstTransactionDate).map(
 			(window): MerchantGroupPeriod => {
 				const row = totals.get(window.start);
 				return {
@@ -175,25 +175,25 @@ export class MerchantSpendingService {
 		const through = running ? asOf : end;
 		const elapsedDays = daysBetween(start, through);
 
-		const firstBookingDate = await findFirstBookingDate(this.bankTransactionRepository, accountId);
+		const firstTransactionDate = await findFirstTransactionDate(this.bankTransactionRepository, accountId);
 		const baseline: Array<{start: string; through: string}> = [];
 		for (let earlier = start, index = 0; index < MERCHANT_RANKING_BASELINE_PERIODS; index++) {
 			earlier = periodStart(addDays(earlier, -1), interval);
 			const earlierEnd = addDays(nextPeriodStart(earlier, interval), -1);
-			if (!firstBookingDate || earlierEnd < firstBookingDate) break;
+			if (!firstTransactionDate || earlierEnd < firstTransactionDate) break;
 			const cut = addDays(earlier, elapsedDays);
 			baseline.unshift({start: earlier, through: running && cut < earlierEnd ? cut : earlierEnd});
 		}
 
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {
-			bookingDate: {from: baseline[0]?.start ?? start, to: through},
+			date: {from: baseline[0]?.start ?? start, to: through},
 			baseAmount: 'PRESENT',
 			cashFlows: ['SPENDING'],
 		});
 		const rows = await query
 			.select(SQL_MERCHANT_GROUP, 'groupId')
-			.addSelect(`to_char("transaction"."bookingDate", 'YYYY-MM-DD')`, 'day')
+			.addSelect(`to_char("transaction"."date", 'YYYY-MM-DD')`, 'day')
 			.addSelect(`SUM(-${CENTS})::text`, 'spent')
 			.andWhere('"transaction"."merchantKey" IS NOT NULL')
 			.groupBy('1')
@@ -276,7 +276,7 @@ export class MerchantSpendingService {
 		const variants = createOwnerScopedQuery(this.bankTransactionRepository, accountId)
 			.select(`${SQL_MERCHANT_KEY_NAME} COLLATE "C"`, 'key')
 			.addSelect(
-				`(array_agg("transaction"."displayDescription" ORDER BY "transaction"."bookingDate" DESC NULLS FIRST, "transaction"."createdAt" DESC))[1]`,
+				`(array_agg("transaction"."displayDescription" ORDER BY "transaction"."date" DESC NULLS FIRST, "transaction"."createdAt" DESC))[1]`,
 				'name',
 			)
 			.addSelect(`COALESCE(SUM(-${CENTS}) FILTER (WHERE ${SQL_SPENDING} AND ${DEBIT}), 0)::text`, 'paid')
@@ -288,8 +288,8 @@ export class MerchantSpendingService {
 				'paymentCount',
 			)
 			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
-			.addSelect(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'firstDate')
-			.addSelect(`to_char(MAX("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'lastDate')
+			.addSelect(`to_char(MIN("transaction"."date"), 'YYYY-MM-DD')`, 'firstDate')
+			.addSelect(`to_char(MAX("transaction"."date"), 'YYYY-MM-DD')`, 'lastDate')
 			.andWhere(`"transaction"."merchantKey" IS NOT NULL AND NOT ${SQL_INTERNAL}`)
 			.groupBy('1');
 		const [variantSql, parameters]: [string, unknown[]] = variants.getQueryAndParameters();
@@ -348,7 +348,7 @@ export class MerchantSpendingService {
 		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
 			.select(SQL_MERCHANT_GROUP, 'groupId')
 			.addSelect('COUNT(*)::int', 'count')
-			.andWhere('"transaction"."bookingDate" BETWEEN :from AND :to', {from, to})
+			.andWhere('"transaction"."date" BETWEEN :from AND :to', {from, to})
 			.andWhere(`${SQL_MERCHANT_GROUP} IN (:...groupIds)`, {groupIds})
 			.groupBy('1')
 			.getRawMany<{groupId: string; count: number}>();

@@ -82,7 +82,7 @@ async function mockHome(page: Page, padding = 0) {
     }),
   );
   await page.route(`${API_URL}/bank-transactions?**`, (route) => {
-    const from = new URL(route.request().url()).searchParams.get('filter[bookingDate][from]');
+    const from = new URL(route.request().url()).searchParams.get('filter[date][from]');
     return fulfillJson(route, {
       ...(from ? monthTransactions(from.slice(0, 7), 3) : {transactions: [], total: 0}),
       padding: 'x'.repeat(padding),

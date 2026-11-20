@@ -137,7 +137,7 @@ test('cash flow picker applies the real spending predicate from the first page',
   expect(response.ok()).toBe(true);
   const list: unknown = await response.json();
   const expected = await page.request.get(
-    `${API_URL}/bank-transactions?filter[cashFlows][]=SPENDING&sort[by]=bookingDate&sort[order]=DESC&pagination[pageIndex]=0&pagination[pageSize]=50`,
+    `${API_URL}/bank-transactions?filter[cashFlows][]=SPENDING&sort[by]=date&sort[order]=DESC&pagination[pageIndex]=0&pagination[pageSize]=50`,
   );
   expect(expected.ok()).toBe(true);
   expect(list).toEqual(await expected.json());
@@ -165,7 +165,7 @@ for (const mobile of [false, true]) {
       .first()
       .click();
     await expect(page).toHaveURL(/bank-transactions/);
-    const bookingDate = new URL(page.url()).searchParams.get('bookingDate');
+    const dateParam = new URL(page.url()).searchParams.get('date');
     await openTransactionFilter(page, 'Cash flow');
     const parent = page.getByRole('option', {name: 'Internal movements', exact: true});
     const exchange = page.getByRole('option', {name: 'Currency exchange', exact: true});
@@ -198,7 +198,7 @@ for (const mobile of [false, true]) {
     await parent.click();
     await expect(exchange).toHaveAttribute('data-filter-selected', 'false');
     await expect(transfer).toHaveAttribute('data-filter-selected', 'false');
-    expect(new URL(page.url()).searchParams.get('bookingDate')).toBe(bookingDate);
+    expect(new URL(page.url()).searchParams.get('date')).toBe(dateParam);
     await expect
       .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
       .toEqual(['SPENDING']);

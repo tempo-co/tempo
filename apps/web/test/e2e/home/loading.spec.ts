@@ -234,9 +234,9 @@ test('the running month asks for its transactions once, up to today, while the r
   const asked: string[] = [];
   await page.route('**/bank-transactions?**', async (route) => {
     const params = new URL(route.request().url()).searchParams;
-    if (params.has('filter[bookingDate][from]'))
+    if (params.has('filter[date][from]'))
       asked.push(
-        `${params.get('filter[bookingDate][from]')}..${params.get('filter[bookingDate][to]')}`,
+        `${params.get('filter[date][from]')}..${params.get('filter[date][to]')}`,
       );
     await route.fallback();
   });

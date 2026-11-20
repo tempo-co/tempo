@@ -151,8 +151,17 @@ describe('BankTransactionController', () => {
 
 		expect(response.body.total).toBe(4);
 		expect(categorizeSpy).not.toHaveBeenCalled();
-		expect(response.body.transactions[0]).toMatchObject({
+		// Newest first by the day each payment happened: the coffee was paid on the 24th and booked on the 26th.
+		expect(response.body.transactions.map(({description}: BankTransactionResponse) => description)).toEqual([
+			'Groceries',
+			'Coffee shop',
+			'Salary',
+			'Transfer',
+		]);
+		const coffee = response.body.transactions[1];
+		expect(coffee).toMatchObject({
 			id: fixtureTransaction.id,
+			date: '2026-08-24',
 			transactionDate: '2026-08-24',
 			bookingDate: '2026-08-26',
 			amount: '-4.50000000',
@@ -186,9 +195,9 @@ describe('BankTransactionController', () => {
 		expect(serializedResponse).not.toContain('provider-entry-coffee');
 		expect(serializedResponse).not.toContain('identification-hash-must-not-leak');
 		expect(serializedResponse).not.toContain('provider-account-must-not-leak');
-		expect(response.body.transactions[0]).not.toHaveProperty('stableIdentityKey');
-		expect(response.body.transactions[0]).not.toHaveProperty('bankTransactionCode');
-		expect(response.body.transactions[0]).not.toHaveProperty('bankTransactionSubCode');
+		expect(coffee).not.toHaveProperty('stableIdentityKey');
+		expect(coffee).not.toHaveProperty('bankTransactionCode');
+		expect(coffee).not.toHaveProperty('bankTransactionSubCode');
 	});
 
 	it('uses default pagination and preserves the full total across pages', async () => {
@@ -209,8 +218,8 @@ describe('BankTransactionController', () => {
 			expect(response.body.total).toBe(12);
 			expect(response.body.transactions).toHaveLength(10);
 			expect(response.body.transactions[0]).toMatchObject({
-				id: fixtureTransaction.id,
-				bookingDate: '2026-08-26',
+				id: fixtureGroceriesTransaction.id,
+				date: '2026-08-25',
 			});
 
 			const firstPageIds = response.body.transactions.map(({id}: {id: string}) => id);
@@ -223,11 +232,9 @@ describe('BankTransactionController', () => {
 			expect(nextPageResponse.body.total).toBe(12);
 			expect(nextPageResponse.body.transactions).toHaveLength(2);
 			expect(new Set([...firstPageIds, ...nextPageIds]).size).toBe(12);
-			expect(
-				nextPageResponse.body.transactions.every(
-					({bookingDate}: {bookingDate: string}) => bookingDate === '2026-08-01',
-				),
-			).toBe(true);
+			expect(nextPageResponse.body.transactions.every(({date}: {date: string}) => date === '2026-08-01')).toBe(
+				true,
+			);
 		} finally {
 			await bankTransactionRepository.remove(additionalTransactions);
 		}
@@ -248,17 +255,17 @@ describe('BankTransactionController', () => {
 		expect(paginatedResponse.body.transactions).toHaveLength(4);
 		expect(paginatedResponse.body.transactions[0].amount).toBe('-30.00000000');
 
-		const bookingDateAscendingResponse = await verifiedAgent
+		const dateAscendingResponse = await verifiedAgent
 			.get('/bank-transactions')
 			.query({
 				'pagination[pageIndex]': '0',
 				'pagination[pageSize]': '10',
-				'sort[by]': 'bookingDate',
+				'sort[by]': 'date',
 				'sort[order]': 'ASC',
 			})
 			.expect(200);
 
-		expect(bookingDateAscendingResponse.body.transactions[0].bookingDate).toBe('2026-08-10');
+		expect(dateAscendingResponse.body.transactions[0].date).toBe('2026-08-10');
 
 		const sameDayTransactions = await fixtures.createTransactions(
 			fixtureBankAccount,
@@ -411,8 +418,8 @@ describe('BankTransactionController', () => {
 		const filteredResponse = await verifiedAgent
 			.get('/bank-transactions')
 			.query({
-				'filter[bookingDate][from]': '2026-08-21',
-				'filter[bookingDate][to]': '2026-08-26',
+				'filter[date][from]': '2026-08-21',
+				'filter[date][to]': '2026-08-24',
 				'filter[bankAccountIds][]': fixtureBankAccount.id,
 				'filter[search]': 'coffee',
 			})
@@ -420,6 +427,21 @@ describe('BankTransactionController', () => {
 
 		expect(filteredResponse.body.total).toBe(1);
 		expect(filteredResponse.body.transactions[0].description).toBe('Coffee shop');
+
+		// An older client's names for the date filter and the date order mean the same.
+		const olderClientResponse = await verifiedAgent
+			.get('/bank-transactions')
+			.query({
+				'filter[bookingDate][from]': '2026-08-21',
+				'filter[bookingDate][to]': '2026-08-24',
+				'filter[bankAccountIds][]': fixtureBankAccount.id,
+				'sort[by]': 'bookingDate',
+				'sort[order]': 'DESC',
+			})
+			.expect(200);
+		expect(
+			olderClientResponse.body.transactions.map(({description}: BankTransactionResponse) => description),
+		).toEqual(['Coffee shop']);
 
 		const longSearchText = 'Example long transaction remittance '.padEnd(1000, 'x');
 		const longSearchTransaction = await fixtures.createTransaction(fixtureBankAccount, {
@@ -494,7 +516,7 @@ describe('BankTransactionController', () => {
 			expect(multipleCategoriesResponse.body.total).toBe(2);
 			expect(
 				multipleCategoriesResponse.body.transactions.map(({description}: {description: string}) => description),
-			).toEqual(['Coffee shop', 'Groceries']);
+			).toEqual(['Groceries', 'Coffee shop']);
 		} finally {
 			await bankTransactionRepository.update({id: fixtureTransaction.id}, {category: null});
 			await bankTransactionRepository.update({id: fixtureGroceriesTransaction.id}, {category: null});
@@ -869,8 +891,8 @@ describe('BankTransactionController', () => {
 			const response = await verifiedAgent
 				.get('/bank-transactions')
 				.query({
-					'filter[bookingDate][from]': june(1),
-					'filter[bookingDate][to]': june(30),
+					'filter[date][from]': june(1),
+					'filter[date][to]': june(30),
 					'pagination[pageSize]': '100',
 					...filter,
 				})
@@ -928,7 +950,7 @@ describe('BankTransactionController', () => {
 		['an unsupported sort field', {'sort[by]': 'postedDate'}],
 		['an unsupported sort order', {'sort[order]': 'DOWN'}],
 		['a search longer than 1000 characters', {'filter[search]': 'x'.repeat(1001)}],
-		['an invalid booking date', {'filter[bookingDate][from]': '2026-99-99'}],
+		['an invalid date', {'filter[date][from]': '2026-99-99'}],
 		['a malformed bank account ID', {'filter[bankAccountIds][]': 'not-a-uuid'}],
 		['an unsupported category', {'filter[categories][]': 'NOT_A_CATEGORY'}],
 		['an unsupported categorization source', {'filter[categorySources][]': 'RULE'}],

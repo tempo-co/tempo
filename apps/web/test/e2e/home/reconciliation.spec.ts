@@ -41,8 +41,8 @@ test('a real category total in a month reconciles with its transaction drill', a
   expect(JSON.parse(search.get('cashFlows')!)).toEqual(['SPENDING']);
   expect(search.get('baseAmount')).toBe(counts.missingBaseAmount > 0 ? 'PRESENT' : null);
   const params = new URLSearchParams({
-    'filter[bookingDate][from]': '2026-08-01',
-    'filter[bookingDate][to]': '2026-08-31',
+    'filter[date][from]': '2026-08-01',
+    'filter[date][to]': '2026-08-31',
     'filter[categories][]': 'UNCATEGORIZED',
     'filter[cashFlows][]': 'SPENDING',
     'filter[baseAmount]': 'PRESENT',
@@ -95,8 +95,8 @@ test('a real income source reconciles with its drill, from its month and from it
       page.getByRole('button', {name: 'Remove filter: One income source'}),
     ).toBeVisible();
     const params = new URLSearchParams({
-      'filter[bookingDate][from]': from,
-      'filter[bookingDate][to]': to,
+      'filter[date][from]': from,
+      'filter[date][to]': to,
       'filter[cashFlows][]': 'INCOME',
       'filter[baseAmount]': 'PRESENT',
       'filter[incomeSource]': part.key,

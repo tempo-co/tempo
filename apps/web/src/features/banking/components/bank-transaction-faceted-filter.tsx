@@ -25,7 +25,7 @@ type FacetedFilterProps = {
 
 /**
  * A filter's own toolbar control: an outline trigger with a popover, or (`pane`) just the options, for the Filters
- * panel, which shows one filter at a time and scrolls it itself. The Booking date filter is the one that needs both.
+ * panel, which shows one filter at a time and scrolls it itself. The Date filter is the one that needs both.
  */
 export function FacetedFilter({
   variant,

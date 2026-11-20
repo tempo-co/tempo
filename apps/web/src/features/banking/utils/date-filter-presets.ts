@@ -9,15 +9,15 @@ import {
   subYears,
 } from 'date-fns';
 
-export type BookingDateRange = {from: Date; to: Date};
+export type DateFilterRange = {from: Date; to: Date};
 
-export type BookingDatePreset = {
+export type DateFilterPreset = {
   label: string;
-  getRange: (today: Date) => BookingDateRange;
+  getRange: (today: Date) => DateFilterRange;
 };
 
 // Ranges use midnight dates, matching what the calendar produces for a picked day.
-export const BOOKING_DATE_PRESETS: BookingDatePreset[] = [
+export const DATE_FILTER_PRESETS: DateFilterPreset[] = [
   {label: 'Last 30 days', getRange: (today) => ({from: subDays(today, 29), to: today})},
   {label: 'This month', getRange: (today) => ({from: startOfMonth(today), to: today})},
   {
@@ -38,5 +38,5 @@ export const BOOKING_DATE_PRESETS: BookingDatePreset[] = [
   },
 ];
 
-/** How many years back the booking date calendar's year dropdown reaches. */
-export const BOOKING_DATE_HISTORY_YEARS = 10;
+/** How many years back the date filter calendar's year dropdown reaches. */
+export const DATE_FILTER_HISTORY_YEARS = 10;

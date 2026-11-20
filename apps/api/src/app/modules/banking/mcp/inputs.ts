@@ -14,7 +14,7 @@ import validator from 'validator';
 import {z} from 'zod';
 
 export const filtersSchema = z.strictObject({
-	bookingDate: z.strictObject({from: z.iso.date().optional(), to: z.iso.date().optional()}).optional(),
+	date: z.strictObject({from: z.iso.date().optional(), to: z.iso.date().optional()}).optional(),
 	bankAccountIds: z.array(z.uuidv4()).optional(),
 	search: z
 		.string()

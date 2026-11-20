@@ -34,6 +34,7 @@ export type {BankTransactionBaseAmountMethod};
 @Index('idx_bank_transactions_account_stable_identity', ['bankAccountId', 'stableIdentityKey'], {unique: true})
 @Index('idx_bank_transactions_account_identity_group', ['bankAccountId', 'stableIdentityGroupKey'])
 @Index('idx_bank_transactions_account_booking_date', ['bankAccountId', 'bookingDate'])
+@Index('idx_bank_transactions_account_date', ['bankAccountId', 'date'])
 @Index('idx_bank_transactions_account_merchant_key', ['bankAccountId', 'merchantKey'])
 @Index('idx_bank_transactions_import', ['importId'])
 @Index('idx_bank_transactions_account_amount', ['bankAccountId', 'amount'])
@@ -79,6 +80,17 @@ export class BankTransaction {
 
 	@Column({type: 'date', nullable: true})
 	transactionDate: string | null;
+
+	/** The day the payment happened, which the ledger, its filters and every total use. Sync bookkeeping keeps `bookingDate`. */
+	@Column({
+		type: 'date',
+		nullable: true,
+		generatedType: 'STORED',
+		asExpression: 'COALESCE("transactionDate", "bookingDate", "valueDate")',
+		insert: false,
+		update: false,
+	})
+	readonly date: string | null;
 
 	@Column({type: 'numeric', precision: 20, scale: 8})
 	amount: string;

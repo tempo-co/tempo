@@ -166,12 +166,20 @@ const listRows = (page: Page) => page.getByTestId(/^bank-transaction-row-/);
 const last = <T>(items: T[]) => items[items.length - 1];
 
 test('groups rows by day and loads fifty more at a time', async ({page}) => {
-  // A row not yet booked comes last, the way the API orders it, but belongs to its day.
+  // Rows sit under the day they were made: a row not yet booked under today, and a card payment made on Sunday
+  // but booked today under Sunday.
   const unbooked = row(120, '2026-11-10', {
     bookingDate: null,
     displayDescription: 'Example Pending',
   });
-  const rows = [...history(), unbooked];
+  const paidSunday = row(121, '2026-11-10', {
+    transactionDate: '2026-11-08',
+    date: '2026-11-08',
+    displayDescription: 'Example Paid Sunday',
+  });
+  // They take the place of two 1 October rows, so the first page still ends in December.
+  const ledger = history();
+  const rows = [...ledger.slice(0, 2), unbooked, ...ledger.slice(2, 6), paidSunday, ...ledger.slice(8)];
   const requests = await mockLedger(page, rows);
   await page.setViewportSize({width: 1440, height: 900});
   await page.goto('/bank-transactions');
@@ -185,7 +193,7 @@ test('groups rows by day and loads fifty more at a time', async ({page}) => {
     'Wednesday 31 December 2025',
   ]);
   // Without a filter the summary is the count alone; no totals are asked for.
-  await expect(page.getByTestId('bank-transactions-summary')).toHaveText('121 transactions');
+  await expect(page.getByTestId('bank-transactions-summary')).toHaveText('120 transactions');
   expect(requests.totals).toHaveLength(0);
 
   const loadMore = page.getByRole('button', {name: 'Load more'});
@@ -194,7 +202,7 @@ test('groups rows by day and loads fifty more at a time', async ({page}) => {
   expect(last(requests.list)?.get('pagination[pageIndex]')).toBe('1');
   expect(last(requests.list)?.get('pagination[pageSize]')).toBe('50');
   await loadMore.click();
-  await expect(listRows(page)).toHaveCount(121);
+  await expect(listRows(page)).toHaveCount(120);
   await expect(loadMore).toBeHidden();
   // A day that runs across pages stays one card.
   await expect(page.getByRole('heading', {name: 'Sunday 1 June 2025'})).toHaveCount(1);
@@ -202,11 +210,13 @@ test('groups rows by day and loads fifty more at a time', async ({page}) => {
   await expect(today).toHaveCount(1);
   await expect(today.getByTestId(/^bank-transaction-row-/)).toHaveCount(3);
   await expect(today.getByTestId(`bank-transaction-row-${unbooked.id}`)).toBeVisible();
+  const sunday = page.getByRole('region', {name: 'Sunday 8 November', exact: true});
+  await expect(sunday.getByTestId(`bank-transaction-row-${paidSunday.id}`)).toBeVisible();
 
   // A row loaded later opens at once from the list while its details load.
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  const later = rows[110];
+  const later = ledger[110];
   await page.route(`**/bank-transactions/${later.id}`, async (route) => {
     await held;
     await fulfillJson(route, later);
@@ -342,7 +352,7 @@ for (const phone of [false, true]) {
       const [toggleBox, dateBox, searchBox] = await Promise.all(
         [
           toggle,
-          page.getByRole('button', {name: /^Booking date/}),
+          page.getByRole('button', {name: /^Date/}),
           page.getByTestId('bank-transactions-search'),
         ].map(boxOf),
       );
@@ -459,7 +469,7 @@ test('shows every filter in force as a removable chip, Home drills included', as
     recurringSeriesKey: 'b'.repeat(32),
     categoryStatuses: JSON.stringify(['FAILED']),
     categories: JSON.stringify(['FOOD_AND_DRINK', 'SHOPPING', 'HEALTH']),
-    bookingDate: JSON.stringify({from: '2026-10-03', to: '2026-10-20'}),
+    date: JSON.stringify({from: '2026-10-03', to: '2026-10-20'}),
     baseAmount: 'PRESENT',
   });
   await page.setViewportSize({width: 1440, height: 900});
@@ -491,7 +501,7 @@ test('shows every filter in force as a removable chip, Home drills included', as
     page.getByRole('button', {name: 'Remove filter: 3 Oct 2026 – 20 Oct 2026'}),
   ).toBeVisible();
   await page.getByRole('button', {name: 'Remove filter: 3 Oct 2026 – 20 Oct 2026'}).click();
-  await expect(page).not.toHaveURL(/bookingDate/);
+  await expect(page).not.toHaveURL(/[?&]date=/);
   await expectNoHorizontalOverflow(page);
 });
 

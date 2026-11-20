@@ -70,7 +70,7 @@ const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) 
 export const recurringSeriesKeySchema = z.string().regex(/^[0-9a-f]{32}$/);
 
 export const bankTransactionSearchParamsSchema = z.object({
-  bookingDate: z
+  date: z
     .object({
       from: z.preprocess(toDate, z.date()).optional(),
       to: z.preprocess(toDate, z.date()).optional(),
@@ -109,7 +109,7 @@ export const bankTransactionSearchParamsSchema = z.object({
   /** The orders the page offers; an older link's category or source order falls back to newest first. */
   sort: z
     .object({
-      by: z.enum(['bookingDate', 'amount'] as const satisfies readonly BankTransactionSortField[]),
+      by: z.enum(['date', 'amount'] as const satisfies readonly BankTransactionSortField[]),
       order: z.enum(SORT_ORDERS),
     })
     .optional()
@@ -120,7 +120,7 @@ export type BankTransactionSearchParams = z.infer<typeof bankTransactionSearchPa
 
 /** The search params that filter the transaction list; `search` is the free-text query. */
 export const BANK_TRANSACTION_FILTER_KEYS = [
-  'bookingDate',
+  'date',
   'bankAccountIds',
   'categories',
   'categorySources',
@@ -142,7 +142,7 @@ export type BankTransactionFilterParams = Pick<
 export type BankTransactionSortParams = BankTransactionSearchParams['sort'];
 
 export const DEFAULT_BANK_TRANSACTION_SORT: NonNullable<BankTransactionSortParams> = {
-  by: 'bookingDate',
+  by: 'date',
   order: 'DESC',
 };
 

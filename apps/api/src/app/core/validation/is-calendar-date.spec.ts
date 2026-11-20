@@ -1,7 +1,7 @@
 import {IsOptional, validateSync} from 'class-validator';
 import 'reflect-metadata';
 
-import {BankTransactionBookingDateFilterDto} from '@modules/banking/api/dtos/bank-transaction-query.dto';
+import {BankTransactionDateFilterDto} from '@modules/banking/api/dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from '@modules/banking/api/dtos/bank-transaction-summary-query.dto';
 
 import {IsCalendarDate} from './is-calendar-date';
@@ -64,28 +64,23 @@ describe('calendar-date validation', () => {
 		expect(Object.keys(constraints(date))).not.toHaveLength(0);
 	});
 
-	it.each([...validDates, ...invalidDates])(
-		'keeps the booking-date and summary validation aligned for %p',
-		(date) => {
-			const booking = validateSync(
-				Object.assign(new BankTransactionBookingDateFilterDto(), {from: date, to: date}),
-			);
-			const summary = validateSync(
-				Object.assign(new BankTransactionSummaryQueryDto(), {month: '2026-10', asOf: date}),
-			);
-			const requiredConstraints = Object.keys(constraints(date));
-			const optionalConstraints = date == null ? [] : requiredConstraints;
+	it.each([...validDates, ...invalidDates])('keeps the date filter and summary validation aligned for %p', (date) => {
+		const dateFilter = validateSync(Object.assign(new BankTransactionDateFilterDto(), {from: date, to: date}));
+		const summary = validateSync(
+			Object.assign(new BankTransactionSummaryQueryDto(), {month: '2026-10', asOf: date}),
+		);
+		const requiredConstraints = Object.keys(constraints(date));
+		const optionalConstraints = date == null ? [] : requiredConstraints;
 
-			for (const property of ['from', 'to']) {
-				expect(Object.keys(booking.find((error) => error.property === property)?.constraints ?? {})).toEqual(
-					optionalConstraints,
-				);
-			}
-			expect(Object.keys(summary.find((error) => error.property === 'asOf')?.constraints ?? {})).toEqual(
-				requiredConstraints,
+		for (const property of ['from', 'to']) {
+			expect(Object.keys(dateFilter.find((error) => error.property === property)?.constraints ?? {})).toEqual(
+				optionalConstraints,
 			);
-		},
-	);
+		}
+		expect(Object.keys(summary.find((error) => error.property === 'asOf')?.constraints ?? {})).toEqual(
+			requiredConstraints,
+		);
+	});
 
 	it.each(['0050-04', '2026-1', '2026-13'])('rejects the summary month %s', (month) => {
 		const errors = validateSync(Object.assign(new BankTransactionSummaryQueryDto(), {month, asOf: '2026-10-18'}));

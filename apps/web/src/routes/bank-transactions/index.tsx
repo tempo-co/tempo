@@ -149,7 +149,7 @@ function BankTransactionsIndex() {
                   <>
                     <BankTransactionLedger
                       transactions={transactions}
-                      groupByDay={sort.by === 'bookingDate'}
+                      groupByDay={sort.by === 'date'}
                       empty={
                         isFiltered ? (
                           <NoMatchingTransactions filters={filters} onClearFilters={clearFilters} />

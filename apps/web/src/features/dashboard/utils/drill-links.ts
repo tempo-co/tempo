@@ -11,13 +11,13 @@ export function parseCalendarDate(value: string) {
   return parse(value, 'yyyy-MM-dd', new Date());
 }
 
-function bookingRange(from: string, to: string) {
+function dateRange(from: string, to: string) {
   return {from: parseCalendarDate(from), to: parseCalendarDate(to)};
 }
 
-/** Every transaction booked between two calendar dates. */
+/** Every transaction made between two calendar dates. */
 export function periodDrill(from: string, to: string): BankTransactionDrillSearch {
-  return {bookingDate: bookingRange(from, to)};
+  return {date: dateRange(from, to)};
 }
 
 /**

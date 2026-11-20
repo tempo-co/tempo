@@ -27,7 +27,7 @@ export function TransactionListRow({
       <div className='min-w-0'>
         <p className='truncate text-sm'>{resolveBankTransactionDisplayTitle(transaction)}</p>
         <p className='truncate text-xs text-muted-foreground'>
-          {formatBankTransactionCompactDate(transaction.bookingDate ?? transaction.transactionDate)}
+          {formatBankTransactionCompactDate(transaction.date)}
           {isPendingBankTransaction(transaction) && ' · Pending'}
         </p>
       </div>
