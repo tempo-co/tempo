@@ -13,7 +13,7 @@ import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatters';
 import {TileRowsSkeleton} from '@/features/dashboard/components/loading';
-import {wasToasted} from '@/utils/api';
+import {HttpError, wasToasted} from '@/utils/api';
 
 import {
   useAddNeverSentRows,
@@ -149,9 +149,11 @@ function NeverSentList({
           description: 'Try again in a moment.',
           id: `bank-import-add-failed-${summary.id}`,
         });
-      // Whatever the failure, rows of this add may have landed without their answer, or another tab may have added
-      // rows: the list is read again, and rows it no longer lists show as added.
-      void refreshRows().then(onAdded);
+      // Rows of this add may have landed without their answer, or another tab may have added rows: the list is read
+      // again, and rows it no longer lists show as added. A 404 means the import is gone, undone elsewhere, and its
+      // rows with it, so nothing is read again.
+      if (!(failure instanceof HttpError && failure.status === 404))
+        void refreshRows().then(onAdded);
     } finally {
       setAdding(null);
     }

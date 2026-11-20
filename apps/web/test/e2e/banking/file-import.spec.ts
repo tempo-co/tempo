@@ -866,10 +866,14 @@ test.describe('statement file import on Connections', () => {
   });
 
   /**
-   * An import whose two never-sent rows are listed, where adding the first is refused and reading the list again
-   * answers `reread`. Answers with the list and the number of reads.
+   * An import whose two never-sent rows are listed, where adding the first is refused with `refusal` and reading the
+   * list again answers `reread`. Answers with the list and the number of reads.
    */
-  async function refuseAddThenReread(page: Page, reread: (route: Route) => Promise<void>) {
+  async function refuseAddThenReread(
+    page: Page,
+    reread: (route: Route) => Promise<void>,
+    refusal = 409,
+  ) {
     const row = (id: number, description: string): BankImportNeverSentRow => ({
       id: `00000000-0000-4000-8000-00000000090${id}`,
       kind: 'not_in_bank',
@@ -889,7 +893,7 @@ test.describe('statement file import on Connections', () => {
     const api = await mockFileImport(page, {
       uploads: [created(importSummary({rowsAdded: 0, rowsDoubtful: 0, rowsNotInBank: 2}))],
       neverSentRows: [row(1, 'Example Fee'), row(2, 'Example Charge')],
-      failAdds: {0: 409},
+      failAdds: {0: refusal},
     });
     let reads = 0;
     await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
@@ -921,6 +925,17 @@ test.describe('statement file import on Connections', () => {
     await expect(list.getByRole('button', {name: 'Add Example Fee on 3 Jun'})).toBeEnabled();
     await expect(list.getByRole('button', {name: 'Add Example Charge on 3 Jun'})).toBeEnabled();
     expect(api.adds).toHaveLength(1);
+  });
+
+  test('an add refused because the import is gone does not read the list again', async ({page}) => {
+    const {list, reads} = await refuseAddThenReread(page, (route) => fulfillJson(route, []), 404);
+
+    const toasts = page.locator('[data-sonner-toast]');
+    await expect(toasts).toContainText("Couldn't add the transaction");
+    expect(await countAfterToasts(page, toasts)).toBe(1);
+    expect(reads()).toBe(1);
+    await expect(list.getByRole('button', {name: 'Add Example Charge on 3 Jun'})).toBeEnabled();
+    await expect(list.getByRole('status')).toHaveCount(0);
   });
 
   test('a refused add whose list is read again after the session ended signs out', async ({

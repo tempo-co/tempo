@@ -29,7 +29,7 @@ export function useBankImportNeverSentRows(importId: string, enabled: boolean) {
 }
 
 /**
- * Reads the list again after an add failed, and answers with the rows it listed before that it no longer lists:
+ * Reads the list again after an add failed, and answers with the rows listed when it started that it no longer lists:
  * they were added, here (whose answer may not have arrived) or in another tab. Every row stays on screen; rows
  * that newly appeared join the list. A read that fails answers with none and leaves the list as it was. It reads
  * through the query cache, so an expired session signs out as on any other read.
@@ -37,6 +37,13 @@ export function useBankImportNeverSentRows(importId: string, enabled: boolean) {
 export function useRefreshNeverSentRows(importId: string) {
   const queryClient = useQueryClient();
   return async (): Promise<string[]> => {
+    // Only rows listed before the read can have been added by the time it answers; rows the list gained meanwhile
+    // are judged by a later read.
+    const before = (
+      queryClient.getQueryData<BankImportNeverSentRow[]>(
+        bankImportQueryKeys.neverSentRows(importId),
+      ) ?? []
+    ).map(({id}) => id);
     let fresh: BankImportNeverSentRow[];
     try {
       fresh = await queryClient.fetchQuery({
@@ -50,16 +57,14 @@ export function useRefreshNeverSentRows(importId: string) {
       return [];
     }
     const listed = new Set(fresh.map(({id}) => id));
-    let gone: string[] = [];
     queryClient.setQueryData<BankImportNeverSentRow[]>(
       bankImportQueryKeys.neverSentRows(importId),
       (previous = []) => {
         const known = new Set(previous.map(({id}) => id));
-        gone = previous.filter(({id}) => !listed.has(id)).map(({id}) => id);
         return [...previous, ...fresh.filter(({id}) => !known.has(id))];
       },
     );
-    return gone;
+    return before.filter((id) => !listed.has(id));
   };
 }
 
