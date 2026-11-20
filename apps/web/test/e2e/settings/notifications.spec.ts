@@ -592,4 +592,87 @@ test.describe('Notification settings', () => {
     expect(await toasts()).toEqual([]);
     expect(attempts).toEqual([]);
   });
+
+  test.describe('on a screen without the notification settings', () => {
+    /** Answers the alert settings read with `answer` and counts the reads. */
+    async function countSettingsReads(page: Page, answer: (route: Route) => Promise<void>) {
+      const reads = {count: 0};
+      await page.route(`${API_URL}/notifications`, (route) => {
+        reads.count++;
+        return answer(route);
+      });
+      return reads;
+    }
+
+    test('a refused settings read restores nothing and shows nothing', async ({page}) => {
+      await stubPush(page, {permission: 'granted'});
+      const reads = await countSettingsReads(page, (route) =>
+        route.fulfill({status: 429, json: {message: 'Too many requests'}}),
+      );
+      const toasts = await recordToasts(page);
+
+      await page.goto('/settings/appearance');
+      await expect.poll(() => reads.count).toBeGreaterThan(0);
+      await page.waitForTimeout(1000);
+      expect(await toasts()).toEqual([]);
+      expect((await pushState(page)).subscribeCalls).toBe(0);
+    });
+
+    test('a failed registration does not read the settings again', async ({page}) => {
+      await stubPush(page, {permission: 'granted'});
+      const reads = await countSettingsReads(page, (route) => route.fulfill({json: settings()}));
+      let registrations = 0;
+      await page.route(`${API_URL}/notifications/subscriptions`, (route) => {
+        registrations++;
+        return route.fulfill({status: 500, json: {message: 'Internal server error'}});
+      });
+
+      await page.goto('/settings/appearance');
+      await expect.poll(() => registrations).toBe(1);
+      await expect.poll(async () => (await pushState(page)).subscribed).toBe(false);
+      await page.waitForTimeout(1000);
+      expect(reads.count).toBe(1);
+      expect(registrations).toBe(1);
+    });
+
+    test('after opening while Tempo is unreachable, reads the settings only once Tempo confirms the session', async ({
+      page,
+    }) => {
+      await stubPush(page, {permission: 'granted'});
+      const reads = await countSettingsReads(page, (route) => route.fulfill({json: settings()}));
+      await recordSubscriptionRequests(page);
+      await page.goto('/settings/appearance');
+      // The saved account lets Tempo open without a connection.
+      await expect
+        .poll(() => page.evaluate(() => localStorage.getItem('tempo-offline-cache')))
+        .not.toBeNull();
+      await expect.poll(() => reads.count).toBe(1);
+
+      let confirm = () => {};
+      const confirmation = new Promise<void>((resolve) => (confirm = resolve));
+      await page.route('**/accounts/me', async (route) => {
+        await confirmation;
+        return route.fulfill({json: account});
+      });
+      await mockJson(page, `${API_URL}/health`, {status: 'ok'});
+      let unreachable = true;
+      await page.route(`${API_URL}/**`, (route) =>
+        unreachable ? route.abort('internetdisconnected') : route.fallback(),
+      );
+      await setPushOnLoad(page, {subscribed: false});
+      reads.count = 0;
+      await page.reload();
+      await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
+
+      // Reconnecting probes Tempo, then asks it to confirm the session, which is held here.
+      unreachable = false;
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeHidden();
+      await page.waitForTimeout(1000);
+      expect(reads.count).toBe(0);
+
+      confirm();
+      await expect.poll(() => reads.count).toBe(1);
+    });
+  });
 });

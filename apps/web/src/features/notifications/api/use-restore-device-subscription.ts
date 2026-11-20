@@ -21,10 +21,11 @@ import {
 /**
  * Subscribes this browser again without asking when notifications are still allowed but its subscription is gone
  * (clearing site data on Android removes the subscription and keeps the permission). It runs once Tempo answers with
- * the alert settings, and again when bank alerts are turned on, but not for a device that was turned off. Only a device
- * that could be restored asks Tempo for the settings, so other devices, and the moment logout clears the session,
- * read nothing. Failures stay silent and leave the device off, so Allow notifications still works. An attempt that
- * logout or bank alerts going off interrupts registers nothing and ends any subscription it got.
+ * the alert settings, and again when bank alerts are turned on, but not for a device that was turned off. Only a
+ * confirmed session on a device that could be restored asks Tempo for the settings, once per app open, so other
+ * devices, and the moment logout clears the session, read nothing. Failures stay silent and leave the device off, so
+ * Allow notifications still works. An attempt that logout or bank alerts going off interrupts registers nothing and
+ * ends any subscription it got.
  */
 export function useRestoreDeviceSubscription(confirmed: boolean) {
   const queryClient = useQueryClient();
@@ -34,7 +35,10 @@ export function useRestoreDeviceSubscription(confirmed: boolean) {
     getPushSupport() === 'supported' &&
     Notification.permission === 'granted' &&
     !isDeviceTurnedOff();
-  const {data: settings} = useNotificationSettings({enabled: restorable, background: true});
+  const {data: settings} = useNotificationSettings({
+    enabled: confirmed && restorable,
+    background: true,
+  });
   // Logout clears the confirmed session, so settings put back after it, by a failed save's rollback, start nothing.
   const publicKey = confirmed && settings?.preferences.bankConnections ? settings.publicKey : null;
 

@@ -22,16 +22,16 @@ export const DEVICE_KEY = ['notifications', 'device'] as const;
 export const SUBSCRIPTIONS = '/notifications/subscriptions';
 
 /**
- * The owner's alert choices and the key this browser subscribes with. A background reader passes `background` to
- * read them once per app open, not again on every return to the tab or reconnection.
+ * The owner's alert choices and the key this browser subscribes with. A failed read shows no toast: Settings shows
+ * its own error with Retry, and a background reader stays silent. A background reader passes `background` to read
+ * them once per app open.
  */
 export function useNotificationSettings({enabled = true, background = false} = {}) {
   return useQuery({
     queryKey: SETTINGS_KEY,
-    queryFn: () => api.get<NotificationSettings>('/notifications'),
+    queryFn: () => api.get<NotificationSettings>('/notifications', {quiet: true}),
     enabled,
-    refetchOnWindowFocus: !background,
-    refetchOnReconnect: !background,
+    staleTime: background ? Infinity : undefined,
   });
 }
 
