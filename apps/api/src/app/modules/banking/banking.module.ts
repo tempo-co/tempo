@@ -54,6 +54,7 @@ import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {BankingSyncProcessor} from './services/banking-sync.processor';
 import {BankingSyncService} from './services/banking-sync.service';
 import {CurrencyExchangeService} from './services/currency-exchange.service';
+import {DerivedDataRefreshService} from './services/derived-data-refresh.service';
 import {FileAccountBalanceService} from './services/file-account-balance.service';
 import {FxRateService} from './services/fx-rate.service';
 import {McpReaderService} from './services/mcp-reader.service';
@@ -110,6 +111,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		FxRateService,
 		OwnTransferService,
 		CurrencyExchangeService,
+		DerivedDataRefreshService,
 		BankConnectionAlertService,
 		BankConnectionAlertProcessor,
 		PushAlertProcessor,
