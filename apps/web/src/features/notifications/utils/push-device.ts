@@ -82,13 +82,26 @@ function toKey(base64url: string) {
 export async function subscribeDevice(publicKey: string): Promise<PushSubscriptionRegistration> {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') throw new NotificationPermissionError(permission);
+  return subscribeAllowedDevice(publicKey);
+}
+
+/**
+ * Subscribes this browser without asking, once notifications are allowed. iPhone and iPad may refuse it outside a
+ * click.
+ */
+export async function subscribeAllowedDevice(
+  publicKey: string,
+  isStopped = () => false,
+): Promise<PushSubscriptionRegistration> {
   const registration = await navigator.serviceWorker.ready;
-  const subscription =
-    (await registration.pushManager.getSubscription()) ??
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: toKey(publicKey),
-    }));
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) return toRegistration(existing);
+  // Logout can end an attempt while the browser answers; a stopped attempt creates no subscription.
+  if (isStopped()) throw new Error('The subscription attempt was stopped.');
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: toKey(publicKey),
+  });
   return toRegistration(subscription);
 }
 
@@ -106,4 +119,27 @@ export async function unsubscribeDevice(): Promise<string | null> {
   if (!subscription) return null;
   await subscription.unsubscribe();
   return subscription.endpoint;
+}
+
+const TURNED_OFF_KEY = 'tempo-device-alerts-off';
+
+/**
+ * Whether this device was turned off in Settings, so Tempo leaves it unsubscribed until Allow is tapped. Unreadable
+ * storage counts as turned off: the choice can't be known, so Tempo doesn't subscribe on its own.
+ */
+export function isDeviceTurnedOff() {
+  try {
+    return localStorage.getItem(TURNED_OFF_KEY) === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export function setDeviceTurnedOff(turnedOff: boolean) {
+  try {
+    if (turnedOff) localStorage.setItem(TURNED_OFF_KEY, 'true');
+    else localStorage.removeItem(TURNED_OFF_KEY);
+  } catch {
+    /* Without storage the choice is not remembered; the subscription itself still ends or starts. */
+  }
 }
