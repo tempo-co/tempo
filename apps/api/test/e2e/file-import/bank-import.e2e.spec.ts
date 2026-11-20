@@ -176,12 +176,14 @@ const REVOLUT_HEADER = 'Type,Product,Started Date,Completed Date,Description,Amo
 
 type RevolutRow = readonly [day: string, amount: string, currency: string];
 
-/** A Revolut CSV statement of completed current-account rows. */
+/** A Revolut CSV statement of completed current-account rows, each currency's balance running from 1000.00. */
 function revolutStatement(rows: readonly RevolutRow[]): Buffer {
-	const lines = rows.map(
-		([day, amount, currency], index) =>
-			`Card Payment,Current,${day} 10:00:00,${day} 12:00:00,Example Shop ${index + 1},${amount},0,${currency},COMPLETED,`,
-	);
+	const cents = new Map<string, number>();
+	const lines = rows.map(([day, amount, currency], index) => {
+		const balance = (cents.get(currency) ?? 100_000) + Math.round(Number(amount) * 100);
+		cents.set(currency, balance);
+		return `Card Payment,Current,${day} 10:00:00,${day} 12:00:00,Example Shop ${index + 1},${amount},0,${currency},COMPLETED,${(balance / 100).toFixed(2)}`;
+	});
 	return Buffer.from([REVOLUT_HEADER, ...lines, ''].join('\r\n'));
 }
 
