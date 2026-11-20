@@ -10,7 +10,7 @@ import type {
 } from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {request as httpRequest} from 'node:http';
+import {type Server as HttpServer, request as httpRequest} from 'node:http';
 import {AddressInfo, Server} from 'node:net';
 import {join} from 'node:path';
 import {deflateRawSync} from 'node:zlib';
@@ -18,7 +18,7 @@ import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, In, IsNull, Repository} from 'typeorm';
 
-import {dateInTimeZone} from '@core/time/app-time-zone';
+import {dateInAppTimeZone, dateInTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -28,8 +28,10 @@ import {
 	createBankTransactionStableIdentityKey,
 } from '@modules/banking/bank-transaction-identity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {RecurringSeriesHide} from '@modules/banking/recurring/recurring-series-hide.entity';
+import {lockReportingCurrencyForChange} from '@modules/banking/reporting-currency';
 import {BankTransactionAmountConversionQueueService} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
 import {BankingConnectionLockService} from '@modules/banking/services/banking-connection-lock.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
@@ -248,7 +250,7 @@ describe('Bank imports', () => {
 	 * `finish`. Without `declareLength` the body is sent chunked, with no Content-Length to check.
 	 */
 	async function openUpload(cookie: string, files: Buffer[], {declareLength = true} = {}) {
-		if (!httpServer.listening) await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+		await listen();
 		const boundary = 'example-e2e-boundary';
 		const partHeader = (index: number) =>
 			Buffer.from(
@@ -356,6 +358,55 @@ describe('Bank imports', () => {
 		const ids: string[] = page.body.transactions.map(({id}: {id: string}) => id);
 		const valueById = new Map((await transactions.findBy({id: In(ids)})).map((row) => [row.id, row[field]]));
 		return ids.map((id) => valueById.get(id));
+	}
+
+	afterEach(async () => {
+		if (!httpServer.listening) return;
+		(httpServer as HttpServer).closeAllConnections();
+		await new Promise<void>((resolve, reject) => httpServer.close((error) => (error ? reject(error) : resolve())));
+	});
+
+	/** Binds the app to a loopback port of its own until the test ends, so overlapping requests share one listener. */
+	async function listen() {
+		if (!httpServer.listening) await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+	}
+
+	/** A statement of the account with the other example IBAN, its rows paid at Example Shop. */
+	function ofOtherAccount(entries: Array<{amount: string; bookingDate: string}>): CamtStatement {
+		return {
+			iban: OTHER_EXAMPLE_IBAN,
+			sequence: '1',
+			entries: entries.map(({amount, bookingDate}) => ({
+				amount: amount.replace('-', ''),
+				bookingDate,
+				info: 'Example Shop',
+			})),
+		};
+	}
+
+	/** Pauses the next imported-files balance recompute, inside its caller's transaction, until `release`. */
+	function pauseNextRecompute() {
+		const balances = app.get(FileAccountBalanceService);
+		const recompute = balances.recompute.bind(balances);
+		let reachedRecompute!: () => void;
+		const reached = new Promise<void>((resolve) => (reachedRecompute = resolve));
+		let release!: () => void;
+		const held = new Promise<void>((resolve) => (release = resolve));
+		const spy = jest.spyOn(balances, 'recompute').mockImplementationOnce(async (...args) => {
+			reachedRecompute();
+			await held;
+			return recompute(...args);
+		});
+		return {reached, release, restore: () => spy.mockRestore()};
+	}
+
+	/** How many database sessions of the test database wait on a lock. */
+	async function lockWaits() {
+		const [{waiting}] = await transactions.query<Array<{waiting: number}>>(
+			`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
+			WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+		);
+		return waiting;
 	}
 
 	/** The three fields the balance trend reads, as stored. */
@@ -923,18 +974,10 @@ describe('Bank imports', () => {
 	});
 
 	it('resolves a doubtful row of an imported-files account from a drop into a synced account alongside a balance save and another such drop', async () => {
+		await listen();
 		const {owner, agent} = await createOwner();
 		const synced = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
 		await fixtures.createBankAccount(synced, {iban: EXAMPLE_IBAN});
-		const ofOtherAccount = (entries: Array<{amount: string; bookingDate: string}>) => ({
-			iban: OTHER_EXAMPLE_IBAN,
-			sequence: '1',
-			entries: entries.map(({amount, bookingDate}) => ({
-				amount: amount.replace('-', ''),
-				bookingDate,
-				info: 'Example Shop',
-			})),
-		});
 		const first = await drop(agent, [
 			Buffer.from(
 				camt053([
@@ -967,26 +1010,9 @@ describe('Bank imports', () => {
 				.set('Origin', ORIGIN)
 				.send({decision: 'new'})
 				.then((reply) => reply);
-		const lockWaits = async () =>
-			(
-				await transactions.query<Array<{waiting: number}>>(
-					`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
-					WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-				)
-			)[0].waiting;
 
 		// The save pauses after storing its balance, before its transaction commits.
-		const balances = app.get(FileAccountBalanceService);
-		const recompute = balances.recompute.bind(balances);
-		let reached!: () => void;
-		const saveReached = new Promise<void>((resolve) => (reached = resolve));
-		let release!: () => void;
-		const held = new Promise<void>((resolve) => (release = resolve));
-		const spy = jest.spyOn(balances, 'recompute').mockImplementationOnce(async (...args) => {
-			reached();
-			await held;
-			return recompute(...args);
-		});
+		const {reached: saveReached, release, restore} = pauseNextRecompute();
 		try {
 			const save = setBalance(agent, fileConnectionId, fileAccountId, '50.00').then((reply) => reply);
 			await saveReached;
@@ -999,7 +1025,7 @@ describe('Bank imports', () => {
 			expect((await resolution).status).toBe(200);
 		} finally {
 			release();
-			spy.mockRestore();
+			restore();
 		}
 		// Today's entered balance, with every row booked on or before today already in it.
 		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '50.00000000'});
@@ -1048,6 +1074,121 @@ describe('Bank imports', () => {
 		}
 		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '50.00000000'});
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(5);
+	});
+
+	/**
+	 * An imported-files account with a row a sync removed, listed on a drop recorded under a synced connection: the
+	 * state a sync of the account while it was synced again, then a removal of that bank keeping it, leaves. Its days
+	 * are ten days before today.
+	 */
+	async function keptAccountWithRemovedRow() {
+		await listen();
+		const {owner, agent} = await createOwner();
+		const synced = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
+		await fixtures.createBankAccount(synced, {iban: EXAMPLE_IBAN});
+		const day = addDays(dateInAppTimeZone(new Date()), -10);
+		const first = await drop(agent, [
+			Buffer.from(
+				camt053([
+					ofOtherAccount([
+						{amount: '-11.00', bookingDate: addDays(day, -1)},
+						{amount: '-11.00', bookingDate: addDays(day, 1)},
+					]),
+				]),
+			),
+		]).expect(201);
+		const fileAccountId = (first.body as BankImportSummary).accounts[0].id;
+		// The record of this drop hangs on the synced connection; its row for the imported-files account is doubtful.
+		const mixed = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{sequence: '1', entries: [{amount: '4.00', reference: 'SYNCED-1', bookingDate: day}]},
+					ofOtherAccount([{amount: '-11.00', bookingDate: day}]),
+				]),
+			),
+		]).expect(201);
+		expect(mixed.body).toMatchObject({rowsDoubtful: 1});
+		const [row] = (await agent.get(`/bank-imports/${mixed.body.id}/doubtful-rows`).expect(200)).body;
+		const {id: _id, ...asked} = await doubtfulRows.findOneByOrFail({id: row.id});
+		const {id: removedId} = await doubtfulRows.save(
+			doubtfulRows.create({
+				...asked,
+				kind: 'removed_by_sync',
+				candidateTransactionIds: [],
+				resolution: null,
+				resolvedTransactionId: null,
+			}),
+		);
+		await imports.update({id: mixed.body.id}, {rowsRemovedBySync: 1});
+		return {
+			agent,
+			synced,
+			fileAccountId,
+			fileConnectionId: (await fileConnection(owner))!.id,
+			removedId,
+			addBack: () =>
+				agent
+					.post(`/bank-imports/${mixed.body.id}/never-sent-rows/add`)
+					.set('Origin', ORIGIN)
+					.send({rowIds: [removedId]})
+					.then((reply) => reply),
+		};
+	}
+
+	it('adds back a row a sync removed to an imported-files account from a drop into a synced account once a balance save in progress commits', async () => {
+		const {agent, fileAccountId, fileConnectionId, addBack} = await keptAccountWithRemovedRow();
+		const {reached: saveReached, release, restore} = pauseNextRecompute();
+		try {
+			const save = setBalance(agent, fileConnectionId, fileAccountId, '60.00').then((reply) => reply);
+			await saveReached;
+			const addedBack = addBack();
+			// The add waits on a lock the save holds, then recomputes the balance over the saved one.
+			await waitFor(lockWaits, (waiting) => waiting > 0);
+			release();
+
+			expect((await save).status).toBe(200);
+			const added = await addedBack;
+			expect(added.status).toBe(200);
+			expect(added.body).toMatchObject({rowsAdded: 2, rowsRemovedBySync: 0});
+		} finally {
+			release();
+			restore();
+		}
+		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '60.00000000'});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(3);
+	});
+
+	it('refuses to add back a row of a drop into a synced account while that connection syncs, and adds nothing', async () => {
+		const {synced, removedId, addBack} = await keptAccountWithRemovedRow();
+		const syncRuns = await app.get(BankingConnectionLockService).acquire(synced.id);
+		try {
+			const busy = await addBack();
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			syncRuns.stop();
+			await syncRuns.release();
+		}
+		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+	});
+
+	it('refuses to add back a row whose account an authorization takes back to its bank while the add waits for its locks, and adds nothing', async () => {
+		const {synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
+		const leaseService = app.get(BankingConnectionLockService);
+		const acquire = leaseService.acquire.bind(leaseService);
+		const takenBack = jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
+			await bankAccounts.update(fileAccountId, {bankConnection: {id: synced.id}});
+			return acquire(...args);
+		});
+		try {
+			const busy = await addBack();
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			takenBack.mockRestore();
+		}
+		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
 	});
 
 	it('keeps an import to its owner', async () => {
@@ -1958,7 +2099,7 @@ describe('Bank imports', () => {
 		});
 	});
 
-	it('runs the duplicate ladder against a synced account, holds doubtful rows and undoes only what it added', async () => {
+	it('runs the duplicate ladder against a synced account, holds doubtful rows, adds rows the bank never sent in the current reporting currency and to the balance of an account kept from its removed bank, and undoes only what it added', async () => {
 		const {owner, agent} = await createOwner();
 		const connection = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
 		const account = await fixtures.createBankAccount(connection, {
@@ -2369,8 +2510,38 @@ describe('Bank imports', () => {
 		expect(addedOne.body).toMatchObject({rowsAdded: 1, rowsAlreadyPresent: 23, rowsDoubtful: 0, rowsNotInBank: 1});
 		// All or none: one of the two is added already.
 		await add(final.body.id, [notSentNew.id, notSentNext.id]).expect(409);
-		const addedBoth = await add(final.body.id, [notSentNew.id]).expect(200);
-		expect(addedBoth.body).toMatchObject({rowsAdded: 2, rowsNotInBank: 0});
+		// An add waits for a change of reporting currency under way, then writes its amounts in the new currency: the
+		// EUR row gets no GBP amount copied from it.
+		let commitChange!: () => void;
+		const changeHolds = new Promise<void>((resolve) => (commitChange = resolve));
+		let changeStarted!: () => void;
+		const changeLocked = new Promise<void>((resolve) => (changeStarted = resolve));
+		const change = app.get(DataSource).transaction(async (manager) => {
+			await lockReportingCurrencyForChange(manager, owner.id);
+			await manager
+				.getRepository(Account)
+				.update({id: owner.id}, {baseCurrency: 'GBP', baseCurrencyState: 'CONFIRMED'});
+			changeStarted();
+			await changeHolds;
+		});
+		await changeLocked;
+		await listen();
+		const addingNew = add(final.body.id, [notSentNew.id]).then((reply) => reply);
+		try {
+			await waitFor(lockWaits, (waiting) => waiting === 1);
+		} finally {
+			commitChange();
+		}
+		const [, addedNew] = await Promise.all([change, addingNew]);
+		expect(addedNew.status).toBe(200);
+		expect(addedNew.body).toMatchObject({rowsAdded: 2, rowsNotInBank: 0});
+		expect(await transactions.findOneByOrFail({importId: final.body.id, entryReference: 'FILE-NEW'})).toMatchObject(
+			{amountInBaseCurrency: null, baseAmountMethod: null},
+		);
+		await accounts.update(
+			{id: owner.id},
+			{baseCurrency: owner.baseCurrency, baseCurrencyState: owner.baseCurrencyState},
+		);
 		await agent.get(`/bank-imports/${final.body.id}/never-sent-rows`).expect(200, []);
 		expect(
 			(await transactions.find({where: {importId: final.body.id}}))
@@ -2395,6 +2566,41 @@ describe('Bank imports', () => {
 		).toEqual(['FILE-NEW']);
 		await agent.delete(`/bank-imports/${pending.body.id}`).set('Origin', ORIGIN).expect(204);
 		expect(await doubtfulRows.countBy({importId: pending.body.id})).toBe(0);
+
+		// Removing the bank but keeping its accounts makes the account's balance follow its rows: the newest day a
+		// stored row states its balance after, plus every row booked after that day. A row the owner adds then whose
+		// statement states its balance after moves that day.
+		await transactions.delete({bankAccountId: account.id, transactionStatus: 'PDNG'});
+		const withBalance = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						opening: '1000.00',
+						openingDate: '2026-04-15',
+						closing: '945.00',
+						closingDate: '2026-04-15',
+						entries: [entry('55.00', '2026-04-15', 'FILE-NEW')],
+					},
+				]),
+			),
+		]).expect(201);
+		expect(withBalance.body).toMatchObject({rowsAdded: 0, rowsNotInBank: 1});
+		const bookedAfter = async (day: string) => {
+			const [{sum}]: Array<{sum: string}> = await transactions.query(
+				`SELECT COALESCE(SUM("amount"), 0)::text AS "sum" FROM "bank_transactions"
+				WHERE "bankAccountId" = $1 AND "bookingDate" > $2`,
+				[account.id, day],
+			);
+			return Number(sum);
+		};
+		const balance = async () => Number((await balanceFields(account.id)).currentBalanceAmount);
+		await agent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
+		// The synced row of 12 March states its balance after.
+		expect(await balance()).toBe(470 + (await bookedAfter('2026-03-12')));
+		const [withBalanceRow] = (await agent.get(`/bank-imports/${withBalance.body.id}/never-sent-rows`).expect(200))
+			.body as BankImportNeverSentRow[];
+		await add(withBalance.body.id, [withBalanceRow.id]).expect(200);
+		expect(await balance()).toBe(945 + (await bookedAfter('2026-04-15')));
 	});
 
 	it('keeps doubtful and never-sent rows and their decisions to the owner', async () => {
