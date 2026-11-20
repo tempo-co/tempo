@@ -1230,11 +1230,10 @@ test.describe('statement file import on Connections', () => {
 
     const working = dialog.getByRole('status').filter({hasText: 'Working out the columns…'});
     await expect(working).toBeVisible();
-    // The spinner sits on the text's line.
+    // The spinner sits on the text's line. It rotates, which grows its box around a fixed centre, so compare centres.
     const [line, spinner] = [await boxOf(working), await boxOf(working.locator('svg'))];
     expect(line.height).toBeLessThan(28);
-    expect(spinner.y).toBeGreaterThanOrEqual(line.y);
-    expect(spinner.y + spinner.height).toBeLessThanOrEqual(line.y + line.height);
+    expect(Math.abs(spinner.y + spinner.height / 2 - (line.y + line.height / 2))).toBeLessThanOrEqual(2);
     await expect(dialog.getByRole('button', {name: 'Cancel'})).toBeEnabled();
     answer();
 
