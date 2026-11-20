@@ -170,10 +170,10 @@ export class DerivedDataRefreshService {
 		// write that changed none of them does no own-transfer work.
 		const scope = ownTransferScope(ownTransferIds, exchanges?.reclassifiedIds ?? null);
 		if (scope !== 'skip') await this.recomputeOwnTransfers(ownerId, scope);
-		await this.enqueueCategorization(writtenIds, 'Transaction');
-		// Rows that stopped being exchanges go back to the model; written ones are queued already.
-		const written = new Set(writtenIds);
-		const formerLegIds = (exchanges?.requeuedIds ?? []).filter((id) => !written.has(id));
+		const writtenQueued = await this.enqueueCategorization(writtenIds, 'Transaction');
+		// Rows that stopped being exchanges go back to the model; written ones are queued already unless that failed.
+		const queued = new Set(writtenQueued ? writtenIds : []);
+		const formerLegIds = (exchanges?.requeuedIds ?? []).filter((id) => !queued.has(id));
 		await this.enqueueCategorization(formerLegIds, 'Former exchange');
 	}
 
@@ -228,12 +228,15 @@ export class DerivedDataRefreshService {
 		}
 	}
 
-	private async enqueueCategorization(transactionIds: readonly string[], rows: string): Promise<void> {
-		if (transactionIds.length === 0) return;
+	/** Returns whether the rows are queued; `logLabel` names them in the warning when queueing fails. */
+	private async enqueueCategorization(transactionIds: readonly string[], logLabel: string): Promise<boolean> {
+		if (transactionIds.length === 0) return true;
 		try {
 			await this.categorizationService.enqueueForTransactions(transactionIds);
+			return true;
 		} catch (error) {
-			this.logger.warn(`${rows} categorization enqueue failed: ${safeErrorName(error)}`);
+			this.logger.warn(`${logLabel} categorization enqueue failed: ${safeErrorName(error)}`);
+			return false;
 		}
 	}
 }

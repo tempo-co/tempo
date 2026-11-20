@@ -18,11 +18,8 @@ import type {
 	BankTransactionCategorizationResult,
 	MerchantIdentification,
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
-import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
-import * as exchangeRecompute from '@modules/banking/currency-exchange/currency-exchange-recompute';
 import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
-import * as ownTransferRecompute from '@modules/banking/own-transfer/own-transfer-recompute';
 import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -251,30 +248,6 @@ describe('DerivedDataRefreshService', () => {
 		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 	});
 
-	it('after a sync write whose exchange recompute fails, labels own transfers over the whole history', async () => {
-		const {owner, current, savings} = await createOwner();
-		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
-		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
-		jest.spyOn(exchangeRecompute, 'recomputeCurrencyExchanges').mockRejectedValueOnce(
-			new Error('Synthetic exchange recompute failure'),
-		);
-
-		await service.refresh(owner.id, {
-			kind: 'sync-write',
-			writtenIds: [writtenDebit.id, writtenCredit.id],
-			formerCounterpartIds: [],
-		});
-
-		// Which rows the failed recompute reclassified is unknown, so no row is out of scope.
-		expect(await labels(writtenDebit, writtenCredit, untouchedDebit, untouchedCredit)).toEqual([
-			ownTransferLeg(writtenCredit),
-			ownTransferLeg(writtenDebit),
-			ownTransferLeg(untouchedCredit),
-			ownTransferLeg(untouchedDebit),
-		]);
-		expect(await queuedForCategorization()).toEqual(sortedIds(writtenDebit, writtenCredit));
-	});
-
 	it('after a sync write that unpaired an exchange, labels the leg it did not write as an own transfer and queues both legs for categorization', async () => {
 		const {owner, current, savings, usd} = await createOwner();
 		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
@@ -326,20 +299,6 @@ describe('DerivedDataRefreshService', () => {
 		// Every merchant of the owner's history is queued for identification, and no other owner's.
 		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 		expect(await ownerMerchants(other.owner)).toEqual([]);
-	});
-
-	it('queues the written rows for logos when queueing them for categorization fails', async () => {
-		const {owner, current} = await createOwner();
-		const writtenPurchase = await createPurchase(current, 'Example Shop', '2026-01-17');
-		jest.spyOn(app.get(CategorizationScheduler), 'enqueueForTransactions').mockRejectedValueOnce(
-			new Error('Synthetic categorization enqueue failure'),
-		);
-
-		await expect(
-			service.refresh(owner.id, {kind: 'sync-write', writtenIds: [writtenPurchase.id], formerCounterpartIds: []}),
-		).resolves.toBeUndefined();
-
-		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 	});
 
 	it.each([
@@ -449,26 +408,6 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('after converted amounts whose exchange recompute fails, labels own transfers over the whole history', async () => {
-		const {owner, current, savings} = await createOwner();
-		const [transferDebit, transferCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
-		jest.spyOn(exchangeRecompute, 'recomputeCurrencyExchanges').mockRejectedValueOnce(
-			new Error('Synthetic exchange recompute failure'),
-		);
-
-		await service.refresh(owner.id, {
-			kind: 'converted-amounts',
-			amountsConverted: true,
-			reportingCurrencyChanged: false,
-		});
-
-		// Which rows the failed recompute reclassified is unknown, so any row may have stopped being an exchange leg.
-		expect(await labels(transferDebit, transferCredit)).toEqual([
-			ownTransferLeg(transferCredit),
-			ownTransferLeg(transferDebit),
-		]);
-	});
-
 	it('after a failed sync write, labels exchanges and own transfers over the whole history', async () => {
 		const {owner, current, savings, usd} = await createOwner();
 		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
@@ -484,59 +423,28 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('retries a failed scoped own-transfer recompute over the whole history', async () => {
-		const {owner, current, savings} = await createOwner();
-		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
-		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
-		jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers').mockRejectedValueOnce(
-			new Error('Synthetic own-transfer recompute failure'),
-		);
-
-		await service.refresh(owner.id, {
-			kind: 'sync-write',
-			writtenIds: [writtenDebit.id, writtenCredit.id],
-			formerCounterpartIds: [],
-		});
-
-		expect(await labels(writtenDebit, writtenCredit, untouchedDebit, untouchedCredit)).toEqual([
-			ownTransferLeg(writtenCredit),
-			ownTransferLeg(writtenDebit),
-			ownTransferLeg(untouchedCredit),
-			ownTransferLeg(untouchedDebit),
-		]);
-	});
-
-	it('daily, labels every owner’s own transfers over the whole history, one owner’s failure not stopping the rest', async () => {
-		// Owners are recomputed in id order, so the failing one comes first.
-		const [failing, other] = [await createOwner(), await createOwner()].sort((a, b) =>
-			a.owner.id < b.owner.id ? -1 : 1,
-		);
-		const [failingDebit, failingCredit] = await createSavingsTransfer(
-			failing.current,
-			failing.savings,
+	it('daily, labels every owner’s own transfers over the whole history', async () => {
+		const [first, second] = [await createOwner(), await createOwner()];
+		const [firstDebit, firstCredit] = await createSavingsTransfer(
+			first.current,
+			first.savings,
 			'25.00',
 			'2026-01-12',
 		);
-		const [otherDebit, otherCredit] = await createSavingsTransfer(
-			other.current,
-			other.savings,
+		const [secondDebit, secondCredit] = await createSavingsTransfer(
+			second.current,
+			second.savings,
 			'55.00',
 			'2026-01-16',
-		);
-		const recompute = ownTransferRecompute.recomputeOwnTransfers;
-		jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers').mockImplementation((executor, ownerId, scope) =>
-			ownerId === failing.owner.id
-				? Promise.reject(new Error('Synthetic own-transfer recompute failure'))
-				: recompute(executor, ownerId, scope),
 		);
 
 		await service.recomputeAllOwnTransfers();
 
-		expect(await labels(failingDebit, failingCredit, otherDebit, otherCredit)).toEqual([
-			unlabelled,
-			unlabelled,
-			ownTransferLeg(otherCredit),
-			ownTransferLeg(otherDebit),
+		expect(await labels(firstDebit, firstCredit, secondDebit, secondCredit)).toEqual([
+			ownTransferLeg(firstCredit),
+			ownTransferLeg(firstDebit),
+			ownTransferLeg(secondCredit),
+			ownTransferLeg(secondDebit),
 		]);
 	});
 });

@@ -3,7 +3,7 @@ import type {BankTransaction as BankTransactionResponse} from '@tempo/contracts'
 import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
-import {Repository} from 'typeorm';
+import {DataSource, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
@@ -13,7 +13,7 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BANK_TRANSACTION_CASH_FLOW_TREATMENTS} from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
-import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
+import {recomputeOwnTransfersAndCategories} from '@modules/banking/own-transfer/own-transfer-category';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -735,7 +735,7 @@ describe('BankTransactionController', () => {
 			category: 'HOUSING_AND_UTILITIES',
 			categorySource: 'MANUAL',
 		});
-		await app.get(DerivedDataRefreshService).recomputeAllOwnTransfers();
+		await app.get(DataSource).transaction((manager) => recomputeOwnTransfersAndCategories(manager, account.id));
 		const categoryOf = async (id: string) =>
 			bankTransactionRepository.findOneOrFail({
 				where: {id},

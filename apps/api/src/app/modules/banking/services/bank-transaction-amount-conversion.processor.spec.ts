@@ -9,20 +9,38 @@ import {
 import {BankTransactionAmountConversionProcessor} from './bank-transaction-amount-conversion.processor';
 import {BankTransactionAmountConversionJobData} from './bank-transaction-amount-conversion.queue.service';
 
+const PROCESSOR_DEPENDENCIES = [
+	'conversionService',
+	'configurationService',
+	'derivedDataRefreshService',
+	'recurringSeriesService',
+] as const;
+
+/** Builds the processor with named test doubles, in constructor order. */
+function createProcessor(
+	dependencies: Record<(typeof PROCESSOR_DEPENDENCIES)[number], unknown>,
+): BankTransactionAmountConversionProcessor {
+	return new BankTransactionAmountConversionProcessor(
+		...(PROCESSOR_DEPENDENCIES.map((name) => dependencies[name]) as ConstructorParameters<
+			typeof BankTransactionAmountConversionProcessor
+		>),
+	);
+}
+
 describe('BankTransactionAmountConversionProcessor', () => {
 	const job = (name: string) => ({name}) as Job<BankTransactionAmountConversionJobData>;
 	const setup = (enabled: boolean | Record<string, boolean>) => {
 		const conversionService = {backfill: jest.fn().mockResolvedValue(undefined)};
 		const derivedDataRefreshService = {recomputeAllOwnTransfers: jest.fn().mockResolvedValue(undefined)};
 		const recurringSeriesService = {foldAllChangeNotes: jest.fn().mockResolvedValue(undefined)};
-		const processor = new BankTransactionAmountConversionProcessor(
-			conversionService as never,
-			{
+		const processor = createProcessor({
+			conversionService,
+			configurationService: {
 				get: jest.fn((key: string) => (typeof enabled === 'boolean' ? enabled : (enabled[key] ?? false))),
-			} as never,
-			derivedDataRefreshService as never,
-			recurringSeriesService as never,
-		);
+			},
+			derivedDataRefreshService,
+			recurringSeriesService,
+		});
 		return {conversionService, derivedDataRefreshService, recurringSeriesService, processor};
 	};
 
