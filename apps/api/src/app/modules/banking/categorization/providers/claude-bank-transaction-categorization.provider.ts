@@ -165,7 +165,9 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				searchQuery &&
 				(first.lookUpMerchant || cardPaymentInReview) &&
 				!first.results.some(({category}) => PERSON_TRANSFER_CATEGORIES.has(category));
-			const merchantSearch = lookUp ? await this.searchMerchant(searchQuery) : undefined;
+			const merchantSearch = lookUp
+				? await this.searchMerchant(searchQuery, this.sharedOwnerCountry(transactions))
+				: undefined;
 			if (!merchantSearch) return first.results;
 			const second = await this.callCategorize(categories, requestTransactions, transactions, merchantSearch);
 			return second.results;
@@ -201,9 +203,15 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	 * The top web results for the code-built query, or nothing when the search failed or found nothing. The search API
 	 * receives only that query. Never throws: a failed search must not fail categorization.
 	 */
-	private async searchMerchant(query: string): Promise<MerchantSearch | undefined> {
+	/** The bank country every row's account shares, or none when the group's rows come from different countries. */
+	private sharedOwnerCountry(transactions: readonly BankTransactionCategorizationInput[]): string | undefined {
+		const countries = new Set(transactions.map(({ownerBank}) => ownerBank?.country));
+		return countries.size === 1 ? [...countries][0] : undefined;
+	}
+
+	private async searchMerchant(query: string, country?: string): Promise<MerchantSearch | undefined> {
 		try {
-			const results = await this.webSearch.search(query);
+			const results = await this.webSearch.search(query, country);
 			return results.length ? {query, results} : undefined;
 		} catch (error) {
 			// The search error names only the HTTP status, never the query.

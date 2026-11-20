@@ -2,7 +2,12 @@ import {Logger} from '@nestjs/common';
 
 import {ConfigurationService} from '@core/config/config.service';
 
-import {BraveWebSearchClient, BraveWebSearchError, toMerchantSearchResults} from './brave-web-search.client';
+import {
+	BraveWebSearchClient,
+	BraveWebSearchError,
+	toBraveCountry,
+	toMerchantSearchResults,
+} from './brave-web-search.client';
 
 function client(key: string | null = 'synthetic-brave-key') {
 	const config = {get: (name: string) => (name === 'BRAVE_SEARCH_API_KEY' ? (key ?? undefined) : undefined)};
@@ -32,7 +37,7 @@ describe('BraveWebSearchClient', () => {
 			}),
 		);
 
-		await expect(client().search('Example Cafe Example City')).resolves.toEqual([
+		await expect(client().search('Example Cafe Example City', 'nl')).resolves.toEqual([
 			{title: 'Example Cafe', hostname: 'cafe.example.test', snippet: 'Coffee.'},
 		]);
 
@@ -43,6 +48,7 @@ describe('BraveWebSearchClient', () => {
 			count: '5',
 			result_filter: 'web',
 			text_decorations: 'false',
+			country: 'NL',
 		});
 		expect(init.headers).toEqual({'X-Subscription-Token': 'synthetic-brave-key', Accept: 'application/json'});
 		const logged = JSON.stringify(logSpy.mock.calls);
@@ -60,6 +66,17 @@ describe('BraveWebSearchClient', () => {
 		await expect(client(key).search('Example Cafe')).rejects.toEqual(
 			new BraveWebSearchError(key ? status : 'not_configured'),
 		);
+	});
+});
+
+describe('toBraveCountry', () => {
+	it.each([
+		['NL', 'NL'],
+		[' gb ', 'GB'],
+		['RO', 'ALL'],
+		[undefined, 'ALL'],
+	])('searches from %j as %s', (country, expected) => {
+		expect(toBraveCountry(country)).toBe(expected);
 	});
 });
 

@@ -320,6 +320,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			.mockResolvedValueOnce(response([classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})]));
 		const transaction = {
 			...input(),
+			ownerBank: {name: 'Example Bank', country: 'NL'},
 			amount: '-42.17',
 			remittanceInformation: 'synthetic-private-note',
 			previousManualCategories: [
@@ -348,8 +349,8 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				},
 			},
 		]);
-		// The search API receives the code-built query and nothing else.
-		expect(search.mock.calls).toEqual([[SEARCH_QUERY]]);
+		// The search API receives the code-built query and the owner's bank country, nothing else.
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY, 'NL']]);
 		expect(create).toHaveBeenCalledTimes(2);
 		const [[first], [second]] = create.mock.calls;
 		expect(JSON.stringify([second.tools, second.system])).toBe(JSON.stringify([first.tools, first.system]));
@@ -370,7 +371,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			);
 		const [result] = await categorizeOn(provider, 'search');
 		expect(result).toMatchObject({category: 'SHOPPING', searchTrace: {queries: [SEARCH_QUERY]}});
-		expect(search.mock.calls).toEqual([[SEARCH_QUERY]]);
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY, undefined]]);
 		expect(create).toHaveBeenCalledTimes(2);
 	});
 
@@ -431,6 +432,25 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		} finally {
 			warn.mockRestore();
 		}
+	});
+
+	it('searches worldwide when the group holds rows from banks in different countries', async () => {
+		const {provider, create, search} = setup();
+		search.mockResolvedValue(SEARCH_RESULTS);
+		create
+			.mockResolvedValueOnce(
+				response([classification(), classification({correlationId: '1'})], {lookUpMerchant: true}),
+			)
+			.mockResolvedValueOnce(response([classification(), classification({correlationId: '1'})]));
+		await provider.categorize(
+			[
+				{...input('transaction-1'), ownerBank: {name: 'Example Bank', country: 'NL'}},
+				{...input('transaction-2'), ownerBank: {name: 'Example Bank', country: 'DE'}},
+			],
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+			{searchQuery: SEARCH_QUERY},
+		);
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY, undefined]]);
 	});
 
 	it('fails the group when the call after a search fails, keeping nothing from the first answer', async () => {

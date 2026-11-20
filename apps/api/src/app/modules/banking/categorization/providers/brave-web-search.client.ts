@@ -13,6 +13,12 @@ import {
 
 const API_URL = 'https://api.search.brave.com/res/v1/web/search';
 const TIMEOUT_MS = 10_000;
+// The countries Brave accepts for `country`; it refuses any other code, so those search all countries.
+const BRAVE_COUNTRIES = new Set(
+	'AR AU AT BE BR CA CL DK FI FR DE GR HK IN ID IT JP KR MY MX NL NZ NO CN PL PT PH RU SA ZA ES SE CH TW TR GB US'.split(
+		' ',
+	),
+);
 
 /** A search Brave refused or never answered with results: no key, or an HTTP status other than 200. */
 export class BraveWebSearchError extends Error {
@@ -34,7 +40,8 @@ export class BraveWebSearchClient {
 
 	constructor(private readonly configurationService: ConfigurationService) {}
 
-	async search(query: string): Promise<MerchantSearchResult[]> {
+	/** Searches from `country` (the owner's bank country, ISO 3166 alpha-2) when Brave supports it, else worldwide. */
+	async search(query: string, country?: string): Promise<MerchantSearchResult[]> {
 		const key = this.configurationService.get('BRAVE_SEARCH_API_KEY');
 		if (!key) throw new BraveWebSearchError('not_configured');
 		const url = new URL(API_URL);
@@ -43,6 +50,7 @@ export class BraveWebSearchClient {
 			count: String(MAX_MERCHANT_SEARCH_RESULTS),
 			result_filter: 'web',
 			text_decorations: 'false',
+			country: toBraveCountry(country),
 		}).toString();
 		const startedAt = Date.now();
 		const response = await fetch(url, {
@@ -59,6 +67,11 @@ export class BraveWebSearchClient {
 		this.logger.log(`Brave web search: ${Date.now() - startedAt} ms, results ${results.length}`);
 		return results;
 	}
+}
+
+export function toBraveCountry(country: string | undefined): string {
+	const code = country?.trim().toUpperCase();
+	return code && BRAVE_COUNTRIES.has(code) ? code : 'ALL';
 }
 
 /** The top web results as the model may see them: a title, the site's hostname and a bounded plain-text snippet. */

@@ -599,7 +599,7 @@ describe('Bank transaction categorization integration', () => {
 				(row) => row.categoryStatus === 'COMPLETED',
 			);
 			expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: query});
-			expect(search.mock.calls).toEqual([[query]]);
+			expect(search.mock.calls).toEqual([[query, 'NL']]);
 			expect(create).toHaveBeenCalledTimes(2);
 			const [[first], [second]] = create.mock.calls;
 			// Only the client tool that carries the answer; no server tool sees the full input.
