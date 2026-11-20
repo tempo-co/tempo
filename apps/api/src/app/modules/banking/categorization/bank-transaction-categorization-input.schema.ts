@@ -116,33 +116,34 @@ const categorizationInputSchema = z.object({correlationId: text, ...classifiedFi
 /** The one web search query a call may run: sanitized merchant text, never identifiers, amounts or dates. */
 const searchQuerySchema = nonBlankText.max(BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH);
 
-/** What a merchant web search can report about the business behind a query. */
-export const MERCHANT_SEARCH_FINDING_KINDS = ['BUSINESS', 'PAYMENT_PROCESSOR', 'PERSON', 'NOTHING'] as const;
-/** Longest description of a business the model sees from a search finding. */
-export const MAX_SEARCH_FINDING_DESCRIPTION_LENGTH = 300;
+/** How many web results the categorizing call sees for a merchant, and how long each one's text may be. */
+export const MAX_MERCHANT_SEARCH_RESULTS = 5;
+export const MAX_MERCHANT_SEARCH_TITLE_LENGTH = 200;
+export const MAX_MERCHANT_SEARCH_SNIPPET_LENGTH = 500;
+
+const merchantSearchResultSchema = z
+	.object({
+		title: nonBlankText.max(MAX_MERCHANT_SEARCH_TITLE_LENGTH).nullable(),
+		hostname: nonBlankText,
+		snippet: nonBlankText.max(MAX_MERCHANT_SEARCH_SNIPPET_LENGTH),
+	})
+	.strict();
 
 /**
- * What a web search for a row group's merchant found, from a separate call that saw only the query. Sent beside the
- * transactions in the categorizing call.
+ * The top web results for a row group's code-built merchant query, sent beside the transactions in a second
+ * categorizing call when the first one asked for a lookup.
  */
-const searchFindingSchema = z
+const merchantSearchSchema = z
 	.object({
 		query: searchQuerySchema,
-		// Only a business or a payment processor: a search that found a person or nothing is not sent.
-		identifies: z.enum(MERCHANT_SEARCH_FINDING_KINDS).extract(['BUSINESS', 'PAYMENT_PROCESSOR']),
-		description: z.string().max(MAX_SEARCH_FINDING_DESCRIPTION_LENGTH).nullable(),
+		results: z.array(merchantSearchResultSchema).min(1).max(MAX_MERCHANT_SEARCH_RESULTS),
 	})
 	.strict();
 
 /** Build it with `toBankTransactionCategorizationInput`, which normalizes the fields the hash and the model see. */
 export type BankTransactionCategorizationInput = z.infer<typeof categorizationInputSchema>;
-export type BankTransactionCategorizationSearchFinding = z.infer<typeof searchFindingSchema>;
-
-/** The finding exactly as the model may see it, or null when `value` is not one. */
-export function toSearchFinding(value: unknown): BankTransactionCategorizationSearchFinding | null {
-	const parsed = searchFindingSchema.safeParse(value);
-	return parsed.success ? parsed.data : null;
-}
+export type MerchantSearchResult = z.infer<typeof merchantSearchResultSchema>;
+export type MerchantSearch = z.infer<typeof merchantSearchSchema>;
 export type PreviousManualCategory = z.infer<typeof previousManualCategorySchema>;
 export type SameAmountPayment = z.infer<typeof sameAmountPaymentSchema>;
 export type OwnerBank = z.infer<typeof ownerBankSchema>;
@@ -178,6 +179,7 @@ export function toInputContract() {
 			maxTransactions: BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE,
 			transaction: z.toJSONSchema(categorizationInputSchema),
 			searchQuery: z.toJSONSchema(searchQuerySchema),
+			merchantSearch: z.toJSONSchema(merchantSearchSchema),
 		},
 	};
 }

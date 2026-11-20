@@ -14,14 +14,9 @@ import {ConfigurationService} from '@core/config/config.service';
 import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';
 
 import {normalizeBankTransactionText} from '../../bank-transaction-display';
-import {isHostname, safeErrorName, truncate} from '../../banking.utils';
-import {
-	type BankTransactionCategorizationSearchFinding,
-	MAX_SEARCH_FINDING_DESCRIPTION_LENGTH,
-	MERCHANT_SEARCH_FINDING_KINDS,
-	toCategorizationRequestTransaction,
-	toSearchFinding,
-} from '../bank-transaction-categorization-input.schema';
+import {BANK_TRANSACTION_TYPES} from '../../bank-transaction-type';
+import {isHostname, safeErrorName} from '../../banking.utils';
+import {type MerchantSearch, toCategorizationRequestTransaction} from '../bank-transaction-categorization-input.schema';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -40,11 +35,13 @@ import {
 	MerchantIdentification,
 	MerchantIdentificationInput,
 } from '../bank-transaction-categorization.types';
+import {BraveWebSearchClient, BraveWebSearchError} from './brave-web-search.client';
 import contract from './claude-categorization-contract.json';
 import merchantContract from './claude-merchant-contract.json';
 
 const categorizationResponseSchema = z
 	.object({
+		lookUpMerchant: z.boolean(),
 		classifications: z.array(
 			z
 				.object({
@@ -72,10 +69,6 @@ const searchTraceSchema = z.object({
 	evidenceType: z.enum(BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES),
 });
 
-const searchFindingResponseSchema = z
-	.object({identifies: z.enum(MERCHANT_SEARCH_FINDING_KINDS), description: z.string().nullable()})
-	.strict();
-
 const merchantIdentificationResponseSchema = z
 	.object({
 		merchants: z.array(
@@ -95,13 +88,12 @@ const merchantIdentificationResponseSchema = z
 
 // The prompts and response schemas live in the contract files, the one source for them.
 const {instructions: CATEGORIZATION_INSTRUCTIONS, schema: categorizationResponseJsonSchema} = contract;
-const {instructions: SEARCH_INSTRUCTIONS, schema: searchFindingResponseJsonSchema} = contract.search;
 const CLAUDE_API = 'claude-api';
 type SearchTrace = Omit<BankTransactionCategorizationSearchTrace, 'evidenceType'>;
 
 type ClaudeClient = Pick<Anthropic, 'messages'>;
 /** What a request is for and how many rows or merchants it carries, for its usage log line. */
-type ApiCall = {kind: 'categorize' | 'merchant search' | 'merchant identification'; items: number};
+type ApiCall = {kind: 'categorize' | 'merchant identification'; items: number};
 type RequestInput = {correlationId: string};
 type ClaudeEffort = NonNullable<NonNullable<MessageCreateParamsNonStreaming['output_config']>['effort']>;
 const API_TIMEOUT_MS = 90_000;
@@ -112,23 +104,15 @@ const CREDIT_BALANCE_PATTERN = /credit balance is too low/i;
 // Adaptive thinking at high effort shares this budget with the reply, about 40 tokens per row of a 50-row group; a
 // reply cut off at the limit fails the group rather than leaving it pending.
 const CATEGORIZATION_MAX_TOKENS = 16_384;
-// The merchant search reads one query and answers in a sentence, so it thinks briefly.
-const SEARCH_EFFORT: ClaudeEffort = 'low';
-const SEARCH_MAX_TOKENS = 4096;
 // The categorizing call returns its answer as the input of this tool, which Tempo reads and never runs. A strict
 // json_schema format made the model often skip thinking and send well-known merchants to review. Adaptive thinking
 // rejects a forced tool choice, so the choice stays auto and the description asks for exactly one call.
 const STRUCTURED_OUTPUT_TOOL = 'StructuredOutput';
 const STRUCTURED_OUTPUT_DESCRIPTION =
 	'Use this tool to return your final response in the requested structured format. You MUST call this tool exactly once at the end of your response to provide the structured output.';
+// An answer filing a payment as a transfer names a person, whose name never goes to the search API.
+const PERSON_TRANSFER_CATEGORIES: ReadonlySet<string> = new Set(['TRANSFER_IN', 'TRANSFER_OUT']);
 const REPLY_BLOCKS = new Set(['text', 'thinking', 'redacted_thinking']);
-const SEARCH_REPLY_BLOCKS = new Set([
-	'text',
-	'thinking',
-	'redacted_thinking',
-	'server_tool_use',
-	'web_search_tool_result',
-]);
 
 @Injectable()
 export class ClaudeBankTransactionCategorizationProvider implements BankTransactionCategorizationProvider {
@@ -138,7 +122,11 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	private readonly effort: ClaudeEffort;
 	private readonly apiKey?: string;
 
-	constructor(configurationService: ConfigurationService, @Optional() client?: ClaudeClient) {
+	constructor(
+		configurationService: ConfigurationService,
+		private readonly webSearch: BraveWebSearchClient,
+		@Optional() client?: ClaudeClient,
+	) {
 		this.model = configurationService.get('AI_CATEGORIZATION_MODEL');
 		// The config schema checks the value against the contract's effort list.
 		this.effort = configurationService.get('AI_CATEGORIZATION_EFFORT') as ClaudeEffort;
@@ -147,10 +135,11 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	}
 
 	/**
-	 * One call for a row group on the Anthropic API. With a `searchQuery`, it first runs a separate merchant search
-	 * that sees only that query, then categorizes with its finding; a failed search leaves the call without one. The
-	 * categorizing call offers no server tool, because the API cannot hold a model that sees the full input to the
-	 * code-built query; it only offers the StructuredOutput tool that carries its answer.
+	 * Categorizes a row group on the Anthropic API. With a `searchQuery`, a first answer that asks to look up the
+	 * merchant, or leaves an outgoing card payment in review, makes code run that query, and only it, on a web search API; a second call then categorizes with the top
+	 * results, and its answer is the one returned. A failed or empty search keeps the first answer. The categorizing
+	 * calls offer no server tool, because the API cannot hold a model that sees the full input to the code-built query;
+	 * they only offer the StructuredOutput tool that carries the answer.
 	 */
 	async categorize(
 		transactions: readonly BankTransactionCategorizationInput[],
@@ -164,91 +153,70 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			correlationId: String(index),
 		}));
 		try {
-			const search = searchQuery && this.hasApi() ? await this.searchMerchant(searchQuery) : undefined;
-			const answer = await this.callStructuredOutput(
-				{kind: 'categorize', items: transactions.length},
-				this.createStructuredOutputRequest(
-					this.createCategorizationSystem(categories),
-					{
-						transactions: requestTransactions,
-						...(search?.finding && {searchFinding: search.finding}),
-					},
-					categorizationResponseJsonSchema,
-					CATEGORIZATION_MAX_TOKENS,
-				),
-			);
-			return this.parseResults(answer, transactions, search?.trace);
+			const first = await this.callCategorize(categories, requestTransactions, transactions);
+			// An outgoing card payment left in review is one a search may settle, whether or not the model asked: a card
+			// pays a merchant account.
+			const cardPaymentInReview =
+				transactions.every(
+					({transactionType, direction}) =>
+						transactionType === BANK_TRANSACTION_TYPES.CARD_PAYMENT && direction === 'EXPENSE',
+				) && first.results.some(({category}) => category === 'NEEDS_REVIEW');
+			const lookUp =
+				searchQuery &&
+				(first.lookUpMerchant || cardPaymentInReview) &&
+				!first.results.some(({category}) => PERSON_TRANSFER_CATEGORIES.has(category));
+			const merchantSearch = lookUp
+				? await this.searchMerchant(searchQuery, this.sharedOwnerCountry(transactions))
+				: undefined;
+			if (!merchantSearch) return first.results;
+			const second = await this.callCategorize(categories, requestTransactions, transactions, merchantSearch);
+			return second.results;
 		} catch (error) {
 			// A billing/quota/transport failure must never turn into a category.
 			throw this.callFailed(error);
 		}
 	}
 
+	private async callCategorize(
+		categories: readonly BankTransactionCategoryDefinition[],
+		requestTransactions: readonly BankTransactionCategorizationInput[],
+		transactions: readonly RequestInput[],
+		merchantSearch?: MerchantSearch,
+	): Promise<{lookUpMerchant: boolean; results: BankTransactionCategorizationResult[]}> {
+		const answer = await this.callStructuredOutput(
+			{kind: 'categorize', items: transactions.length},
+			this.createStructuredOutputRequest(
+				this.createCategorizationSystem(categories),
+				{transactions: requestTransactions, ...(merchantSearch && {merchantSearch})},
+				categorizationResponseJsonSchema,
+				CATEGORIZATION_MAX_TOKENS,
+			),
+		);
+		const searchTrace = merchantSearch && {
+			queries: [merchantSearch.query],
+			sourceDomains: this.toSourceDomains(merchantSearch.results.map(({hostname}) => hostname)),
+		};
+		return this.parseResults(answer, transactions, searchTrace);
+	}
+
 	/**
-	 * Runs at most one web search for a merchant in a call that receives only the code-built query, never transaction
-	 * text, amounts, history or other names, so whatever query the model writes can reveal nothing else. Returns the
-	 * trace only when a search ran, and with it a finding when the results identified a business; an answer from the
-	 * model's own knowledge adds nothing the categorizing call lacks. Never throws: a failed search must not fail
-	 * categorization.
+	 * The top web results for the code-built query, or nothing when the search failed or found nothing. The search API
+	 * receives only that query. Never throws: a failed search must not fail categorization.
 	 */
-	private async searchMerchant(
-		searchQuery: string,
-	): Promise<{finding?: BankTransactionCategorizationSearchFinding; trace: SearchTrace} | undefined> {
+	/** The bank country every row's account shares, or none when the group's rows come from different countries. */
+	private sharedOwnerCountry(transactions: readonly BankTransactionCategorizationInput[]): string | undefined {
+		const countries = new Set(transactions.map(({ownerBank}) => ownerBank?.country));
+		return countries.size === 1 ? [...countries][0] : undefined;
+	}
+
+	private async searchMerchant(query: string, country?: string): Promise<MerchantSearch | undefined> {
 		try {
-			const response = await this.createMessage(
-				{kind: 'merchant search', items: 1},
-				{
-					...this.createRequest(
-						SEARCH_INSTRUCTIONS,
-						{query: searchQuery},
-						searchFindingResponseJsonSchema,
-						SEARCH_MAX_TOKENS,
-						SEARCH_EFFORT,
-					),
-					tools: [
-						{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']},
-					],
-				},
-			);
-			const searches = response.usage.server_tool_use?.web_search_requests ?? 0;
-			const invocations = response.content.filter((block) => block.type === 'server_tool_use');
-			// One search at most, counted both ways: an invocation the tool refused is not billed but still a second try.
-			if (
-				searches > 1 ||
-				invocations.length > 1 ||
-				response.content.some(
-					(block) =>
-						!SEARCH_REPLY_BLOCKS.has(block.type) ||
-						(block.type === 'server_tool_use' && block.name !== 'web_search'),
-				)
-			)
-				throw this.invalidResponseError();
-			// A search that ran returns a list of results, possibly empty; a tool error is not a search.
-			const results = response.content.flatMap((block) =>
-				block.type === 'web_search_tool_result' && Array.isArray(block.content) ? [block.content] : [],
-			);
-			const ranQuery = (invocations[0]?.input as {query?: unknown} | undefined)?.query;
-			if (searches === 0 || results.length === 0) return undefined;
-			const parsed = searchFindingResponseSchema.safeParse(this.parseJson(this.replyText(response)));
-			if (!parsed.success) throw this.invalidResponseError();
-			const query = (typeof ranQuery === 'string' && this.toTraceQuery(ranQuery)) || searchQuery;
-			const {identifies, description} = parsed.data;
-			const trace = {
-				queries: [query],
-				sourceDomains: this.toSourceDomains(results.flat().map(({url}) => this.toHostname(url))),
-			};
-			// A search that ran but identified no business is no evidence: results for a name can be about anyone
-			// sharing it, so the call decides from the transaction alone.
-			if (identifies !== 'BUSINESS' && identifies !== 'PAYMENT_PROCESSOR') return {trace};
-			const finding = toSearchFinding({
-				query,
-				identifies,
-				description: truncate(description?.trim(), MAX_SEARCH_FINDING_DESCRIPTION_LENGTH),
-			});
-			if (!finding) throw this.invalidResponseError();
-			return {finding, trace};
+			const results = await this.webSearch.search(query, country);
+			return results.length ? {query, results} : undefined;
 		} catch (error) {
-			this.logger.warn(`Merchant web search failed; categorizing without it: ${safeErrorName(error)}`);
+			// The search error names only the HTTP status, never the query.
+			const reason = error instanceof BraveWebSearchError ? error.message : safeErrorName(error);
+			this.logger.warn(`Merchant web search failed; keeping the answer without it: ${reason}`);
 			return undefined;
 		}
 	}
@@ -441,20 +409,6 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		);
 	}
 
-	/** The query a search ran, as the trace stores it: control characters removed, within the query limit. */
-	private toTraceQuery(query: string): string | null {
-		const cleaned = query.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
-		return truncate(cleaned, BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH);
-	}
-
-	private toHostname(url: unknown): string | null {
-		try {
-			return typeof url === 'string' ? new URL(url).hostname : null;
-		} catch {
-			return null;
-		}
-	}
-
 	/** Keeps well-formed hostnames only, up to the trace limit. */
 	private toSourceDomains(values: unknown): string[] {
 		const domains = new Set<string>();
@@ -479,10 +433,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		parsed: unknown,
 		transactions: readonly RequestInput[],
 		searchTrace?: SearchTrace,
-	): BankTransactionCategorizationResult[] {
+	): {lookUpMerchant: boolean; results: BankTransactionCategorizationResult[]} {
 		const validation = categorizationResponseSchema.safeParse(parsed);
 		if (!validation.success) throw this.invalidResponseError();
-		const items = validation.data.classifications;
+		const {lookUpMerchant, classifications: items} = validation.data;
 		const ids = new Set(items.map(({correlationId}) => correlationId));
 		if (
 			items.length !== transactions.length ||
@@ -490,7 +444,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 			transactions.some((_, index) => !ids.has(String(index)))
 		)
 			throw this.invalidResponseError();
-		return items.map((item) => ({
+		const results = items.map((item) => ({
 			correlationId: transactions[Number(item.correlationId)].correlationId,
 			category: item.category,
 			confidence: item.confidence,
@@ -500,6 +454,7 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 				? {searchTrace: this.parseSearchTrace({...searchTrace, evidenceType: item.evidenceType})}
 				: {}),
 		}));
+		return {lookUpMerchant, results};
 	}
 
 	private parseSearchTrace(trace: SearchTrace & {evidenceType: unknown}): BankTransactionCategorizationSearchTrace {

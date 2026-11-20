@@ -24,6 +24,7 @@ import type {
 } from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {CategorizationPipeline} from '@modules/banking/categorization/categorization-pipeline.service';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
+import {BraveWebSearchClient} from '@modules/banking/categorization/providers/brave-web-search.client';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -563,43 +564,31 @@ describe('Bank transaction categorization integration', () => {
 		});
 	});
 
-	it('searches the merchant on the API with only its query, then categorizes through the StructuredOutput tool and stores the trace', async () => {
+	it('looks up a merchant the first answer asks for on the search API with only its query, then categorizes again with the results and stores the trace', async () => {
 		const query = WEB_SEARCH_TRACE.queries[0];
+		const answer = (lookUpMerchant: boolean, category: string, evidenceType: string) => ({
+			stop_reason: 'tool_use',
+			usage: {server_tool_use: {web_search_requests: 0}},
+			content: [
+				{
+					type: 'tool_use',
+					id: 'toolu_synthetic',
+					name: 'StructuredOutput',
+					input: {
+						lookUpMerchant,
+						classifications: [{correlationId: '0', category, confidence: 0.9, evidenceType}],
+					},
+				},
+			],
+		});
 		const create = jest
 			.fn()
-			.mockResolvedValueOnce({
-				stop_reason: 'end_turn',
-				usage: {server_tool_use: {web_search_requests: 1}},
-				content: [
-					{type: 'server_tool_use', name: 'web_search', input: {query}},
-					{
-						type: 'web_search_tool_result',
-						content: [{type: 'web_search_result', url: 'https://www.example.test/about'}],
-					},
-					{type: 'text', text: '{"identifies":"BUSINESS","description":"A synthetic shop selling gadgets."}'},
-				],
-			})
-			.mockResolvedValueOnce({
-				stop_reason: 'tool_use',
-				usage: {server_tool_use: {web_search_requests: 0}},
-				content: [
-					{
-						type: 'tool_use',
-						id: 'toolu_synthetic',
-						name: 'StructuredOutput',
-						input: {
-							classifications: [
-								{
-									correlationId: '0',
-									category: 'SHOPPING',
-									confidence: 0.9,
-									evidenceType: 'PURCHASE_CONTEXT',
-								},
-							],
-						},
-					},
-				],
-			});
+			.mockResolvedValueOnce(answer(true, 'NEEDS_REVIEW', 'INSUFFICIENT'))
+			.mockResolvedValueOnce(answer(false, 'SHOPPING', 'PURCHASE_CONTEXT'));
+		const results = [
+			{title: 'Synthetic gadgets', hostname: 'example.test', snippet: 'A synthetic shop selling gadgets.'},
+		];
+		const search = jest.spyOn(BraveWebSearchClient.prototype, 'search').mockResolvedValue(results);
 		const transport = await useClaudeTransport(app, create);
 		try {
 			await bankTransactionRepository.update(CATEGORIZATION_E2E_WEB_TRANSACTION_ID, {categoryStatus: 'PENDING'});
@@ -610,21 +599,16 @@ describe('Bank transaction categorization integration', () => {
 				(row) => row.categoryStatus === 'COMPLETED',
 			);
 			expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: query});
+			expect(search.mock.calls).toEqual([[query, 'NL']]);
 			expect(create).toHaveBeenCalledTimes(2);
-			const [[search], [categorize]] = create.mock.calls;
-			expect(search.tools).toEqual([
-				{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']},
-			]);
-			expect(search.messages).toEqual([{role: 'user', content: JSON.stringify({query})}]);
+			const [[first], [second]] = create.mock.calls;
 			// Only the client tool that carries the answer; no server tool sees the full input.
-			expect(categorize.tools.map(({name}: {name: string}) => name)).toEqual(['StructuredOutput']);
-			const sent = JSON.parse(categorize.messages[0].content);
+			for (const request of [first, second])
+				expect(request.tools.map(({name}: {name: string}) => name)).toEqual(['StructuredOutput']);
+			expect(JSON.parse(first.messages[0].content)).not.toHaveProperty('merchantSearch');
+			const sent = JSON.parse(second.messages[0].content);
 			expect(sent).not.toHaveProperty('searchQuery');
-			expect(sent.searchFinding).toEqual({
-				query,
-				identifies: 'BUSINESS',
-				description: 'A synthetic shop selling gadgets.',
-			});
+			expect(sent.merchantSearch).toEqual({query, results});
 			expect(categorized).toMatchObject({
 				category: 'SHOPPING',
 				categoryConfidence: '0.900',
@@ -635,6 +619,7 @@ describe('Bank transaction categorization integration', () => {
 				categoryLastError: null,
 			});
 		} finally {
+			search.mockRestore();
 			await transport.restore();
 		}
 	});

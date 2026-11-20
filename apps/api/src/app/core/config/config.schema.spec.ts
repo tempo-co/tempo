@@ -265,6 +265,22 @@ describe('categorization web-search configuration', () => {
 
 		expect(parsed.AI_CATEGORIZATION_WEB_SEARCH_ENABLED).toBe(true);
 	});
+
+	it('requires a Brave Search key when categorization searches the web', () => {
+		const searching = {
+			...baseConfig,
+			AI_CATEGORIZATION_ENABLED: 'true',
+			ANTHROPIC_API_KEY: 'synthetic-anthropic-key',
+			AI_CATEGORIZATION_WEB_SEARCH_ENABLED: 'true',
+		};
+
+		expect(configSchema.safeParse(searching).error?.issues).toEqual([
+			expect.objectContaining({path: ['BRAVE_SEARCH_API_KEY']}),
+		]);
+		expect(configSchema.parse({...searching, BRAVE_SEARCH_API_KEY: 'synthetic-brave-key'})).toMatchObject({
+			AI_CATEGORIZATION_WEB_SEARCH_ENABLED: true,
+		});
+	});
 });
 
 describe('file import column mapper configuration', () => {

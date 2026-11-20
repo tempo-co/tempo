@@ -70,6 +70,9 @@ beforeAll(async () => {
 	} else {
 		delete process.env.ANTHROPIC_API_KEY;
 	}
+	// Specs that search replace `BraveWebSearchClient.prototype.search`, so no search API is called.
+	if (aiCategorizationWebSearchEnabled) process.env.BRAVE_SEARCH_API_KEY = 'test-only-placeholder';
+	else delete process.env.BRAVE_SEARCH_API_KEY;
 
 	const [{seedAccounts}, {AppModule}] = await Promise.all([
 		import('../../scripts/seed-data/seed-accounts'),

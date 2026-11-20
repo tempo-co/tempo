@@ -55,6 +55,8 @@ export const configSchema = z
 		AI_CATEGORIZATION_EFFORT: z.enum(categorizationContract.efforts).default('high'),
 		AI_CATEGORIZATION_WEB_SEARCH_ENABLED: strictBooleanEnvSchema.default(false),
 		ANTHROPIC_API_KEY: z.string().min(1).optional(),
+		// Brave Search API key for merchant lookups during categorization.
+		BRAVE_SEARCH_API_KEY: z.string().min(1).optional(),
 
 		// --- Merchant logos ---
 		MERCHANT_LOGOS_ENABLED: strictBooleanEnvSchema.default(false),
@@ -203,6 +205,18 @@ export const configSchema = z
 				code: 'custom',
 				path: ['ANTHROPIC_API_KEY'],
 				message: 'Configure ANTHROPIC_API_KEY when Claude categorization is enabled.',
+			});
+		}
+
+		if (
+			config.AI_CATEGORIZATION_ENABLED &&
+			config.AI_CATEGORIZATION_WEB_SEARCH_ENABLED &&
+			!config.BRAVE_SEARCH_API_KEY
+		) {
+			context.addIssue({
+				code: 'custom',
+				path: ['BRAVE_SEARCH_API_KEY'],
+				message: 'Configure BRAVE_SEARCH_API_KEY when categorization web search is enabled.',
 			});
 		}
 

@@ -17,7 +17,7 @@ $ npm ci
 
 The development environment uses variables from `.env.development`. To override these locally (for API keys or secrets), define them in a `.env.development.local` file, which takes precedence.
 
-Optional features, all off by default (`src/app/core/config/config.schema.ts`): AI categorization and merchant search (`docs/categorization.md`), merchant logos (`docs/merchant-logos.md`), statement file import and its column mapper (`docs/file-import.md`). Each AI feature needs `ANTHROPIC_API_KEY`, except merchant logos with `MERCHANT_LOGOS_CACHED_ONLY=true`.
+Optional features, all off by default (`src/app/core/config/config.schema.ts`): AI categorization and merchant search (`docs/categorization.md`), merchant logos (`docs/merchant-logos.md`), statement file import and its column mapper (`docs/file-import.md`). Each AI feature needs `ANTHROPIC_API_KEY`, except merchant logos with `MERCHANT_LOGOS_CACHED_ONLY=true`; merchant search also needs `BRAVE_SEARCH_API_KEY`.
 
 ## Development
 

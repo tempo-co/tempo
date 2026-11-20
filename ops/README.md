@@ -43,7 +43,7 @@ Production secrets live in the production env file (path set by `install.sh`, mo
 
 ### Claude categorization
 
-The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env file. While the API is unavailable (rate limit, overload, an exhausted credit balance, a refused key, no connection), transactions stay pending and queue retries, then hourly reconciliation, retry them.
+The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env file, and, with `AI_CATEGORIZATION_WEB_SEARCH_ENABLED=true`, the Brave Search API with `BRAVE_SEARCH_API_KEY` (the API refuses to start without it). A failed or out-of-credit search only means the model decides without web results. While the API is unavailable (rate limit, overload, an exhausted credit balance, a refused key, no connection), transactions stay pending and queue retries, then hourly reconciliation, retry them.
 
 ### Merchant logos
 

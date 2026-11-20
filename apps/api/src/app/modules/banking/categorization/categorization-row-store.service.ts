@@ -58,8 +58,8 @@ export type CompletionValues = Pick<
 
 /**
  * How long a PROCESSING claim holds before another worker may take the row. The pipeline renews its claims before
- * every provider call after the first, so this only has to outlast one call (90 s on the API, plus the merchant search
- * before it) with the database work around it. A worker that died leaves its rows for the next sweep after this.
+ * every provider call after the first, so this only has to outlast one row group (up to two 90 s API calls and a
+ * 10 s web search between them) with the database work around it. A worker that died leaves its rows for the next sweep after this.
  */
 const STALE_PROCESSING_AFTER_MS = 15 * 60 * 1000;
 /** Bounds the concurrent hash refreshes so a batch does not take the whole connection pool. */

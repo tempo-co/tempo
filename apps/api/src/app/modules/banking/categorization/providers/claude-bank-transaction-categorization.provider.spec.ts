@@ -20,6 +20,7 @@ import {
 	type BankTransactionCategorizationInput,
 	MERCHANT_KINDS,
 } from '../bank-transaction-categorization.types';
+import {type BraveWebSearchClient, BraveWebSearchError} from './brave-web-search.client';
 import {ClaudeBankTransactionCategorizationProvider} from './claude-bank-transaction-categorization.provider';
 import contract from './claude-categorization-contract.json';
 import merchantContract from './claude-merchant-contract.json';
@@ -47,7 +48,7 @@ function input(correlationId = 'transaction-1'): BankTransactionCategorizationIn
 	};
 }
 
-/** A call for one row, without a web search (`plain`) or with a merchant search query (`search`). */
+/** A call for one row, without a merchant search query (`plain`) or with one (`search`). */
 type CallKind = 'plain' | 'search';
 
 function categorizeOn(provider: ClaudeBankTransactionCategorizationProvider, kind: CallKind) {
@@ -76,6 +77,7 @@ async function outcomeOf(
 
 function setup(overrides: Record<string, unknown> = {}) {
 	const create = jest.fn();
+	const search = jest.fn();
 	const config = {
 		get: (key: string) =>
 			({
@@ -85,7 +87,12 @@ function setup(overrides: Record<string, unknown> = {}) {
 				...overrides,
 			})[key],
 	} as unknown as ConfigurationService;
-	return {provider: new ClaudeBankTransactionCategorizationProvider(config, {messages: {create}} as never), create};
+	const webSearch = {search} as unknown as BraveWebSearchClient;
+	return {
+		provider: new ClaudeBankTransactionCategorizationProvider(config, webSearch, {messages: {create}} as never),
+		create,
+		search,
+	};
 }
 
 function classification(overrides: Record<string, unknown> = {}) {
@@ -93,10 +100,10 @@ function classification(overrides: Record<string, unknown> = {}) {
 }
 
 /** The categorizing call's reply: the answer as the input of its one StructuredOutput tool call. */
-function response(classifications: unknown[]) {
+function response(classifications: unknown[], {lookUpMerchant = false} = {}) {
 	return {
 		stop_reason: 'tool_use',
-		content: [{type: 'thinking', thinking: '', signature: ''}, structuredOutput({classifications})],
+		content: [{type: 'thinking', thinking: '', signature: ''}, structuredOutput({lookUpMerchant, classifications})],
 		usage: {server_tool_use: {web_search_requests: 0}},
 	};
 }
@@ -113,28 +120,12 @@ const STRUCTURED_OUTPUT_REQUEST = {
 	tool_choice: {type: 'auto', disable_parallel_tool_use: true},
 };
 
-/** The merchant search call's reply: one web search with `query` and the finding it reports. */
-function searchReply({
-	query = SEARCH_QUERY,
-	finding = {identifies: 'BUSINESS', description: 'A cafe serving coffee and pastries.'} as object | string,
-	searches = 1,
-	results = [{type: 'web_search_result', url: 'https://www.cafe.example.test/menu?private=1'}] as unknown,
-} = {}) {
-	return {
-		stop_reason: 'end_turn',
-		usage: {server_tool_use: {web_search_requests: searches}},
-		content: [
-			{type: 'thinking', thinking: '', signature: ''},
-			...(searches
-				? [
-						{type: 'server_tool_use', name: 'web_search', input: {query}},
-						{type: 'web_search_tool_result', content: results},
-					]
-				: []),
-			{type: 'text', text: typeof finding === 'string' ? finding : JSON.stringify(finding)},
-		],
-	};
-}
+/** Top web results as the search client returns them. */
+const SEARCH_RESULTS = [
+	{title: 'Example Cafe', hostname: 'cafe.example.test', snippet: 'A cafe serving coffee and pastries.'},
+	{title: null, hostname: 'reviews.example.test', snippet: 'Reviews of Example Cafe.'},
+	{title: 'Example Cafe menu', hostname: 'cafe.example.test', snippet: 'Coffee, tea and cake.'},
+];
 
 /** A categorizing reply that ran one web search with `query`, which a request without a server tool must never produce. */
 function searchedResponse(query: string) {
@@ -148,7 +139,10 @@ function searchedResponse(query: string) {
 				type: 'web_search_tool_result',
 				content: [{type: 'web_search_result', url: 'https://www.example.test/path?token=private'}],
 			},
-			structuredOutput({classifications: [classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})]}),
+			structuredOutput({
+				lookUpMerchant: false,
+				classifications: [classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})],
+			}),
 		],
 	};
 }
@@ -314,21 +308,19 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(Object.keys(JSON.parse(request.messages[0].content))).toEqual(['transactions']);
 	});
 
-	it('searches for the merchant in a call that receives only the query, then categorizes with its finding', async () => {
-		const {provider, create} = setup();
+	it('looks up a merchant the first answer asks for: the search gets only the query, a second call decides with the results', async () => {
+		const {provider, create, search} = setup();
+		search.mockResolvedValue(SEARCH_RESULTS);
 		create
 			.mockResolvedValueOnce(
-				searchReply({
-					results: [
-						{type: 'web_search_result', url: 'https://www.cafe.example.test/menu?private=1'},
-						{type: 'web_search_result', url: 'https://reviews.example.test/cafe'},
-						{type: 'web_search_result', url: 'not a url'},
-					],
+				response([classification({category: 'NEEDS_REVIEW', evidenceType: 'INSUFFICIENT'})], {
+					lookUpMerchant: true,
 				}),
 			)
 			.mockResolvedValueOnce(response([classification({evidenceType: 'MERCHANT_IDENTITY_ONLY'})]));
 		const transaction = {
 			...input(),
+			ownerBank: {name: 'Example Bank', country: 'NL'},
 			amount: '-42.17',
 			remittanceInformation: 'synthetic-private-note',
 			previousManualCategories: [
@@ -357,120 +349,118 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				},
 			},
 		]);
+		// The search API receives the code-built query and the owner's bank country, nothing else.
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY, 'NL']]);
 		expect(create).toHaveBeenCalledTimes(2);
-		const [[searchRequest], [categorizeRequest]] = create.mock.calls;
-		// The whole searching request: the query is the only input it carries.
-		expect(searchRequest).toEqual({
-			model: 'claude-sonnet-5-5',
-			max_tokens: 4096,
-			system: contract.search.instructions,
-			messages: [{role: 'user', content: JSON.stringify({query: SEARCH_QUERY})}],
-			thinking: {type: 'adaptive'},
-			output_config: {effort: 'low', format: {type: 'json_schema', schema: contract.search.schema}},
-			tools: [{type: 'web_search_20250305', name: 'web_search', max_uses: 1, allowed_callers: ['direct']}],
-		});
-		expect(JSON.stringify(searchRequest)).not.toMatch(
-			/42\.17|9\.99|synthetic-private-note|synthetic-history-note|transaction-1|5814|2026-0/,
-		);
-		expect(categorizeRequest.system[0].text).toBe(contract.instructions);
-		expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
-		expect(JSON.parse(categorizeRequest.messages[0].content)).toEqual({
+		const [[first], [second]] = create.mock.calls;
+		expect(JSON.stringify([second.tools, second.system])).toBe(JSON.stringify([first.tools, first.system]));
+		expect(JSON.parse(first.messages[0].content)).toEqual({transactions: [{...transaction, correlationId: '0'}]});
+		expect(JSON.parse(second.messages[0].content)).toEqual({
 			transactions: [{...transaction, correlationId: '0'}],
-			searchFinding: {
-				query: SEARCH_QUERY,
-				identifies: 'BUSINESS',
-				description: 'A cafe serving coffee and pastries.',
-			},
+			merchantSearch: {query: SEARCH_QUERY, results: SEARCH_RESULTS},
 		});
 	});
 
-	it('records the query the search ran and passes a bounded description', async () => {
-		const {provider, create} = setup();
-		const ranQuery = `${SEARCH_QUERY} Example City`;
+	it('looks up the merchant when the first answer leaves an outgoing card payment in review without asking for a lookup', async () => {
+		const {provider, create, search} = setup();
+		search.mockResolvedValue(SEARCH_RESULTS);
 		create
-			.mockResolvedValueOnce(
-				searchReply({
-					query: ranQuery,
-					finding: {identifies: 'PAYMENT_PROCESSOR', description: ` ${'x'.repeat(400)} `},
-				}),
-			)
 			.mockResolvedValueOnce(response([classification({category: 'NEEDS_REVIEW', evidenceType: 'INSUFFICIENT'})]))
-			.mockResolvedValueOnce(searchReply({finding: {identifies: 'BUSINESS', description: '  '}}))
-			.mockResolvedValueOnce(response([classification()]));
-		const [processor] = await categorizeOn(provider, 'search');
-		const [business] = await categorizeOn(provider, 'search');
-		expect(processor.searchTrace?.queries).toEqual([ranQuery]);
-		expect(business.searchTrace?.queries).toEqual([SEARCH_QUERY]);
-		const findings = [1, 3].map((call) => JSON.parse(create.mock.calls[call][0].messages[0].content).searchFinding);
-		expect(findings).toEqual([
-			{query: ranQuery, identifies: 'PAYMENT_PROCESSOR', description: 'x'.repeat(300)},
-			{query: SEARCH_QUERY, identifies: 'BUSINESS', description: null},
-		]);
+			.mockResolvedValueOnce(
+				response([classification({category: 'SHOPPING', evidenceType: 'MERCHANT_IDENTITY_ONLY'})]),
+			);
+		const [result] = await categorizeOn(provider, 'search');
+		expect(result).toMatchObject({category: 'SHOPPING', searchTrace: {queries: [SEARCH_QUERY]}});
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY, undefined]]);
+		expect(create).toHaveBeenCalledTimes(2);
 	});
-
-	it.each(['NOTHING', 'PERSON'])(
-		'keeps the trace of a search that found %s but sends no finding',
-		async (identifies) => {
-			const {provider, create} = setup();
-			create
-				.mockResolvedValueOnce(searchReply({finding: {identifies, description: 'Example Person'}}))
-				.mockResolvedValueOnce(
-					response([classification({category: 'NEEDS_REVIEW', evidenceType: 'INSUFFICIENT'})]),
-				);
-			const [result] = await categorizeOn(provider, 'search');
-			expect(result.searchTrace).toEqual({
-				queries: [SEARCH_QUERY],
-				sourceDomains: ['cafe.example.test'],
-				evidenceType: 'INSUFFICIENT',
-			});
-			expect(JSON.parse(create.mock.calls[1][0].messages[0].content)).not.toHaveProperty('searchFinding');
-		},
-	);
 
 	it.each([
-		['the search call fails', {status: 500}],
-		['the search call is refused', {status: 429}],
-		['the search reply is not a finding', searchReply({finding: 'not json'})],
-		['the search reply has an unknown finding', searchReply({finding: {identifies: 'SHOP', description: null}})],
-		['the model answers without searching', searchReply({searches: 0})],
+		['the first answer asks for no lookup', {lookUpMerchant: false, kind: 'search', category: 'FOOD_AND_DRINK'}],
 		[
-			'the search tool returns an error',
-			searchReply({results: {type: 'web_search_tool_result_error', error_code: 'unavailable'}}),
+			'a payment that is not by card is left in review without asking for a lookup',
+			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', transactionType: 'TRANSFER'},
 		],
-		['the reply ran more than one search', searchReply({searches: 2})],
 		[
-			'the reply invoked the search twice',
-			(() => {
-				const reply = searchReply();
-				const [thinking, ...rest] = reply.content;
-				const retry = [
-					{type: 'server_tool_use', name: 'web_search', input: {query: `${SEARCH_QUERY} menu`}},
-					{
-						type: 'web_search_tool_result',
-						content: {type: 'web_search_tool_result_error', error_code: 'max_uses_exceeded'},
-					},
-				];
-				return {...reply, content: [thinking, ...rest.slice(0, 2), ...retry, ...rest.slice(2)]};
-			})(),
+			'an incoming card payment is left in review without asking for a lookup',
+			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', direction: 'INCOME'},
 		],
-		['the search reply is cut off', {...searchReply(), stop_reason: 'max_tokens'}],
-	])('categorizes without a finding or trace when %s', async (_case, searchOutcome) => {
+		['the group has no merchant query', {lookUpMerchant: true, kind: 'plain', category: 'FOOD_AND_DRINK'}],
+		[
+			'the first answer files it as a transfer to a person',
+			{lookUpMerchant: true, kind: 'search', category: 'TRANSFER_OUT'},
+		],
+	] as const)('keeps the first answer without searching when %s', async (_case, testCase) => {
+		const {lookUpMerchant, kind, category} = testCase;
+		const {provider, create, search} = setup();
+		create.mockResolvedValue(response([classification({category})], {lookUpMerchant}));
+		const [result] = await provider.categorize(
+			[
+				{
+					...input(),
+					transactionType: 'transactionType' in testCase ? testCase.transactionType : 'CARD_PAYMENT',
+					direction: 'direction' in testCase ? testCase.direction : 'EXPENSE',
+				},
+			],
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+			kind === 'search' ? {searchQuery: SEARCH_QUERY} : {},
+		);
+		expect(result).toMatchObject({category});
+		expect(result).not.toHaveProperty('searchTrace');
+		expect(search).not.toHaveBeenCalled();
+		expect(create).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		['the search is refused', () => Promise.reject(new BraveWebSearchError(402)), 'HTTP 402'],
+		['the search fails', () => Promise.reject(new Error('synthetic search failure')), 'Error'],
+		['the search finds nothing', () => Promise.resolve([]), null],
+	])('keeps the first answer without a trace when %s', async (_case, outcome, logged) => {
 		const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 		try {
-			const {provider, create} = setup();
-			if ('status' in searchOutcome) create.mockRejectedValueOnce(searchOutcome);
-			else create.mockResolvedValueOnce(searchOutcome);
-			create.mockResolvedValueOnce(response([classification({category: 'NEEDS_REVIEW'})]));
+			const {provider, create, search} = setup();
+			search.mockImplementation(outcome);
+			create.mockResolvedValue(response([classification({category: 'NEEDS_REVIEW'})], {lookUpMerchant: true}));
 			const [result] = await categorizeOn(provider, 'search');
 			expect(result).toMatchObject({category: 'NEEDS_REVIEW', provider: 'claude-api'});
 			expect(result).not.toHaveProperty('searchTrace');
-			expect(create).toHaveBeenCalledTimes(2);
-			const categorizeRequest = create.mock.calls[1][0];
-			expect(categorizeRequest.tools).toEqual(STRUCTURED_OUTPUT_REQUEST.tools);
-			expect(JSON.parse(categorizeRequest.messages[0].content)).not.toHaveProperty('searchFinding');
+			expect(search).toHaveBeenCalledTimes(1);
+			expect(create).toHaveBeenCalledTimes(1);
+			expect(warn.mock.calls.map(([message]) => String(message))).toEqual(
+				logged ? [expect.stringMatching(new RegExp(`${logged}$`))] : [],
+			);
 		} finally {
 			warn.mockRestore();
 		}
+	});
+
+	it('searches worldwide when the group holds rows from banks in different countries', async () => {
+		const {provider, create, search} = setup();
+		search.mockResolvedValue(SEARCH_RESULTS);
+		create
+			.mockResolvedValueOnce(
+				response([classification(), classification({correlationId: '1'})], {lookUpMerchant: true}),
+			)
+			.mockResolvedValueOnce(response([classification(), classification({correlationId: '1'})]));
+		await provider.categorize(
+			[
+				{...input('transaction-1'), ownerBank: {name: 'Example Bank', country: 'NL'}},
+				{...input('transaction-2'), ownerBank: {name: 'Example Bank', country: 'DE'}},
+			],
+			BANK_TRANSACTION_CATEGORY_DEFINITIONS,
+			{searchQuery: SEARCH_QUERY},
+		);
+		expect(search.mock.calls).toEqual([[SEARCH_QUERY, undefined]]);
+	});
+
+	it('fails the group when the call after a search fails, keeping nothing from the first answer', async () => {
+		const {provider, create, search} = setup();
+		search.mockResolvedValue(SEARCH_RESULTS);
+		create
+			.mockResolvedValueOnce(response([classification()], {lookUpMerchant: true}))
+			.mockRejectedValueOnce({status: 500, message: 'synthetic'});
+		await expect(outcomeOf(provider, 'search')).resolves.toBe('failed');
+		expect(create).toHaveBeenCalledTimes(2);
 	});
 
 	describe('structured response validation', () => {
@@ -567,8 +557,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				const {provider, create} = setup();
 				create.mockRejectedValue({status, message: 'secret raw input'});
 				await expect(outcomeOf(provider, kind)).resolves.toBe(expected);
-				// A failed merchant search leaves the categorizing call to decide the outcome.
-				expect(create).toHaveBeenCalledTimes(kind === 'search' ? 2 : 1);
+				expect(create).toHaveBeenCalledTimes(1);
 			}
 		});
 
@@ -604,10 +593,9 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		it('fails a categorizing reply that ran a web search, keeping nothing from it', async () => {
 			for (const kind of ['plain', 'search'] as const) {
 				const {provider, create} = setup();
-				if (kind === 'search') create.mockResolvedValueOnce(searchReply());
 				create.mockResolvedValueOnce(searchedResponse('Example Cafe menu'));
 				await expect(outcomeOf(provider, kind)).resolves.toBe('failed');
-				expect(create).toHaveBeenCalledTimes(kind === 'search' ? 2 : 1);
+				expect(create).toHaveBeenCalledTimes(1);
 			}
 		});
 
@@ -645,7 +633,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 						AI_CATEGORIZATION_EFFORT: 'high',
 					})[key],
 			} as unknown as ConfigurationService;
-			const provider = new ClaudeBankTransactionCategorizationProvider(config);
+			const provider = new ClaudeBankTransactionCategorizationProvider(config, {} as BraveWebSearchClient);
 			await expect(outcomeOf(provider, 'plain')).resolves.toBe('failed');
 			const logged = JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
 			expect(logged).not.toContain('synthetic-leaked-transaction-text');

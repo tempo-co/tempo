@@ -5,14 +5,14 @@ Enable Banking, Claude and the browsers' push services are paid, credentialed or
 ## Rules
 
 - **Off by default.** AI categorization and web search are off in `.env.development`, `.env.test` and the shared E2E setup. A spec that needs them opts in through `test/setup/e2e.setup.ts` (`enableAiCategorizationE2e()` at module scope, before the app boots), not through a second env file, Jest config, npm script or CI job.
-- **Synthetic credentials only.** The opt-in sets `ANTHROPIC_API_KEY=test-only-placeholder`. Never read, forward or require a real key in development or tests.
-- **Mock only the provider boundary.** Keep schema, persistence, queue, worker, retries, routes, auth, DTOs and ownership real. Spy on every provider method the path uses (`categorize`, `identifyMerchants`) before bootstrap, so startup reconciliation cannot reach the network.
+- **Synthetic credentials only.** The opt-in sets `ANTHROPIC_API_KEY=test-only-placeholder`, and the web search opt-in `BRAVE_SEARCH_API_KEY=test-only-placeholder`. Never read, forward or require a real key in development or tests.
+- **Mock only the provider boundary.** Keep schema, persistence, queue, worker, retries, routes, auth, DTOs and ownership real. Spy on every provider method the path uses (`categorize`, `identifyMerchants`, and `BraveWebSearchClient.search` for search) before bootstrap, so startup reconciliation cannot reach the network.
 - **Deterministic doubles.** Return schema-valid results keyed by the input correlation ids, with categories from the real catalog and bounded confidence.
 - **Both suites.** The default suite proves the feature is off and the provider is never called; the opted-in suite proves orchestration and persistence end to end.
 - **Adapter tests separately.** Test the concrete provider against a mocked transport or loopback server that matches the real schema: malformed, incomplete, duplicate and out-of-domain responses.
 - **Real infrastructure for diagnosis.** Query-builder mocks hide identifier quoting, column widths, races and affected-row guards. Fix the SQL or schema rather than weakening the test.
 - **Outbound privacy.** Write adversarial synthetic fixtures before changing sanitization and assert on the serialized request (with and without a search allowed).
-- **Cost limits are enforced in code.** Assert the number of provider requests per batch (one categorizing call per row group, offering only its `StructuredOutput` answer tool; at most one separate search call per group with a search query, its tool capped at one use). Prompt wording alone is not a cap.
+- **Cost limits are enforced in code.** Assert the number of provider requests per batch (one categorizing call per row group, offering only its `StructuredOutput` answer tool; at most one web search and one more categorizing call per group, only when its first answer asks for a lookup and it has a search query). Prompt wording alone is not a cap.
 - **Separate gates.** A refusal verifies failure handling, not a successful call. Rows inserted by direct SQL bypass enqueue hooks; pending rows with no jobs mean the provider path never ran.
 - **Accuracy is a separate claim.** Schema validity and model confidence say nothing about correctness.
 - **Trace recovery.** Before promising automatic recovery, trace the stored failure status through queue-attempt exhaustion and the reconciliation sweep's selection predicate; a retryable error is useless if the worker stores a status the sweep skips.
