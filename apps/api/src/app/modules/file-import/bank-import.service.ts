@@ -53,6 +53,7 @@ import {BankImport} from './bank-import.entity';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
 import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
+import {recordedAccounts} from './recorded-accounts';
 import {ParseRunnerService} from './runner/parse-runner.service';
 import {RepeatedRows, StatementGap, gapsOutsideCoverage, joinStatements} from './statement-chain';
 
@@ -244,15 +245,14 @@ export class BankImportService {
 						rowsNotInBank: 0,
 						dateFrom: bookingDates[0] ?? null,
 						dateTo: bookingDates.at(-1) ?? null,
-						bankAccountIds: accounts.map(({account}) => account.id),
-						createdBankAccountIds: accounts.filter(({created}) => created).map(({account}) => account.id),
-						// Only an imported-files account takes its balance from its files.
-						closingBalances: accountRows.flatMap(({closingBalance}, index) => {
-							const {account, connection} = accounts[index];
-							return closingBalance && connection.provider === BANK_CONNECTION_PROVIDERS.FILE
-								? [{bankAccountId: account.id, ...closingBalance}]
-								: [];
-						}),
+						...recordedAccounts(
+							accounts.map(({account, connection, created}, index) => ({
+								bankAccountId: account.id,
+								created,
+								fromFiles: connection.provider === BANK_CONNECTION_PROVIDERS.FILE,
+								closingBalance: accountRows[index].closingBalance,
+							})),
+						),
 						// On a synced account only the days its bank sync does not cover can be missing from Tempo.
 						statementGaps: accountRows.flatMap(({gaps, currency}, index) => {
 							const {account, connection} = accounts[index];
@@ -1511,6 +1511,8 @@ function hashDrop(files: readonly Buffer[]): string {
 
 function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankImportSummary {
 	const accountsById = new Map(accounts.map((account) => [account.id, account]));
+	// Imports recorded before an account was recorded once per drop can name it twice.
+	const accountIds = [...new Set(record.bankAccountIds)];
 	return {
 		id: record.id,
 		format: record.format,
@@ -1527,7 +1529,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		rowsRemovedBySync: record.rowsRemovedBySync,
 		dateFrom: record.dateFrom,
 		dateTo: record.dateTo,
-		accounts: record.bankAccountIds.flatMap((id) => {
+		accounts: accountIds.flatMap((id) => {
 			const account = accountsById.get(id);
 			if (!account) return [];
 			return [
@@ -1541,7 +1543,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		}),
 		accountsWithoutBalance: record.undoneAt
 			? []
-			: record.bankAccountIds.flatMap((id) => {
+			: accountIds.flatMap((id) => {
 					const account = accountsById.get(id);
 					if (
 						!account ||

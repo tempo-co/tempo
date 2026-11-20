@@ -1,16 +1,17 @@
 import type {Locator, Page, Request, Route} from '@playwright/test';
-import type {
-  AddBankImportNeverSentRowsRequest,
-  BankConnection,
-  BankImportDoubtfulRow,
-  BankImportError,
-  BankImportLayout,
-  BankImportLayoutProposal,
-  BankImportNeverSentRow,
-  BankImportSummary,
-  ConfirmBankImportLayoutProposalRequest,
-  ResolveBankImportDoubtfulRowRequest,
-  SetBankAccountBalanceRequest,
+import {
+  type AddBankImportNeverSentRowsRequest,
+  BANK_IMPORT_MAX_ROWS_PER_ADD,
+  type BankConnection,
+  type BankImportDoubtfulRow,
+  type BankImportError,
+  type BankImportLayout,
+  type BankImportLayoutProposal,
+  type BankImportNeverSentRow,
+  type BankImportSummary,
+  type ConfirmBankImportLayoutProposalRequest,
+  type ResolveBankImportDoubtfulRowRequest,
+  type SetBankAccountBalanceRequest,
 } from '@tempo/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
@@ -148,6 +149,8 @@ type ImportApi = {
   /** The bodies of never-sent rows added, and how often the list of them was read. */
   adds: AddBankImportNeverSentRowsRequest[];
   neverSentReads: number;
+  /** The never-sent rows added, which the list of them no longer holds. */
+  added: Set<string>;
   undos: string[];
   proposals: Request[];
   confirms: ConfirmBankImportLayoutProposalRequest[];
@@ -168,6 +171,7 @@ async function mockFileImport(
     doubtfulRows = [],
     neverSentRows = [],
     holdAdd,
+    failAdds = {},
     mapper = false,
     proposals = [],
     layouts = [],
@@ -178,6 +182,8 @@ async function mockFileImport(
     neverSentRows?: BankImportNeverSentRow[];
     /** Holds each add of never-sent rows until it resolves. */
     holdAdd?: () => Promise<void>;
+    /** The status each add of never-sent rows that fails answers with, by the add's index from 0. */
+    failAdds?: Record<number, number>;
     /** Whether the deployment works out the columns of a table it does not know. */
     mapper?: boolean;
     /** The answer to each proposal in turn. */
@@ -186,6 +192,7 @@ async function mockFileImport(
   } = {},
 ) {
   const api: ImportApi = {
+    added: new Set(),
     imports: [...imports],
     uploads: [],
     resolves: [],
@@ -224,12 +231,19 @@ async function mockFileImport(
   });
   await page.route(`${API_URL}/bank-imports/*/never-sent-rows`, (route) => {
     api.neverSentReads += 1;
-    return fulfillJson(route, neverSentRows);
+    // Like the API, the list holds only the rows not added yet.
+    return fulfillJson(
+      route,
+      neverSentRows.filter(({id}) => !api.added.has(id)),
+    );
   });
   await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
     const request = route.request().postDataJSON() as AddBankImportNeverSentRowsRequest;
     api.adds.push(request);
     await holdAdd?.();
+    const failure = failAdds[api.adds.length - 1];
+    if (failure) return fulfillJson(route, {statusCode: failure, message: 'Refused'}, failure);
+    for (const id of request.rowIds) api.added.add(id);
     const [current] = api.imports;
     const removed = request.rowIds.filter(
       (id) => neverSentRows.find((row) => row.id === id)?.kind === 'removed_by_sync',
@@ -424,6 +438,50 @@ test.describe('statement file import on Connections', () => {
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     // A 404 is the answer, so it is not asked again.
     expect(probes).toBe(1);
+  });
+
+  test("shows file import while its route answers with the API's own error, and nothing while a proxy answers for it", async ({
+    page,
+  }) => {
+    await page.clock.install({time: TODAY});
+    let answer: 'api' | 'proxy' = 'api';
+    let probes = 0;
+    let answered = 0;
+    // The list is asked three more times, each after a longer wait, before the page treats it as failed.
+    const waitOutRetries = async () => {
+      for (let retry = 1; retry <= 3; retry += 1) {
+        await expect.poll(() => answered).toBe(retry);
+        await page.clock.runFor(5_000);
+      }
+      await expect.poll(() => answered).toBe(4);
+      await page.clock.runFor(1_000);
+    };
+    await page.route(`${API_URL}/bank-imports`, async (route) => {
+      probes += 1;
+      await (answer === 'api'
+        ? fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500)
+        : route.fulfill({status: 502, contentType: 'text/html', body: '<h1>502 Bad Gateway</h1>'}));
+      answered += 1;
+    });
+
+    await page.goto('/bank-connections');
+    await waitOutRetries();
+    await expect(page.getByRole('button', {name: 'Import a file'})).toBeVisible();
+    await expect(page.getByText("Couldn't load your imports")).toBeVisible();
+
+    answer = 'proxy';
+    probes = 0;
+    answered = 0;
+    await page.reload();
+    await waitOutRetries();
+    // Nothing on screen marks a failure that leaves import unknown, so, as in the import-off test, the page gets a
+    // moment after the last answer to show anything: a status-only check shows the button within that moment.
+    await page.clock.resume();
+    await page.waitForTimeout(300);
+    expect(probes).toBe(4);
+    await expect(page.getByRole('region', {name: 'Mock ASPSP'})).toBeVisible();
+    expect(await page.getByRole('button', {name: 'Import a file'}).count()).toBe(0);
+    expect(await page.getByRole('heading', {name: 'Imports'}).count()).toBe(0);
   });
 
   test('imports chosen files and shows what they added, where they went and when', async ({
@@ -690,6 +748,86 @@ test.describe('statement file import on Connections', () => {
       {rowIds: [rows[0].id, rows[2].id, rows[3].id]},
     ]);
     expect(api.neverSentReads).toBe(1);
+  });
+
+  test('a group too large for one request refused partway keeps the rows that were added, and drops the rows added elsewhere', async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const pocket = Array.from(
+      {length: BANK_IMPORT_MAX_ROWS_PER_ADD + 1},
+      (_, index): BankImportNeverSentRow => ({
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        kind: 'not_in_bank',
+        bankAccountId: CHECKING.id,
+        row: {
+          bookingDate: '2026-06-02',
+          valueDate: '2026-06-02',
+          amount: '-0.50',
+          currency: 'EUR',
+          balanceAfter: null,
+          bankReference: null,
+          counterpartyName: 'Example Pocket',
+          description: 'Round-up',
+          remittanceInformation: null,
+        },
+      }),
+    );
+    const fee: BankImportNeverSentRow = {
+      ...pocket[0],
+      id: '00000000-0000-4000-8000-100000000000',
+      row: {...pocket[0].row, amount: '-30.00', counterpartyName: null, description: 'Example Fee'},
+    };
+    const rows = [...pocket, fee];
+    const api = await mockFileImport(page, {
+      uploads: [
+        created(importSummary({rowsAdded: 0, rowsDoubtful: 0, rowsNotInBank: rows.length})),
+      ],
+      neverSentRows: rows,
+      failAdds: {1: 409},
+    });
+    // The second request waits, then is refused.
+    let addRequests = 0;
+    await page.route(`${API_URL}/bank-imports/*/never-sent-rows/add`, async (route) => {
+      addRequests += 1;
+      if (addRequests === 2) await held;
+      await route.fallback();
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    const summaryBody = dialog.getByTestId('bank-import-summary');
+    await summaryBody
+      .getByRole('button', {name: 'Not added: 502 rows your bank never sent'})
+      .click();
+    const groups = summaryBody.getByTestId('bank-import-never-sent-group');
+    const group = groups.first();
+
+    await group.getByRole('button', {name: 'Add 501 from Example Pocket'}).click();
+    // The rows of the first request show as added while the group waits for the rest.
+    try {
+      await expect(group.getByRole('listitem').first().getByRole('status')).toHaveText('Added');
+      await expect(group.getByRole('button', {name: 'Adding…'})).toBeDisabled();
+    } finally {
+      // Another tab adds the row of the second request and the fee first.
+      api.added.add(pocket[BANK_IMPORT_MAX_ROWS_PER_ADD].id);
+      api.added.add(fee.id);
+      release();
+    }
+    const toasts = page.locator('[data-sonner-toast]');
+    await expect(toasts).toContainText("Couldn't add the transaction");
+    expect(await countAfterToasts(page, toasts)).toBe(1);
+    // The list is read again: the rows added elsewhere leave, the rows added here stay as added.
+    await expect.poll(() => api.neverSentReads).toBe(2);
+    await expect(groups).toHaveCount(1);
+    await expect(group).toContainText('500 rows');
+    await expect(group.getByRole('button', {name: /^Add /})).toHaveCount(0);
+    await expect(group.getByRole('listitem').first().getByRole('status')).toHaveText('Added');
+    expect(api.adds.map(({rowIds}) => rowIds)).toEqual([
+      pocket.slice(0, BANK_IMPORT_MAX_ROWS_PER_ADD).map(({id}) => id),
+      [pocket[BANK_IMPORT_MAX_ROWS_PER_ADD].id],
+    ]);
   });
 
   test('shows the rows a later sync removed in the import summary only, and adds them back by row or by group', async ({
@@ -1771,7 +1909,7 @@ test.describe('statement file import on Connections', () => {
     ]);
   });
 
-  test('lists imports newest first, undoes one after confirming and keeps it listed as undone', async ({
+  test('lists imports newest first, undoes one after confirming, also on a second try, and keeps it listed as undone', async ({
     page,
   }) => {
     const imports = [
@@ -1806,6 +1944,12 @@ test.describe('statement file import on Connections', () => {
     ];
     await mockBankConnections(page, [MOCK_CONNECTION, IMPORTED_FILES]);
     const api = await mockFileImport(page, {imports});
+    let undoFails = true;
+    await page.route(`${API_URL}/bank-imports/*`, (route) => {
+      if (route.request().method() !== 'DELETE' || !undoFails) return route.fallback();
+      undoFails = false;
+      return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+    });
     await page.goto('/bank-connections');
 
     const list = page.getByTestId('bank-imports-list');
@@ -1829,6 +1973,14 @@ test.describe('statement file import on Connections', () => {
       'This removes the 212 transactions it added. Any that bank sync has picked up since then are kept. ' +
         'The account it created is removed too, unless another import also added transactions to it.',
     );
+    await confirm.getByRole('button', {name: 'Undo import'}).click();
+    // A failed try says so in the confirmation, which stays open for another.
+    await expect(confirm.getByRole('alert')).toHaveText(
+      "Couldn't undo the import. Try again in a moment.",
+    );
+    await expect(confirm.getByRole('heading', {name: 'Undo this import?'})).toBeVisible();
+    expect(await countAfterToasts(page, page.locator('[data-sonner-toast]'))).toBe(0);
+    expect(api.undos).toEqual([]);
     await confirm.getByRole('button', {name: 'Undo import'}).click();
     await expect(page.getByText('Import undone')).toBeVisible();
     await expect(confirm).toBeHidden();

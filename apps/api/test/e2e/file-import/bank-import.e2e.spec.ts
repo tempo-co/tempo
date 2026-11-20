@@ -1233,6 +1233,34 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: frAccount.id})).toBe(25);
 	});
 
+	it('records an account two statements of a drop are sent to once', async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {aspspName: 'Example Bank FR'});
+		const account = await fixtures.createBankAccount(connection, {iban: 'FR1420041010050500013M02606'});
+
+		const together = await drop(agent, [
+			BANK_CODE_OTHER_ROWS_OFX,
+			revolutStatement([['2026-10-27', '-7.00', 'EUR']]),
+		])
+			.field('accountChoices', JSON.stringify({'Example Bank FR:EUR': account.id, 'Revolut:EUR': account.id}))
+			.expect(201);
+
+		expect(together.body).toMatchObject({rowsAdded: 7, accounts: [{id: account.id, created: false}]});
+		expect(together.body.accounts).toHaveLength(1);
+		expect((await imports.findOneByOrFail({id: together.body.id})).bankAccountIds).toEqual([account.id]);
+	});
+
+	it('lists an import that recorded an account twice with that account once', async () => {
+		const {agent} = await createOwner();
+		const imported = (await drop(agent, [STATEMENT_FILES[0]]).expect(201)).body as BankImportSummary;
+		const [account] = imported.accounts;
+		await imports.update(imported.id, {bankAccountIds: [account.id, account.id]});
+
+		const listed = (await agent.get('/bank-imports').expect(200)).body as BankImportList;
+
+		expect(listed.imports.find(({id}) => id === imported.id)?.accounts).toEqual([account]);
+	});
+
 	it("imports one account's rows once across CAMT.053, MT940 and TXT, dropped in either order or all at once", async () => {
 		const camtFirst = await createOwner();
 		expect((await drop(camtFirst.agent, CAMT_FILES).expect(201)).body).toMatchObject({

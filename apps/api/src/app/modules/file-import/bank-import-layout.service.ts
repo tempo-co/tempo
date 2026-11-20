@@ -8,7 +8,7 @@ import type {
 	BankImportLayout as BankImportLayoutResponse,
 	ConfirmBankImportLayoutProposalRequest,
 } from '@tempo/contracts';
-import {BANK_IMPORT_CURRENCIES} from '@tempo/contracts';
+import {BANK_IMPORT_CURRENCIES, BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
 import {DataSource, EntityManager, MoreThan} from 'typeorm';
 
@@ -32,8 +32,6 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 /** The codes a file or its owner may name: the active ISO 4217 ones, and the former ones the ECB has rates for. */
 const IMPORT_CURRENCY_CODES: ReadonlySet<string> = new Set([...ISO_CURRENCY_CODES, ...BANK_IMPORT_CURRENCIES]);
 
-/** Model calls an owner may start in 24 hours, whatever their outcome. */
-export const MAX_PROPOSALS_PER_DAY = 5;
 export const PROPOSAL_LIFETIME_MS = 60 * 60 * 1000;
 export const MAX_SAVED_LAYOUTS = 50;
 /** A saved layout's JSON at most: an owner's 50 always fit one request to the parse child. */
@@ -244,9 +242,11 @@ export class BankImportLayoutService {
 				where: {accountId: ownerId, createdAt: MoreThan(since)},
 				order: {createdAt: 'ASC'},
 			});
-			if (recent.length >= MAX_PROPOSALS_PER_DAY) {
+			if (recent.length >= BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY) {
 				// The oldest of the day's calls leaves the window first.
-				const retryAt = new Date(recent[recent.length - MAX_PROPOSALS_PER_DAY].createdAt.getTime() + DAY_MS);
+				const retryAt = new Date(
+					recent[recent.length - BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY].createdAt.getTime() + DAY_MS,
+				);
 				throw this.refuse('mapper_limit_reached', {retryAt: retryAt.toISOString()});
 			}
 			const now = new Date();

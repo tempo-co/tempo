@@ -5,6 +5,8 @@ import {invalidateBankDerivedData} from '@/features/banking/api/invalidate-bank-
 import {bankQueryKeys} from '@/features/banking/api/query-keys';
 import {HttpError, NetworkError, SessionChangedError, api, isAuthError} from '@/utils/api';
 
+import {isApiServerError} from '../utils/import-availability';
+
 export const bankImportQueryKeys = {
   root: ['bank-imports'] as const,
   list: ['bank-imports', 'list'] as const,
@@ -32,7 +34,7 @@ export const bankImportsQueryOptions = queryOptions({
 
 /**
  * Whether file import is on, from the import list (newest first), which is also the list the page shows.
- * `on` once the list loads, or once the API answers its route with an error of its own (the route is there);
+ * `on` once the list loads, or once the API answers its route with a server error of its own (the route is there);
  * `off` on a 404; `unknown` while loading or without an answer, when nothing of file import is shown.
  */
 export function useBankImports() {
@@ -43,7 +45,7 @@ export function useBankImports() {
       ? 'on'
       : isOff(error)
         ? 'off'
-        : error instanceof HttpError && !(error instanceof NetworkError) && error.status >= 500
+        : error instanceof HttpError && isApiServerError(error.status, error.body)
           ? 'on'
           : 'unknown';
   // Whether a table in no layout Tempo knows can have its columns worked out.

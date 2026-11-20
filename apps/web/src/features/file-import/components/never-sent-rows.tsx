@@ -1,8 +1,7 @@
-import {
-  BANK_IMPORT_MAX_ROWS_PER_ADD,
-  type BankImportNeverSentKind,
-  type BankImportNeverSentRow,
-  type BankImportSummary,
+import type {
+  BankImportNeverSentKind,
+  BankImportNeverSentRow,
+  BankImportSummary,
 } from '@tempo/contracts';
 import {ChevronRight, FileX} from 'lucide-react';
 import {useId, useState} from 'react';
@@ -19,6 +18,7 @@ import {HttpError, wasToasted} from '@/utils/api';
 import {
   useAddNeverSentRows,
   useBankImportNeverSentRows,
+  useRefreshNeverSentRows,
 } from '../api/use-bank-import-never-sent-rows';
 import {formatCount, plural} from '../utils/import-format';
 import {
@@ -45,14 +45,16 @@ const GROUP_ROWS = 5;
 export function NeverSentRows({
   summary,
   kind,
+  added,
+  onAdded,
 }: {
   summary: BankImportSummary;
   kind: BankImportNeverSentKind;
+  /** The rows added from this summary, in either kind's list. */
+  added: ReadonlySet<string>;
+  onAdded: (ids: readonly string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  // Kept here, not in the list, so rows added stay added when the list folds and opens again: the other kind's list
-  // may keep the rows read before the add.
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const listId = useId();
   const count = neverSentCount(summary, kind);
   // Opened once in this summary, the list stays so its added rows can show as added.
@@ -79,12 +81,7 @@ export function NeverSentRows({
       </Button>
       {open && (
         <div id={listId}>
-          <NeverSentList
-            summary={summary}
-            kind={kind}
-            added={added}
-            onAdded={(ids) => setAdded((current) => new Set([...current, ...ids]))}
-          />
+          <NeverSentList summary={summary} kind={kind} added={added} onAdded={onAdded} />
         </div>
       )}
     </section>
@@ -111,6 +108,7 @@ function NeverSentList({
     refetch,
   } = useBankImportNeverSentRows(summary.id, true);
   const {addNeverSentRows} = useAddNeverSentRows();
+  const refreshRows = useRefreshNeverSentRows(summary.id);
   // The rows of the add on its way, so its button shows it and the others wait.
   const [adding, setAdding] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState(GROUPS_PAGE);
@@ -133,22 +131,27 @@ function NeverSentList({
 
   const add = async (ids: string[]) => {
     setAdding(ids);
+    // A group sent in several requests can fail partway: the rows already added show as added.
+    const landed = new Set<string>();
     try {
-      await addNeverSentRows({importId: summary.id, rowIds: ids});
-      onAdded(ids);
+      await addNeverSentRows({
+        importId: summary.id,
+        rowIds: ids,
+        onAdded: (chunk) => {
+          for (const id of chunk) landed.add(id);
+          onAdded(chunk);
+        },
+      });
     } catch (failure) {
+      const notAdded = ids.length - landed.size;
       if (!wasToasted(failure))
-        toast.error(copy.failed(ids.length), {
+        toast.error(copy.failed(notAdded), {
           description: 'Try again in a moment.',
           id: `bank-import-add-failed-${summary.id}`,
         });
-      // Another tab may have added a row or undone the import, or a group sent in several requests got partway:
-      // show what is still open.
-      if (
-        ids.length > BANK_IMPORT_MAX_ROWS_PER_ADD ||
-        (failure instanceof HttpError && [404, 409].includes(failure.status))
-      )
-        void refetch();
+      // Another tab may have added a row or undone the import: show what is still open.
+      if (failure instanceof HttpError && [404, 409].includes(failure.status))
+        void refreshRows(new Set([...added, ...landed])).catch(() => undefined);
     } finally {
       setAdding(null);
     }
@@ -200,8 +203,11 @@ function Group({
 }) {
   const [all, setAll] = useState(false);
   const open = group.rows.filter(({id}) => !added.has(id)).map(({id}) => id);
+  // Rows of a group sent in several requests show as added as each lands, so the group stays pending by its rows.
   const addingGroup =
-    adding !== null && adding.length > 1 && adding.every((id) => open.includes(id));
+    adding !== null &&
+    adding.length > 1 &&
+    adding.every((id) => group.rows.some((row) => row.id === id));
   const rows = all ? group.rows : group.rows.slice(0, GROUP_ROWS);
   return (
     <li
@@ -218,7 +224,7 @@ function Group({
             {plural(group.rows.length, 'row')}
           </span>
         </span>
-        {open.length > 1 ? (
+        {open.length > 1 || addingGroup ? (
           <Button
             variant='outline'
             size='sm'

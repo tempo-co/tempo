@@ -1,5 +1,7 @@
 import {
+  BANK_IMPORT_DROP_LIMITS,
   BANK_IMPORT_ERROR_CODES,
+  BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY,
   type BankImportAccountQuestion,
   type BankImportError,
   type BankImportErrorCode,
@@ -7,15 +9,8 @@ import {
 
 import {layoutBank} from './supported-files';
 
-// What one drop may hold, mirrored from the API's apps/api/src/app/modules/file-import/parsers/parse-limits.ts:
-// its parse child loads that file alone, so the limits cannot live in the contracts.
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_FILES_PER_DROP = 20;
-const MAX_DROP_BYTES = 25 * 1024 * 1024;
-// Named in copy only: the API's MAX_ARCHIVE_ENTRIES (parse-limits.ts) and MAX_PROPOSALS_PER_DAY
-// (bank-import-layout.service.ts).
-const MAX_ARCHIVE_ENTRIES = 500;
-const MAX_PROPOSALS_PER_DAY = 5;
+const {MAX_FILE_BYTES, MAX_FILES_PER_DROP, MAX_DROP_BYTES, MAX_ARCHIVE_ENTRIES} =
+  BANK_IMPORT_DROP_LIMITS;
 
 /** A drop of several files is all or nothing, so every refusal says so. */
 export const NOTHING_IMPORTED = 'Nothing was imported.';
@@ -43,7 +38,7 @@ const REFUSAL_COPY: Record<
   // Working out the columns was tried and failed; the file stays chosen to try again.
   mapper_unavailable: {
     title: "Working out the columns didn't work this time",
-    description: `Try again later. Each try counts towards the ${MAX_PROPOSALS_PER_DAY} allowed in 24 hours.`,
+    description: `Try again later. Each try counts towards the ${BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} allowed in 24 hours.`,
   },
   layout_not_mappable: {
     title: "Tempo couldn't work out this file's columns",
@@ -175,7 +170,7 @@ function limitCopy(retryAt: string | undefined, now = new Date()): RefusalCopy {
     ? 'tomorrow'
     : `${at.toDateString() === now.toDateString() ? 'today' : 'tomorrow'} at ${timeFormat.format(at)}`;
   return {
-    title: `You've reached the limit of ${MAX_PROPOSALS_PER_DAY} tries in 24 hours`,
+    title: `You've reached the limit of ${BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} tries in 24 hours`,
     description: `Every try at working out columns counts, even one that failed or was cancelled. You can try again ${when}.`,
   };
 }
