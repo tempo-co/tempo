@@ -57,7 +57,7 @@ import {
 	SQL_SPENDING,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
-	findFirstBookingDate,
+	findFirstTransactionDate,
 } from './bank-transaction-filters';
 import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
 
@@ -102,15 +102,15 @@ export class BankTransactionSummaryService {
 		const isPastMonth = month < asOf.slice(0, 7);
 
 		const candidateMonths = previousMonths(month, BASELINE_MONTHS);
-		// Flows cover every candidate month; months before the first booking simply have no rows.
-		const [firstBookingDate, flows, period] = await Promise.all([
-			findFirstBookingDate(this.bankTransactionRepository, accountId),
+		// Flows cover every candidate month; months before the first transaction simply have no rows.
+		const [firstTransactionDate, flows, period] = await Promise.all([
+			findFirstTransactionDate(this.bankTransactionRepository, accountId),
 			this.findFlows(accountId, `${candidateMonths[0]}-01`, through),
 			this.findPeriodCounts(accountId, monthStart, through),
 		]);
-		const baselineMonths = firstBookingDate
+		const baselineMonths = firstTransactionDate
 			? candidateMonths.filter(
-					(baselineMonth) => `${baselineMonth}-${daysInMonth(baselineMonth)}` >= firstBookingDate,
+					(baselineMonth) => `${baselineMonth}-${daysInMonth(baselineMonth)}` >= firstTransactionDate,
 				)
 			: [];
 
@@ -139,7 +139,7 @@ export class BankTransactionSummaryService {
 				continue;
 			}
 			const monthDaily = baselineDaily.get(row.month);
-			// A sync between the queries may add rows before the first booking date read above.
+			// A sync between the queries may add rows before the first transaction date read above.
 			if (!monthDaily) continue;
 			addTo(monthDaily, row.day, spending);
 			if (isPastMonth || row.day <= throughDay) {
@@ -215,12 +215,12 @@ export class BankTransactionSummaryService {
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_CASH_FLOW_RANGE);
 
-		const [firstBookingDate, rows] = await Promise.all([
-			findFirstBookingDate(this.bankTransactionRepository, accountId),
+		const [firstTransactionDate, rows] = await Promise.all([
+			findFirstTransactionDate(this.bankTransactionRepository, accountId),
 			this.findPeriodFlows(accountId, interval, starts[0], to),
 		]);
 		const totals = new Map(rows.map((row) => [row.start, row]));
-		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+		const periods = periodWindows(interval, starts, to, asOf, firstTransactionDate).map(
 			(window): BankTransactionCashFlowPeriod => {
 				const spending = -parseCents(totals.get(window.start)?.spending ?? '0');
 				const income = parseCents(totals.get(window.start)?.income ?? '0');
@@ -370,7 +370,7 @@ export class BankTransactionSummaryService {
 	private createFlowQuery(accountId: string, from: string, to: string) {
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		applyBankTransactionFilters(query, {
-			bookingDate: {from, to},
+			date: {from, to},
 			baseAmount: 'PRESENT',
 			cashFlows: ['SPENDING', 'INCOME'],
 		});
@@ -380,8 +380,8 @@ export class BankTransactionSummaryService {
 	/** Spending and income per month, day and category key; amounts are raw base-currency sums. */
 	private findFlows(accountId: string, from: string, to: string): Promise<FlowRow[]> {
 		return this.createFlowQuery(accountId, from, to)
-			.select(`to_char("transaction"."bookingDate", 'YYYY-MM')`, 'month')
-			.addSelect('EXTRACT(DAY FROM "transaction"."bookingDate")::int', 'day')
+			.select(`to_char("transaction"."date", 'YYYY-MM')`, 'month')
+			.addSelect('EXTRACT(DAY FROM "transaction"."date")::int', 'day')
 			.addSelect(`CASE WHEN ${SQL_SPENDING} THEN 'SPENDING' ELSE 'INCOME' END`, 'flow')
 			.addSelect(`COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`, 'category')
 			.addSelect(`ROUND(SUM(${SQL_BASE_AMOUNT}), 2)::text`, 'amount')
@@ -409,7 +409,7 @@ export class BankTransactionSummaryService {
 
 	private async findPeriodCounts(accountId: string, from: string, to: string) {
 		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
-		applyBankTransactionFilters(query, {bookingDate: {from, to}});
+		applyBankTransactionFilters(query, {date: {from, to}});
 		const counts = await query
 			.select(
 				`ROUND(COALESCE(SUM(ABS(${SQL_BASE_AMOUNT})) FILTER (WHERE ${SQL_OWN_TRANSFER_DEBIT}), 0), 2)::text`,

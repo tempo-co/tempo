@@ -348,7 +348,7 @@ for (const width of [1440, 390]) {
           .getByRole('region', {name: 'Transactions'})
           .getByRole('link', {name: 'Open in Transactions', exact: true})
           .click();
-        await expect(page).toHaveURL(/\/bank-transactions\?.*bookingDate=/);
+        await expect(page).toHaveURL(/\/bank-transactions\?(.*&)?date=/);
         const listUrl = page.url();
         const tableRow = (row: BankTransaction) =>
           page.getByTestId(`bank-transaction-row-${row.id}`);

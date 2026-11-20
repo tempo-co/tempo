@@ -74,7 +74,7 @@ test('touch date selection fills the available seven-column calendar on a narrow
   page,
 }) => {
   await page.goto('/bank-transactions');
-  const drawer = await openTransactionFilter(page, 'Booking date');
+  const drawer = await openTransactionFilter(page, 'Date');
   const calendar = drawer.getByTestId('bank-transaction-mobile-calendar');
   await expect(calendar).toBeVisible();
   // Only the filter's options scroll; the sheet keeps its title and actions in place.
@@ -112,7 +112,7 @@ test('touch date selection fills the available seven-column calendar on a narrow
   const lastDay = await boxOf(week.locator('td').last());
   expect(lastDay.x + lastDay.width).toBeLessThanOrEqual(bounds.x + bounds.width);
   await calendar.getByRole('gridcell', {name: '5', exact: true}).tap();
-  await expect(page).toHaveURL(/bookingDate/);
+  await expect(page).toHaveURL(/[?&]date=/);
 });
 
 for (const width of [320, 820]) {

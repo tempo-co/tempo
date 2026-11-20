@@ -9,6 +9,7 @@ export function createBankTransaction(overrides: Partial<BankTransaction> = {}):
 		entryReference: 'entry-reference',
 		stableIdentityKey: 'stable-identity-key',
 		stableIdentityGroupKey: 'stable-identity-group-key',
+		date: '2026-09-01',
 		transactionDate: '2026-09-01',
 		bookingDate: '2026-09-02',
 		valueDate: '2026-09-03',

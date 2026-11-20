@@ -21,7 +21,7 @@ const PROCESSING = 'PROCESSING' satisfies BankTransactionCategorizationStatus;
 /** The row's amount in the owner's base currency; null until it is converted. */
 export const SQL_BASE_AMOUNT = '"transaction"."amountInBaseCurrency"';
 /** The first day of the row's week, month or year (`YYYY-MM-DD`, as `periodStarts` gives it); binds `:interval`. */
-export const SQL_PERIOD_START = `to_char(date_trunc(:interval, "transaction"."bookingDate"::timestamp), 'YYYY-MM-DD')`;
+export const SQL_PERIOD_START = `to_char(date_trunc(:interval, "transaction"."date"::timestamp), 'YYYY-MM-DD')`;
 
 // Provider writes persist canonical currency and direction codes.
 const INDICATOR_SQL = '"transaction"."creditDebitIndicator"';
@@ -80,13 +80,13 @@ export function createOwnerScopedQuery(repository: Repository<BankTransaction>, 
 		.where('connection.accountId = :accountId', {accountId});
 }
 
-/** The owner's first booking date over every row, internal ones included: where their history starts. */
-export async function findFirstBookingDate(
+/** The owner's first transaction `date` over every row, internal ones included: where their history starts. */
+export async function findFirstTransactionDate(
 	repository: Repository<BankTransaction>,
 	accountId: string,
 ): Promise<string | null> {
 	const row = await createOwnerScopedQuery(repository, accountId)
-		.select(`to_char(MIN("transaction"."bookingDate"), 'YYYY-MM-DD')`, 'first')
+		.select(`to_char(MIN("transaction"."date"), 'YYYY-MM-DD')`, 'first')
 		.getRawOne<{first: string | null}>();
 	return row?.first ?? null;
 }
@@ -101,13 +101,9 @@ export function applyBankTransactionFilters(
 	recurringTransactionIds?: readonly string[],
 ): void {
 	if (recurringTransactionIds) query.andWhereInIds(recurringTransactionIds);
-	const bookingDate = filter?.bookingDate;
-	if (bookingDate?.from) {
-		query.andWhere('transaction.bookingDate >= :bookingDateFrom', {bookingDateFrom: bookingDate.from});
-	}
-	if (bookingDate?.to) {
-		query.andWhere('transaction.bookingDate <= :bookingDateTo', {bookingDateTo: bookingDate.to});
-	}
+	const date = filter?.date ?? filter?.bookingDate;
+	if (date?.from) query.andWhere('transaction.date >= :dateFrom', {dateFrom: date.from});
+	if (date?.to) query.andWhere('transaction.date <= :dateTo', {dateTo: date.to});
 	if (filter?.bankAccountIds && filter.bankAccountIds.length > 0) {
 		query.andWhere('bankAccount.id IN (:...bankAccountIds)', {
 			bankAccountIds: filter.bankAccountIds,

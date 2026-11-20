@@ -611,8 +611,8 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
     return fulfillJson(
       route,
       history.totalsBetween(
-        query.get('filter[bookingDate][from]')!,
-        query.get('filter[bookingDate][to]')!,
+        query.get('filter[date][from]')!,
+        query.get('filter[date][to]')!,
       ),
     );
   });
@@ -651,7 +651,7 @@ export async function mockHomeHistory(
   );
   await page.route('**/bank-transactions?**', (route) => {
     if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
-    const from = params(route).get('filter[bookingDate][from]');
+    const from = params(route).get('filter[date][from]');
     const pagination = {
       index: Number(params(route).get('pagination[pageIndex]') ?? 0),
       size: Number(params(route).get('pagination[pageSize]') ?? transactionsPerMonth),

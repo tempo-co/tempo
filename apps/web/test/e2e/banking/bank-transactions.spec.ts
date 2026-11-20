@@ -30,8 +30,8 @@ test.describe('bank transactions', () => {
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await expect(page.getByTestId('bank-transactions-summary')).toHaveText(/^\d+ transactions$/);
     // Rows sit under their day, this year's without the year.
-    const day = page.getByRole('region', {name: 'Wednesday 26 August', exact: true});
-    await expect(day.getByRole('heading', {name: 'Wednesday 26 August'})).toBeVisible();
+    const day = page.getByRole('region', {name: 'Monday 24 August', exact: true});
+    await expect(day.getByRole('heading', {name: 'Monday 24 August'})).toBeVisible();
     await expect(day.getByTestId(/^bank-transaction-row-/)).toContainText(['Coffee shop']);
     await expect(firstTransactionRow.getByTestId('ledger-row-category')).toHaveText(
       'Categorizing…',
@@ -639,14 +639,14 @@ test.describe('bank transactions', () => {
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await page.keyboard.press('Escape');
 
-    await page.getByRole('button', {name: 'Booking date'}).first().click();
+    await page.getByRole('button', {name: 'Date'}).first().click();
     for (let monthIndex = 0; monthIndex < 24; monthIndex += 1) {
       if (await page.getByText('August 2026', {exact: true}).isVisible()) break;
       await page.getByRole('button', {name: 'Go to previous month'}).click();
     }
-    await page.getByRole('dialog').getByRole('gridcell', {name: '26'}).last().click();
+    await page.getByRole('dialog').getByRole('gridcell', {name: '24'}).last().click();
 
-    await expect(page).toHaveURL(/bookingDate/);
+    await expect(page).toHaveURL(/[?&]date=/);
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await expect(page.getByText('Provider purchase')).not.toBeVisible();
   });
@@ -655,15 +655,15 @@ test.describe('bank transactions', () => {
     await page.setViewportSize({width: 1280, height: 720});
     await page.goto('/bank-transactions');
 
-    const trigger = page.getByRole('button', {name: /^Booking date/}).first();
+    const trigger = page.getByRole('button', {name: /^Date/}).first();
     await trigger.click();
     const quickRanges = page.getByRole('group', {name: 'Quick ranges'});
     await quickRanges.getByRole('button', {name: 'Last year'}).click();
 
     const lastYear = new Date().getFullYear() - 1;
-    await expect(page).toHaveURL(/bookingDate/);
+    await expect(page).toHaveURL(/[?&]date=/);
     await expect(trigger).toHaveAccessibleName(
-      `Booking date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`,
+      `Date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`,
     );
     await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
       'aria-pressed',
@@ -679,7 +679,7 @@ test.describe('bank transactions', () => {
     await page.getByRole('gridcell', {name: '20', exact: true}).click();
 
     await expect(trigger).toHaveAccessibleName(
-      `Booking date: Mar 10, ${targetYear} - Mar 20, ${targetYear}`,
+      `Date: Mar 10, ${targetYear} - Mar 20, ${targetYear}`,
     );
     await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
       'aria-pressed',
@@ -856,7 +856,7 @@ test.describe('bank transactions', () => {
     // Phones have no date control of their own, so the date is the sheet's first filter; each names its values.
     const facets = sheet.getByRole('list').getByRole('button');
     await expect(facets).toHaveText([
-      /^Booking dateAny/,
+      /^DateAny/,
       /^CategoriesAny/,
       /^Cash flowAny/,
       /^Category sourceAny/,
@@ -910,11 +910,11 @@ test.describe('bank transactions', () => {
     ).toBeVisible();
 
     // The booking date lives in the sheet on phones; its Reset is the footer's too.
-    await openTransactionFilter(page, 'Booking date');
+    await openTransactionFilter(page, 'Date');
     await sheet.getByRole('button', {name: 'This month', exact: true}).click();
-    await expect(page).toHaveURL(/bookingDate=/);
-    await sheet.getByRole('button', {name: 'Reset Booking date', exact: true}).click();
-    await expect(page).not.toHaveURL(/bookingDate=/);
+    await expect(page).toHaveURL(/[?&]date=/);
+    await sheet.getByRole('button', {name: 'Reset Date', exact: true}).click();
+    await expect(page).not.toHaveURL(/[?&]date=/);
 
     await sheet.getByRole('button', {name: 'Clear all', exact: true}).click();
     const clearedUrl = new URL(page.url());
@@ -940,7 +940,7 @@ test.describe('bank transactions', () => {
     await expect(page.getByRole('heading', {name: 'Bank transactions'})).toBeVisible();
     await expect(page.getByTestId('bank-transactions-summary')).toBeVisible();
     // Phones keep search, Order and Filters on one line; the date moves into Filters.
-    await expect(page.getByRole('button', {name: /^Booking date/})).toBeHidden();
+    await expect(page.getByRole('button', {name: /^Date/})).toBeHidden();
     const search = page.getByTestId('bank-transactions-search');
     const order = page.getByRole('button', {name: 'Order: Newest first'});
     const filtersTrigger = page.getByTestId('bank-transaction-filters-trigger');
@@ -994,11 +994,11 @@ test.describe('bank transactions', () => {
     });
     await expect(page.getByRole('button', {name: 'Order: Largest out first'})).toBeVisible();
     await expect(page.getByRole('region', {name: /August/})).toHaveCount(0);
-    await expect(meta).toHaveText(/^26 Aug ·Categorizing…$/);
+    await expect(meta).toHaveText(/^24 Aug ·Categorizing…$/);
 
     await page.clock.setFixedTime(AFTER_SEEDED_TRANSACTION_YEAR_NOW);
     await page.reload();
-    await expect(meta).toHaveText(/^26 Aug 2026 ·/);
+    await expect(meta).toHaveText(/^24 Aug 2026 ·/);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -1006,7 +1006,7 @@ test.describe('bank transactions', () => {
     await page.setViewportSize({width: 320, height: 852});
     await page.goto('/bank-transactions');
 
-    const sheet = await openTransactionFilter(page, 'Booking date');
+    const sheet = await openTransactionFilter(page, 'Date');
     let dayButtons = sheet.locator('button[name="day"]:not([disabled]):not(.day-outside)');
     if ((await dayButtons.count()) < 2) {
       await sheet.getByRole('button', {name: 'Go to previous month'}).click();
@@ -1022,7 +1022,7 @@ test.describe('bank transactions', () => {
     }));
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
     await sheet.getByRole('button', {name: 'Back to filters'}).click();
-    await expect(sheet.getByRole('button', {name: /^Booking date/})).not.toContainText('Any');
+    await expect(sheet.getByRole('button', {name: /^Date/})).not.toContainText('Any');
     await expectNoHorizontalOverflow(page);
   });
 
@@ -1064,7 +1064,7 @@ test.describe('bank transactions', () => {
     // One list without day headings; each row names its date instead.
     await expect(page.getByRole('region', {name: /August/})).toHaveCount(0);
     await expect(page.getByRole('list', {name: 'Transactions'})).toBeVisible();
-    await expect(rows.filter({hasText: 'Coffee shop'})).toContainText('26 Aug');
+    await expect(rows.filter({hasText: 'Coffee shop'})).toContainText('24 Aug');
 
     await choose('Largest in first', 'Largest out first', {by: 'amount', order: 'ASC'});
     expect(JSON.parse(new URL(page.url()).searchParams.get('sort')!)).toEqual({
@@ -1072,22 +1072,22 @@ test.describe('bank transactions', () => {
       order: 'ASC',
     });
 
-    await choose('Largest out first', 'Oldest first', {by: 'bookingDate', order: 'ASC'});
+    await choose('Largest out first', 'Oldest first', {by: 'date', order: 'ASC'});
     const days = page.getByRole('region', {name: /August/});
     await expect(days.first()).toBeVisible();
     const headings = await page.getByRole('heading', {level: 2}).allTextContents();
-    expect(headings[headings.length - 1]).toBe('Wednesday 26 August');
+    expect(headings[headings.length - 1]).toBe('Monday 24 August');
 
-    await choose('Oldest first', 'Newest first', {by: 'bookingDate', order: 'DESC'});
+    await choose('Oldest first', 'Newest first', {by: 'date', order: 'DESC'});
     expect(new URL(page.url()).searchParams.has('sort')).toBe(false);
-    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Wednesday 26 August');
+    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
 
     // A link ordered by a field the page no longer offers opens in the default order.
     await page.goto(
       `/bank-transactions?sort=${encodeURIComponent(JSON.stringify({by: 'category', order: 'ASC'}))}`,
     );
     await expect(order('Newest first')).toBeVisible();
-    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Wednesday 26 August');
+    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
   });
 
   test('preserves original values for mixed-currency amount results', async ({page}) => {

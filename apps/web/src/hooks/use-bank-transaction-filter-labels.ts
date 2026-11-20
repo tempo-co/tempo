@@ -6,7 +6,7 @@ import {
   BANK_TRANSACTION_FILTER_KEYS,
   type BankTransactionFilterParams,
 } from '@/features/banking/types/bank-transaction';
-import {BOOKING_DATE_PRESETS} from '@/features/banking/utils/booking-date-presets';
+import {DATE_FILTER_PRESETS} from '@/features/banking/utils/date-filter-presets';
 import {CASH_FLOW_LABELS, CATEGORY_STATUS_LABELS} from '@/features/banking/utils/drill-filters';
 import {formatBankTransactionCategorySource} from '@/features/banking/utils/formatters';
 import {useReportingCurrency} from '@/features/reporting-currency/api/use-reporting-currency';
@@ -19,9 +19,9 @@ export type FilterLabel = {key: BankTransactionFilterKey; label: string; phoneOn
 const list = (labels: string[], noun: string) =>
   labels.length <= 2 ? labels.join(', ') : `${labels.length} ${noun}`;
 
-function dateLabel(range: NonNullable<BankTransactionFilterParams['bookingDate']>) {
+function dateLabel(range: NonNullable<BankTransactionFilterParams['date']>) {
   const today = startOfDay(new Date());
-  const preset = BOOKING_DATE_PRESETS.find(({getRange}) => {
+  const preset = DATE_FILTER_PRESETS.find(({getRange}) => {
     const r = getRange(today);
     return range.from && isSameDay(r.from, range.from) && range.to && isSameDay(r.to, range.to);
   });
@@ -39,8 +39,8 @@ export function useBankTransactionFilterLabels(filters: BankTransactionFilterPar
   const currency = useReportingCurrency().data?.currency ?? 'reporting currency';
   const chips: FilterLabel[] = [];
   if (filters.needsAttention) chips.push({key: 'needsAttention', label: 'To review'});
-  if (filters.bookingDate?.from)
-    chips.push({key: 'bookingDate', label: dateLabel(filters.bookingDate), phoneOnly: true});
+  if (filters.date?.from)
+    chips.push({key: 'date', label: dateLabel(filters.date), phoneOnly: true});
   if (filters.categories?.length)
     chips.push({
       key: 'categories',

@@ -23,7 +23,7 @@ import {
 	SQL_PERIOD_START,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
-	findFirstBookingDate,
+	findFirstTransactionDate,
 } from './bank-transaction-filters';
 
 const CATEGORY_KEY = `COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`;
@@ -58,15 +58,15 @@ export class BankTransactionHistoryService {
 		const flowQuery = () => {
 			const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 			applyBankTransactionFilters(query, {
-				bookingDate: {from: starts[0], to},
+				date: {from: starts[0], to},
 				baseAmount: 'PRESENT',
 				cashFlows: [flow],
 			});
 			return query.setParameter('interval', interval);
 		};
 
-		const [firstBookingDate, parts, sources] = await Promise.all([
-			findFirstBookingDate(this.bankTransactionRepository, accountId),
+		const [firstTransactionDate, parts, sources] = await Promise.all([
+			findFirstTransactionDate(this.bankTransactionRepository, accountId),
 			flowQuery()
 				.select(SQL_PERIOD_START, 'start')
 				.addSelect(key, 'key')
@@ -79,7 +79,7 @@ export class BankTransactionHistoryService {
 						.select(key, 'key')
 						.addSelect(`mode() WITHIN GROUP (ORDER BY "transaction"."displayDescription")`, 'label')
 						.addSelect(
-							`(array_agg("transaction"."id" ORDER BY "transaction"."bookingDate" DESC, "transaction"."id" DESC))[1]`,
+							`(array_agg("transaction"."id" ORDER BY "transaction"."date" DESC, "transaction"."id" DESC))[1]`,
 							'latestId',
 						)
 						.groupBy('1')
@@ -98,7 +98,7 @@ export class BankTransactionHistoryService {
 		}
 		const labelByKey = new Map(sources.map((row) => [row.key, row.label]));
 
-		const periods = periodWindows(interval, starts, to, asOf, firstBookingDate).map(
+		const periods = periodWindows(interval, starts, to, asOf, firstTransactionDate).map(
 			(window): BankTransactionBreakdownPeriod => {
 				const periodParts = (partsByStart.get(window.start) ?? [])
 					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount)}))

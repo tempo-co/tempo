@@ -27,8 +27,7 @@ type LedgerProps = {
   onTransactionSelect: (id: BankTransaction['id'], trigger: HTMLButtonElement) => void;
 };
 
-const dayOf = (transaction: BankTransaction) =>
-  transaction.bookingDate ?? transaction.transactionDate ?? '';
+const dayOf = (transaction: BankTransaction) => transaction.date ?? '';
 
 function formatLedgerDay(value: string) {
   if (!value) return 'No date';
@@ -80,7 +79,6 @@ export function BankTransactionLedger({
     );
   }
 
-  // Rows not yet booked come last from the API; they join their day's card instead of opening a second one.
   const days = new Map<string, BankTransaction[]>();
   for (const transaction of transactions) {
     const day = dayOf(transaction);

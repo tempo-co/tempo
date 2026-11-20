@@ -309,7 +309,7 @@ describe('RecurringSeries', () => {
 			expect(totals.body).toMatchObject({count: rows.length, spending: '480.00', income: '0.00', net: '-480.00'});
 			const laterTotals = await fresh.agent
 				.get('/bank-transactions/totals')
-				.query({filter: {recurringSeriesKey: academy.key, bookingDate: {from: '2026-08-01'}}})
+				.query({filter: {recurringSeriesKey: academy.key, date: {from: '2026-08-01'}}})
 				.expect(200);
 			expect(laterTotals.body).toMatchObject({count: 3, spending: '240.00', income: '0.00', net: '-240.00'});
 			await ownerAgent

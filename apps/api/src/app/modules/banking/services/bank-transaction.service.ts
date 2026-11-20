@@ -63,7 +63,7 @@ export class BankTransactionService {
 			: undefined;
 		applyBankTransactionFilters(query, queryParams.filter, recurringIds);
 
-		const sortField = queryParams.sort?.by ?? 'bookingDate';
+		const sortField = queryParams.sort?.by ?? 'date';
 		const sortOrder = queryParams.sort?.order ?? 'DESC';
 		const sortColumn =
 			sortField === 'amount'
@@ -72,12 +72,13 @@ export class BankTransactionService {
 					? 'transaction.category'
 					: sortField === 'source'
 						? 'connection.aspspName'
-						: 'transaction.bookingDate';
+						: 'transaction.date';
 		query.orderBy(sortColumn, sortOrder, 'NULLS LAST');
-		if (sortField !== 'bookingDate') {
-			query.addOrderBy('transaction.bookingDate', 'DESC', 'NULLS LAST');
+		if (sortField !== 'date') {
+			query.addOrderBy('transaction.date', 'DESC', 'NULLS LAST');
 		}
 		query
+			.addOrderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
 			// Providers send dates without a time, so the order sync first saw rows in breaks same-day ties.
 			.addOrderBy('transaction.createdAt', 'DESC')
@@ -99,7 +100,8 @@ export class BankTransactionService {
 
 		const query = createLedgerQuery(this.bankTransactionRepository, accountId)
 			.andWhere('connection.id = :connectionId', {connectionId})
-			.orderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
+			.orderBy('transaction.date', 'DESC', 'NULLS LAST')
+			.addOrderBy('transaction.bookingDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.valueDate', 'DESC', 'NULLS LAST')
 			.addOrderBy('transaction.createdAt', 'DESC')
 			.addOrderBy('transaction.id', 'DESC')
@@ -247,6 +249,7 @@ export class BankTransactionService {
 		return {
 			...this.toSharedResponseFields(transaction, merchantLogoUrl),
 			merchantGroupId,
+			date: transaction.date,
 			transactionDate: transaction.transactionDate,
 			direction: toBankTransactionDirection(transaction.creditDebitIndicator),
 			transactionType: transaction.transactionType ?? BANK_TRANSACTION_TYPES.OTHER,

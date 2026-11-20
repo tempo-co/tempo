@@ -81,7 +81,7 @@ test('a month shows its money, where it went against the usual, where it came fr
   await expect(more).toHaveCount(0);
   await expect(transactions.getByRole('link', {name: 'Open in Transactions'})).toHaveAttribute(
     'href',
-    /bookingDate=/,
+    /[?&]date=/,
   );
 });
 
@@ -94,7 +94,7 @@ test('a later page of the month’s transactions that fails keeps the loaded one
   await mockSyntheticHome(page, {transactionsPerMonth: 45});
   const later = await failLaterPages(page, '**/bank-transactions?**', (params) => {
     const index = params.get('pagination[pageIndex]');
-    return params.has('filter[bookingDate][from]') && index && index !== '0' ? index : null;
+    return params.has('filter[date][from]') && index && index !== '0' ? index : null;
   });
   await page.goto('/?month=2026-03');
 

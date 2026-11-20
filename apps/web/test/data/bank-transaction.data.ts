@@ -4,6 +4,8 @@ import type {BankTransaction} from '@tempo/contracts';
 export function createBankTransaction(overrides: Partial<BankTransaction> = {}): BankTransaction {
   return {
     id: '00000000-0000-4000-8000-000000000010',
+    // Dated as the API dates it, unless a test sets it.
+    date: overrides.transactionDate ?? overrides.bookingDate ?? overrides.valueDate ?? null,
     transactionDate: null,
     bookingDate: null,
     valueDate: null,

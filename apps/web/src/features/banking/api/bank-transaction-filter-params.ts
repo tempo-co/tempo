@@ -15,11 +15,11 @@ export function appendBankTransactionFilterParams(
   params: URLSearchParams,
   filters: BankTransactionFilterParams,
 ) {
-  if (filters.bookingDate?.from) {
-    params.append('filter[bookingDate][from]', format(filters.bookingDate.from, 'yyyy-MM-dd'));
+  if (filters.date?.from) {
+    params.append('filter[date][from]', format(filters.date.from, 'yyyy-MM-dd'));
   }
-  if (filters.bookingDate?.to) {
-    params.append('filter[bookingDate][to]', format(filters.bookingDate.to, 'yyyy-MM-dd'));
+  if (filters.date?.to) {
+    params.append('filter[date][to]', format(filters.date.to, 'yyyy-MM-dd'));
   }
   appendArrayFilter(params, 'filter[bankAccountIds][]', filters.bankAccountIds);
   appendArrayFilter(params, 'filter[categories][]', filters.categories);

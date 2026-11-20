@@ -77,8 +77,8 @@ test('the heat table model has each row by year, a month on average, with small 
   const drill = housing.cells[2].search!;
   expect(drill.categories).toEqual(['HOUSING_AND_UTILITIES']);
   expect(drill.cashFlows).toEqual(['SPENDING']);
-  expect(format(drill.bookingDate!.from!, 'yyyy-MM-dd')).toBe('2024-12-01');
-  expect(format(drill.bookingDate!.to!, 'yyyy-MM-dd')).toBe('2024-12-31');
+  expect(format(drill.date!.from!, 'yyyy-MM-dd')).toBe('2024-12-01');
+  expect(format(drill.date!.to!, 'yyyy-MM-dd')).toBe('2024-12-31');
 
   // A year without the category shows a dash and opens nothing.
   const travel = table.top[3];

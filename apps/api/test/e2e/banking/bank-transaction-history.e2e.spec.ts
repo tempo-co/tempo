@@ -234,8 +234,8 @@ describe('Bank transaction history', () => {
 						const {body: list} = await agent
 							.get('/bank-transactions')
 							.query({
-								'filter[bookingDate][from]': period.start,
-								'filter[bookingDate][to]': period.end,
+								'filter[date][from]': period.start,
+								'filter[date][to]': period.end,
 								'filter[cashFlows][]': 'INCOME',
 								'filter[baseAmount]': 'PRESENT',
 								'filter[incomeSource]': part.key,

@@ -300,6 +300,8 @@ function PaymentChart({
         ? [{date, month: paidMonth(date, series), amount: Math.abs(Number(tx.amount))}]
         : [];
     })
+    // The list comes in payment-date order; the bars run by the booking date detection reads.
+    .sort((a, b) => a.date.localeCompare(b.date))
     .map((point, index) => ({...point, index}));
   if (points.length < 2) return null;
   const unusualIndex = series.flags.includes('HIGHER_THAN_USUAL') ? points.length - 1 : -1;

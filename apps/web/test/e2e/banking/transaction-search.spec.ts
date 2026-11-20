@@ -76,13 +76,13 @@ test('a search within dates that matches nothing widens to all dates', async ({p
       : route.continue(),
   );
   const october = encodeURIComponent(JSON.stringify({from: '2026-10-01', to: '2026-10-31'}));
-  await page.goto(`/bank-transactions?search=bakery&bookingDate=${october}`);
+  await page.goto(`/bank-transactions?search=bakery&date=${october}`);
 
   await expect(page.getByRole('heading', {name: 'No matching transactions'})).toBeVisible();
   await expect(page.getByText('Nothing matches “bakery” with these filters.')).toBeVisible();
   await page.getByRole('button', {name: 'Search all dates'}).click();
 
-  await expect(page).not.toHaveURL(/bookingDate=/);
+  await expect(page).not.toHaveURL(/[?&]date=/);
   expect(new URL(page.url()).searchParams.get('search')).toBe('bakery');
   await expect(page.getByText('Nothing matches “bakery”.')).toBeVisible();
   await expect(page.getByRole('button', {name: 'Search all dates'})).toHaveCount(0);

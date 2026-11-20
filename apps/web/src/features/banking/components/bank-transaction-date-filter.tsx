@@ -11,10 +11,10 @@ import {cn} from '@/utils/cn';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
 import {
-  BOOKING_DATE_HISTORY_YEARS,
-  BOOKING_DATE_PRESETS,
-  BookingDateRange,
-} from '../utils/booking-date-presets';
+  DATE_FILTER_HISTORY_YEARS,
+  DATE_FILTER_PRESETS,
+  DateFilterRange,
+} from '../utils/date-filter-presets';
 import {FacetedFilter} from './bank-transaction-faceted-filter';
 
 type BankTransactionDateFilterProps = {
@@ -30,42 +30,40 @@ export function BankTransactionDateFilter({
 }: BankTransactionDateFilterProps) {
   const navigate = useNavigate({from: '/bank-transactions/'});
   const today = startOfDay(new Date());
-  const [month, setMonth] = useState(() => filters.bookingDate?.from ?? today);
+  const [month, setMonth] = useState(() => filters.date?.from ?? today);
 
   const handleSelect = async (range: DateRange | undefined) => {
-    const bookingDate = range?.from ? {from: range.from, to: range.to} : undefined;
+    const date = range?.from ? {from: range.from, to: range.to} : undefined;
     await navigate({
-      search: (prev) => ({...prev, bookingDate}),
+      search: (prev) => ({...prev, date}),
     });
   };
 
-  const handlePresetSelect = async (range: BookingDateRange) => {
+  const handlePresetSelect = async (range: DateFilterRange) => {
     setMonth(range.from);
     await handleSelect(range);
   };
 
   const handleOpenChange = (open: boolean) => {
-    if (open) setMonth(filters.bookingDate?.from ?? today);
+    if (open) setMonth(filters.date?.from ?? today);
   };
 
   const handleReset = async () => {
-    await navigate({search: (prev) => ({...prev, bookingDate: undefined})});
+    await navigate({search: (prev) => ({...prev, date: undefined})});
   };
 
-  const bookingDateFrom = filters.bookingDate?.from;
-  const bookingDateTo = filters.bookingDate?.to;
-  const fullBookingDateLabel = bookingDateFrom
-    ? `${format(bookingDateFrom, 'MMM dd, y')}${
-        bookingDateTo ? ` - ${format(bookingDateTo, 'MMM dd, y')}` : ''
-      }`
+  const dateFrom = filters.date?.from;
+  const dateTo = filters.date?.to;
+  const fullDateLabel = dateFrom
+    ? `${format(dateFrom, 'MMM dd, y')}${dateTo ? ` - ${format(dateTo, 'MMM dd, y')}` : ''}`
     : undefined;
-  const compactBookingDateLabel = bookingDateFrom
-    ? `${format(bookingDateFrom, 'MMM d')}${
-        bookingDateTo
+  const compactDateLabel = dateFrom
+    ? `${format(dateFrom, 'MMM d')}${
+        dateTo
           ? `–${format(
-              bookingDateTo,
-              bookingDateFrom.getFullYear() === bookingDateTo.getFullYear() &&
-                bookingDateFrom.getMonth() === bookingDateTo.getMonth()
+              dateTo,
+              dateFrom.getFullYear() === dateTo.getFullYear() &&
+                dateFrom.getMonth() === dateTo.getMonth()
                 ? 'd'
                 : 'MMM d',
             )}`
@@ -83,13 +81,13 @@ export function BankTransactionDateFilter({
           : 'flex w-36 flex-col gap-0.5 border-r p-2'
       }
     >
-      {BOOKING_DATE_PRESETS.map((preset) => {
+      {DATE_FILTER_PRESETS.map((preset) => {
         const range = preset.getRange(today);
         const isActive =
-          filters.bookingDate?.from !== undefined &&
-          filters.bookingDate.to !== undefined &&
-          isSameDay(filters.bookingDate.from, range.from) &&
-          isSameDay(filters.bookingDate.to, range.to);
+          filters.date?.from !== undefined &&
+          filters.date.to !== undefined &&
+          isSameDay(filters.date.from, range.from) &&
+          isSameDay(filters.date.to, range.to);
         return (
           <Button
             key={preset.label}
@@ -130,11 +128,11 @@ export function BankTransactionDateFilter({
       initialFocus
       mode='range'
       captionLayout='dropdown-buttons'
-      fromDate={startOfYear(subYears(today, BOOKING_DATE_HISTORY_YEARS))}
+      fromDate={startOfYear(subYears(today, DATE_FILTER_HISTORY_YEARS))}
       toDate={today}
       month={month}
       onMonthChange={setMonth}
-      selected={filters.bookingDate as DateRange | undefined}
+      selected={filters.date as DateRange | undefined}
       onSelect={handleSelect}
       disabled={{after: today}}
     />
@@ -143,21 +141,21 @@ export function BankTransactionDateFilter({
   return (
     <FacetedFilter
       variant={variant}
-      label='Booking date'
+      label='Date'
       icon={<CalendarIcon />}
-      isActive={!!filters.bookingDate}
+      isActive={!!filters.date}
       summary={
-        fullBookingDateLabel && (
+        fullDateLabel && (
           <>
             <Separator orientation='vertical' className='mx-2 h-4' />
             <span className='min-w-0 truncate text-secondary-foreground max-md:flex-1'>
-              <span className='max-md:hidden'>{fullBookingDateLabel}</span>
-              <span className='hidden max-md:inline'>{compactBookingDateLabel}</span>
+              <span className='max-md:hidden'>{fullDateLabel}</span>
+              <span className='hidden max-md:inline'>{compactDateLabel}</span>
             </span>
           </>
         )
       }
-      ariaLabel={fullBookingDateLabel ? `Booking date: ${fullBookingDateLabel}` : undefined}
+      ariaLabel={fullDateLabel ? `Date: ${fullDateLabel}` : undefined}
       contentClassName='w-auto p-0'
       className={className}
       onOpenChange={handleOpenChange}
@@ -175,7 +173,7 @@ export function BankTransactionDateFilter({
         {presets}
         {calendar}
       </div>
-      {filters.bookingDate !== undefined && (
+      {filters.date !== undefined && (
         <>
           <Separator className='w-full' />
           <div className='p-1'>

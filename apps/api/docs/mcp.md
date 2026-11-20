@@ -55,11 +55,11 @@ Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentH
 
 Search `page` is a zero-based nonnegative integer, default 0. `pageSize` defaults to 10 and must be one of the actual API DTO options: **5, 10, 20, 30, 40, 50, 100**. No unbounded fetch-all loop is provided. Use `transaction_totals` with the same filters for sums across all matches; summing a search page does not produce a full total.
 
-Search accepts optional `sort: {by, order}`, where `by` is `bookingDate`, `amount`, `category` or `source`, and `order` is `ASC` or `DESC`. Amount sorting uses signed base-currency amounts; source sorts by bank name. Omitting sort preserves the API default of newest booking date first. Totals do not accept sorting.
+Search accepts optional `sort: {by, order}`, where `by` is `date`, `amount`, `category` or `source`, and `order` is `ASC` or `DESC`. `date` is the day the payment happened (transaction date, else booking date, else value date). Amount sorting uses signed base-currency amounts; source sorts by bank name. Omitting sort preserves the API default of newest `date` first. Totals do not accept sorting.
 
 Both search and totals accept these optional `filters`, matching the banking DTO:
 
-- `bookingDate: {from?, to?}` with calendar dates.
+- `date: {from?, to?}` with calendar dates, compared with the row's `date`.
 - `bankAccountIds: UUIDv4[]`.
 - `search: string`, maximum 1000 characters using the API validator (surrogate pairs and presentation sequences count as one).
 - `categories: string[]` from `list_categories`, including `UNCATEGORIZED`.

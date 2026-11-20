@@ -24,8 +24,8 @@ import {cn} from '@/utils/cn';
 import type {BankTransactionSortParams} from '../types/bank-transaction';
 
 const SORTS = {
-  newest: {label: 'Newest first', sort: {by: 'bookingDate', order: 'DESC'}},
-  oldest: {label: 'Oldest first', sort: {by: 'bookingDate', order: 'ASC'}},
+  newest: {label: 'Newest first', sort: {by: 'date', order: 'DESC'}},
+  oldest: {label: 'Oldest first', sort: {by: 'date', order: 'ASC'}},
   out: {label: 'Largest out first', sort: {by: 'amount', order: 'ASC'}},
   in: {label: 'Largest in first', sort: {by: 'amount', order: 'DESC'}},
 } as const satisfies Record<string, {label: string; sort: NonNullable<BankTransactionSortParams>}>;
