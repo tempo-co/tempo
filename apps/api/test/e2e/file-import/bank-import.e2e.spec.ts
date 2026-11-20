@@ -18,7 +18,7 @@ import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, In, IsNull, Repository} from 'typeorm';
 
-import {dateInTimeZone} from '@core/time/app-time-zone';
+import {dateInAppTimeZone, dateInTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -28,6 +28,7 @@ import {
 	createBankTransactionStableIdentityKey,
 } from '@modules/banking/bank-transaction-identity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {RecurringSeriesHide} from '@modules/banking/recurring/recurring-series-hide.entity';
 import {lockReportingCurrencyForChange} from '@modules/banking/reporting-currency';
@@ -1075,17 +1076,23 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(5);
 	});
 
-	it('adds back a row a sync removed to an imported-files account from a drop into a synced account once its locks are free', async () => {
+	/**
+	 * An imported-files account with a row a sync removed, listed on a drop recorded under a synced connection: the
+	 * state a sync of the account while it was synced again, then a removal of that bank keeping it, leaves. Its days
+	 * are ten days before today.
+	 */
+	async function keptAccountWithRemovedRow() {
 		await listen();
 		const {owner, agent} = await createOwner();
 		const synced = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
 		await fixtures.createBankAccount(synced, {iban: EXAMPLE_IBAN});
+		const day = addDays(dateInAppTimeZone(new Date()), -10);
 		const first = await drop(agent, [
 			Buffer.from(
 				camt053([
 					ofOtherAccount([
-						{amount: '-11.00', bookingDate: '2026-03-14'},
-						{amount: '-11.00', bookingDate: '2026-03-16'},
+						{amount: '-11.00', bookingDate: addDays(day, -1)},
+						{amount: '-11.00', bookingDate: addDays(day, 1)},
 					]),
 				]),
 			),
@@ -1095,17 +1102,13 @@ describe('Bank imports', () => {
 		const mixed = await drop(agent, [
 			Buffer.from(
 				camt053([
-					{sequence: '1', entries: [{amount: '4.00', reference: 'SYNCED-1', bookingDate: '2026-03-15'}]},
-					ofOtherAccount([{amount: '-11.00', bookingDate: '2026-03-15'}]),
+					{sequence: '1', entries: [{amount: '4.00', reference: 'SYNCED-1', bookingDate: day}]},
+					ofOtherAccount([{amount: '-11.00', bookingDate: day}]),
 				]),
 			),
 		]).expect(201);
 		expect(mixed.body).toMatchObject({rowsDoubtful: 1});
 		const [row] = (await agent.get(`/bank-imports/${mixed.body.id}/doubtful-rows`).expect(200)).body;
-		const fileConnectionId = (await fileConnection(owner))!.id;
-
-		// A row of this drop a sync of the account removed while it was synced again, listed after a later removal of
-		// that bank kept it.
 		const {id: _id, ...asked} = await doubtfulRows.findOneByOrFail({id: row.id});
 		const {id: removedId} = await doubtfulRows.save(
 			doubtfulRows.create({
@@ -1117,46 +1120,29 @@ describe('Bank imports', () => {
 			}),
 		);
 		await imports.update({id: mixed.body.id}, {rowsRemovedBySync: 1});
-		const addBack = () =>
-			agent
-				.post(`/bank-imports/${mixed.body.id}/never-sent-rows/add`)
-				.set('Origin', ORIGIN)
-				.send({rowIds: [removedId]})
-				.then((reply) => reply);
-		// It waits for a running sync of the connection the record hangs on, and is refused while it keeps running.
-		const syncRuns = await app.get(BankingConnectionLockService).acquire(synced.id);
-		try {
-			const busy = await addBack();
-			expect(busy.status).toBe(409);
-			expect(busy.body).toMatchObject({code: 'account_busy'});
-		} finally {
-			syncRuns.stop();
-			await syncRuns.release();
-		}
-		// An authorization that takes the account back to its bank while the add waits for its locks: refused as
-		// busy, and nothing is added.
-		const leaseService = app.get(BankingConnectionLockService);
-		const acquire = leaseService.acquire.bind(leaseService);
-		const takenBack = jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
-			await bankAccounts.update(fileAccountId, {bankConnection: {id: synced.id}});
-			return acquire(...args);
-		});
-		try {
-			const busy = await addBack();
-			expect(busy.status).toBe(409);
-			expect(busy.body).toMatchObject({code: 'account_busy'});
-		} finally {
-			takenBack.mockRestore();
-			await bankAccounts.update(fileAccountId, {bankConnection: {id: fileConnectionId}});
-		}
-		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+		return {
+			agent,
+			synced,
+			fileAccountId,
+			fileConnectionId: (await fileConnection(owner))!.id,
+			removedId,
+			addBack: () =>
+				agent
+					.post(`/bank-imports/${mixed.body.id}/never-sent-rows/add`)
+					.set('Origin', ORIGIN)
+					.send({rowIds: [removedId]})
+					.then((reply) => reply),
+		};
+	}
 
-		// It waits for a balance save in progress, then adds the row and recomputes the balance under the save's.
+	it('adds back a row a sync removed to an imported-files account from a drop into a synced account once a balance save in progress commits', async () => {
+		const {agent, fileAccountId, fileConnectionId, addBack} = await keptAccountWithRemovedRow();
 		const {reached: saveReached, release, restore} = pauseNextRecompute();
 		try {
 			const save = setBalance(agent, fileConnectionId, fileAccountId, '60.00').then((reply) => reply);
 			await saveReached;
 			const addedBack = addBack();
+			// The add waits on a lock the save holds, then recomputes the balance over the saved one.
 			await waitFor(lockWaits, (waiting) => waiting > 0);
 			release();
 
@@ -1170,6 +1156,39 @@ describe('Bank imports', () => {
 		}
 		expect(await balanceFields(fileAccountId)).toMatchObject({currentBalanceAmount: '60.00000000'});
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(3);
+	});
+
+	it('refuses to add back a row of a drop into a synced account while that connection syncs, and adds nothing', async () => {
+		const {synced, removedId, addBack} = await keptAccountWithRemovedRow();
+		const syncRuns = await app.get(BankingConnectionLockService).acquire(synced.id);
+		try {
+			const busy = await addBack();
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			syncRuns.stop();
+			await syncRuns.release();
+		}
+		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+	});
+
+	it('refuses to add back a row whose account an authorization takes back to its bank while the add waits for its locks, and adds nothing', async () => {
+		const {synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
+		const leaseService = app.get(BankingConnectionLockService);
+		const acquire = leaseService.acquire.bind(leaseService);
+		const takenBack = jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
+			await bankAccounts.update(fileAccountId, {bankConnection: {id: synced.id}});
+			return acquire(...args);
+		});
+		try {
+			const busy = await addBack();
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			takenBack.mockRestore();
+		}
+		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
 	});
 
 	it('keeps an import to its owner', async () => {
