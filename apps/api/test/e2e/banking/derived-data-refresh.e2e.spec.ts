@@ -184,6 +184,75 @@ describe('DerivedDataRefreshService', () => {
 		expect(enqueueCategorization).toHaveBeenCalledWith([writtenDebit.id, writtenCredit.id]);
 	});
 
+	it('after a file write, settles the reporting currency, labels the whole history and queues the written rows for categorization and the owner for logos', async () => {
+		const {owner, current, savings, usd} = await createOwner();
+		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
+		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
+		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
+		const writtenIds = [writtenDebit.id, writtenCredit.id];
+
+		await service.refresh(owner.id, {kind: 'file-write', writtenIds});
+
+		expect(
+			await labels(exchangeDebit, exchangeCredit, writtenDebit, writtenCredit, untouchedDebit, untouchedCredit),
+		).toEqual([
+			exchangeLeg,
+			exchangeLeg,
+			ownTransferLeg(writtenCredit),
+			ownTransferLeg(writtenDebit),
+			ownTransferLeg(untouchedCredit),
+			ownTransferLeg(untouchedDebit),
+		]);
+		// The import's history is complete once it commits and holds two currencies, so the owner is asked to choose.
+		expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: 'SETUP_PENDING'});
+		expect(enqueueCategorization).toHaveBeenCalledWith(writtenIds);
+		expect(enqueueLogos).toHaveBeenCalledWith(owner.id, undefined);
+	});
+
+	it('queues the written rows for logos when queueing them for categorization fails', async () => {
+		const {owner, current, savings} = await createOwner();
+		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
+		const writtenIds = [writtenDebit.id, writtenCredit.id];
+		enqueueCategorization.mockRejectedValueOnce(new Error('Synthetic categorization enqueue failure'));
+
+		await expect(
+			service.refresh(owner.id, {kind: 'sync-write', writtenIds, formerCounterpartIds: []}),
+		).resolves.toBeUndefined();
+
+		expect(enqueueLogos).toHaveBeenCalledWith(owner.id, writtenIds);
+	});
+
+	it.each([
+		['an authorization', 'authorization'],
+		['a removal', 'removal'],
+	] as const)(
+		'after %s, labels own transfers over the whole history and leaves a choice among several currencies for the sync',
+		async (_, kind) => {
+			const {owner, current, savings, usd} = await createOwner();
+			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
+			const [transferDebit, transferCredit] = await createSavingsTransfer(
+				current,
+				savings,
+				'55.00',
+				'2026-01-16',
+			);
+
+			await service.refresh(owner.id, {kind});
+
+			// Exchanges are not recomputed, so the exchange debit that names the holder reads as a one-sided own transfer.
+			expect(await labels(exchangeDebit, exchangeCredit, transferDebit, transferCredit)).toEqual([
+				{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+				unlabelled,
+				ownTransferLeg(transferCredit),
+				ownTransferLeg(transferDebit),
+			]);
+			// No history has been fetched yet, so the owner is not asked to choose among the two currencies.
+			expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: null});
+			expect(enqueueCategorization).not.toHaveBeenCalled();
+			expect(enqueueLogos).not.toHaveBeenCalled();
+		},
+	);
+
 	it('after a failed sync write, labels exchanges and own transfers over the whole history', async () => {
 		const {owner, current, savings, usd} = await createOwner();
 		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);

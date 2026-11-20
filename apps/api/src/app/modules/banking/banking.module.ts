@@ -125,6 +125,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		OwnTransferService,
 		CurrencyExchangeService,
 		ReportingCurrencyService,
+		DerivedDataRefreshService,
 		BankTransactionCategorizationModule,
 		MerchantLogoModule,
 	],

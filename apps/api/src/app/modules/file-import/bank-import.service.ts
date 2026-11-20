@@ -26,8 +26,6 @@ import {
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray, safeErrorName} from '@modules/banking/banking.utils';
 import {isManualCategorySource} from '@modules/banking/categorization/bank-transaction-categorization.types';
-import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
-import {MerchantLogoService} from '@modules/banking/merchant-logos/merchant-logo.service';
 import {isIbanIdentificationHash, verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
 import {lockReportingCurrencyForAmountWrites} from '@modules/banking/reporting-currency';
 import {
@@ -39,11 +37,9 @@ import {
 	BankingConnectionLockService,
 } from '@modules/banking/services/banking-connection-lock.service';
 import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
-import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
+import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {fileAccountProviderId, lockFileConnection} from '@modules/banking/services/file-connection';
-import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
-import {ReportingCurrencyService} from '@modules/banking/services/reporting-currency.service';
 import {FinalSyncDays, finalSyncDays} from '@modules/banking/sync-coverage';
 
 import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
@@ -175,13 +171,9 @@ export class BankImportService {
 		private readonly parseRunner: ParseRunnerService,
 		private readonly persistence: BankTransactionPersistenceService,
 		private readonly connectionLockService: BankingConnectionLockService,
-		private readonly ownTransferService: OwnTransferService,
-		private readonly currencyExchangeService: CurrencyExchangeService,
-		private readonly categorizationService: CategorizationScheduler,
-		private readonly merchantLogoService: MerchantLogoService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
 		private readonly layoutService: BankImportLayoutService,
-		private readonly reportingCurrencyService: ReportingCurrencyService,
+		private readonly derivedDataRefresh: DerivedDataRefreshService,
 	) {}
 
 	/**
@@ -387,7 +379,10 @@ export class BankImportService {
 			await this.releaseLocks(locks);
 		}
 
-		await this.afterRowsChanged(ownerId, result.persistedTransactionIds);
+		await this.derivedDataRefresh.refresh(ownerId, {
+			kind: 'file-write',
+			writtenIds: result.persistedTransactionIds,
+		});
 		return toSummary(
 			result.record,
 			result.accounts.map(({account, connection}) => ({...account, bankConnection: connection})),
@@ -476,7 +471,7 @@ export class BankImportService {
 			await this.releaseLocks(locks);
 		}
 
-		await this.afterRowsChanged(ownerId, []);
+		await this.derivedDataRefresh.refresh(ownerId, {kind: 'file-write', writtenIds: []});
 	}
 
 	/** The import's open doubtful rows in booking order, each with the candidates that still exist. */
@@ -631,7 +626,10 @@ export class BankImportService {
 			await this.releaseLocks(locks);
 		}
 
-		await this.afterRowsChanged(ownerId, resolved.insertedTransactionIds);
+		await this.derivedDataRefresh.refresh(ownerId, {
+			kind: 'file-write',
+			writtenIds: resolved.insertedTransactionIds,
+		});
 		return toSummary(resolved.record, await this.findOwnedAccounts(ownerId, resolved.record.bankAccountIds));
 	}
 
@@ -744,7 +742,7 @@ export class BankImportService {
 			await this.releaseLocks(locks);
 		}
 
-		await this.afterRowsChanged(ownerId, added.insertedTransactionIds);
+		await this.derivedDataRefresh.refresh(ownerId, {kind: 'file-write', writtenIds: added.insertedTransactionIds});
 		return toSummary(added.record, await this.findOwnedAccounts(ownerId, added.record.bankAccountIds));
 	}
 
@@ -1351,23 +1349,6 @@ export class BankImportService {
 			where: {id: In(unique), bankConnection: {accountId: ownerId}},
 			relations: {bankConnection: true},
 		});
-	}
-
-	/** The steps sync runs after it persists rows, in the same order. */
-	private async afterRowsChanged(ownerId: Account['id'], transactionIds: readonly string[]): Promise<void> {
-		// An import can add accounts in another currency, and its history is complete once it commits.
-		await this.reportingCurrencyService.reconcileSafely(ownerId, {historySettled: true});
-		// Recompute first so new exchanges and own transfers are marked before the worker can claim them.
-		// Exchanges go first: own-transfer detection skips exchange legs.
-		await this.currencyExchangeService.recomputeForOwnerSafely(ownerId);
-		await this.ownTransferService.recomputeForOwnerSafely(ownerId);
-		if (transactionIds.length === 0) return;
-		try {
-			await this.categorizationService.enqueueForTransactions(transactionIds);
-		} catch (error) {
-			this.logger.warn(`Transaction categorization enqueue failed: ${safeErrorName(error)}`);
-		}
-		await this.merchantLogoService.enqueueForOwnerSafely(ownerId);
 	}
 }
 
