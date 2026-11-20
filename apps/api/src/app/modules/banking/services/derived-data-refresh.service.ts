@@ -66,7 +66,8 @@ function planRefresh(change: DerivedDataChange): RefreshPlan {
 			return {
 				// Accounts that all hold one currency set it right away; a choice among several waits for a sync.
 				reconcile: {historySettled: false},
-				exchanges: false,
+				// Moved accounts change which legs share a connection, so exchanges can pair or part.
+				exchanges: true,
 				ownTransferIds: null,
 				writtenIds: [],
 				logoIds: [],
