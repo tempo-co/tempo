@@ -14,7 +14,12 @@ import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import type {
+	BankTransactionCategorizationResult,
+	MerchantIdentification,
+} from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
+import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
 import * as exchangeRecompute from '@modules/banking/currency-exchange/currency-exchange-recompute';
 import {Merchant} from '@modules/banking/merchant-logos/merchant.entity';
 import * as ownTransferRecompute from '@modules/banking/own-transfer/own-transfer-recompute';
@@ -26,6 +31,32 @@ import {createBankingOwner} from '../../utils/banking-utils';
 
 enableAiCategorizationE2e();
 enableMerchantLogosE2e();
+
+/** Replaces the model calls before the app boots, so no job, startup reconcile included, reaches the provider. */
+function stubProviders(): void {
+	jest.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'categorize').mockImplementation(
+		async (transactions): Promise<readonly BankTransactionCategorizationResult[]> =>
+			transactions.map(({correlationId}) => ({
+				correlationId,
+				category: 'SHOPPING',
+				confidence: 0.5,
+				provider: 'claude-api',
+				model: 'test-model',
+			})),
+	);
+	jest.spyOn(ClaudeBankTransactionCategorizationProvider.prototype, 'identifyMerchants').mockImplementation(
+		async (inputs): Promise<readonly MerchantIdentification[]> =>
+			inputs.map(({correlationId}) => ({
+				correlationId,
+				kind: 'UNCLEAR',
+				brand: null,
+				company: null,
+				domain: null,
+				domainConfident: false,
+			})),
+	);
+}
+stubProviders();
 
 const HOLDER = 'Jane Example';
 const EUR_IBAN = 'NL91ABNA0417164300';
@@ -55,6 +86,7 @@ describe('DerivedDataRefreshService', () => {
 
 	afterEach(async () => {
 		jest.restoreAllMocks();
+		stubProviders();
 		await Promise.all([categorizationQueue.drain(true), logoQueue.drain(true)]);
 	});
 
@@ -482,7 +514,7 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('daily, recomputes every owner’s exchanges and then own transfers over the whole history, one owner’s failure not stopping the rest', async () => {
+	it('daily, labels every owner’s own transfers over the whole history, one owner’s failure not stopping the rest', async () => {
 		// Owners are recomputed in id order, so the failing one comes first.
 		const [failing, other] = [await createOwner(), await createOwner()].sort((a, b) =>
 			a.owner.id < b.owner.id ? -1 : 1,
@@ -493,43 +525,26 @@ describe('DerivedDataRefreshService', () => {
 			'25.00',
 			'2026-01-12',
 		);
-		const [exchangeDebit, exchangeCredit] = await createExchange(other.current, other.usd);
-		await service.refresh(other.owner.id, {kind: 'failed-sync-write'});
 		const [otherDebit, otherCredit] = await createSavingsTransfer(
 			other.current,
 			other.savings,
 			'55.00',
 			'2026-01-16',
 		);
-		// A change no refresh saw: the exchange no longer pairs.
-		await fixtures.transactions.update(exchangeCredit.id, {description: 'Corrected provider description'});
-		const recomputeExchanges = exchangeRecompute.recomputeCurrencyExchanges;
-		jest.spyOn(exchangeRecompute, 'recomputeCurrencyExchanges').mockImplementation((executor, ownerId) =>
-			ownerId === failing.owner.id
-				? Promise.reject(new Error('Synthetic exchange recompute failure'))
-				: recomputeExchanges(executor, ownerId),
-		);
-		const recomputeOwnTransfers = ownTransferRecompute.recomputeOwnTransfers;
+		const recompute = ownTransferRecompute.recomputeOwnTransfers;
 		jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers').mockImplementation((executor, ownerId, scope) =>
 			ownerId === failing.owner.id
 				? Promise.reject(new Error('Synthetic own-transfer recompute failure'))
-				: recomputeOwnTransfers(executor, ownerId, scope),
+				: recompute(executor, ownerId, scope),
 		);
 
-		await service.recomputeAllExchangesAndOwnTransfers();
+		await service.recomputeAllOwnTransfers();
 
-		// The debit stopped being an exchange leg before own transfers were recomputed, so it reads as a one-sided own
-		// transfer by the holder's name.
-		expect(
-			await labels(failingDebit, failingCredit, exchangeDebit, exchangeCredit, otherDebit, otherCredit),
-		).toEqual([
+		expect(await labels(failingDebit, failingCredit, otherDebit, otherCredit)).toEqual([
 			unlabelled,
-			unlabelled,
-			{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
 			unlabelled,
 			ownTransferLeg(otherCredit),
 			ownTransferLeg(otherDebit),
 		]);
-		expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
 	});
 });

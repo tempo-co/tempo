@@ -13,9 +13,7 @@ describe('BankTransactionAmountConversionProcessor', () => {
 	const job = (name: string) => ({name}) as Job<BankTransactionAmountConversionJobData>;
 	const setup = (enabled: boolean | Record<string, boolean>) => {
 		const conversionService = {backfill: jest.fn().mockResolvedValue(undefined)};
-		const derivedDataRefreshService = {
-			recomputeAllExchangesAndOwnTransfers: jest.fn().mockResolvedValue(undefined),
-		};
+		const derivedDataRefreshService = {recomputeAllOwnTransfers: jest.fn().mockResolvedValue(undefined)};
 		const recurringSeriesService = {foldAllChangeNotes: jest.fn().mockResolvedValue(undefined)};
 		const processor = new BankTransactionAmountConversionProcessor(
 			conversionService as never,
@@ -35,7 +33,7 @@ describe('BankTransactionAmountConversionProcessor', () => {
 		await processor.process(job(RECOMPUTE_OWN_TRANSFERS_JOB));
 
 		expect(conversionService.backfill).not.toHaveBeenCalled();
-		expect(derivedDataRefreshService.recomputeAllExchangesAndOwnTransfers).not.toHaveBeenCalled();
+		expect(derivedDataRefreshService.recomputeAllOwnTransfers).not.toHaveBeenCalled();
 		expect(recurringSeriesService.foldAllChangeNotes).not.toHaveBeenCalled();
 	});
 
@@ -45,7 +43,7 @@ describe('BankTransactionAmountConversionProcessor', () => {
 		await processor.process(job(BANK_TRANSACTION_AMOUNT_CONVERSION_JOB));
 
 		expect(conversionService.backfill).toHaveBeenCalledTimes(1);
-		expect(derivedDataRefreshService.recomputeAllExchangesAndOwnTransfers).not.toHaveBeenCalled();
+		expect(derivedDataRefreshService.recomputeAllOwnTransfers).not.toHaveBeenCalled();
 	});
 
 	it('converts imported statements while bank synchronization is off', async () => {
@@ -56,14 +54,14 @@ describe('BankTransactionAmountConversionProcessor', () => {
 		expect(conversionService.backfill).toHaveBeenCalledTimes(1);
 	});
 
-	it('runs the daily whole-history exchange and own-transfer recompute, then folds every owner’s history change notes', async () => {
+	it('runs the daily whole-history own-transfer recompute, then folds every owner’s history change notes', async () => {
 		const {conversionService, derivedDataRefreshService, recurringSeriesService, processor} = setup(true);
 
 		await processor.process(job(RECOMPUTE_OWN_TRANSFERS_JOB));
 
-		expect(derivedDataRefreshService.recomputeAllExchangesAndOwnTransfers).toHaveBeenCalledTimes(1);
+		expect(derivedDataRefreshService.recomputeAllOwnTransfers).toHaveBeenCalledTimes(1);
 		expect(recurringSeriesService.foldAllChangeNotes).toHaveBeenCalledTimes(1);
-		expect(derivedDataRefreshService.recomputeAllExchangesAndOwnTransfers.mock.invocationCallOrder[0]).toBeLessThan(
+		expect(derivedDataRefreshService.recomputeAllOwnTransfers.mock.invocationCallOrder[0]).toBeLessThan(
 			recurringSeriesService.foldAllChangeNotes.mock.invocationCallOrder[0],
 		);
 		expect(conversionService.backfill).not.toHaveBeenCalled();

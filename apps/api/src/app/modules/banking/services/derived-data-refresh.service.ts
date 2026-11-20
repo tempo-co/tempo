@@ -106,7 +106,8 @@ function ownTransferScope(
 
 /**
  * Brings the values derived from an owner's transaction history up to date after a write has committed. Each step
- * tolerates the failure of an earlier one; the daily whole-history recompute corrects anything a failure left behind.
+ * tolerates the failure of an earlier one; the daily whole-history recompute corrects the own transfers a failure left
+ * behind, and the owner's next refresh the exchanges.
  */
 @Injectable()
 export class DerivedDataRefreshService {
@@ -129,15 +130,15 @@ export class DerivedDataRefreshService {
 	}
 
 	/**
-	 * Daily safety net: recomputes every owner's exchanges and then own transfers over the whole history, so a change
-	 * no refresh saw or a recompute that failed (a crash between a sync's commit and its refresh, a write whose commit
-	 * was not acknowledged) is corrected within a day.
+	 * Daily safety net: recomputes every owner's own transfers over the whole history, so a change no scoped recompute
+	 * saw (a crash between a sync's commit and its refresh, a write whose commit was not acknowledged) is corrected
+	 * within a day.
 	 */
-	async recomputeAllExchangesAndOwnTransfers(): Promise<void> {
+	async recomputeAllOwnTransfers(): Promise<void> {
 		const owners: Array<{accountId: string}> = await this.dataSource.query(
 			'SELECT DISTINCT "accountId" FROM "bank_connections" ORDER BY "accountId"',
 		);
-		for (const {accountId} of owners) await this.recomputeLabels(accountId, null, []);
+		for (const {accountId} of owners) await this.recomputeOwnTransfers(accountId);
 	}
 
 	/**

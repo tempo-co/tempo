@@ -27,7 +27,6 @@ import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.e
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
-import * as ownTransferRecompute from '@modules/banking/own-transfer/own-transfer-recompute';
 import {BankTransactionAmountConversionQueueService} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
@@ -1109,7 +1108,7 @@ describe('BankConnectionController', () => {
 				const secondState = await authorize(owner.agent);
 				createSession.mockResolvedValueOnce({
 					sessionId: 'provider-session-kept-again',
-					consentValidUntil: '2031-01-01T00:00:00.000Z',
+					consentValidUntil: `${addDays(dateInAppTimeZone(new Date()), 180)}T00:00:00.000Z`,
 					aspsp: {name: 'ABN AMRO', country: 'NL'},
 					accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
 				});
@@ -1155,6 +1154,8 @@ describe('BankConnectionController', () => {
 				.where('accountId = :accountId', {accountId: owner.id})
 				.execute();
 		},
+		// The flow waits for its own user's verification email.
+		30_000,
 	);
 
 	it('removes the connection when the provider fails to revoke its consent', async () => {
@@ -3791,18 +3792,48 @@ describe('BankConnectionController', () => {
 			]),
 		);
 
-		// Whether a failed commit stored anything is unknown, so own transfers are recomputed over the whole history.
-		const recompute = jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers');
+		// An own transfer between two other accounts, stored without its labels and untouched by the sync.
+		const {connection: otherConnection, bankAccounts: otherAccounts} = await createAuthorizedConnectionFixture(
+			'rollback-own-transfer-session',
+			[
+				{
+					providerAccountId: 'rollback-own-transfer-current',
+					identificationHash: 'hash-rollback-own-transfer-current',
+					currency: 'EUR',
+					iban: 'NL91ABNA0417164300',
+				},
+				{
+					providerAccountId: 'rollback-own-transfer-savings',
+					identificationHash: 'hash-rollback-own-transfer-savings',
+					currency: 'EUR',
+					iban: 'DE89370400440532013000',
+				},
+			],
+		);
+		const transferLeg = (indicator: 'CRDT' | 'DBIT', counterpartyIban: string) => ({
+			amount: '313.37',
+			currency: 'EUR',
+			creditDebitIndicator: indicator,
+			bookingDate: '2026-08-14',
+			description: 'Online banking transfer',
+			counterpartyIban,
+		});
+		const debit = await fixtures.createTransaction(otherAccounts[0], transferLeg('DBIT', 'DE89370400440532013000'));
+		const credit = await fixtures.createTransaction(otherAccounts[1], transferLeg('CRDT', 'NL91ABNA0417164300'));
+
 		try {
 			await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
 				status: 500,
 				message: 'Bank synchronization could not be saved.',
 			});
-			expect(recompute.mock.calls.map(([, ownerId, scope]) => [ownerId, scope])).toEqual([
-				[account.id, undefined],
-			]);
+			// Whether the failed commit stored anything is unknown, so own transfers are recomputed over the whole history.
+			expect(
+				(await bankTransactionRepository.findBy({id: In([debit.id, credit.id])})).map(
+					({ownTransferEvidence}) => ownTransferEvidence,
+				),
+			).toEqual(['IBAN', 'IBAN']);
 		} finally {
-			recompute.mockRestore();
+			await bankConnectionRepository.delete(otherConnection.id);
 		}
 		expect(await bankAccountBalanceRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);
 		expect(await bankTransactionRepository.count({where: {bankAccountId: bankAccount.id}})).toBe(0);

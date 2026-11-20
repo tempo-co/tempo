@@ -177,14 +177,15 @@ export async function seedOwnTransferData(
 	);
 
 	const dataSource = app.get(DataSource);
+	// Exchanges first, as in the derived-data refresh: own-transfer detection skips exchange legs.
+	const exchanges = await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
 	const ownTransfers = await dataSource.transaction((manager) =>
 		recomputeOwnTransfersAndCategories(manager, account.id),
 	);
-	const exchanges = await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
 	// Rows that stopped being own transfers or exchanges go back to the model, when categorization is enabled.
 	await app
 		.get(CategorizationScheduler)
-		.enqueueForTransactions([...ownTransfers.requeuedIds, ...exchanges.requeuedIds]);
+		.enqueueForTransactions([...exchanges.requeuedIds, ...ownTransfers.requeuedIds]);
 	return {abnConnection, abnAccount, revolutConnection, revolutAccount, revolutUsdAccount};
 }
 
