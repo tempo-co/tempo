@@ -683,16 +683,44 @@ export class BankImportService {
 		if (found.some(({bankAccountId}) => !accountsById.get(bankAccountId)?.bankConnection)) {
 			throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 		}
-		// Only synced accounts have final days, so only their sync locks are taken, before the record's own as always.
-		const locks = await this.lockSyncedConnections(
-			accounts.flatMap(({bankConnection}) =>
+		// An owner has one imported-files connection.
+		const fileConnectionId = accounts.find(
+			({bankConnection}) => bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
+		)?.bankConnection.id;
+		const locks = await this.lockSyncedConnections([
+			...accounts.flatMap(({bankConnection}) =>
 				bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [bankConnection.id],
 			),
-		);
+			// An account its bank's removal kept is on the imported-files connection while the record may still hang on
+			// a synced one: that one's sync lock first, as imports and undo take it.
+			...(fileConnectionId && owned.bankConnectionId !== fileConnectionId ? [owned.bankConnectionId] : []),
+		]);
 		let added: {record: BankImport; insertedTransactionIds: string[]};
 		try {
 			added = await this.dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForAmountWrites(manager, ownerId);
 				const {record} = await this.lockImport(manager, ownerId, owned);
+				// The imported-files connection after the record's own, the order an import and an undo take them in, so
+				// a kept account's balance is recomputed over rows and an entered balance no one else is changing.
+				if (
+					fileConnectionId &&
+					fileConnectionId !== record.bankConnectionId &&
+					!(await manager.getRepository(BankConnection).findOne({
+						where: {id: fileConnectionId, accountId: ownerId},
+						lock: {mode: 'pessimistic_write'},
+					}))
+				) {
+					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
+				}
+				// A removal or an authorization that moved an account after it was read committed before its sync lock
+				// was free: the locks taken are not that account's, so the add is refused as busy.
+				const moved = await manager.getRepository(BankAccount).count({
+					where: accounts.map(({id, bankConnection}) => ({
+						id,
+						bankConnection: {id: Not(bankConnection.id), accountId: ownerId},
+					})),
+				});
+				if (moved > 0) throw new BankImportRefusalException('account_busy');
 				const rows = manager.getRepository(BankImportDoubtfulRow);
 				const current = await rows.find({
 					where: {id: In(ids), importId: record.id, kind: In([...BANK_IMPORT_NEVER_SENT_ROW_KINDS])},
@@ -724,6 +752,10 @@ export class BankImportService {
 						);
 					}
 					await rows.update({id: row.id}, {resolution: 'new', resolvedTransactionId: transactionId});
+				}
+				// Does nothing for a synced account.
+				for (const bankAccountId of new Set(current.map(({bankAccountId}) => bankAccountId))) {
+					await this.fileAccountBalanceService.recompute(manager, ownerId, bankAccountId);
 				}
 				const removedBySync = current.filter(({kind}) => kind === 'removed_by_sync').length;
 				record.rowsAdded += current.length;
