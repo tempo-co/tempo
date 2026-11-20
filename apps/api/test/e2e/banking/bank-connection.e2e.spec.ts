@@ -27,6 +27,7 @@ import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.e
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
+import * as ownTransferRecompute from '@modules/banking/own-transfer/own-transfer-recompute';
 import {BankTransactionAmountConversionQueueService} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
 import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
@@ -34,7 +35,6 @@ import {BankingEncryptionService} from '@modules/banking/services/banking-encryp
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
-import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -3703,13 +3703,15 @@ describe('BankConnectionController', () => {
 		);
 
 		// Whether a failed commit stored anything is unknown, so own transfers are recomputed over the whole history.
-		const recompute = jest.spyOn(app.get(OwnTransferService), 'recomputeForOwnerSafely');
+		const recompute = jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers');
 		try {
 			await expect(app.get(BankingSyncService).synchronizeAutomatically(connection.id)).rejects.toMatchObject({
 				status: 500,
 				message: 'Bank synchronization could not be saved.',
 			});
-			expect(recompute.mock.calls).toEqual([[account.id]]);
+			expect(recompute.mock.calls.map(([, ownerId, scope]) => [ownerId, scope])).toEqual([
+				[account.id, undefined],
+			]);
 		} finally {
 			recompute.mockRestore();
 		}

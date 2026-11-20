@@ -1,12 +1,14 @@
 import {Injectable, Logger} from '@nestjs/common';
+import {DataSource} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
 import {safeErrorName} from '../banking.utils';
 import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
+import {recomputeCurrencyExchanges} from '../currency-exchange/currency-exchange-recompute';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
-import {CurrencyExchangeService} from './currency-exchange.service';
-import {OwnTransferService} from './own-transfer.service';
+import {recomputeOwnTransfersAndCategories} from '../own-transfer/own-transfer-category';
+import type {OwnTransferRecomputeScope} from '../own-transfer/own-transfer-recompute';
 import {ReportingCurrencyService} from './reporting-currency.service';
 
 /** What a write to an owner's transaction history changed, as the derived-data refresh needs to know it. */
@@ -24,22 +26,28 @@ export type DerivedDataChange =
 	/** A bank authorization that committed a connection: account IBANs and currencies may have changed. */
 	| {kind: 'authorization'}
 	/** A committed connection removal: accounts may be gone, or moved onto the imported-files connection. */
-	| {kind: 'removal'};
+	| {kind: 'removal'}
+	/** A committed amount-conversion pass for the owner. */
+	| {kind: 'converted-amounts'; amountsConverted: boolean; reportingCurrencyChanged: boolean};
 
 type RefreshPlan = {
 	/** Reconcile the reporting currency, telling it whether the history is settled; null skips the reconcile. */
 	reconcile: {historySettled: boolean} | null;
 	/** Whether to recompute currency exchanges before own transfers. */
 	exchanges: boolean;
-	/** The rows own transfers can have changed around besides the reclassified exchanges; null is the whole history. */
-	ownTransferIds: readonly string[] | null;
+	/**
+	 * The rows own transfers can have changed around besides the reclassified exchanges; null is the whole history, and
+	 * `if-reclassified` the whole history only when the exchange recompute reclassified a row or failed.
+	 */
+	ownTransferIds: readonly string[] | null | 'if-reclassified';
 	/** Rows to queue for categorization; merchant logos are queued only when there are any. */
 	writtenIds: readonly string[];
 	/** The rows to queue for merchant logos; null is the owner's whole history. */
 	logoIds: readonly string[] | null;
 };
 
-function planRefresh(change: DerivedDataChange): RefreshPlan {
+/** The steps the change needs, or null when it needs none. */
+function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 	switch (change.kind) {
 		case 'sync-write':
 			return {
@@ -71,7 +79,34 @@ function planRefresh(change: DerivedDataChange): RefreshPlan {
 				writtenIds: [],
 				logoIds: [],
 			};
+		case 'converted-amounts':
+			// Same-day exchanges are matched on converted amounts, so new ones can complete a pairing, and a reporting
+			// currency change replaced them all. Own-transfer detection reads no converted amount, only whether a row is an
+			// exchange leg.
+			if (!change.amountsConverted && !change.reportingCurrencyChanged) return null;
+			return {
+				reconcile: null,
+				exchanges: true,
+				ownTransferIds: 'if-reclassified',
+				writtenIds: [],
+				logoIds: [],
+			};
 	}
+}
+
+/**
+ * The own-transfer recompute's scope given the exchange recompute's reclassified rows (null when it failed or did not
+ * run), or `skip` when own transfers cannot have changed.
+ */
+function ownTransferScope(
+	ownTransferIds: RefreshPlan['ownTransferIds'],
+	reclassifiedIds: readonly string[] | null,
+): OwnTransferRecomputeScope | undefined | 'skip' {
+	if (ownTransferIds === null) return undefined;
+	// A failed exchange recompute may still have committed, so which rows it reclassified is unknown.
+	if (reclassifiedIds === null) return undefined;
+	if (ownTransferIds === 'if-reclassified') return reclassifiedIds.length > 0 ? undefined : 'skip';
+	return {transactionIds: [...new Set([...ownTransferIds, ...reclassifiedIds])]};
 }
 
 /**
@@ -83,40 +118,97 @@ export class DerivedDataRefreshService {
 	private readonly logger = new Logger(DerivedDataRefreshService.name);
 
 	constructor(
+		private readonly dataSource: DataSource,
 		private readonly reportingCurrencyService: ReportingCurrencyService,
-		private readonly currencyExchangeService: CurrencyExchangeService,
-		private readonly ownTransferService: OwnTransferService,
 		private readonly categorizationService: CategorizationScheduler,
 		private readonly merchantLogoService: MerchantLogoService,
 	) {}
 
 	async refresh(ownerId: Account['id'], change: DerivedDataChange): Promise<void> {
 		const plan = planRefresh(change);
+		if (!plan) return;
 		if (plan.reconcile) await this.reportingCurrencyService.reconcileSafely(ownerId, plan.reconcile);
 		// Exchanges go first: own-transfer detection skips exchange legs. Both run before the enqueues, so new exchanges
 		// and own transfers are marked before the worker can claim them.
-		const reclassifiedIds = plan.exchanges
-			? await this.currencyExchangeService.recomputeForOwnerSafely(ownerId)
-			: null;
+		const reclassifiedIds = plan.exchanges ? await this.recomputeExchanges(ownerId) : null;
 		// Own transfers can only change around the given rows and the rows whose exchange classification changed, so a
-		// write that changed none of them does no own-transfer work. A failed exchange recompute leaves the changed rows
-		// unknown.
-		await this.ownTransferService.recomputeForOwnerSafely(
-			ownerId,
-			plan.ownTransferIds && reclassifiedIds
-				? {transactionIds: [...new Set([...plan.ownTransferIds, ...reclassifiedIds])]}
-				: undefined,
-		);
+		// write that changed none of them does no own-transfer work.
+		const scope = ownTransferScope(plan.ownTransferIds, reclassifiedIds);
+		if (scope !== 'skip') await this.recomputeOwnTransfers(ownerId, scope);
 		if (plan.writtenIds.length === 0) return;
-		await this.enqueueCategorization(plan.writtenIds);
+		await this.enqueueCategorization(plan.writtenIds, 'Transaction');
 		await this.merchantLogoService.enqueueForOwnerSafely(ownerId, plan.logoIds ?? undefined);
 	}
 
-	private async enqueueCategorization(transactionIds: readonly string[]): Promise<void> {
+	/**
+	 * Daily safety net: recomputes every owner's own transfers over the whole history, so a change no scoped recompute
+	 * saw (a crash between a sync's commit and its refresh, a write whose commit was not acknowledged) is corrected
+	 * within a day.
+	 */
+	async recomputeAllOwnTransfers(): Promise<void> {
+		const owners: Array<{accountId: string}> = await this.dataSource.query(
+			'SELECT DISTINCT "accountId" FROM "bank_connections" ORDER BY "accountId"',
+		);
+		for (const {accountId} of owners) await this.recomputeOwnTransfers(accountId);
+	}
+
+	/**
+	 * Returns the rows that became or stopped being exchanges, or null when the recompute failed: it may still have
+	 * committed, so which rows changed is unknown.
+	 */
+	private async recomputeExchanges(ownerId: Account['id']): Promise<string[] | null> {
+		try {
+			const result = await this.dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, ownerId));
+			if (result.transactionsChanged > 0) {
+				this.logger.log(`Currency exchanges recomputed: ${result.transactionsChanged} transactions changed`);
+			}
+			// Rows that stopped being exchanges go back to the model once the transaction has committed.
+			await this.enqueueCategorization(result.requeuedIds, 'Former currency exchange');
+			return result.reclassifiedIds;
+		} catch (error) {
+			this.logger.warn(`Currency exchange recompute failed: ${safeErrorName(error)}`);
+			return null;
+		}
+	}
+
+	/** A failed scoped recompute is retried over the whole history; a failed whole-history one waits for the next day. */
+	private async recomputeOwnTransfers(ownerId: Account['id'], scope?: OwnTransferRecomputeScope): Promise<void> {
+		try {
+			await this.recomputeOwnTransfersOnce(ownerId, scope);
+			return;
+		} catch (error) {
+			this.logger.warn(`Own-transfer recompute failed: ${safeErrorName(error)}`);
+			if (!scope) return;
+		}
+		try {
+			await this.recomputeOwnTransfersOnce(ownerId);
+		} catch (error) {
+			this.logger.warn(`Own-transfer recompute failed: ${safeErrorName(error)}`);
+		}
+	}
+
+	private async recomputeOwnTransfersOnce(ownerId: Account['id'], scope?: OwnTransferRecomputeScope): Promise<void> {
+		if (scope?.transactionIds.length === 0) return;
+		const startedAt = Date.now();
+		const {result, requeuedIds} = await this.dataSource.transaction((manager) =>
+			recomputeOwnTransfersAndCategories(manager, ownerId, scope),
+		);
+		// Rows that stopped being own transfers go back to the model once the transaction has committed.
+		await this.enqueueCategorization(requeuedIds, 'Former own-transfer');
+		if (result.transactionsChanged > 0 || result.accountIbansAdded > 0) {
+			this.logger.log(
+				`Own transfers recomputed${scope ? ' in scope' : ''}: ${result.transactionsChanged} transactions ` +
+					`changed, ${result.accountIbansAdded} account IBANs added in ${Date.now() - startedAt} ms`,
+			);
+		}
+	}
+
+	private async enqueueCategorization(transactionIds: readonly string[], rows: string): Promise<void> {
+		if (transactionIds.length === 0) return;
 		try {
 			await this.categorizationService.enqueueForTransactions(transactionIds);
 		} catch (error) {
-			this.logger.warn(`Transaction categorization enqueue failed: ${safeErrorName(error)}`);
+			this.logger.warn(`${rows} categorization enqueue failed: ${safeErrorName(error)}`);
 		}
 	}
 }

@@ -1,6 +1,6 @@
 import {INestApplicationContext} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {DeepPartial, Repository} from 'typeorm';
+import {DataSource, DeepPartial, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {
@@ -10,8 +10,8 @@ import {
 } from '@modules/banking/bank-transaction-financial-event';
 import {BANK_TRANSACTION_TYPES} from '@modules/banking/bank-transaction-type';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {CurrencyExchangeService} from '@modules/banking/services/currency-exchange.service';
-import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
+import {recomputeCurrencyExchanges} from '@modules/banking/currency-exchange/currency-exchange-recompute';
+import {recomputeOwnTransfersAndCategories} from '@modules/banking/own-transfer/own-transfer-category';
 
 import {BankingFixtures} from './banking-fixtures';
 import {OWN_TRANSFER_ACCOUNT_EMAIL} from './seed.constants';
@@ -175,8 +175,9 @@ export async function seedOwnTransferData(
 		]),
 	);
 
-	await app.get(OwnTransferService).recomputeForOwner(account.id);
-	await app.get(CurrencyExchangeService).recomputeForOwner(account.id);
+	const dataSource = app.get(DataSource);
+	await dataSource.transaction((manager) => recomputeOwnTransfersAndCategories(manager, account.id));
+	await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
 	return {abnConnection, abnAccount, revolutConnection, revolutAccount, revolutUsdAccount};
 }
 

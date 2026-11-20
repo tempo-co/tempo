@@ -13,7 +13,7 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BANK_TRANSACTION_CASH_FLOW_TREATMENTS} from '@modules/banking/bank-transaction-financial-event';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {ClaudeBankTransactionCategorizationProvider} from '@modules/banking/categorization/providers/claude-bank-transaction-categorization.provider';
-import {OwnTransferService} from '@modules/banking/services/own-transfer.service';
+import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 
 import {BankingFixtures, CURRENCY_EXCHANGE_EVENT, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -735,7 +735,7 @@ describe('BankTransactionController', () => {
 			category: 'HOUSING_AND_UTILITIES',
 			categorySource: 'MANUAL',
 		});
-		await app.get(OwnTransferService).recomputeForOwner(account.id);
+		await app.get(DerivedDataRefreshService).recomputeAllOwnTransfers();
 		const categoryOf = async (id: string) =>
 			bankTransactionRepository.findOneOrFail({
 				where: {id},
