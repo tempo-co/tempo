@@ -12,7 +12,7 @@ import {setAppBadge} from '../utils/push-device';
  * count; signing out clears it, also when a review count read during sign-out arrives late. A
  * browser already subscribed to alerts is registered with this session once Tempo has confirmed the session, so
  * opening a saved Tempo offline tries no write. A browser that lost its subscription while notifications stay
- * allowed is subscribed again once Tempo answers with the alert settings.
+ * allowed is subscribed again once Tempo has confirmed the session and answered with the alert settings.
  */
 export function DeviceAlerts() {
   const needsAttention = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention;
@@ -31,7 +31,7 @@ export function DeviceAlerts() {
       /* Alerts resume the next time Tempo opens. */
     });
   }, [confirmedAccountId]);
-  useRestoreDeviceSubscription();
+  useRestoreDeviceSubscription(!!confirmedAccountId);
 
   return null;
 }
