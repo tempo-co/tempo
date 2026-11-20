@@ -22,11 +22,10 @@ import {
 	BANK_CONNECTION_STATUSES,
 	DESTRUCTIVE_CONNECTION_STATUSES,
 } from './banking-sync.constants';
+import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {FileAccountBalanceService} from './file-account-balance.service';
 import {fileAccountProviderId, lockFileConnection} from './file-connection';
 import {findOwnedConnection} from './find-owned-connection';
-import {OwnTransferService} from './own-transfer.service';
-import {ReportingCurrencyService} from './reporting-currency.service';
 
 const REMOVABLE_CONNECTION_STATUSES = [
 	BANK_CONNECTION_STATUSES.PENDING_AUTHORIZATION,
@@ -56,10 +55,9 @@ export class BankConnectionRemovalService {
 		private readonly dataSource: DataSource,
 		private readonly authorizationStateService: BankingAuthorizationStateService,
 		private readonly connectionLockService: BankingConnectionLockService,
-		private readonly ownTransferService: OwnTransferService,
 		private readonly consentRevocationService: BankingConsentRevocationService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
-		private readonly reportingCurrencyService: ReportingCurrencyService,
+		private readonly derivedDataRefresh: DerivedDataRefreshService,
 	) {}
 
 	async removeConnection(
@@ -153,10 +151,7 @@ export class BankConnectionRemovalService {
 			await releaseLockSafely(connectionLock, this.logger, 'Banking synchronization lock release failed');
 		}
 
-		// Remaining legs whose counterpart was deleted become one-sided or unlabelled.
-		await this.ownTransferService.recomputeForOwnerSafely(accountId);
-		// Removing every account in other currencies leaves one an owner without a currency can use right away.
-		await this.reportingCurrencyService.reconcileSafely(accountId, {historySettled: false});
+		await this.derivedDataRefresh.refresh(accountId, {kind: 'removal'});
 	}
 
 	/**

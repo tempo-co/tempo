@@ -19,13 +19,11 @@ const BANK_AUTHORIZATION_SERVICE_DEPENDENCIES = [
 	'encryptionService',
 	'connectionLockService',
 	'bankingSyncQueueService',
-	'ownTransferService',
-	'reportingCurrencyService',
+	'derivedDataRefresh',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
-	reportingCurrencyService: {reconcileSafely: jest.fn().mockResolvedValue(undefined)},
-	ownTransferService: {recomputeForOwnerSafely: jest.fn().mockResolvedValue(undefined)},
+	derivedDataRefresh: {refresh: jest.fn().mockResolvedValue(undefined)},
 };
 
 /** Builds the service with named test doubles; unspecified dependencies are empty objects. */
