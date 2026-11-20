@@ -227,7 +227,7 @@ describe('DerivedDataRefreshService', () => {
 		['an authorization', 'authorization'],
 		['a removal', 'removal'],
 	] as const)(
-		'after %s, labels own transfers over the whole history and leaves a choice among several currencies for the sync',
+		'after %s, labels exchanges and own transfers over the whole history and leaves a choice among several currencies for the sync',
 		async (_, kind) => {
 			const {owner, current, savings, usd} = await createOwner();
 			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
@@ -240,10 +240,10 @@ describe('DerivedDataRefreshService', () => {
 
 			await service.refresh(owner.id, {kind});
 
-			// Exchanges are not recomputed, so the exchange debit that names the holder reads as a one-sided own transfer.
+			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it.
 			expect(await labels(exchangeDebit, exchangeCredit, transferDebit, transferCredit)).toEqual([
-				{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
-				unlabelled,
+				exchangeLeg,
+				exchangeLeg,
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);
