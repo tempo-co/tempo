@@ -41,7 +41,7 @@ type RefreshPlan = {
 	/** Rows to queue for categorization; merchant logos are queued only when there are any. */
 	writtenIds: readonly string[];
 	/** The rows to queue for merchant logos; null is the owner's whole history. */
-	logoIds: readonly string[] | null;
+	logoTransactionIds: readonly string[] | null;
 };
 
 /** The steps the change needs, or null when it needs none. */
@@ -53,17 +53,17 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 				reconcile: {historySettled: true},
 				ownTransferIds: [...change.writtenIds, ...change.formerCounterpartIds],
 				writtenIds: change.writtenIds,
-				logoIds: change.writtenIds,
+				logoTransactionIds: change.writtenIds,
 			};
 		case 'failed-sync-write':
-			return {reconcile: null, ownTransferIds: null, writtenIds: [], logoIds: []};
+			return {reconcile: null, ownTransferIds: null, writtenIds: [], logoTransactionIds: []};
 		case 'file-write':
 			return {
 				// An import can add accounts in another currency, and its history is complete once it commits.
 				reconcile: {historySettled: true},
 				ownTransferIds: null,
 				writtenIds: change.writtenIds,
-				logoIds: null,
+				logoTransactionIds: null,
 			};
 		case 'authorization':
 		case 'removal':
@@ -73,7 +73,7 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 				// Moved accounts change which legs share a connection, so exchanges can pair or part.
 				ownTransferIds: null,
 				writtenIds: [],
-				logoIds: [],
+				logoTransactionIds: [],
 			};
 		case 'converted-amounts':
 			// Same-day exchanges are matched on converted amounts, so new ones can complete a pairing, and a reporting
@@ -84,7 +84,7 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 				reconcile: null,
 				ownTransferIds: 'if-reclassified',
 				writtenIds: [],
-				logoIds: [],
+				logoTransactionIds: [],
 			};
 	}
 }
@@ -126,7 +126,7 @@ export class DerivedDataRefreshService {
 		if (plan.reconcile) await this.reportingCurrencyService.reconcileSafely(ownerId, plan.reconcile);
 		await this.recomputeLabels(ownerId, plan.ownTransferIds, plan.writtenIds);
 		if (plan.writtenIds.length === 0) return;
-		await this.merchantLogoService.enqueueForOwnerSafely(ownerId, plan.logoIds ?? undefined);
+		await this.merchantLogoService.enqueueForOwnerSafely(ownerId, plan.logoTransactionIds ?? undefined);
 	}
 
 	/**
@@ -143,7 +143,7 @@ export class DerivedDataRefreshService {
 
 	/**
 	 * Recomputes exchanges, then own transfers, then queues the written rows and the former exchange legs for
-	 * categorization. Exchanges go first: own-transfer detection skips exchange legs. Both run before the enqueue, so
+	 * categorization. Exchanges go first: own-transfer detection skips exchange legs. Both run before the enqueues, so
 	 * new exchanges and own transfers are labelled before the worker can claim a row.
 	 */
 	private async recomputeLabels(
@@ -156,8 +156,11 @@ export class DerivedDataRefreshService {
 		// write that changed none of them does no own-transfer work.
 		const scope = ownTransferScope(ownTransferIds, exchanges?.reclassifiedIds ?? null);
 		if (scope !== 'skip') await this.recomputeOwnTransfers(ownerId, scope);
-		// Rows that stopped being exchanges go back to the model.
-		await this.enqueueCategorization([...writtenIds, ...(exchanges?.requeuedIds ?? [])], 'Transaction');
+		await this.enqueueCategorization(writtenIds, 'Transaction');
+		// Rows that stopped being exchanges go back to the model; written ones are queued already.
+		const written = new Set(writtenIds);
+		const formerLegIds = (exchanges?.requeuedIds ?? []).filter((id) => !written.has(id));
+		await this.enqueueCategorization(formerLegIds, 'Former exchange');
 	}
 
 	/**

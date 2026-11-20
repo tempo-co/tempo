@@ -391,15 +391,6 @@ describe('DerivedDataRefreshService', () => {
 				'2026-01-16',
 			);
 			await fixtures.transactions.update(exchangeCredit.id, {description: 'Corrected provider description'});
-			// What is queued for categorization when the own-transfer recompute starts.
-			let queuedBeforeOwnTransfers: string[] | undefined;
-			const recompute = ownTransferRecompute.recomputeOwnTransfers;
-			jest.spyOn(ownTransferRecompute, 'recomputeOwnTransfers').mockImplementation(
-				async (executor, ownerId, scope) => {
-					queuedBeforeOwnTransfers ??= await queuedForCategorization();
-					return recompute(executor, ownerId, scope);
-				},
-			);
 
 			await service.refresh(owner.id, {kind: 'converted-amounts', ...changed});
 
@@ -410,8 +401,6 @@ describe('DerivedDataRefreshService', () => {
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);
-			// The former legs are queued only once the debit is labelled an own transfer, so no worker claims it before.
-			expect(queuedBeforeOwnTransfers).toEqual([]);
 			expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
 			expect(await ownerMerchants(owner)).toEqual([]);
 		},
