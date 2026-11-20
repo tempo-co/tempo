@@ -82,6 +82,16 @@ function toKey(base64url: string) {
 export async function subscribeDevice(publicKey: string): Promise<PushSubscriptionRegistration> {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') throw new NotificationPermissionError(permission);
+  return subscribeAllowedDevice(publicKey);
+}
+
+/**
+ * Subscribes this browser without asking, once notifications are allowed. iPhone and iPad may refuse it outside a
+ * click.
+ */
+export async function subscribeAllowedDevice(
+  publicKey: string,
+): Promise<PushSubscriptionRegistration> {
   const registration = await navigator.serviceWorker.ready;
   const subscription =
     (await registration.pushManager.getSubscription()) ??
@@ -106,4 +116,18 @@ export async function unsubscribeDevice(): Promise<string | null> {
   if (!subscription) return null;
   await subscription.unsubscribe();
   return subscription.endpoint;
+}
+
+const TURNED_OFF_KEY = 'tempo-device-alerts-off';
+
+/** Whether this device was turned off in Settings, so Tempo leaves it unsubscribed until Allow is tapped. */
+export const isDeviceTurnedOff = () => localStorage.getItem(TURNED_OFF_KEY) === 'true';
+
+export function setDeviceTurnedOff(turnedOff: boolean) {
+  try {
+    if (turnedOff) localStorage.setItem(TURNED_OFF_KEY, 'true');
+    else localStorage.removeItem(TURNED_OFF_KEY);
+  } catch {
+    /* Without storage the choice is not remembered; the subscription itself still ends or starts. */
+  }
 }

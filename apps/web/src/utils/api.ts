@@ -145,6 +145,11 @@ type RequestOptions = RequestInit & {
    * A message limits this to a 401 with that message; any other 401 is an ended session.
    */
   expectUnauthorized?: boolean | string;
+  /**
+   * A write the user did not start: offline, a lost connection, an ended session or a rate limit throws without a
+   * toast.
+   */
+  quiet?: boolean;
 };
 /** Options for post/put/patch/delete, which take the JSON body as a value and serialize it. */
 type WriteOptions = Omit<RequestOptions, 'body'>;
@@ -171,6 +176,7 @@ async function request<T = unknown>(
   const epoch = sessionEpoch;
   const isWrite = !['GET', 'HEAD'].includes(init?.method ?? 'GET');
   if (isWrite && !onlineManager.isOnline()) {
+    if (init?.quiet) throw new NetworkError();
     toast.error('Changes cannot be saved while Tempo is unreachable.');
     throw toasted(new NetworkError());
   }
@@ -184,7 +190,7 @@ async function request<T = unknown>(
     if (init?.signal?.aborted && error instanceof DOMException && error.name === 'AbortError')
       throw error;
     onlineManager.setOnline(false);
-    if (!isWrite) throw new NetworkError();
+    if (!isWrite || init?.quiet) throw new NetworkError();
     toast.error('Cannot reach Tempo. Your change was not confirmed. Check before trying again.');
     throw toasted(new NetworkError());
   });
@@ -209,6 +215,7 @@ async function request<T = unknown>(
         )
           throw new HttpError(response.status, expectedMessage);
       }
+      if (init?.quiet) throw new SessionExpiredError(response.status, response.statusText);
       toast.error('Your session has expired', {
         description: 'Please log in again to continue using the app.',
         id: 'session-expired',
@@ -233,6 +240,7 @@ async function request<T = unknown>(
           }
         }
       }
+      if (init?.quiet) throw new HttpError(response.status, response.statusText, retryAfterSeconds);
       toast.error('Rate limit exceeded', {
         description: formatRetryAfter(retryAfterSeconds),
         id: 'rate-limit-exceeded',

@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {
   NotificationPreferencesUpdate,
   NotificationSettings,
+  PushSubscriptionRegistration,
   PushSubscriptionRemoval,
 } from '@tempo/contracts';
 import {toast} from 'sonner';
@@ -9,6 +10,7 @@ import {toast} from 'sonner';
 import {
   NotificationPermissionError,
   getDeviceSubscription,
+  setDeviceTurnedOff,
   subscribeDevice,
   toRegistration,
   unsubscribeDevice,
@@ -16,8 +18,8 @@ import {
 import {api, wasToasted} from '@/utils/api';
 
 const SETTINGS_KEY = ['notifications'] as const;
-const DEVICE_KEY = ['notifications', 'device'] as const;
-const SUBSCRIPTIONS = '/notifications/subscriptions';
+export const DEVICE_KEY = ['notifications', 'device'] as const;
+export const SUBSCRIPTIONS = '/notifications/subscriptions';
 
 /** The owner's alert choices and the key this browser subscribes with. */
 export function useNotificationSettings() {
@@ -70,6 +72,7 @@ export function useAllowNotifications() {
     mutationFn: async (publicKey: string) => {
       const registration = await subscribeDevice(publicKey);
       await api.put(SUBSCRIPTIONS, registration);
+      setDeviceTurnedOff(false);
       return registration.endpoint;
     },
     onSuccess: (endpoint) => queryClient.setQueryData(DEVICE_KEY, endpoint),
@@ -81,11 +84,12 @@ export function useAllowNotifications() {
   });
 }
 
-/** Unsubscribes this browser and removes it from Tempo. */
+/** Unsubscribes this browser and removes it from Tempo; Tempo leaves it off until Allow is tapped again. */
 export function useTurnOffNotifications() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
+      setDeviceTurnedOff(true);
       const endpoint = await unsubscribeDevice();
       if (endpoint) {
         await api.delete(SUBSCRIPTIONS, {endpoint} satisfies PushSubscriptionRemoval);
@@ -104,5 +108,10 @@ export function useTurnOffNotifications() {
  */
 export async function registerExistingSubscription() {
   const subscription = await getDeviceSubscription();
-  if (subscription) await api.put(SUBSCRIPTIONS, toRegistration(subscription));
+  if (subscription)
+    await api.put(
+      SUBSCRIPTIONS,
+      toRegistration(subscription) satisfies PushSubscriptionRegistration,
+      {quiet: true},
+    );
 }
