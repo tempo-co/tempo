@@ -92,7 +92,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'PERSONAL_CARE',
 		label: 'Personal care',
 		description:
-			'Hair, beauty, grooming, cosmetics, toiletries, and similar personal-care services or products, including those bought at a drugstore; medicines and medical treatment belong in Health and fitness.',
+			'Hair, beauty, grooming, cosmetics, toiletries, laundry and dry cleaning, and similar personal-care services or products, including those bought at a drugstore; medicines and medical treatment belong in Health and fitness.',
 	},
 	{
 		value: 'ENTERTAINMENT',
@@ -110,7 +110,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'SERVICES',
 		label: 'Services',
 		description:
-			'Paid practical, professional, and digital services: repairs of shoes, phones, or clothing, alterations, cleaning, laundry and dry cleaning, postage, parcel and delivery fees, childcare, legal, accounting, and advice services, and software, apps, cloud storage, and online tools; streaming and media services belong in Entertainment, vehicle and bike servicing in Transportation, home repairs and tradespeople in Home improvement, food delivery orders in Eating out, bank fees in Fees, personal grooming in Personal care, and utilities in Housing and utilities.',
+			'Paid practical, professional, and digital services: repairs of shoes, phones, or clothing, alterations, home cleaning, postage, parcel and delivery fees, childcare, legal, accounting, and advice services, and software, apps, cloud storage, and online tools; streaming and media services belong in Entertainment, vehicle and bike servicing in Transportation, home repairs and tradespeople in Home improvement, food delivery orders in Eating out, bank fees in Fees, personal grooming, laundry, and dry cleaning in Personal care, and utilities in Housing and utilities.',
 	},
 	{
 		value: 'EDUCATION',

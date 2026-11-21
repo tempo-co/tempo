@@ -83,6 +83,8 @@ describe('bank transaction categorization contract', () => {
 		expect(description('SHOPPING')).toContain('books, musical instruments, sports and hobby equipment');
 		expect(description('SHOPPING')).toContain('tobacco and vaping products');
 		expect(description('PERSONAL_CARE')).toContain('including those bought at a drugstore');
+		expect(description('PERSONAL_CARE')).toContain('laundry and dry cleaning');
+		expect(description('SERVICES')).toContain('laundry, and dry cleaning in Personal care');
 		expect(description('TRANSPORTATION')).toContain(
 			'vehicle and bike servicing, repairs, inspections, and car washes',
 		);
