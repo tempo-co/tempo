@@ -10,7 +10,7 @@
 
 ## Privacy
 
-This repository and everything attached to it (commits, PRs, comments, issues, CI logs, images) are public, and Tempo handles real bank data.
+This repository and everything attached to it (commits, PRs, comments, CI logs, images) are public, and Tempo handles real bank data. Linear issues are private to the maintainer's workspace, so local paths, host names and links to the live app may go there; names, emails, transaction details, IBANs and card numbers may not.
 
 - Never put real personal data in code, tests, fixtures, docs, commits, PR text or comments: names, emails, addresses, transaction details (merchants, amounts, dates, references), IBANs, card numbers, host names, IPs or home-directory paths.
 - Use obviously fake values (`user@example.com`, "Example Shop", `example.ts.net`, published example IBANs such as `NL91ABNA0417164300`) and build fixtures from scratch. Refer to production rows by UUID only.

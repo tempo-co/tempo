@@ -76,7 +76,8 @@ export function whereManualCategoryFollowUpCandidates<T extends WhereExpressionB
 		.andWhere('"financialEventType" IS NULL');
 	if (followUp.action === 'APPLY') {
 		query.andWhere(
-			`("category" IS DISTINCT FROM :followUpCategory OR "categorySource" IS DISTINCT FROM 'HISTORY')`,
+			// A row that already has the category keeps its source: offering it would change nothing visible.
+			'"category" IS DISTINCT FROM :followUpCategory',
 			{followUpCategory: followUp.category},
 		);
 	} else {
