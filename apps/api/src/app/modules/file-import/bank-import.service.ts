@@ -41,7 +41,6 @@ import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.
 import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {fileAccountProviderId} from '@modules/banking/services/file-connection';
-import {FinalSyncDays, finalSyncDays} from '@modules/banking/sync-coverage';
 
 import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportLayoutService} from './bank-import-layout.service';
@@ -210,7 +209,8 @@ export class BankImportService {
 		const result = await this.write(
 			ownerId,
 			{syncedConnectionIds, ...(toFiles ? {fileConnection: 'create'} : {})},
-			async ({manager, fileConnection}) => {
+			async (write) => {
+				const {manager, fileConnection} = write;
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
 				const syncedAccount = accounts.find(
@@ -287,79 +287,81 @@ export class BankImportService {
 						!target.bank &&
 						!!accountRows[index].iban &&
 						!accountRows[index].learnedBank;
-					// Read under the sync lock, which every write of coverage and pending rows holds.
-					const finalDays = await this.findFinalSyncDays(manager, account, connection);
+					// Final days are read under the sync lock, which every write of coverage and pending rows holds.
 					// Candidates are read again per format, inside the transaction, so they include the rows the
 					// formats before this one just inserted. Each format numbers its rows in a scheme of its own, so
 					// whether the bank's references are set aside is decided per format.
-					for (const {format, layout, rows, newestFirst} of byFormat) {
-						const numbering = statementNumbering(format, layout);
-						const incoming = rows.map(toMatchRow);
-						// Only there are imported rows told apart by numbering; elsewhere every imported row keeps its
-						// references, as sync's set-aside decision rests on sync's references alone.
-						const candidates = await this.findMatchCandidates(
-							manager,
-							account.id,
-							rows,
-							fileIbanConfirmed ? numbering : null,
-						);
-						const ladder = confirmed
-							? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
-							: fileIbanConfirmed
-								? matchWithReferenceFallback(incoming, candidates, {
-										pairLookAlikeGroups: true,
-										minProbedRows: REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
-									})
-								: {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
-						const {referencesSetAside} = ladder;
-						const outcomes = decideOnFinalDays(rows, ladder.outcomes, finalDays);
-						if (referencesSetAside) {
-							this.logger.log(
-								`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
-							);
-						}
-						const newRows = new Set(rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new'));
-						if (newRows.size > 0) {
-							// Stored newest first, so the transaction list shows a day's rows in that order.
-							const persisted = await this.persistence.insertImportedTransactions(
-								manager.getRepository(BankTransaction),
-								account,
-								newestFirst
-									.filter((row) => newRows.has(row))
-									.map((row) => toTransactionInput(row, account.currency)),
-								connection.aspspName,
-								{importId: record.id, statementNumbering: numbering},
-							);
-							persistedTransactionIds.push(...persisted.insertedTransactionIds);
-						}
-						const doubtful = rows.flatMap((row, rowIndex) => {
-							const outcome = outcomes[rowIndex];
-							return outcome.kind === 'doubtful' || outcome.kind === 'notInBank'
-								? [
-										{
-											importId: record.id,
-											bankAccountId: account.id,
-											kind:
-												outcome.kind === 'doubtful'
-													? ('doubtful' as const)
-													: ('not_in_bank' as const),
-											row,
-											candidateTransactionIds: outcome.candidateIds,
-										},
-									]
-								: [];
-						});
-						for (const chunk of chunkArray(doubtful, BATCH_WRITE_CHUNK_SIZE)) {
-							await manager.getRepository(BankImportDoubtfulRow).insert(chunk);
-						}
-						addLadderCounts(counts, outcomes);
-					}
-				}
-				// An imported-files account's balance follows its rows; a synced account keeps the one sync reports.
-				for (const {account, connection} of accounts) {
-					if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
-					const balance = await this.fileAccountBalanceService.recompute(manager, ownerId, account.id);
-					if (balance) Object.assign(account, balance);
+					const added = await this.accountHistoryWriter.addFileRows(
+						write,
+						{account, connection, importId: record.id},
+						async ({finalDays, insert}) => {
+							for (const {format, layout, rows, newestFirst} of byFormat) {
+								const numbering = statementNumbering(format, layout);
+								const incoming = rows.map(toMatchRow);
+								// Only there are imported rows told apart by numbering; elsewhere every imported row
+								// keeps its references, as sync's set-aside decision rests on sync's references alone.
+								const candidates = await this.findMatchCandidates(
+									manager,
+									account.id,
+									rows,
+									fileIbanConfirmed ? numbering : null,
+								);
+								const ladder = confirmed
+									? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
+									: fileIbanConfirmed
+										? matchWithReferenceFallback(incoming, candidates, {
+												pairLookAlikeGroups: true,
+												minProbedRows: REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
+											})
+										: {
+												outcomes: matchTransactions(incoming, candidates),
+												referencesSetAside: false,
+											};
+								const {referencesSetAside} = ladder;
+								const outcomes = decideOnFinalDays(rows, ladder.outcomes, finalDays);
+								if (referencesSetAside) {
+									this.logger.log(
+										`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
+									);
+								}
+								const newRows = new Set(
+									rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new'),
+								);
+								if (newRows.size > 0) {
+									// Stored newest first, so the transaction list shows a day's rows in that order.
+									await insert(
+										newestFirst
+											.filter((row) => newRows.has(row))
+											.map((row) => toTransactionInput(row, account.currency)),
+										{statementNumbering: numbering},
+									);
+								}
+								const doubtful = rows.flatMap((row, rowIndex) => {
+									const outcome = outcomes[rowIndex];
+									return outcome.kind === 'doubtful' || outcome.kind === 'notInBank'
+										? [
+												{
+													importId: record.id,
+													bankAccountId: account.id,
+													kind:
+														outcome.kind === 'doubtful'
+															? ('doubtful' as const)
+															: ('not_in_bank' as const),
+													row,
+													candidateTransactionIds: outcome.candidateIds,
+												},
+											]
+										: [];
+								});
+								for (const chunk of chunkArray(doubtful, BATCH_WRITE_CHUNK_SIZE)) {
+									await manager.getRepository(BankImportDoubtfulRow).insert(chunk);
+								}
+								addLadderCounts(counts, outcomes);
+							}
+						},
+					);
+					persistedTransactionIds.push(...added.change.writtenIds);
+					if (added.balance) Object.assign(account, added.balance);
 				}
 				Object.assign(record, counts, {
 					rowsAlreadyPresent:
@@ -554,7 +556,8 @@ export class BankImportService {
 				// balance no one else is changing.
 				...(toFiles ? {fileConnection: 'existing'} : {}),
 			},
-			async ({manager, fileConnection}) => {
+			async (write) => {
+				const {manager, fileConnection} = write;
 				const {record} = await this.lockImport(manager, ownerId, owned);
 				if (toFiles && fileConnection?.id !== connection.id) {
 					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
@@ -583,18 +586,17 @@ export class BankImportService {
 					resolvedTransactionId = candidate.id;
 					record.rowsAlreadyPresent += 1;
 				} else {
-					const persisted = await this.persistence.insertImportedTransactions(
-						manager.getRepository(BankTransaction),
-						account,
-						[toTransactionInput(current.row, account.currency)],
-						connection.aspspName,
-						{importId: record.id, statementNumbering: importNumbering(record)},
+					const added = await this.accountHistoryWriter.addFileRows(
+						write,
+						{account, connection, importId: record.id},
+						({insert}) =>
+							insert([toTransactionInput(current.row, account.currency)], {
+								statementNumbering: importNumbering(record),
+							}),
 					);
-					insertedTransactionIds.push(...persisted.insertedTransactionIds);
-					resolvedTransactionId = persisted.insertedTransactionIds[0];
+					insertedTransactionIds.push(...added.change.writtenIds);
+					resolvedTransactionId = added.result[0];
 					record.rowsAdded += 1;
-					// Does nothing for a synced account.
-					await this.fileAccountBalanceService.recompute(manager, ownerId, account.id);
 				}
 				record.rowsDoubtful -= 1;
 				await rows.update({id: current.id}, {resolution: request.decision, resolvedTransactionId});
@@ -685,7 +687,8 @@ export class BankImportService {
 				// So a kept account's balance is recomputed over rows and an entered balance no one else is changing.
 				...(fileConnectionId ? {fileConnection: 'existing'} : {}),
 			},
-			async ({manager, fileConnection}) => {
+			async (write) => {
+				const {manager, fileConnection} = write;
 				const {record} = await this.lockImport(manager, ownerId, owned);
 				if (fileConnectionId && fileConnection?.id !== fileConnectionId) {
 					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
@@ -708,31 +711,34 @@ export class BankImportService {
 				if (current.length !== ids.length) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 				if (current.some(({resolution}) => resolution)) throw new ConflictException(BANK_IMPORT_ROW_ADDED);
 				const insertedTransactionIds: string[] = [];
-				for (const row of current) {
-					const account = accountsById.get(row.bankAccountId)!;
-					// One row per call, so each never-sent row records the transaction it became.
-					const persisted = await this.persistence.insertImportedTransactions(
-						manager.getRepository(BankTransaction),
-						account,
-						[toTransactionInput(row.row, account.currency)],
-						account.bankConnection.aspspName,
-						{importId: record.id, statementNumbering: importNumbering(record)},
-					);
-					const [transactionId] = persisted.insertedTransactionIds;
-					insertedTransactionIds.push(transactionId);
-					if (row.ownerEdits) {
-						await this.persistence.applyOwnerEdits(
-							manager.getRepository(BankTransaction),
-							transactionId,
-							row.ownerEdits,
-							account.bankConnection.aspspName,
-						);
-					}
-					await rows.update({id: row.id}, {resolution: 'new', resolvedTransactionId: transactionId});
-				}
-				// Does nothing for a synced account.
 				for (const bankAccountId of new Set(current.map(({bankAccountId}) => bankAccountId))) {
-					await this.fileAccountBalanceService.recompute(manager, ownerId, bankAccountId);
+					const account = accountsById.get(bankAccountId)!;
+					const accountRows = current.filter((row) => row.bankAccountId === bankAccountId);
+					const added = await this.accountHistoryWriter.addFileRows(
+						write,
+						{account, connection: account.bankConnection, importId: record.id},
+						async ({insert}) => {
+							for (const row of accountRows) {
+								// One row per insert, so each never-sent row records the transaction it became.
+								const [transactionId] = await insert([toTransactionInput(row.row, account.currency)], {
+									statementNumbering: importNumbering(record),
+								});
+								if (row.ownerEdits) {
+									await this.persistence.applyOwnerEdits(
+										manager.getRepository(BankTransaction),
+										transactionId,
+										row.ownerEdits,
+										account.bankConnection.aspspName,
+									);
+								}
+								await rows.update(
+									{id: row.id},
+									{resolution: 'new', resolvedTransactionId: transactionId},
+								);
+							}
+						},
+					);
+					insertedTransactionIds.push(...added.change.writtenIds);
 				}
 				const removedBySync = current.filter(({kind}) => kind === 'removed_by_sync').length;
 				record.rowsAdded += current.length;
@@ -752,28 +758,6 @@ export class BankImportService {
 
 		await this.derivedDataRefresh.refresh(ownerId, {kind: 'file-write', writtenIds: added.insertedTransactionIds});
 		return toSummary(added.record, await this.findOwnedAccounts(ownerId, added.record.bankAccountIds));
-	}
-
-	/**
-	 * The days bank sync is final for on the account (`finalSyncDays`): none for an imported-files account, or one
-	 * without complete coverage. Pending rows end them, since sync reads again from the oldest one.
-	 */
-	private async findFinalSyncDays(
-		manager: EntityManager,
-		account: BankAccount,
-		connection: BankConnection,
-	): Promise<FinalSyncDays | null> {
-		if (!account.syncCoveredFrom || !account.syncCoveredThrough) return null;
-		const pendingStarts = await this.persistence.findPendingTransactionStarts(
-			manager.getRepository(BankTransaction),
-			[account.id],
-		);
-		return finalSyncDays({
-			provider: connection.provider,
-			syncCoveredFrom: account.syncCoveredFrom,
-			syncCoveredThrough: account.syncCoveredThrough,
-			oldestPendingDay: pendingStarts.get(account.id) ?? null,
-		});
 	}
 
 	/**

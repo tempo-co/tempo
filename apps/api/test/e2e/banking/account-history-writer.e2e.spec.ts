@@ -410,4 +410,119 @@ describe('AccountHistoryWriterService', () => {
 			},
 		);
 	});
+
+	describe('adding file rows to an account', () => {
+		const today = dateInAppTimeZone(new Date());
+		const day = (daysAgo: number) => addDays(today, -daysAgo);
+		const fileRow = (entryReference: string, amount: string, onDay: string): BankTransactionInput => ({
+			...row(entryReference, amount),
+			bookingDate: onDay,
+			valueDate: onDay,
+		});
+
+		const saveImport = (owner: Account, connectionId: string, bankAccountId: string) =>
+			app.get<Repository<BankImport>>(getRepositoryToken(BankImport)).save({
+				accountId: owner.id,
+				bankConnectionId: connectionId,
+				fileHash: 'b'.repeat(64),
+				format: 'camt053',
+				filesCount: 1,
+				rowsParsed: 1,
+				rowsAdded: 1,
+				rowsAlreadyPresent: 0,
+				bankAccountIds: [bankAccountId],
+				createdBankAccountIds: [],
+			});
+
+		it("gives a synced account's final days, which end before its oldest pending row, stores the rows as the import's and returns them as a file write", async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await fixtures.bankAccounts.update(
+				{id: bankAccount.id},
+				{
+					syncCoveredFrom: day(60),
+					syncCoveredThrough: day(5),
+					currentBalanceAmount: '250.00',
+					currentBalanceType: 'ITAV',
+				},
+			);
+			await fixtures.createTransactions(bankAccount, [
+				{amount: '-4.00', bookingDate: day(20), valueDate: day(20), transactionStatus: 'PDNG'},
+			]);
+			const record = await saveImport(owner, connection.id, bankAccount.id);
+			const account = await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id});
+
+			const added = await writer.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
+				writer.addFileRows(write, {account, connection, importId: record.id}, async ({finalDays, insert}) => ({
+					finalDays,
+					ids: await insert([fileRow('FILE-1', '5.00', day(30)), fileRow('FILE-2', '6.00', day(30))], {
+						statementNumbering: 'camt053',
+					}),
+				})),
+			);
+
+			expect(added.result.finalDays).toEqual({from: day(52), through: day(21)});
+			expect(added.result.ids).toHaveLength(2);
+			expect(added.change).toEqual({kind: 'file-write', writtenIds: added.result.ids});
+			expect(added.balance).toBeNull();
+			expect(
+				await fixtures.transactions.find({where: {importId: record.id}, order: {entryReference: 'ASC'}}),
+			).toEqual([
+				expect.objectContaining({
+					id: added.result.ids[0],
+					entryReference: 'FILE-1',
+					statementNumbering: 'camt053',
+				}),
+				expect.objectContaining({
+					id: added.result.ids[1],
+					entryReference: 'FILE-2',
+					statementNumbering: 'camt053',
+				}),
+			]);
+			expect(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+				currentBalanceAmount: '250.00000000',
+			});
+		});
+
+		it("moves the balance of an account its bank's removal kept with the rows added to it, and gives it no final days", async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await writer.write(owner.id, {fileConnection: 'create'}, async () => undefined);
+			jest.spyOn(app.get(BankingConsentRevocationService), 'revokeSessions').mockResolvedValue(undefined);
+			await app.get(BankConnectionRemovalService).removeConnection(owner.id, connection.id, {keepAccounts: true});
+			await fixtures.bankAccounts.update(
+				{id: bankAccount.id},
+				{
+					syncCoveredFrom: day(60),
+					syncCoveredThrough: day(5),
+					statedBalanceAmount: '100.00',
+					statedBalanceDate: day(10),
+				},
+			);
+			const kept = await fixtures.bankAccounts.findOneOrFail({
+				where: {id: bankAccount.id},
+				relations: {bankConnection: true},
+			});
+			const record = await saveImport(owner, kept.bankConnection.id, kept.id);
+
+			const added = await writer.write(owner.id, {fileConnection: 'existing'}, (write) =>
+				writer.addFileRows(
+					write,
+					{account: kept, connection: kept.bankConnection, importId: record.id},
+					async ({finalDays, insert}) => ({
+						finalDays,
+						ids: await insert([fileRow('FILE-1', '5.00', day(3))], {statementNumbering: null}),
+					}),
+				),
+			);
+
+			expect(added.result.finalDays).toBeNull();
+			expect(added.change).toEqual({kind: 'file-write', writtenIds: added.result.ids});
+			expect(await fixtures.transactions.findOneByOrFail({id: added.result.ids[0]})).toMatchObject({
+				importId: record.id,
+			});
+			expect(Number(added.balance?.currentBalanceAmount)).toBe(95);
+			const stored = await fixtures.bankAccounts.findOneByOrFail({id: kept.id});
+			expect(Number(stored.currentBalanceAmount)).toBe(95);
+			expect(stored.balanceUpdatedAt).toEqual(new Date(`${day(3)}T00:00:00.000Z`));
+		});
+	});
 });

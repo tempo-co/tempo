@@ -5,7 +5,7 @@ Tempo shows people their spending and income across the bank accounts they conne
 ## Language
 
 **Account-history writer**:
-The one way a write to an owner's transaction history (a sync, an import, a doubtful or never-sent row, an undo) starts: it takes the write's locks in one fixed order before any row is touched. Inside it, recording a bank fetch for an account runs that account's steps in one fixed order too.
+The one way a write to an owner's transaction history (a sync, an import, a doubtful or never-sent row, an undo) starts: it takes the write's locks in one fixed order before any row is touched. Inside it, recording a bank fetch for an account, or adding file rows to an account, runs that account's steps in one fixed order too.
 _Avoid_: import transaction, sync transaction, lock helper
 
 **Derived-data refresh**:

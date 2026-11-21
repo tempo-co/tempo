@@ -11,6 +11,7 @@ import {BankTransactionPersistenceService} from './bank-transaction-persistence.
 import {BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingSyncService} from './banking-sync.service';
 import {EnableBankingClientError} from './enable-banking.client';
+import {FileAccountBalanceService} from './file-account-balance.service';
 
 const NO_TRANSACTIONS: EnableBankingTransactionsResult = {transactions: [], unparseableCount: 0};
 
@@ -59,6 +60,7 @@ function createBankingSyncService(
 			(dependencies.dataSource ?? {}) as DataSource,
 			(dependencies.connectionLockService ?? {}) as BankingConnectionLockService,
 			new BankTransactionPersistenceService(),
+			{} as FileAccountBalanceService,
 		),
 		...dependencies,
 	};

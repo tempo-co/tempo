@@ -11,10 +11,15 @@ import type {EnableBankingTransaction, EnableBankingTransactionFetchOptions} fro
 import {AccountHistoryWriteBusyError} from '../errors/account-history-write-busy.error';
 import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
 import {FinalSyncDays, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
-import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
+import {
+	BankTransactionInput,
+	BankTransactionPersistenceService,
+	ImportedTransactionsTarget,
+} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
 import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
 import type {DerivedDataChange} from './derived-data-refresh.service';
+import {FileAccountBalance, FileAccountBalanceService} from './file-account-balance.service';
 import {lockFileConnection} from './file-connection';
 
 /** How long a write waits for a sync of a connection it writes to, then refuses as busy. */
@@ -28,6 +33,7 @@ export type AccountHistoryWriteLocks = {
 };
 
 export type AccountHistoryWrite = {
+	ownerId: Account['id'];
 	manager: EntityManager;
 	/** The locked imported-files connection when asked for; null when the owner has none (`existing`) or it went. */
 	fileConnection: BankConnection | null;
@@ -56,6 +62,32 @@ export type RecordedBankFetch = {
 	change: Extract<DerivedDataChange, {kind: 'sync-write'}>;
 };
 
+/** The account a file write adds rows to, and the import they become rows of. */
+export type FileRowsTarget = {
+	/** The account as read inside the write. */
+	account: BankAccount;
+	connection: Pick<BankConnection, 'provider' | 'aspspName'>;
+	importId: ImportedTransactionsTarget['importId'];
+};
+
+/** What adding file rows offers the caller's work on the account. */
+export type FileRowsWrite = {
+	/** The days bank sync is final for on the account, as the write's locks hold them (`findFinalSyncDays`). */
+	finalDays: FinalSyncDays | null;
+	/** Inserts the rows as new rows of the import, listed in the given order; returns their ids in that order. */
+	insert: (
+		transactions: readonly BankTransactionInput[],
+		numbering: Pick<ImportedTransactionsTarget, 'statementNumbering'>,
+	) => Promise<string[]>;
+};
+
+export type AddedFileRows<T> = {
+	result: T;
+	/** An imported-files account's balance after the rows; null for an account of a synced connection. */
+	balance: FileAccountBalance | null;
+	change: Extract<DerivedDataChange, {kind: 'file-write'}>;
+};
+
 /**
  * Opens every write to an owner's transaction history (sync, import, doubtful and never-sent rows, undo) with its
  * locks taken in one order: the sync leases of the synced connections, in id order; then, in the transaction, the
@@ -71,6 +103,7 @@ export class AccountHistoryWriterService {
 		private readonly dataSource: DataSource,
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly persistence: BankTransactionPersistenceService,
+		private readonly fileAccountBalanceService: FileAccountBalanceService,
 	) {}
 
 	/** Runs the work in one transaction under the write's locks; a lease not had in time refuses it as busy. */
@@ -92,7 +125,7 @@ export class AccountHistoryWriterService {
 									lock: {mode: 'pessimistic_write'},
 								})
 							: null;
-				const result = await work({manager, fileConnection: locked});
+				const result = await work({ownerId, manager, fileConnection: locked});
 				for (const lease of leases) lease.assertHealthy();
 				return result;
 			});
@@ -187,11 +220,43 @@ export class AccountHistoryWriterService {
 	}
 
 	/**
+	 * Adds file rows to one account inside the write: the work gets the account's final sync days, to decide which rows
+	 * are new, and inserts them as rows of the import. Then an account on the imported-files connection (one kept when
+	 * its bank was removed too) has its balance recomputed from its rows; a synced account keeps the one sync reports.
+	 */
+	async addFileRows<T>(
+		{ownerId, manager}: AccountHistoryWrite,
+		{account, connection, importId}: FileRowsTarget,
+		work: (rows: FileRowsWrite) => Promise<T>,
+	): Promise<AddedFileRows<T>> {
+		const transactions = manager.getRepository(BankTransaction);
+		const writtenIds: string[] = [];
+		const result = await work({
+			finalDays: await this.findFinalSyncDays(manager, {...account, bankConnection: connection}),
+			insert: async (rows, {statementNumbering}) => {
+				if (rows.length === 0) return [];
+				const {insertedTransactionIds} = await this.persistence.insertImportedTransactions(
+					transactions,
+					account,
+					rows,
+					connection.aspspName,
+					{importId, statementNumbering},
+				);
+				writtenIds.push(...insertedTransactionIds);
+				return insertedTransactionIds;
+			},
+		});
+		// Decided by the connection the account is on now, which a removal keeping it may have changed since it was read.
+		const balance = await this.fileAccountBalanceService.recompute(manager, ownerId, account.id);
+		return {result, balance, change: {kind: 'file-write', writtenIds}};
+	}
+
+	/**
 	 * The days bank sync is final for on the account (`finalSyncDays`), from its coverage and the pending rows stored
 	 * now: sync reads again from the oldest one, so the days from it on are not final. Null for an account without
 	 * coverage or on a provider that records none.
 	 */
-	async findFinalSyncDays(
+	private async findFinalSyncDays(
 		manager: EntityManager,
 		account: Pick<BankAccount, 'id' | 'syncCoveredFrom' | 'syncCoveredThrough'> & {
 			bankConnection: Pick<BankConnection, 'provider'>;

@@ -15,7 +15,7 @@ import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
 /** The balance type of an imported-files account's balance: a closing balance, from the file or the owner. */
 export const FILE_ACCOUNT_BALANCE_TYPE = 'CLBD';
 
-type BalanceFields = Pick<BankAccount, 'currentBalanceAmount' | 'currentBalanceType' | 'balanceUpdatedAt'>;
+export type FileAccountBalance = Pick<BankAccount, 'currentBalanceAmount' | 'currentBalanceType' | 'balanceUpdatedAt'>;
 
 /**
  * The balance of an account that exists only from imported files. It is the anchor amount plus every row booked
@@ -76,7 +76,7 @@ export class FileAccountBalanceService {
 		manager: EntityManager,
 		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
-	): Promise<BalanceFields | null> {
+	): Promise<FileAccountBalance | null> {
 		const account = await manager.getRepository(BankAccount).findOne({
 			where: {id: bankAccountId, bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE}},
 		});
@@ -87,7 +87,7 @@ export class FileAccountBalanceService {
 			(account.statedBalanceAmount !== null && account.statedBalanceDate !== null
 				? {date: account.statedBalanceDate, amount: account.statedBalanceAmount}
 				: null);
-		const fields: BalanceFields = anchor
+		const fields: FileAccountBalance = anchor
 			? await this.balanceFrom(manager, account.id, anchor)
 			: {currentBalanceAmount: null, currentBalanceType: null, balanceUpdatedAt: null};
 		await manager.getRepository(BankAccount).update({id: account.id}, fields);
@@ -197,7 +197,7 @@ export class FileAccountBalanceService {
 		manager: EntityManager,
 		bankAccountId: BankAccount['id'],
 		anchor: FileAnchor,
-	): Promise<BalanceFields> {
+	): Promise<FileAccountBalance> {
 		const [{amount, reported}]: Array<{amount: string; reported: string}> = await manager.query(
 			`SELECT ($3::numeric + COALESCE(SUM(t."amount") FILTER (WHERE t."bookingDate" > $2::date), 0))::text AS "amount",
 				to_char(GREATEST($2::date, MAX(t."bookingDate")), 'YYYY-MM-DD') AS "reported"
