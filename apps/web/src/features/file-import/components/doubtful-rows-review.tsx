@@ -405,7 +405,7 @@ function Choice({
 function Title({title, detail}: {title: string; detail: string}) {
   return (
     <span className='min-w-0'>
-      <span className='line-clamp-2 text-sm wrap-anywhere'>{title}</span>
+      <span className='block text-sm wrap-anywhere'>{title}</span>
       <span className='block truncate text-xs text-muted-foreground'>{detail}</span>
     </span>
   );

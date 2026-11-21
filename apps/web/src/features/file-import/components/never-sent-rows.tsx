@@ -221,7 +221,7 @@ function Group({
           <FileX strokeWidth={2} />
         </span>
         <span className='min-w-0'>
-          <span className='line-clamp-2 text-sm wrap-anywhere'>{group.label}</span>
+          <span className='block text-sm wrap-anywhere'>{group.label}</span>
           <span className='block truncate text-xs text-muted-foreground'>
             {plural(group.rows.length, 'row')}
           </span>
@@ -301,7 +301,7 @@ function Row({
   return (
     <li className='grid min-h-14 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 px-3 py-2'>
       <span className='min-w-0'>
-        <span className='line-clamp-2 text-sm wrap-anywhere'>{sameAsGroup ? date : title}</span>
+        <span className='block text-sm wrap-anywhere'>{sameAsGroup ? date : title}</span>
         {!sameAsGroup && (
           <span className='block truncate text-xs text-muted-foreground'>{date}</span>
         )}
