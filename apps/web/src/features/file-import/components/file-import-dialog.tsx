@@ -320,12 +320,18 @@ function PreviewStep({
   onReject: () => void;
 }) {
   const {proposal} = step;
-  const banks = useBankImportBanks().data ?? NO_BANKS;
+  const bankList = useBankImportBanks();
+  const banks = bankList.data ?? NO_BANKS;
   // Until the owner picks, the choice follows Tempo's guess as the list of banks arrives.
   const [pickedBank, setPickedBank] = useState<string | null>(null);
   const bankChoice = pickedBank ?? guessedBankChoice(proposal.bankName, banks);
   const [otherBankName, setOtherBankName] = useState(proposal.bankName ?? '');
-  const bankName = bankChoice === OTHER_BANK ? otherBankName : bankChoice;
+  // Nothing is chosen until the owner's banks have loaded.
+  const bankName = !bankList.isSuccess
+    ? ''
+    : bankChoice === OTHER_BANK
+      ? otherBankName
+      : bankChoice;
   const [currency, setCurrency] = useState(proposal.defaultCurrency);
   const [pending, setPending] = useState(false);
   // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
@@ -357,7 +363,13 @@ function PreviewStep({
       body={
         <LayoutPreview
           proposal={proposal}
-          banks={banks}
+          banks={
+            bankList.isSuccess
+              ? banks
+              : bankList.isError
+                ? {error: bankList.error, retry: bankList.refetch}
+                : 'pending'
+          }
           bankChoice={bankChoice}
           onBankChoice={(value) => {
             setPickedBank(value);

@@ -1499,6 +1499,13 @@ describe('Bank imports', () => {
 		});
 		// CAMT.053 is matched first whatever the drop order, so the rows stored are its own, with bank references.
 		expect((await ownerRows(allAtOnce.owner)).map(rowContent)).toEqual(camtRows.map(rowContent));
+		// The account records the bank the strongest evidence names, whatever the statements' order: ABN AMRO's TXT
+		// format names its bank, which outranks the BIC the CAMT.053 and MT940 statements state. An account keeps the
+		// bank it recorded first.
+		const recordedBank = async (summary: {accounts: Array<{id: string}>}) =>
+			(await bankAccounts.findOneByOrFail({id: summary.accounts[0].id})).bankIdentity;
+		expect(await recordedBank(mixed.body as BankImportSummary)).toBe('name:abn amro');
+		expect(await recordedBank(camtAfter.body as BankImportSummary)).toBe('name:abn amro');
 
 		// A second format that numbers the same payments in another scheme adds and asks nothing on an account its
 		// IBAN names. Each row records the numbering it came in, and the undo of that format's import removes nothing.
@@ -1700,6 +1707,66 @@ describe('Bank imports', () => {
 			rowsDoubtful: 0,
 			accounts: csv.body.accounts.map(({id}: BankImportSummary['accounts'][number]) => ({id, created: false})),
 		});
+	});
+
+	it('keeps statements of two banks naming the same local account number apart, so their legs never pair', async () => {
+		const {agent} = await createOwner();
+		const bankA = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						otherId: '001234',
+						servicerBic: 'EXMPDEFF',
+						entries: [{amount: '5.00', indicator: 'DBIT', bookingDate: '2026-10-20', info: 'Example Shop'}],
+					},
+					{
+						iban: 'DE89370400440532013000',
+						currency: 'USD',
+						servicerBic: 'EXMPDEFF',
+						entries: [
+							{amount: '8.00', indicator: 'CRDT', bookingDate: '2026-10-27', info: 'Exchanged to USD'},
+						],
+					},
+				]),
+			),
+		]).expect(201);
+		const bankB = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						otherId: '001234',
+						servicerBic: 'EXMPNL2A',
+						entries: [
+							{amount: '7.00', indicator: 'DBIT', bookingDate: '2026-10-27', info: 'Exchanged to USD'},
+						],
+					},
+				]),
+			),
+		]).expect(201);
+
+		const [eurA, usdA] = (bankA.body as BankImportSummary).accounts;
+		const [eurB] = (bankB.body as BankImportSummary).accounts;
+		expect(eurB).toMatchObject({created: true, currency: 'EUR'});
+		expect(eurB.id).not.toBe(eurA.id);
+		expect(
+			(await bankAccounts.findBy({id: In([eurA.id, usdA.id, eurB.id])}))
+				.map(({id, bankIdentity}) => [id === eurB.id ? 'B' : 'A', bankIdentity])
+				.sort(),
+		).toEqual([
+			['A', 'bic:EXMPDEFF'],
+			['A', 'bic:EXMPDEFF'],
+			['B', 'bic:EXMPNL2A'],
+		]);
+		const legs = await transactions.find({where: {bankAccountId: In([usdA.id, eurB.id])}});
+		expect(
+			legs.map(({financialEventType, currencyExchangeCounterpartId}) => [
+				financialEventType,
+				currencyExchangeCounterpartId,
+			]),
+		).toEqual([
+			[null, null],
+			[null, null],
+		]);
 	});
 
 	it("pairs an exchange between an account kept from a removed Revolut connection and a Revolut statement's account", async () => {

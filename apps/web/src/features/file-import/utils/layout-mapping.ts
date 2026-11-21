@@ -1,7 +1,8 @@
-import type {
-  BankImportLayoutField,
-  BankImportLayoutMapping,
-  BankImportLayoutPreviewRow,
+import {
+  type BankImportLayoutField,
+  type BankImportLayoutMapping,
+  type BankImportLayoutPreviewRow,
+  bankNameKey,
 } from '@tempo/contracts';
 
 const FIELD_NAMES: Record<BankImportLayoutField, string> = {
@@ -82,14 +83,11 @@ export function dateCheckCopy({written, date}: {written: string; date: string}) 
 /** The bank choice that reveals a field for a bank Tempo does not list; no bank name holds a control character. */
 export const OTHER_BANK = '\u0000other';
 
-/** How Tempo compares bank names, as the API does: ignoring case and spacing. */
-const bankKey = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
-
 /**
  * The choice a proposal's guessed bank starts from: the listed bank it names, else Other with the guess typed in,
  * else none.
  */
 export function guessedBankChoice(guess: string | null, banks: readonly string[]): string {
   if (!guess?.trim()) return '';
-  return banks.find((bank) => bankKey(bank) === bankKey(guess)) ?? OTHER_BANK;
+  return banks.find((bank) => bankNameKey(bank) === bankNameKey(guess)) ?? OTHER_BANK;
 }

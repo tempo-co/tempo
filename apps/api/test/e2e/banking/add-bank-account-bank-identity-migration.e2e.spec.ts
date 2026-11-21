@@ -1,10 +1,13 @@
 import {DataSource, QueryRunner} from 'typeorm';
 
+import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '@modules/banking/bank-transaction-financial-event';
+
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
 import {createBankingOwner} from '../../utils/banking-utils';
 
 const MIGRATION_NAME = 'AddBankAccountBankIdentity20261121090000';
+const EXCHANGE_PAIRING_MIGRATION_NAME = 'AddCurrencyExchangePairing20261004120000';
 
 describe('AddBankAccountBankIdentity migration', () => {
 	it("records each bank connection's institution name on its accounts and leaves imported-files accounts without one", async () => {
@@ -37,25 +40,34 @@ describe('AddBankAccountBankIdentity migration', () => {
 			const identities = async () =>
 				Object.fromEntries(
 					(
-						(await runner.query(
-							`SELECT "id", "bankIdentity", xmin::text AS "version" FROM "bank_accounts" WHERE "id" = ANY($1)`,
-							[[bankAccount.id, savings.id, otherAccount.id, fileAccount.id]],
-						)) as Array<{id: string; bankIdentity: string | null; version: string}>
-					).map(({id, ...rest}) => [id, rest]),
+						(await runner.query(`SELECT "id", "bankIdentity" FROM "bank_accounts" WHERE "id" = ANY($1)`, [
+							[bankAccount.id, savings.id, otherAccount.id, fileAccount.id],
+						])) as Array<{id: string; bankIdentity: string | null}>
+					).map(({id, bankIdentity}) => [id, bankIdentity]),
 				);
-			const migrated = await identities();
-			expect(
-				Object.fromEntries(Object.entries(migrated).map(([id, {bankIdentity}]) => [id, bankIdentity])),
-			).toEqual({
+			const migrated = {
 				[bankAccount.id]: 'name:abn amro',
 				[savings.id]: 'name:abn amro',
 				[otherAccount.id]: 'name:example bank',
 				[fileAccount.id]: null,
-			});
+			};
+			expect(await identities()).toEqual(migrated);
 			expect(await fingerprints(runner)).toEqual(before);
 
-			// A second run writes no row.
+			// The migrated schema takes the column as the import writes it.
+			await runner.query(`UPDATE "bank_accounts" SET "bankIdentity" = 'bic:EXMPDEFF' WHERE "id" = $1`, [
+				fileAccount.id,
+			]);
+			expect((await identities())[fileAccount.id]).toBe('bic:EXMPDEFF');
+
+			await migration!.down(runner);
+			expect(await runner.hasColumn('bank_accounts', 'bankIdentity')).toBe(false);
 			await migration!.up(runner);
+			expect(await identities()).toEqual(migrated);
+
+			// A second run writes no row.
+			const writes = await countWrites(runner, () => migration!.up(runner));
+			expect(writes).toBe(0);
 			expect(await identities()).toEqual(migrated);
 		} finally {
 			await runner.rollbackTransaction();
@@ -63,7 +75,85 @@ describe('AddBankAccountBankIdentity migration', () => {
 			await fixtures.connections.delete([connection.id, otherBank.id, files.id]);
 		}
 	});
+
+	it('lets an upgrade from before exchange pairing pair the existing history before the column exists', async () => {
+		const app = getApp();
+		const ds = app.get(DataSource);
+		const fixtures = new BankingFixtures(app);
+		const {connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const usd = await fixtures.createBankAccount(connection, {currency: 'USD'});
+		const [debit, credit] = [
+			await fixtures.createTransaction(bankAccount, {
+				amount: '-10.00',
+				currency: 'EUR',
+				creditDebitIndicator: 'DBIT',
+				bookingDate: '2026-01-10',
+				description: 'Exchanged to USD',
+			}),
+			await fixtures.createTransaction(usd, {
+				amount: '12.00',
+				currency: 'USD',
+				creditDebitIndicator: 'CRDT',
+				bookingDate: '2026-01-10',
+				description: 'Exchanged to USD',
+			}),
+		];
+		const identity = ds.migrations.find(({name}) => name === MIGRATION_NAME)!;
+		const pairing = ds.migrations.find(({name}) => name === EXCHANGE_PAIRING_MIGRATION_NAME)!;
+		const runner = ds.createQueryRunner();
+		await runner.startTransaction();
+		try {
+			// The schema before both migrations, with history in it.
+			await identity.down(runner);
+			await pairing.down(runner);
+			expect(await runner.hasColumn('bank_transactions', 'currencyExchangeCounterpartId')).toBe(false);
+
+			await pairing.up(runner);
+
+			const legs = (await runner.query(
+				`SELECT "id", "financialEventType", "currencyExchangeCounterpartId" FROM "bank_transactions"
+				WHERE "id" = ANY($1) ORDER BY "currency"`,
+				[[debit.id, credit.id]],
+			)) as Array<{id: string; financialEventType: string | null; currencyExchangeCounterpartId: string | null}>;
+			expect(legs).toEqual([
+				{
+					id: debit.id,
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					currencyExchangeCounterpartId: credit.id,
+				},
+				{
+					id: credit.id,
+					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+					currencyExchangeCounterpartId: debit.id,
+				},
+			]);
+			await identity.up(runner);
+			expect(await runner.hasColumn('bank_accounts', 'bankIdentity')).toBe(true);
+		} finally {
+			await runner.rollbackTransaction();
+			await runner.release();
+			await fixtures.connections.delete(connection.id);
+		}
+	});
 });
+
+/** How many `bank_accounts` rows `work` updates, counted by a trigger the caller's transaction rolls back. */
+async function countWrites(runner: QueryRunner, work: () => Promise<void>): Promise<number> {
+	await runner.query(`CREATE TABLE "migration_test_writes" ("id" uuid)`);
+	await runner.query(
+		`CREATE FUNCTION "migration_test_count_write"() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN INSERT INTO "migration_test_writes" VALUES (NEW."id"); RETURN NEW; END $$`,
+	);
+	await runner.query(
+		`CREATE TRIGGER "migration_test_count_write" BEFORE UPDATE ON "bank_accounts"
+		FOR EACH ROW EXECUTE FUNCTION "migration_test_count_write"()`,
+	);
+	await work();
+	const [{count}] = (await runner.query(`SELECT count(*)::int AS "count" FROM "migration_test_writes"`)) as Array<{
+		count: number;
+	}>;
+	return count;
+}
 
 /** Row count and an md5 over the rows of the tables the migration must not change, over the columns before it. */
 async function fingerprints(runner: QueryRunner) {

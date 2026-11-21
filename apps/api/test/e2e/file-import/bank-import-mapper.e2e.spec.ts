@@ -257,7 +257,10 @@ describe('Bank import column mapper', () => {
 		// imported-files accounts' (kept ones, from earlier imports), spelled as Tempo knows the bank, and their saved
 		// layouts'. Not a bank they have no account at, a BIC, or Revolut, whose own files name their accounts.
 		await fixtures.createConnection(owner, {aspspName: 'Example  Savings Bank', aspspCountry: 'DE'});
-		await fixtures.createConnection(owner, {aspspName: 'ing', aspspCountry: 'NL'});
+		await fixtures.createConnection(owner, {aspspName: 'ing', aspspCountry: 'NL', status: 'EXPIRED'});
+		// Authorizations that never connected hold no bank of the owner's.
+		for (const status of ['PENDING_AUTHORIZATION', 'CANCELLED', 'FAILED'])
+			await fixtures.createConnection(owner, {aspspName: `Example ${status} Bank`, aspspCountry: 'NL', status});
 		const files = await fixtures.connections.findOneByOrFail({accountId: owner.id, provider: 'file'});
 		await fixtures.createBankAccounts(files, [
 			{bankIdentity: 'name:knab'},

@@ -441,6 +441,33 @@ describe('parseMt940', () => {
 		expect(parsed.servicerBic).toBe(servicerBic);
 	});
 
+	it('reads each SWIFT message of a file, ended by -}, with the BIC of its own header', () => {
+		const message = (bic: string, iban: string) =>
+			[
+				`{1:F01${bic}AXXX0000000000}{2:I940${bic}XXXXN}{4:`,
+				':20:EXAMPLE',
+				`:25:${iban}`,
+				':28C:00001/001',
+				':60F:C261005EUR100,00',
+				':61:261005D10,00NTRFNONREF',
+				':86:Example Shop',
+				':62F:C261005EUR90,00',
+				'-}',
+			].join('\r\n');
+		const file = [message('EXMPDEFF', OTHER_EXAMPLE_IBAN), message('EXMPNL2A', POLISH_IBAN)].join('\r\n');
+
+		expect(
+			parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic, rows}) => [
+				accountIban,
+				servicerBic,
+				rows.length,
+			]),
+		).toEqual([
+			[OTHER_EXAMPLE_IBAN, 'EXMPDEFF', 1],
+			[POLISH_IBAN, 'EXMPNL2A', 1],
+		]);
+	});
+
 	it('finds the statement after blank lines and a header', () => {
 		const file = statement([':61:261005D10,00NTRFNONREF', ':86:Example Shop'], '90,00', [
 			'',

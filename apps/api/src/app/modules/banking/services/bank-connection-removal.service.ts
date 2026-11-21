@@ -207,16 +207,22 @@ export class BankConnectionRemovalService {
 			const providerAccountId = fileId && !takenIds.has(fileId) ? fileId : account.providerAccountId;
 			takenIds.add(providerAccountId);
 			const reported = account.currentBalanceAmount !== null && account.balanceUpdatedAt !== null;
-			await bankAccountRepository.update(
-				{id: account.id},
-				{
+			await bankAccountRepository
+				.createQueryBuilder()
+				.update()
+				.set({
 					bankConnection: {id: fileConnection.id},
 					providerAccountId,
 					bankIdentity: nameBankIdentity(connection.aspspName),
 					statedBalanceAmount: reported ? account.currentBalanceAmount : null,
 					statedBalanceDate: reported ? dateInTimeZone(account.balanceUpdatedAt!, owner.timeZone) : null,
-				},
-			);
+				})
+				.where('"id" = :id', {id: account.id})
+				.andWhere(
+					'"bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "id" = :connectionId AND "accountId" = :ownerId)',
+					{connectionId: connection.id, ownerId},
+				)
+				.execute();
 		}
 		const ids = accounts.map(({id}) => id);
 		await this.importedRowRecords.records.moveToConnection(manager, ownerId, connection.id, fileConnection.id);

@@ -24,6 +24,8 @@ const ACCOUNT_COUNTRY = /^:25:\/?([A-Z]{2})\d{2}/m;
 const BASIC_HEADER = /\{1:F\d{2}([A-Z]{6}[A-Z0-9]{2})[A-Z0-9][A-Z0-9]{3}/;
 /** An output message's application header: type, input time and date, then the sender's terminal address. */
 const OUTPUT_HEADER = /\{2:O\d{3}\d{4}\d{6}([A-Z]{6}[A-Z0-9]{2})/;
+/** The end of a statement: `-`, or `-}` closing a SWIFT message's text block (a trailer block may follow). */
+const MESSAGE_END = /^-(\}|$)/;
 /** Countries whose banks write Windows-1250 or ISO-8859-2 (Ł, Ś, Ž, Ő): Central Europe and Romania. */
 const CENTRAL_EUROPEAN_COUNTRIES = new Set(['PL', 'CZ', 'SK', 'HU', 'SI', 'HR', 'RO']);
 
@@ -91,7 +93,7 @@ function splitStatements(text: string): RawStatement[] {
 			if (!current) throw new ParseRefusal('parse_failed');
 			current.fields.push({tag: tag[1], lines: [tag[2]]});
 			if (/^62[FM]$/.test(tag[1])) current.closed = true;
-		} else if (current?.closed && line.trim() === '-') {
+		} else if (current?.closed && MESSAGE_END.test(line.trim())) {
 			current = null;
 		} else if (current) {
 			// A field continues on the lines up to the next tag.

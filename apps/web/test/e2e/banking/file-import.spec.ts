@@ -179,6 +179,7 @@ async function mockFileImport(
     proposals = [],
     layouts = [],
     banks = KNOWN_BANKS,
+    banksFailures = 0,
   }: {
     imports?: BankImportSummary[];
     uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
@@ -195,6 +196,8 @@ async function mockFileImport(
     layouts?: BankImportLayout[];
     /** The banks `GET /bank-imports/banks` lists. */
     banks?: string[];
+    /** How many reads of the banks fail first (429, which the query does not retry). */
+    banksFailures?: number;
   } = {},
 ) {
   const api: ImportApi = {
@@ -288,9 +291,14 @@ async function mockFileImport(
     return route.fulfill({status: 204});
   });
   await page.route(`${API_URL}/bank-imports/layouts`, (route) => fulfillJson(route, api.layouts));
-  await page.route(`${API_URL}/bank-imports/banks`, (route) =>
-    fulfillJson(route, {banks} satisfies BankImportBanks),
-  );
+  let banksFailed = 0;
+  await page.route(`${API_URL}/bank-imports/banks`, (route) => {
+    if (banksFailed < banksFailures) {
+      banksFailed += 1;
+      return fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429);
+    }
+    return fulfillJson(route, {banks} satisfies BankImportBanks);
+  });
   await page.route(`${API_URL}/bank-imports/layouts/*`, (route) => {
     const id = new URL(route.request().url()).pathname.split('/').pop()!;
     api.removed.push(id);
@@ -1396,6 +1404,34 @@ test.describe('statement file import on Connections', () => {
       {bankName: 'Revolut', currency: 'EUR'},
       {bankName: 'Example Savings Bank', currency: 'GBP'},
     ]);
+  });
+
+  test("a failed load of the owner's banks says so in the picker's place, and Try again brings the picker back", async ({
+    page,
+  }) => {
+    await mockFileImport(page, {
+      mapper: true,
+      uploads: [refused({code: 'layout_unknown', file: 1})],
+      proposals: [proposed(layoutProposal())],
+      banksFailures: 1,
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    const preview = dialog.getByTestId('bank-import-layout-preview');
+    const failed = preview.getByRole('alert').filter({hasText: "Couldn't load your banks"});
+    await expect(failed).toBeVisible();
+    await expect(failed).toContainText('429');
+    await expect(preview.getByLabel('Bank', {exact: true})).toHaveCount(0);
+    await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeDisabled();
+
+    await failed.getByRole('button', {name: 'Try again'}).click();
+
+    await expect(failed).toHaveCount(0);
+    await expect(preview.getByLabel('Bank', {exact: true})).toHaveText('Example Bank');
+    await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeEnabled();
   });
 
   test('a guessed bank the owner does not have starts as Other with the guess typed in, on a phone too', async ({

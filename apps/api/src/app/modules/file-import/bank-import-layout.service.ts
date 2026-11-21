@@ -11,14 +11,17 @@ import type {
 } from '@tempo/contracts';
 import {BANK_IMPORT_CURRENCIES, BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
-import {DataSource, EntityManager, Like, MoreThan, Not} from 'typeorm';
+import {DataSource, EntityManager, In, Like, MoreThan, Not} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import {nameBankIdentity} from '@modules/banking/bank-identity';
-import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
+import {NAME_BANK_IDENTITY_PATTERN, identityBankName, nameBankIdentity} from '@modules/banking/bank-identity';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	DESTRUCTIVE_CONNECTION_STATUSES,
+} from '@modules/banking/services/banking-sync.constants';
 
 import {BankImportLayoutProposal, LayoutProposalStatus} from './bank-import-layout-proposal.entity';
 import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
@@ -87,7 +90,12 @@ export class BankImportLayoutService {
 		const [connections, layouts, fileAccounts] = await Promise.all([
 			this.dataSource.getRepository(BankConnection).find({
 				select: {aspspName: true},
-				where: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)},
+				// Only a connection that holds bank data is the owner's bank: never a pending, cancelled or failed one.
+				where: {
+					accountId: ownerId,
+					provider: Not(BANK_CONNECTION_PROVIDERS.FILE),
+					status: In([...DESTRUCTIVE_CONNECTION_STATUSES]),
+				},
 			}),
 			this.dataSource
 				.getRepository(BankImportLayout)
@@ -96,7 +104,7 @@ export class BankImportLayoutService {
 				select: {bankIdentity: true},
 				where: {
 					bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-					bankIdentity: Like(`${nameBankIdentity('')}%`),
+					bankIdentity: Like(NAME_BANK_IDENTITY_PATTERN),
 				},
 			}),
 		]);
@@ -108,12 +116,14 @@ export class BankImportLayoutService {
 		}
 		const identities = new Set([
 			...owned.filter((bank) => bank.trim()).map(nameBankIdentity),
-			...fileAccounts.flatMap(({bankIdentity}) => (bankIdentity ? [bankIdentity] : [])),
+			...fileAccounts.flatMap(({bankIdentity}) =>
+				identityBankName(bankIdentity) === null ? [] : [bankIdentity!],
+			),
 		]);
 		for (const bank of STATEMENT_BANKS) identities.delete(nameBankIdentity(bank));
 		return {
 			banks: [...identities]
-				.map((identity) => spellings.get(identity) ?? identity.slice(nameBankIdentity('').length))
+				.map((identity) => spellings.get(identity) ?? identityBankName(identity)!)
 				.sort((left, right) => left.localeCompare(right, 'en', {sensitivity: 'base'})),
 		};
 	}

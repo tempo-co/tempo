@@ -15,7 +15,7 @@ import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import {bicBankIdentity, nameBankIdentity} from '@modules/banking/bank-identity';
+import {bicBankIdentity, nameBankIdentity, strongerBankIdentity} from '@modules/banking/bank-identity';
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
@@ -102,7 +102,10 @@ type AccountRows = {
 	 * layout did. Its IBAN then came from a column or line the model chose, so it must be confirmed like a bank.
 	 */
 	learnedBank: string | null;
-	/** The best evidence of the account's bank its statements give (`statementBankIdentity`); null when none does. */
+	/**
+	 * The strongest evidence of the account's bank its statements give (`statementBankIdentity`,
+	 * `strongerBankIdentity`); null when none does. For an account named by an id that is no IBAN, part of the account.
+	 */
 	bankIdentity: string | null;
 	currency: string;
 	/** `learned`: read by one of the owner's saved layouts. */
@@ -223,7 +226,7 @@ export class BankImportService {
 				const {manager, fileConnection} = write;
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
-				await recordBankIdentities(manager, accounts, accountRows);
+				await recordBankIdentities(manager, ownerId, accounts, accountRows);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
 				);
@@ -1432,7 +1435,9 @@ function groupByAccount(
 			: statement.accountOtherId
 				? ['other', statement.accountOtherId]
 				: ['bank', statement.bank as string];
-		const key = JSON.stringify([kind, identifier, statement.accountCurrency]);
+		const evidence = statementBankIdentity(statement, learnedBanks);
+		// An id that is no IBAN is unique only at its bank, so statements of two banks with the same id are two accounts.
+		const key = JSON.stringify([kind, identifier, kind === 'other' ? evidence : null, statement.accountCurrency]);
 		const group = groups.get(key) ?? {
 			identifier,
 			iban: statement.accountIban,
@@ -1442,7 +1447,7 @@ function groupByAccount(
 			currency: statement.accountCurrency,
 			parts: [],
 		};
-		group.bankIdentity ??= statementBankIdentity(statement, learnedBanks);
+		group.bankIdentity = strongerBankIdentity(group.bankIdentity, evidence);
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
 		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
@@ -1602,13 +1607,19 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
  */
 async function recordBankIdentities(
 	manager: EntityManager,
+	ownerId: Account['id'],
 	accounts: readonly ImportedAccount[],
 	accountRows: readonly AccountRows[],
 ): Promise<void> {
 	for (const [index, {account, connection}] of accounts.entries()) {
 		const {bankIdentity} = accountRows[index];
 		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || !bankIdentity || account.bankIdentity) continue;
-		await manager.getRepository(BankAccount).update({id: account.id, bankIdentity: IsNull()}, {bankIdentity});
+		await manager.query(
+			`UPDATE "bank_accounts" SET "bankIdentity" = $3
+			WHERE "id" = $1 AND "bankIdentity" IS NULL
+				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
+			[account.id, ownerId, bankIdentity, BANK_CONNECTION_PROVIDERS.FILE],
+		);
 		account.bankIdentity = bankIdentity;
 	}
 }
@@ -1643,7 +1654,7 @@ function importNumbering({format, layout}: BankImport): string | null {
  * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
  * bank whose files name no account, by that bank and currency (one such account per currency).
  */
-function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
+function fileAccountIdentity({identifier, iban, bank, bankIdentity, currency}: AccountRows): {
 	providerAccountId: string;
 	hashSeed: string;
 	name: string;
@@ -1655,9 +1666,11 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 			name: `${bank} ${currency}`,
 		};
 	}
+	// An IBAN is unique everywhere; another id only at its bank, so its bank's evidence is part of the account.
+	const key = iban || !bankIdentity ? identifier : `${bankIdentity}/${identifier}`;
 	return {
-		providerAccountId: fileAccountProviderId(identifier, currency),
-		hashSeed: `${identifier}:${currency}`,
+		providerAccountId: fileAccountProviderId(key, currency),
+		hashSeed: `${key}:${currency}`,
 		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
 	};
 }

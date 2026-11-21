@@ -28,8 +28,6 @@ export class AddBankAccountBankIdentity20261121090000 implements MigrationInterf
 
 	public async down(queryRunner: QueryRunner): Promise<void> {
 		if (!(await queryRunner.hasTable('bank_accounts'))) return;
-		if (await queryRunner.hasColumn('bank_accounts', 'bankIdentity')) {
-			await queryRunner.dropColumn('bank_accounts', 'bankIdentity');
-		}
+		await queryRunner.query(`ALTER TABLE "bank_accounts" DROP COLUMN IF EXISTS "bankIdentity"`);
 	}
 }

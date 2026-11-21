@@ -75,13 +75,18 @@ function exchangeGroup({connectionId, provider, bankIdentity}: LegRow): Currency
 export async function recomputeCurrencyExchanges(
 	executor: OwnTransferSqlExecutor,
 	ownerId: string,
+	/**
+	 * Whether `bank_accounts.bankIdentity` exists yet. Only a migration that runs before it (`AddCurrencyExchangePairing`)
+	 * says no; imported-files accounts, the only ones grouped by it, did not exist then either.
+	 */
+	{bankIdentityColumn = true}: {bankIdentityColumn?: boolean} = {},
 ): Promise<CurrencyExchangeRecomputeResult> {
 	await executor.query(`SELECT pg_advisory_xact_lock(hashtext('currency-exchange:' || $1))`, [ownerId]);
 
 	// The text and code conditions only narrow the read; detectCurrencyExchangeMarker decides exactly.
 	const rows = (await executor.query(
 		`SELECT transaction."id", account."bankConnectionId" AS "connectionId", connection."provider",
-			account."bankIdentity", transaction."bankAccountId",
+			${bankIdentityColumn ? 'account."bankIdentity"' : 'NULL::varchar AS "bankIdentity"'}, transaction."bankAccountId",
 			to_char(COALESCE(transaction."bookingDate", transaction."transactionDate"), 'YYYY-MM-DD') AS "date",
 			transaction."creditDebitIndicator" AS "indicator", transaction."amount"::text AS "amount",
 			transaction."currency", account."currency" AS "accountCurrency", transaction."description",

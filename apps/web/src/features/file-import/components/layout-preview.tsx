@@ -7,6 +7,7 @@ import {CalendarCheck, FileText} from 'lucide-react';
 import {useId} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
@@ -46,8 +47,11 @@ export function LayoutPreview({
   disabled,
 }: {
   proposal: BankImportLayoutProposal;
-  /** The banks to pick from, sorted (`useBankImportBanks`). */
-  banks: readonly string[];
+  /**
+   * The banks to pick from, sorted (`useBankImportBanks`): `pending` while they load, or the failed load's error, which
+   * takes the picker's place with Try again.
+   */
+  banks: readonly string[] | 'pending' | {error: unknown; retry: () => unknown};
   /** One of `banks`, `OTHER_BANK`, or empty while none is picked. */
   bankChoice: string;
   onBankChoice: (value: string) => void;
@@ -62,6 +66,8 @@ export function LayoutPreview({
   const {preview, mapping, dateCheck, currencyNeeded} = proposal;
   const bankField = useId();
   const otherBankField = useId();
+  const failed = typeof banks !== 'string' && 'error' in banks ? banks : null;
+  const listed = typeof banks === 'string' || failed ? [] : (banks as readonly string[]);
   const currencyField = useId();
   const bankHint = useId();
   const range = formatDateRange(preview.dateFrom, preview.dateTo);
@@ -135,54 +141,67 @@ export function LayoutPreview({
       </section>
 
       <div className='grid grid-cols-1 gap-4'>
-        <div className='grid gap-1.5'>
-          <Label htmlFor={bankField}>Bank</Label>
-          <Select value={bankChoice} onValueChange={onBankChoice} disabled={disabled}>
-            <SelectTrigger
-              id={bankField}
-              className='max-sm:h-11'
-              aria-invalid={bankError && bankChoice !== OTHER_BANK ? true : undefined}
-              aria-describedby={bankChoice === OTHER_BANK ? undefined : bankHint}
+        {failed ? (
+          <LoadErrorState
+            size='section'
+            title="Couldn't load your banks"
+            error={failed.error}
+            onRetry={failed.retry}
+          />
+        ) : (
+          <div className='grid gap-1.5'>
+            <Label htmlFor={bankField}>Bank</Label>
+            <Select
+              value={bankChoice}
+              onValueChange={onBankChoice}
+              disabled={disabled || banks === 'pending'}
             >
-              <SelectValue placeholder='Choose a bank' />
-            </SelectTrigger>
-            <SelectContent>
-              {banks.map((bank) => (
-                <SelectItem key={bank} value={bank}>
-                  {bank}
-                </SelectItem>
-              ))}
-              {banks.length > 0 && <SelectSeparator />}
-              <SelectItem value={OTHER_BANK}>Other</SelectItem>
-            </SelectContent>
-          </Select>
-          {bankChoice === OTHER_BANK && (
-            <>
-              <Label htmlFor={otherBankField} className='mt-2.5'>
-                Bank name
-              </Label>
-              <Input
-                id={otherBankField}
-                value={otherBankName}
-                maxLength={60}
-                autoComplete='off'
-                disabled={disabled}
-                aria-invalid={bankError ? true : undefined}
-                aria-describedby={bankHint}
-                onChange={(event) => onOtherBankName(event.target.value)}
-              />
-            </>
-          )}
-          {bankError ? (
-            <p id={bankHint} role='alert' className='text-xs text-destructive'>
-              {bankError}
-            </p>
-          ) : (
-            <p id={bankHint} className='text-xs text-muted-foreground'>
-              Files of this layout are listed under this name.
-            </p>
-          )}
-        </div>
+              <SelectTrigger
+                id={bankField}
+                className='max-sm:h-11'
+                aria-invalid={bankError && bankChoice !== OTHER_BANK ? true : undefined}
+                aria-describedby={bankChoice === OTHER_BANK ? undefined : bankHint}
+              >
+                <SelectValue placeholder='Choose a bank' />
+              </SelectTrigger>
+              <SelectContent>
+                {listed.map((bank) => (
+                  <SelectItem key={bank} value={bank}>
+                    {bank}
+                  </SelectItem>
+                ))}
+                {listed.length > 0 && <SelectSeparator />}
+                <SelectItem value={OTHER_BANK}>Other</SelectItem>
+              </SelectContent>
+            </Select>
+            {bankChoice === OTHER_BANK && (
+              <>
+                <Label htmlFor={otherBankField} className='mt-2.5'>
+                  Bank name
+                </Label>
+                <Input
+                  id={otherBankField}
+                  value={otherBankName}
+                  maxLength={60}
+                  autoComplete='off'
+                  disabled={disabled}
+                  aria-invalid={bankError ? true : undefined}
+                  aria-describedby={bankHint}
+                  onChange={(event) => onOtherBankName(event.target.value)}
+                />
+              </>
+            )}
+            {bankError ? (
+              <p id={bankHint} role='alert' className='text-xs text-destructive'>
+                {bankError}
+              </p>
+            ) : (
+              <p id={bankHint} className='text-xs text-muted-foreground'>
+                Files of this layout are listed under this name.
+              </p>
+            )}
+          </div>
+        )}
         {currencyNeeded && (
           <div className='grid gap-1.5'>
             <Label htmlFor={currencyField}>Currency</Label>

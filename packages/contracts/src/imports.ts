@@ -424,8 +424,13 @@ export type BankImportLayout = {
 };
 
 /**
- * `GET /bank-imports/banks`: the owner's own banks, to name a saved layout after without typing one: their bank
- * connections', their imported-files accounts' (kept from a removed connection or from earlier imports) and their
- * saved layouts'. Each bank once, ignoring case and spacing, sorted by name.
+ * `GET /bank-imports/banks`: the owner's own banks, to name a saved layout after without typing one: their connected
+ * or once-connected banks, the banks their imported-files accounts record by name (kept from a removed connection or
+ * from earlier imports) and their saved layouts'; never Revolut. Each bank once, ignoring case and spacing, sorted.
  */
 export type BankImportBanks = {banks: string[]};
+
+/** How bank names compare wherever an owner names or picks a bank: ignoring case and spacing. */
+export function bankNameKey(name: string): string {
+	return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}
