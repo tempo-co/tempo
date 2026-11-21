@@ -433,6 +433,11 @@ describe('parseMt940', () => {
 			'EXMPDEFF',
 		],
 		["a header of the sender's BIC over the message type", ['EXMPDEFF', '940', 'EXMPDEFF'], 'EXMPDEFF'],
+		[
+			"a header of the sender's BIC over the message type, then a -",
+			['EXMPDEFF', '940', 'EXMPDEFF', '-'],
+			'EXMPDEFF',
+		],
 		['a header of a BIC with its branch', ['EXMPDEFFXXX', '940', 'EXMPDEFFXXX'], 'EXMPDEFF'],
 		['a header naming no BIC', ['EXAMPLEBANK'], null],
 		['no header', [], null],
@@ -515,11 +520,39 @@ describe('parseMt940', () => {
 			'EXMPBEBB',
 		],
 		[
-			'a SWIFT message right after a statement with no -} shares no header',
+			'a SWIFT message right after a statement with no -} has its own header',
 			SWIFT_HEADER,
 			null,
 			['{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:'],
 			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a SWIFT message whose header starts on its own line, right after a statement with no -}, has its own header',
+			SWIFT_HEADER,
+			null,
+			['{1:', 'F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:'],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a SWIFT message after an empty one that follows a statement with no -} has its own header',
+			SWIFT_HEADER,
+			null,
+			[
+				'{1:F01EXMPNL2AAXXX0000000000}{2:I940EXMPNL2AXXXXN}{4:',
+				'-}',
+				'{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:',
+			],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a bare statement after an empty SWIFT message that follows a statement with no -} has no header',
+			SWIFT_HEADER,
+			null,
+			['{1:F01EXMPNL2AAXXX0000000000}{2:I940EXMPNL2AXXXXN}{4:', '-}'],
+			'-',
 			null,
 		],
 	])(
@@ -614,6 +647,17 @@ describe('parseMt940', () => {
 		{
 			name: 'a file that ends inside the available balance after the closing balance',
 			file: fixture('cut-available-balance-mt940-synthetic.sta').toString('latin1'),
+		},
+		{
+			name: 'a statement a SWIFT message starts inside, before its closing balance',
+			file: statement(
+				[
+					':61:261005D10,00NTRFNONREF',
+					':86:Example Shop',
+					'{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:',
+				],
+				'90,00',
+			),
 		},
 	])('refuses $name', ({file}) => {
 		expect(() => parseMt940(Buffer.from(file, 'latin1'))).toThrow(new ParseRefusal('parse_failed'));
