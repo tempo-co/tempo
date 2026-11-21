@@ -24,10 +24,15 @@ export type StatementClosingBalance = {date: string; amount: string};
  */
 export interface ImportedRowRecords {
 	/** Of these imported rows, the ones an owner's answer keeps: a resolution `new` points at them. */
-	findKeptByOwner(manager: EntityManager, transactionIds: readonly string[]): Promise<Set<string>>;
+	findKeptByOwner(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		transactionIds: readonly string[],
+	): Promise<Set<string>>;
 	/** Sync took these imported rows of the account over: their open questions go. */
 	recordTakenOver(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		transactionIds: readonly string[],
 	): Promise<void>;
@@ -37,6 +42,7 @@ export interface ImportedRowRecords {
 	 */
 	askAbout(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		questions: readonly ImportedRowQuestion[],
 	): Promise<number>;
@@ -46,10 +52,14 @@ export interface ImportedRowRecords {
 	 */
 	recordRemovedBySync(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		removed: readonly RemovedImportedRow[],
 	): Promise<void>;
-	/** The newest closing balance an import not undone recorded for the account, the newest import's on a tie. */
+	/**
+	 * The newest closing balance an import not undone recorded for the account, the newest import's on a tie; only the
+	 * imports of the account's owner count.
+	 */
 	findNewestClosingBalance(
 		manager: EntityManager,
 		bankAccountId: BankAccount['id'],

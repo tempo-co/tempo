@@ -1,5 +1,7 @@
 import type {EntityManager} from 'typeorm';
 
+import type {Account} from '@modules/account/account.entity';
+
 import type {BankAccount} from '../bank-account.entity';
 
 /**
@@ -8,6 +10,7 @@ import type {BankAccount} from '../bank-account.entity';
  */
 export async function replaceHiddenSeriesPayments(
 	manager: EntityManager,
+	ownerId: Account['id'],
 	bankAccountId: BankAccount['id'],
 	replacement: ReadonlyMap<string, string | null>,
 ): Promise<void> {
@@ -16,17 +19,18 @@ export async function replaceHiddenSeriesPayments(
 		`SELECT hide."id", hide."transactionIds" FROM "recurring_series_hides" hide
 		INNER JOIN "bank_connections" connection ON connection."accountId" = hide."accountId"
 		INNER JOIN "bank_accounts" bank_account ON bank_account."bankConnectionId" = connection."id"
-		WHERE bank_account."id" = $1 AND hide."transactionIds" && $2::uuid[]
+		WHERE bank_account."id" = $1 AND hide."accountId" = $3 AND hide."transactionIds" && $2::uuid[]
 		FOR UPDATE OF hide`,
-		[bankAccountId, [...replacement.keys()]],
+		[bankAccountId, [...replacement.keys()], ownerId],
 	);
 	for (const hide of hides) {
 		const transactionIds = [
 			...new Set(hide.transactionIds.flatMap((id) => (replacement.has(id) ? (replacement.get(id) ?? []) : [id]))),
 		];
 		await manager.query(
-			`UPDATE "recurring_series_hides" SET "transactionIds" = $2::uuid[], "updatedAt" = now() WHERE "id" = $1`,
-			[hide.id, transactionIds],
+			`UPDATE "recurring_series_hides" SET "transactionIds" = $2::uuid[], "updatedAt" = now()
+			WHERE "id" = $1 AND "accountId" = $3`,
+			[hide.id, transactionIds, ownerId],
 		);
 	}
 }

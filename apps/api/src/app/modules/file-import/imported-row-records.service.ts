@@ -1,4 +1,4 @@
-import {Injectable, OnModuleInit} from '@nestjs/common';
+import {Injectable} from '@nestjs/common';
 import type {EntityManager} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
@@ -21,66 +21,82 @@ import type {NormalizedRow} from './parsers/parse-result';
  * rows, rows sync took over or removed, and the closing balances imports recorded.
  */
 @Injectable()
-export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleInit {
-	constructor(private readonly registry: ImportedRowRecordsRegistry) {}
-
-	onModuleInit(): void {
-		this.registry.register(this);
+export class ImportedRowRecordsService implements ImportedRowRecords {
+	// Registered as the provider is made, before any lifecycle hook starts the queue workers whose syncs use it.
+	constructor(registry: ImportedRowRecordsRegistry) {
+		registry.register(this);
 	}
 
-	async findKeptByOwner(manager: EntityManager, transactionIds: readonly string[]): Promise<Set<string>> {
+	async findKeptByOwner(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		transactionIds: readonly string[],
+	): Promise<Set<string>> {
 		if (transactionIds.length === 0) return new Set();
 		const kept: Array<{id: string}> = await manager.query(
 			`SELECT DISTINCT answered."resolvedTransactionId" AS "id" FROM "bank_import_doubtful_rows" answered
-			WHERE answered."resolvedTransactionId" = ANY($1::uuid[]) AND answered."resolution" = 'new'`,
-			[transactionIds],
+			INNER JOIN "bank_imports" bank_import ON bank_import."id" = answered."importId"
+			WHERE answered."resolvedTransactionId" = ANY($1::uuid[]) AND answered."resolution" = 'new'
+				AND bank_import."accountId" = $2`,
+			[transactionIds, ownerId],
 		);
 		return new Set(kept.map(({id}) => id));
 	}
 
 	async recordTakenOver(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		transactionIds: readonly string[],
 	): Promise<void> {
 		if (transactionIds.length === 0) return;
 		const [removed]: [Array<{importId: string}>, number] = await manager.query(
-			`DELETE FROM "bank_import_doubtful_rows"
-			WHERE "importedTransactionId" = ANY($1::uuid[]) AND "bankAccountId" = $2 AND "resolution" IS NULL
-			RETURNING "importId"`,
-			[transactionIds, bankAccountId],
+			`DELETE FROM "bank_import_doubtful_rows" doubtful
+			USING "bank_imports" bank_import
+			WHERE doubtful."importedTransactionId" = ANY($1::uuid[]) AND doubtful."bankAccountId" = $2
+				AND doubtful."resolution" IS NULL
+				AND bank_import."id" = doubtful."importId" AND bank_import."accountId" = $3
+			RETURNING doubtful."importId"`,
+			[transactionIds, bankAccountId, ownerId],
 		);
-		for (const {importId} of removed) await this.changeDoubtfulCount(manager, importId, -1);
+		for (const {importId} of removed) await this.changeDoubtfulCount(manager, ownerId, importId, -1);
 	}
 
 	async askAbout(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		questions: readonly ImportedRowQuestion[],
 	): Promise<number> {
 		let asked = 0;
 		for (const {imported, candidateIds} of questions) {
 			const [updated]: [unknown[], number] = await manager.query(
-				`UPDATE "bank_import_doubtful_rows"
-				SET "candidateTransactionIds" = ARRAY(SELECT DISTINCT unnest("candidateTransactionIds" || $2::uuid[])), "updatedAt" = now()
-				WHERE "importedTransactionId" = $1 AND "resolution" IS NULL
-				RETURNING "id"`,
-				[imported.id, candidateIds],
+				`UPDATE "bank_import_doubtful_rows" doubtful
+				SET "candidateTransactionIds" = ARRAY(SELECT DISTINCT unnest(doubtful."candidateTransactionIds" || $2::uuid[])), "updatedAt" = now()
+				FROM "bank_imports" bank_import
+				WHERE doubtful."importedTransactionId" = $1 AND doubtful."resolution" IS NULL
+					AND bank_import."id" = doubtful."importId" AND bank_import."accountId" = $3
+				RETURNING doubtful."id"`,
+				[imported.id, candidateIds, ownerId],
 			);
 			if (updated.length > 0) continue;
-			await manager.query(
+			const inserted: unknown[] = await manager.query(
 				`INSERT INTO "bank_import_doubtful_rows"
 					("importId", "bankAccountId", "row", "candidateTransactionIds", "importedTransactionId")
-				VALUES ($1, $2, $3::jsonb, $4::uuid[], $5)`,
+				SELECT bank_import."id", $2, $3::jsonb, $4::uuid[], $5
+				FROM "bank_imports" bank_import WHERE bank_import."id" = $1 AND bank_import."accountId" = $6
+				RETURNING "id"`,
 				[
 					imported.importId,
 					bankAccountId,
 					JSON.stringify(toImportedRowSnapshot(imported)),
 					candidateIds,
 					imported.id,
+					ownerId,
 				],
 			);
-			await this.changeDoubtfulCount(manager, imported.importId!, 1);
+			if (inserted.length === 0) continue;
+			await this.changeDoubtfulCount(manager, ownerId, imported.importId!, 1);
 			asked += 1;
 		}
 		return asked;
@@ -88,6 +104,7 @@ export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleIn
 
 	async recordRemovedBySync(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		removed: readonly RemovedImportedRow[],
 	): Promise<void> {
@@ -97,7 +114,9 @@ export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleIn
 				`INSERT INTO "bank_import_doubtful_rows"
 					("importId", "bankAccountId", "kind", "row", "candidateTransactionIds", "ownerEdits")
 				SELECT snapshot."importId", $1, 'removed_by_sync', snapshot."row", '{}', snapshot."ownerEdits"
-				FROM jsonb_to_recordset($2::jsonb) AS snapshot("importId" uuid, "row" jsonb, "ownerEdits" jsonb)`,
+				FROM jsonb_to_recordset($2::jsonb) AS snapshot("importId" uuid, "row" jsonb, "ownerEdits" jsonb)
+				INNER JOIN "bank_imports" bank_import ON bank_import."id" = snapshot."importId"
+				WHERE bank_import."accountId" = $3`,
 				[
 					bankAccountId,
 					JSON.stringify(
@@ -107,6 +126,7 @@ export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleIn
 							ownerEdits,
 						})),
 					),
+					ownerId,
 				],
 			);
 		}
@@ -114,15 +134,19 @@ export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleIn
 		// Open questions go with their rows; answered ones stop pointing at a row that is gone.
 		const ids = removed.map(({row}) => row.id);
 		const [closed]: [Array<{importId: string}>, number] = await manager.query(
-			`DELETE FROM "bank_import_doubtful_rows"
-			WHERE "importedTransactionId" = ANY($1::uuid[]) AND "resolution" IS NULL
-			RETURNING "importId"`,
-			[ids],
+			`DELETE FROM "bank_import_doubtful_rows" doubtful
+			USING "bank_imports" bank_import
+			WHERE doubtful."importedTransactionId" = ANY($1::uuid[]) AND doubtful."resolution" IS NULL
+				AND bank_import."id" = doubtful."importId" AND bank_import."accountId" = $2
+			RETURNING doubtful."importId"`,
+			[ids, ownerId],
 		);
 		await manager.query(
-			`UPDATE "bank_import_doubtful_rows" SET "importedTransactionId" = NULL, "updatedAt" = now()
-			WHERE "importedTransactionId" = ANY($1::uuid[])`,
-			[ids],
+			`UPDATE "bank_import_doubtful_rows" doubtful SET "importedTransactionId" = NULL, "updatedAt" = now()
+			FROM "bank_imports" bank_import
+			WHERE doubtful."importedTransactionId" = ANY($1::uuid[])
+				AND bank_import."id" = doubtful."importId" AND bank_import."accountId" = $2`,
+			[ids, ownerId],
 		);
 		const perImport = new Map<string, {removed: number; closed: number}>();
 		const tally = (importId: string, field: 'removed' | 'closed') => {
@@ -137,8 +161,8 @@ export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleIn
 				`UPDATE "bank_imports"
 				SET "rowsRemovedBySync" = "rowsRemovedBySync" + $2, "rowsAdded" = "rowsAdded" - $2,
 					"rowsDoubtful" = "rowsDoubtful" - $3
-				WHERE "id" = $1`,
-				[importId, counts.removed, counts.closed],
+				WHERE "id" = $1 AND "accountId" = $4`,
+				[importId, counts.removed, counts.closed, ownerId],
 			);
 		}
 	}
@@ -190,11 +214,16 @@ export class ImportedRowRecordsService implements ImportedRowRecords, OnModuleIn
 		);
 	}
 
-	private async changeDoubtfulCount(manager: EntityManager, importId: string, change: 1 | -1): Promise<void> {
-		await manager.query(`UPDATE "bank_imports" SET "rowsDoubtful" = "rowsDoubtful" + $2 WHERE "id" = $1`, [
-			importId,
-			change,
-		]);
+	private async changeDoubtfulCount(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		importId: string,
+		change: 1 | -1,
+	): Promise<void> {
+		await manager.query(
+			`UPDATE "bank_imports" SET "rowsDoubtful" = "rowsDoubtful" + $2 WHERE "id" = $1 AND "accountId" = $3`,
+			[importId, change, ownerId],
+		);
 	}
 }
 

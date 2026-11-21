@@ -15,8 +15,9 @@ import {
 } from '@modules/banking/services/account-history-writer.service';
 import {BankConnectionRemovalService} from '@modules/banking/services/bank-connection-removal.service';
 import {BankTransactionInput} from '@modules/banking/services/bank-transaction-persistence.service';
-import {BankingConsentRevocationService} from '@modules/banking/services/banking-consent-revocation.service';
 import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
+import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
+import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -148,7 +149,7 @@ describe('AccountHistoryWriterService', () => {
 	it('commits a write holding the imported-files connection and a removal that keeps the bank accounts', async () => {
 		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
 		await writer.write(owner.id, {fileConnection: 'create'}, async () => undefined);
-		jest.spyOn(app.get(BankingConsentRevocationService), 'revokeSessions').mockResolvedValue(undefined);
+		jest.spyOn(app.get(EnableBankingClient), 'deleteSession').mockResolvedValue(undefined);
 
 		let fileLocked!: () => void;
 		const holdsFileConnection = new Promise<void>((resolve) => (fileLocked = resolve));
@@ -171,6 +172,43 @@ describe('AccountHistoryWriterService', () => {
 		expect(
 			await fixtures.bankAccounts.findOneOrFail({where: {id: bankAccount.id}, relations: {bankConnection: true}}),
 		).toMatchObject({bankConnection: {provider: BANK_CONNECTION_PROVIDERS.FILE}});
+	});
+
+	it("commits an owner's first write creating the imported-files connection and a removal that keeps the bank accounts", async () => {
+		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		jest.spyOn(app.get(EnableBankingClient), 'deleteSession').mockResolvedValue(undefined);
+		// The removal stops once it holds its locks, until the write is under way.
+		const balances = app.get(FileAccountBalanceService);
+		const findAnchored = balances.findAnchoredByConnection.bind(balances);
+		let removalLocked!: () => void;
+		const removalHolds = new Promise<void>((resolve) => (removalLocked = resolve));
+		let resumeRemoval!: () => void;
+		const removalResumes = new Promise<void>((resolve) => (resumeRemoval = resolve));
+		jest.spyOn(balances, 'findAnchoredByConnection').mockImplementationOnce(async (...args) => {
+			removalLocked();
+			await removalResumes;
+			return findAnchored(...args);
+		});
+		const removal = app
+			.get(BankConnectionRemovalService)
+			.removeConnection(owner.id, connection.id, {keepAccounts: true});
+		await removalHolds;
+		const write = writer.write(owner.id, {fileConnection: 'create'}, async ({fileConnection}) => fileConnection);
+		try {
+			await waitFor(lockWaits, (waiting) => waiting === 1);
+		} finally {
+			resumeRemoval();
+		}
+		const [fileConnection] = await Promise.all([write, removal]);
+
+		const fileConnections = await fixtures.connections.findBy({
+			accountId: owner.id,
+			provider: BANK_CONNECTION_PROVIDERS.FILE,
+		});
+		expect(fileConnections.map(({id}) => id)).toEqual([fileConnection?.id]);
+		expect(
+			await fixtures.bankAccounts.findOneOrFail({where: {id: bankAccount.id}, relations: {bankConnection: true}}),
+		).toMatchObject({bankConnection: {id: fileConnection?.id}});
 	});
 
 	describe('recording a bank fetch for an account', () => {
@@ -494,7 +532,7 @@ describe('AccountHistoryWriterService', () => {
 				createdBankAccountIds: [],
 			});
 
-		it("gives a synced account's final days, which end before its oldest pending row, stores the rows as the import's, a row in the reporting currency with its own amount, and returns them as a file write", async () => {
+		it("gives a synced account's final days, which end before its oldest pending row, stores the rows of other days as the import's, a row in the reporting currency with its own amount, and returns them as a file write", async () => {
 			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
 			await fixtures.bankAccounts.update(
 				{id: bankAccount.id},
@@ -515,7 +553,11 @@ describe('AccountHistoryWriterService', () => {
 				writer.addFileRows(write, {account, connection, importId: record.id}, async ({finalDays, insert}) => ({
 					finalDays,
 					ids: await insert(
-						[fileRow('FILE-1', '5.00', day(30)), {...fileRow('FILE-2', '6.00', day(30)), currency: 'USD'}],
+						[
+							fileRow('FILE-1', '5.00', day(10)),
+							fileRow('FINAL', '7.00', day(30)),
+							{...fileRow('FILE-2', '6.00', day(10)), currency: 'USD'},
+						],
 						{statementNumbering: 'camt053'},
 					),
 				})),
@@ -552,7 +594,7 @@ describe('AccountHistoryWriterService', () => {
 		it("moves the balance of an account its bank's removal kept with the rows added to it, and gives it no final days", async () => {
 			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
 			await writer.write(owner.id, {fileConnection: 'create'}, async () => undefined);
-			jest.spyOn(app.get(BankingConsentRevocationService), 'revokeSessions').mockResolvedValue(undefined);
+			jest.spyOn(app.get(EnableBankingClient), 'deleteSession').mockResolvedValue(undefined);
 			await app.get(BankConnectionRemovalService).removeConnection(owner.id, connection.id, {keepAccounts: true});
 			await fixtures.bankAccounts.update(
 				{id: bankAccount.id},

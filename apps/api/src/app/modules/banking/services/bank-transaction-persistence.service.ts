@@ -1,6 +1,8 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from 'typeorm';
 
+import type {Account} from '@modules/account/account.entity';
+
 import {BankAccount} from '../bank-account.entity';
 import type {CreditDebitIndicator} from '../bank-transaction-direction';
 import {
@@ -212,6 +214,7 @@ export class BankTransactionPersistenceService {
 	 */
 	async persistTransactions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccount: BankAccount,
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
@@ -358,7 +361,8 @@ export class BankTransactionPersistenceService {
 			// The row now belongs to the bank's history, so undoing its import leaves it.
 			await repository.update({id: In(ids)}, {importId: null});
 		}
-		if (hasImportedRows) await this.recordImportQuestions(repository, bankAccount.id, questions, adoptedIds);
+		if (hasImportedRows)
+			await this.recordImportQuestions(repository, ownerId, bankAccount.id, questions, adoptedIds);
 
 		const transactionByStableIdentityKey = new Map(
 			transactionValues.map((value) => [value.stableIdentityKey, value]),
@@ -612,12 +616,13 @@ export class BankTransactionPersistenceService {
 	 */
 	private async recordImportQuestions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountId: string,
 		questions: ReadonlyMap<string, ImportQuestion>,
 		adoptedIds: readonly string[],
 	): Promise<void> {
 		const records = this.importedRowRecords.records;
-		await records.recordTakenOver(repository.manager, bankAccountId, adoptedIds);
+		await records.recordTakenOver(repository.manager, ownerId, bankAccountId, adoptedIds);
 		const keys = [...new Set([...questions.values()].flatMap(({candidateKeys}) => candidateKeys))];
 		const idByKey = new Map(
 			keys.length === 0
@@ -635,7 +640,7 @@ export class BankTransactionPersistenceService {
 			].filter((id) => id !== imported.id);
 			return ids.length === 0 ? [] : [{imported, candidateIds: ids}];
 		});
-		const asked = await records.askAbout(repository.manager, bankAccountId, asking);
+		const asked = await records.askAbout(repository.manager, ownerId, bankAccountId, asking);
 		if (asked > 0) this.logger.log(`Sync asked about ${asked} imported transaction(s) it could not match alone.`);
 	}
 
@@ -650,6 +655,7 @@ export class BankTransactionPersistenceService {
 	 */
 	async sweepImportedRows(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccount: BankAccount,
 		finalDays: FinalSyncDays,
 		aspspName: string,
@@ -665,6 +671,7 @@ export class BankTransactionPersistenceService {
 		);
 		const kept = await records.findKeptByOwner(
 			repository.manager,
+			ownerId,
 			onFinalDays.map(({id}) => id),
 		);
 		const removedIds = onFinalDays.filter(({id}) => !kept.has(id));
@@ -738,11 +745,13 @@ export class BankTransactionPersistenceService {
 		// A hidden series keeps following the payment: the look-alike stands in for the removed row, or it drops out.
 		await replaceHiddenSeriesPayments(
 			repository.manager,
+			ownerId,
 			bankAccount.id,
 			new Map(removed.map((row) => [row.id, targets.get(row.id) ?? null])),
 		);
 		await records.recordRemovedBySync(
 			repository.manager,
+			ownerId,
 			bankAccount.id,
 			removed.map((row) => ({row, ownerEdits: editsOf(row)})),
 		);

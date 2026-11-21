@@ -263,8 +263,11 @@ export class BankAuthorizationService {
 			await this.dataSource.transaction(async (manager) => {
 				assertLocksHealthy();
 				const connectionRepository = manager.getRepository(BankConnection);
-				// Before the bank's connections, the order removal and history writes take them in, so taking a kept
-				// account back cannot deadlock with them.
+				// The lock order of banking-invariants.md: the owner's account row, which the pending connection's lock
+				// below also takes, as account deletion and removal take it; then the imported-files connection before
+				// the bank's connections, as removal and history writes take them, so taking a kept account back cannot
+				// deadlock with them.
+				await manager.query('SELECT "id" FROM "accounts" WHERE "id" = $1 FOR UPDATE', [accountId]);
 				const fileConnection = await connectionRepository.findOne({
 					where: {accountId, provider: BANK_CONNECTION_PROVIDERS.FILE},
 					lock: {mode: 'pessimistic_write'},

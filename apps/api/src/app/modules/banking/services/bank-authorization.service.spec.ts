@@ -134,6 +134,7 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		const dataSource = {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
 				callback({
+					query: jest.fn().mockResolvedValue([]),
 					getRepository: jest.fn((entity: unknown) =>
 						entity === BankConnection ? transactionConnectionRepository : {},
 					),
@@ -215,6 +216,7 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		const dataSource = {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) => {
 				const result = await callback({
+					query: jest.fn().mockResolvedValue([]),
 					getRepository: jest.fn((entity: unknown) =>
 						entity === BankConnection ? transactionConnectionRepository : {findOne: jest.fn()},
 					),

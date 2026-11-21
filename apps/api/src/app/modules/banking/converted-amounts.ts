@@ -54,6 +54,7 @@ const sameCurrencyAmountSql = (alias: string) => `ROUND(${alias}."amount", 2)`;
  */
 export async function copySameCurrencyAmounts(
 	manager: EntityManager,
+	ownerId: Account['id'],
 	bankAccountId: BankAccount['id'],
 	/** Limits the update to these rows; every row of the account when omitted. */
 	transactionIds?: readonly string[],
@@ -66,11 +67,11 @@ export async function copySameCurrencyAmounts(
 		FROM "bank_accounts" bank_account
 		INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
 		INNER JOIN "accounts" account ON account."id" = connection."accountId"
-		WHERE bank_account."id" = $1
+		WHERE bank_account."id" = $1 AND account."id" = $2
 			AND t."bankAccountId" = bank_account."id"
 			AND t."baseAmountMethod" IS NULL
-			AND ${inReportingCurrencySql('t', 'account."baseCurrency"')}${transactionIds ? ' AND t."id" = ANY($2::uuid[])' : ''}`,
-		transactionIds ? [bankAccountId, transactionIds] : [bankAccountId],
+			AND ${inReportingCurrencySql('t', 'account."baseCurrency"')}${transactionIds ? ' AND t."id" = ANY($3::uuid[])' : ''}`,
+		transactionIds ? [bankAccountId, ownerId, transactionIds] : [bankAccountId, ownerId],
 	);
 }
 
@@ -80,6 +81,7 @@ export async function copySameCurrencyAmounts(
  */
 export async function clearStaleConvertedAmounts(
 	manager: EntityManager,
+	ownerId: Account['id'],
 	bankAccountId: BankAccount['id'],
 	previousRows: readonly ConversionInputs[],
 ): Promise<void> {
@@ -91,12 +93,14 @@ export async function clearStaleConvertedAmounts(
 		await manager.query(
 			`UPDATE "bank_transactions" AS t
 			SET "amountInBaseCurrency" = NULL, "baseAmountMethod" = NULL, "baseAmountRateDate" = NULL
-			FROM (VALUES ${values.sql}) AS previous(${columns.join(', ')})
+			FROM (VALUES ${values.sql}) AS previous(${columns.join(', ')}), "bank_accounts" bank_account
+			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
 			WHERE t."bankAccountId" = $${values.parameters.length + 1}
+				AND bank_account."id" = t."bankAccountId" AND connection."accountId" = $${values.parameters.length + 2}
 				AND t."id" = previous."id"
 				AND t."amountInBaseCurrency" IS NOT NULL
 				AND ${conversionInputsSql('t')} IS DISTINCT FROM ${conversionInputsSql('previous')}`,
-			[...values.parameters, bankAccountId],
+			[...values.parameters, bankAccountId, ownerId],
 		);
 	}
 }

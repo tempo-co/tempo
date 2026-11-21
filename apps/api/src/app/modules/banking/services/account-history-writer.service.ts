@@ -11,17 +11,16 @@ import {clearStaleConvertedAmounts, copySameCurrencyAmounts} from '../converted-
 import type {EnableBankingTransaction, EnableBankingTransactionFetchOptions} from '../enable-banking.types';
 import {AccountHistoryWriteBusyError} from '../errors/account-history-write-busy.error';
 import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
-import {FinalSyncDays, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
+import {FinalSyncDays, extendSyncCoverage, finalSyncDays, isFinalSyncDay, recordsSyncCoverage} from '../sync-coverage';
 import {
 	BankTransactionInput,
 	BankTransactionPersistenceService,
 	ImportedTransactionsTarget,
 } from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
-import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
 import type {DerivedDataChange} from './derived-data-refresh.service';
 import {FileAccountBalance, FileAccountBalanceService} from './file-account-balance.service';
-import {lockFileConnection} from './file-connection';
+import {lockExistingFileConnection, lockFileConnection} from './file-connection';
 
 /** How long a write waits for a sync of a connection it writes to, then refuses as busy. */
 const SYNC_LEASE_WAIT_MS = 10_000;
@@ -71,11 +70,23 @@ export type FileRowsTarget = {
 	importId: ImportedTransactionsTarget['importId'];
 };
 
+/**
+ * What adding file rows does with a row on a day bank sync is final for: `drop` it, as sync sent every payment of that
+ * day, or `add` it, for a row the owner chose to add (a never-sent row, a doubtful row answered `new`).
+ */
+export type OnFinalSyncDays = 'drop' | 'add';
+
 /** What adding file rows offers the caller's work on the account. */
 export type FileRowsWrite = {
-	/** The days bank sync is final for on the account, as the write's locks hold them (`findFinalSyncDays`). */
+	/**
+	 * The days bank sync is final for on the account, as the write's locks hold them (`findFinalSyncDays`), so the
+	 * work can record the rows it leaves out there.
+	 */
 	finalDays: FinalSyncDays | null;
-	/** Inserts the rows as new rows of the import, listed in the given order; returns their ids in that order. */
+	/**
+	 * Inserts the rows as new rows of the import, listed in the given order, and returns their ids in that order. A row
+	 * on a final day (`fileRowDay`) is left out unless the write adds them (`OnFinalSyncDays`).
+	 */
 	insert: (
 		transactions: readonly BankTransactionInput[],
 		numbering: Pick<ImportedTransactionsTarget, 'statementNumbering'>,
@@ -92,9 +103,9 @@ export type AddedFileRows<T> = {
 /**
  * Opens every write to an owner's transaction history (sync, import, doubtful and never-sent rows, undo) with its
  * locks taken in one order: the sync leases of the synced connections, in id order; then, in the transaction, the
- * reporting-currency lock as its first statement and the imported-files connection; then whatever the work locks
- * (an import record and its connection). Connection removal and authorization lock the imported-files connection
- * before the bank's connections too.
+ * reporting-currency lock as its first statement, and the owner's account row and imported-files connection when the
+ * write asks for it; then whatever the work locks (an import record and its connection). Account deletion, connection
+ * removal and authorization lock the account row, then the imported-files connection, before the bank's connections.
  */
 @Injectable()
 export class AccountHistoryWriterService {
@@ -121,10 +132,7 @@ export class AccountHistoryWriterService {
 					fileConnection === 'create'
 						? await lockFileConnection(manager, ownerId)
 						: fileConnection === 'existing'
-							? await manager.getRepository(BankConnection).findOne({
-									where: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-									lock: {mode: 'pessimistic_write'},
-								})
+							? await lockExistingFileConnection(manager, ownerId)
 							: null;
 				const result = await work({ownerId, manager, fileConnection: locked});
 				for (const lease of leases) lease.assertHealthy();
@@ -142,10 +150,9 @@ export class AccountHistoryWriterService {
 	 * extends the account's coverage when the provider records any; removes the imported rows the bank never sent from
 	 * the days sync is now final for; and moves the watermark when every page came.
 	 */
-	async recordBankFetch({manager}: AccountHistoryWrite, fetch: BankFetch): Promise<RecordedBankFetch> {
+	async recordBankFetch({ownerId, manager}: AccountHistoryWrite, fetch: BankFetch): Promise<RecordedBankFetch> {
 		const {bankAccount, connection} = fetch;
 		const transactions = manager.getRepository(BankTransaction);
-		const accounts = manager.getRepository(BankAccount);
 		const {syncCoveredFrom, syncCoveredThrough} = bankAccount;
 		const storedCoverage =
 			syncCoveredFrom && syncCoveredThrough ? {from: syncCoveredFrom, through: syncCoveredThrough} : null;
@@ -167,13 +174,14 @@ export class AccountHistoryWriterService {
 		if (fetch.transactions.length > 0) {
 			const persisted = await this.persistence.persistTransactions(
 				transactions,
+				ownerId,
 				bankAccount,
 				fetch.transactions,
 				connection.aspspName,
 				recordsCoverage ? coverage : null,
 			);
-			await clearStaleConvertedAmounts(manager, bankAccount.id, persisted.previousRows);
-			await copySameCurrencyAmounts(manager, bankAccount.id);
+			await clearStaleConvertedAmounts(manager, ownerId, bankAccount.id, persisted.previousRows);
+			await copySameCurrencyAmounts(manager, ownerId, bankAccount.id);
 			transactionsAdded = persisted.transactionsAdded;
 			writtenIds = persisted.persistedTransactionIds;
 			takenOverImportedIds = persisted.takenOverImportedIds;
@@ -189,10 +197,10 @@ export class AccountHistoryWriterService {
 				)),
 			);
 			if (recordsCoverage && coverage) {
-				await accounts.update(
-					{id: bankAccount.id},
-					{syncCoveredFrom: coverage.from, syncCoveredThrough: coverage.through},
-				);
+				await updateOwnedAccount(manager, ownerId, bankAccount.id, {
+					syncCoveredFrom: coverage.from,
+					syncCoveredThrough: coverage.through,
+				});
 				// Sync is final for these days now: imported rows there it never sent go.
 				const finalDays = await this.findFinalSyncDays(manager, {
 					id: bankAccount.id,
@@ -203,6 +211,7 @@ export class AccountHistoryWriterService {
 				if (finalDays) {
 					const swept = await this.persistence.sweepImportedRows(
 						transactions,
+						ownerId,
 						bankAccount,
 						finalDays,
 						connection.aspspName,
@@ -214,7 +223,9 @@ export class AccountHistoryWriterService {
 		}
 
 		if (fetch.succeeded) {
-			await accounts.update({id: bankAccount.id}, {transactionsFetchedThrough: fetch.fetchedThrough});
+			await updateOwnedAccount(manager, ownerId, bankAccount.id, {
+				transactionsFetchedThrough: fetch.fetchedThrough,
+			});
 		}
 
 		return {
@@ -224,20 +235,26 @@ export class AccountHistoryWriterService {
 	}
 
 	/**
-	 * Adds file rows to one account inside the write: the work gets the account's final sync days, to decide which rows
-	 * are new, and inserts them as rows of the import, a row in the reporting currency with its own amount. Then an account on the imported-files connection (one kept when
-	 * its bank was removed too) has its balance recomputed from its rows; a synced account keeps the one sync reports.
+	 * Adds file rows to one account inside the write, in one call per account and write: the work gets the account's
+	 * final sync days, to decide which rows are new, and inserts them as rows of the import, a row in the reporting
+	 * currency with its own amount, and none on a final day unless `onFinalDays` adds them. Then an account on the
+	 * imported-files connection (one kept when its bank was removed too) has its balance recomputed from its rows; a
+	 * synced account keeps the one sync reports.
 	 */
 	async addFileRows<T>(
 		{ownerId, manager}: AccountHistoryWrite,
 		{account, connection, importId}: FileRowsTarget,
 		work: (rows: FileRowsWrite) => Promise<T>,
+		{onFinalDays = 'drop'}: {onFinalDays?: OnFinalSyncDays} = {},
 	): Promise<AddedFileRows<T>> {
 		const transactions = manager.getRepository(BankTransaction);
 		const writtenIds: string[] = [];
+		const finalDays = await this.findFinalSyncDays(manager, {...account, bankConnection: connection});
 		const result = await work({
-			finalDays: await this.findFinalSyncDays(manager, {...account, bankConnection: connection}),
-			insert: async (rows, {statementNumbering}) => {
+			finalDays,
+			insert: async (given, {statementNumbering}) => {
+				const rows =
+					onFinalDays === 'add' ? given : given.filter((row) => !isFinalSyncDay(fileRowDay(row), finalDays));
 				if (rows.length === 0) return [];
 				const {insertedTransactionIds} = await this.persistence.insertImportedTransactions(
 					transactions,
@@ -246,7 +263,7 @@ export class AccountHistoryWriterService {
 					connection.aspspName,
 					{importId, statementNumbering},
 				);
-				await copySameCurrencyAmounts(manager, account.id, insertedTransactionIds);
+				await copySameCurrencyAmounts(manager, ownerId, account.id, insertedTransactionIds);
 				writtenIds.push(...insertedTransactionIds);
 				return insertedTransactionIds;
 			},
@@ -304,4 +321,29 @@ export class AccountHistoryWriterService {
 			}
 		}
 	}
+}
+
+/**
+ * A file row's day as file import matches it (`matchDay`): its booking date, or its value date when the statement gave
+ * none, so a booking date filled in from the transaction date does not count.
+ */
+function fileRowDay(row: BankTransactionInput): string | null {
+	return (row.bookingDateFilled ? null : row.bookingDate) ?? row.valueDate ?? null;
+}
+
+/** Updates one of the owner's accounts, as a repository update does, its `updatedAt` too. */
+async function updateOwnedAccount(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	bankAccountId: BankAccount['id'],
+	values: Partial<Pick<BankAccount, 'syncCoveredFrom' | 'syncCoveredThrough' | 'transactionsFetchedThrough'>>,
+): Promise<void> {
+	const entries = Object.entries(values);
+	await manager.query(
+		`UPDATE "bank_accounts" bank_account
+		SET ${entries.map(([column], index) => `"${column}" = $${index + 3}`).join(', ')}, "updatedAt" = CURRENT_TIMESTAMP
+		FROM "bank_connections" connection
+		WHERE bank_account."id" = $1 AND connection."id" = bank_account."bankConnectionId" AND connection."accountId" = $2`,
+		[bankAccountId, ownerId, ...entries.map(([, value]) => value)],
+	);
 }

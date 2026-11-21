@@ -66,6 +66,7 @@ describe('BankConnectionRemovalService', () => {
 			count: jest.fn().mockResolvedValue(0),
 		};
 		const transactionManager = {
+			query: jest.fn().mockResolvedValue([]),
 			getRepository: jest.fn((entity: unknown) =>
 				entity === BankConnection ? transactionConnectionRepository : transactionBankAccountRepository,
 			),
@@ -132,6 +133,7 @@ describe('BankConnectionRemovalService', () => {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) => {
 				events.push('transaction-start');
 				const result = await callback({
+					query: jest.fn().mockResolvedValue([]),
 					getRepository: jest.fn((entity: unknown) =>
 						entity === BankConnection ? transactionConnectionRepository : {count: jest.fn()},
 					),
