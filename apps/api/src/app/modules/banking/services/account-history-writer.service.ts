@@ -22,6 +22,7 @@ import {BankingConnectionLock, BankingConnectionLockService} from './banking-con
 import type {DerivedDataChange} from './derived-data-refresh.service';
 import {FileAccountBalance, FileAccountBalanceService} from './file-account-balance.service';
 import {lockExistingFileConnection, lockFileConnection} from './file-connection';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 /** How long a write waits for a sync of a connection it writes to, then refuses as busy. */
 const SYNC_LEASE_WAIT_MS = 10_000;
@@ -119,6 +120,7 @@ export class AccountHistoryWriterService {
 		private readonly connectionLockService: BankingConnectionLockService,
 		private readonly persistence: BankTransactionPersistenceService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
+		private readonly importedRowRecords: ImportedRowRecordsRegistry,
 	) {}
 
 	/** Runs the work in one transaction under the write's locks; a lease not had in time refuses it as busy. */
@@ -151,10 +153,12 @@ export class AccountHistoryWriterService {
 	 * imported rows they land on), clearing converted amounts whose inputs changed and giving rows in the reporting
 	 * currency their own amount; after a complete fetch, removes the pending rows of its window it did not return;
 	 * extends the account's coverage when the provider records any; removes the imported rows the bank never sent from
-	 * the days sync is now final for; and moves the watermark when every page came.
+	 * the days sync is now final for; and moves the watermark when every page came. Refuses an account that is not the
+	 * owner's (404) before anything is written.
 	 */
 	async recordBankFetch({ownerId, manager}: AccountHistoryWrite, fetch: BankFetch): Promise<RecordedBankFetch> {
 		const {bankAccount, connection} = fetch;
+		await lockOwnedAccount(manager, ownerId, bankAccount.id);
 		const transactions = manager.getRepository(BankTransaction);
 		const {syncCoveredFrom, syncCoveredThrough} = bankAccount;
 		const storedCoverage =
@@ -240,7 +244,7 @@ export class AccountHistoryWriterService {
 
 	/**
 	 * Adds file rows to one of the owner's accounts inside the write, in one call per account and write, refusing an
-	 * account that is not the owner's (404) before anything is written: the work gets the account's
+	 * account or an import that is not the owner's (404) before anything is written: the work gets the account's
 	 * final sync days, to decide which rows are new, and inserts them as rows of the import, a row in the reporting
 	 * currency with its own amount, and none on a final day unless `onFinalDays` adds them. Then an account on the
 	 * imported-files connection (one kept when its bank was removed too) has its balance recomputed from its rows; a
@@ -255,6 +259,7 @@ export class AccountHistoryWriterService {
 		const transactions = manager.getRepository(BankTransaction);
 		const writtenIds: string[] = [];
 		await lockOwnedAccount(manager, ownerId, account.id);
+		await this.importedRowRecords.records.refuseUnownedImport(manager, ownerId, importId);
 		const finalDays = await this.findFinalSyncDays(manager, ownerId, {...account, bankConnection: connection});
 		const result = await work({
 			finalDays,

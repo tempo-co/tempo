@@ -71,6 +71,11 @@ export interface ImportedRowRecords {
 		ownerId: Account['id'],
 		connectionId: BankConnection['id'],
 	): Promise<BankAccount['id'][]>;
+	/**
+	 * Refuses (404) an import that is not the owner's. A plain read: the caller locked the import record already, after
+	 * the write's locks, as the lock order puts it.
+	 */
+	refuseUnownedImport(manager: EntityManager, ownerId: Account['id'], importId: string): Promise<void>;
 	/** The owner's imports under one connection move to another, as the accounts they wrote to did. */
 	moveToConnection(
 		manager: EntityManager,

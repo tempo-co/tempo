@@ -8,11 +8,14 @@ import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES,
 	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
 } from '@modules/banking/bank-transaction-financial-event';
+import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.entity';
 import {BANK_TRANSACTION_TYPES} from '@modules/banking/bank-transaction-type';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {CategorizationScheduler} from '@modules/banking/categorization/categorization-scheduler.service';
+import {convertOwnerAmounts} from '@modules/banking/converted-amounts';
 import {recomputeCurrencyExchanges} from '@modules/banking/currency-exchange/currency-exchange-recompute';
 import {recomputeOwnTransfersAndCategories} from '@modules/banking/own-transfer/own-transfer-category';
+import {lockReportingCurrencyForAmountWrites} from '@modules/banking/reporting-currency';
 
 import {BankingFixtures} from './banking-fixtures';
 import {OWN_TRANSFER_ACCOUNT_EMAIL} from './seed.constants';
@@ -160,8 +163,6 @@ export async function seedOwnTransferData(
 				bookingDate: '2026-08-16',
 				amount: '92.00000000',
 				currency: 'USD',
-				amountInBaseCurrency: '79.80',
-				baseAmountMethod: 'ECB',
 			}),
 			...[ids.unmatchedExchangeIncoming, ids.unmatchedExchangeOtherIncoming].map((id) =>
 				exchangeLeg({
@@ -169,14 +170,24 @@ export async function seedOwnTransferData(
 					bookingDate: '2026-08-14',
 					amount: '17.00000000',
 					currency: 'USD',
-					amountInBaseCurrency: '14.75',
-					baseAmountMethod: 'ECB',
 				}),
 			),
 		]),
 	);
 
 	const dataSource = app.get(DataSource);
+	// The amounts in EUR, which exchange pairing compares, as the conversion job stores them: the USD legs with the
+	// ECB rate of their days (Friday's for the Sunday one).
+	await dataSource
+		.getRepository(BankTransactionFxRate)
+		.upsert({currency: 'USD', rateDate: '2026-08-14', rateToEur: '1.1529', provider: 'ECB'}, [
+			'currency',
+			'rateDate',
+		]);
+	await dataSource.transaction(async (manager) => {
+		await lockReportingCurrencyForAmountWrites(manager, account.id);
+		await convertOwnerAmounts(manager, account.id, 'EUR');
+	});
 	// Exchanges first, as in the derived-data refresh: own-transfer detection skips exchange legs.
 	const exchanges = await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
 	const ownTransfers = await dataSource.transaction((manager) =>
@@ -206,8 +217,6 @@ function seedTransactions(transactions: (DeepPartial<BankTransaction> & {id: str
 	return transactions.map((transaction) => ({
 		valueDate: transaction.bookingDate,
 		transactionDate: transaction.bookingDate,
-		amountInBaseCurrency: transaction.amount,
-		baseAmountMethod: 'SAME' as const,
 		creditDebitIndicator: transaction.amount.startsWith('-') ? ('DBIT' as const) : ('CRDT' as const),
 		transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
 		...transaction,

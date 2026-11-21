@@ -62,6 +62,7 @@ function createBankingSyncService(
 			(dependencies.connectionLockService ?? {}) as BankingConnectionLockService,
 			new BankTransactionPersistenceService(new ImportedRowRecordsRegistry()),
 			{} as FileAccountBalanceService,
+			new ImportedRowRecordsRegistry(),
 		),
 		...dependencies,
 	};
@@ -170,6 +171,10 @@ type LockOwner = {
 	token: string;
 	expiresAt: number;
 };
+
+/** The run's transaction answering raw queries: the owner's account is found, every other query reads nothing. */
+const transactionQuery = () =>
+	jest.fn(async (sql: string) => (sql.includes('FOR KEY SHARE OF bank_account') ? [{id: 'bank-account-id'}] : []));
 
 describe('BankingSyncService synchronization lock', () => {
 	let service: BankingSyncService;
@@ -295,7 +300,7 @@ describe('BankingSyncService synchronization lock', () => {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
 				callback({
 					getRepository: jest.fn().mockReturnValue(transactionRepository),
-					query: jest.fn().mockResolvedValue([]),
+					query: transactionQuery(),
 				}),
 			),
 			getRepository: jest.fn().mockReturnValue(transactionRepository),
@@ -464,7 +469,7 @@ describe('BankingSyncService synchronization lock', () => {
 				transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
 					callback({
 						getRepository: jest.fn().mockReturnValue(transactionRepository),
-						query: jest.fn().mockResolvedValue([]),
+						query: transactionQuery(),
 					}),
 				),
 				getRepository: jest.fn().mockReturnValue(transactionRepository),
@@ -501,7 +506,7 @@ describe('BankingSyncService synchronization lock', () => {
 					await jest.advanceTimersByTimeAsync((15 * 60 * 1000) / 3 + 1);
 					await callback({
 						getRepository: jest.fn().mockReturnValue(transactionRepository),
-						query: jest.fn().mockResolvedValue([]),
+						query: transactionQuery(),
 					});
 					committed = true;
 				}),

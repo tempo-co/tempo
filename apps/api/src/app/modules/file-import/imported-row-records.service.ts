@@ -1,4 +1,4 @@
-import {Injectable} from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import type {EntityManager} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
@@ -14,6 +14,7 @@ import {
 	StatementClosingBalance,
 } from '@modules/banking/services/imported-row-records';
 
+import {BANK_IMPORT_NOT_FOUND} from './bank-import.service';
 import type {NormalizedRow} from './parsers/parse-result';
 
 /**
@@ -201,6 +202,14 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 			[connectionId, ownerId],
 		);
 		return rows.map(({bankAccountId}) => bankAccountId);
+	}
+
+	async refuseUnownedImport(manager: EntityManager, ownerId: Account['id'], importId: string): Promise<void> {
+		const owned: Array<{id: string}> = await manager.query(
+			`SELECT "id" FROM "bank_imports" WHERE "id" = $1 AND "accountId" = $2`,
+			[importId, ownerId],
+		);
+		if (owned.length === 0) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
 	}
 
 	async moveToConnection(

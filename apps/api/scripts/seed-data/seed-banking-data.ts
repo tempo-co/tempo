@@ -1,9 +1,11 @@
 import {INestApplicationContext} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {Repository} from 'typeorm';
+import {DataSource, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BANK_TRANSACTION_TYPES} from '@modules/banking/bank-transaction-type';
+import {copySameCurrencyAmounts} from '@modules/banking/converted-amounts';
+import {lockReportingCurrencyForAmountWrites} from '@modules/banking/reporting-currency';
 
 import {BankingFixtures} from './banking-fixtures';
 import {VERIFIED_ACCOUNT_EMAIL} from './seed.constants';
@@ -70,7 +72,13 @@ export async function seedBankingData(
 			observedAt: new Date('2026-08-26T12:00:00.000Z'),
 		},
 	]);
-	const transactions = await fixtures.createTransactions(bankAccount, createSeedTransactions());
+	await fixtures.createTransactions(bankAccount, createSeedTransactions());
+	// The rows are all EUR, the owner's reporting currency: each is its own converted amount, as a sync stores it.
+	await app.get(DataSource).transaction(async (manager) => {
+		await lockReportingCurrencyForAmountWrites(manager, account.id);
+		await copySameCurrencyAmounts(manager, account.id, bankAccount.id);
+	});
+	const transactions = await fixtures.transactions.find({where: {bankAccountId: bankAccount.id}, order: {id: 'ASC'}});
 
 	return {bankConnection, bankAccount, bankSyncRun, balances, transactions};
 }
@@ -160,10 +168,6 @@ function createSeedTransactions() {
 
 	return transactions.map((transaction) => ({
 		...transaction,
-		// These fixtures are all EUR: seed the completed same-currency conversion explicitly.
-		amountInBaseCurrency: Number(transaction.amount).toFixed(2),
-		baseAmountMethod: 'SAME' as const,
-		baseAmountRateDate: null,
 		providerTransactionId: transaction.id,
 		entryReference: transaction.id,
 	}));

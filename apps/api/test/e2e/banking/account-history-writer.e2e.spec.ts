@@ -390,6 +390,23 @@ describe('AccountHistoryWriterService', () => {
 			});
 		});
 
+		it("refuses a fetch of another owner's account and writes nothing", async () => {
+			const {connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const {owner: other} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+
+			await expect(
+				recordFetch(other, connection, bankAccount.id, {
+					transactions: [booked({entryReference: 'BANK-1', bookingDate: day(3), valueDate: day(3)})],
+					dateFrom: day(10),
+				}),
+			).rejects.toBeInstanceOf(NotFoundException);
+
+			expect(await fixtures.transactions.findBy({bankAccountId: bankAccount.id})).toEqual([]);
+			expect(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+				transactionsFetchedThrough: null,
+			});
+		});
+
 		it('removes the imported rows the bank never sent from the days it is final for, which end before its oldest pending row', async () => {
 			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
 			await fixtures.bankAccounts.update(
@@ -687,6 +704,23 @@ describe('AccountHistoryWriterService', () => {
 			await expect(
 				writer.write(other.id, {}, (write) =>
 					writer.addFileRows(write, {account, connection, importId: record.id}, ({insert}) =>
+						insert([fileRow('FILE-1', '5.00', day(3))], {statementNumbering: null}),
+					),
+				),
+			).rejects.toBeInstanceOf(NotFoundException);
+
+			expect(await fixtures.transactions.findBy({bankAccountId: bankAccount.id})).toEqual([]);
+		});
+
+		it("refuses rows of another owner's import and writes nothing", async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const other = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const othersRecord = await saveImport(other.owner, other.connection.id, other.bankAccount.id);
+			const account = await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id});
+
+			await expect(
+				writer.write(owner.id, {}, (write) =>
+					writer.addFileRows(write, {account, connection, importId: othersRecord.id}, ({insert}) =>
 						insert([fileRow('FILE-1', '5.00', day(3))], {statementNumbering: null}),
 					),
 				),
