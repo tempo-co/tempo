@@ -33,7 +33,6 @@ describe('AddBankAccountBankIdentity migration', () => {
 		try {
 			await migration!.down(runner);
 			expect(await runner.hasColumn('bank_accounts', 'bankIdentity')).toBe(false);
-			expect(await runner.hasColumn('bank_imports', 'bankIdentities')).toBe(false);
 			const before = await fingerprints(runner);
 
 			await migration!.up(runner);
@@ -54,7 +53,6 @@ describe('AddBankAccountBankIdentity migration', () => {
 			};
 			expect(await identities()).toEqual(migrated);
 			expect(await fingerprints(runner)).toEqual(before);
-			expect(await runner.hasColumn('bank_imports', 'bankIdentities')).toBe(true);
 
 			// The migrated schema takes the column as the import writes it.
 			await runner.query(`UPDATE "bank_accounts" SET "bankIdentity" = 'bic:EXMPDEFF' WHERE "id" = $1`, [

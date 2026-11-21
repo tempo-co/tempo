@@ -3,13 +3,9 @@ import {Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryG
 
 import {Account} from '@modules/account/account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import type {BankIdentity} from '@modules/banking/bank-identity';
 
 /** A closing balance an import's statements state for one account: a decimal string as of the end of `date`. */
 export type BankImportClosingBalance = {bankAccountId: string; date: string; amount: string};
-
-/** A bank an import's statements give an account. */
-export type BankImportBankIdentity = {bankAccountId: string; bankIdentity: BankIdentity};
 
 /** One drop of statement files. The files themselves are discarded after parsing; only this record is kept. */
 @Entity('bank_imports')
@@ -102,14 +98,6 @@ export class BankImport {
 	 */
 	@Column({type: 'jsonb', default: () => `'[]'::jsonb`})
 	closingBalances: BankImportClosingBalance[];
-
-	/**
-	 * Per account made from files, each bank its statements in the drop give. An account named by an id that is no IBAN
-	 * takes no statement of another bank than any of them gives while the import is not undone, and undoing it gives
-	 * the account the strongest bank its other imports give (`recomputeFileBankIdentities`).
-	 */
-	@Column({type: 'jsonb', default: () => `'[]'::jsonb`})
-	bankIdentities: BankImportBankIdentity[];
 
 	/** Where a statement of the drop does not open at the closing balance of the one before it. */
 	@Column({type: 'jsonb', default: () => `'[]'::jsonb`})

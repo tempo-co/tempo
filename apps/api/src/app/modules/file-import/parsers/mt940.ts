@@ -101,6 +101,9 @@ function splitStatements(text: string): RawStatement[] {
 		} else if (current?.closed && MESSAGE_END.test(line.trim())) {
 			messageHeader = [];
 			current = null;
+			// Messages written back to back can start the next one on the line that ends this one.
+			const next = line.indexOf('{1:');
+			if (next >= 0) header.push(line.slice(next).trim());
 		} else if (current) {
 			// A field continues on the lines up to the next tag; one starting a SWIFT message ends the message's header.
 			if (line.trim().startsWith('{1:')) messageHeader = [];

@@ -507,6 +507,14 @@ describe('parseMt940', () => {
 			null,
 		],
 		[
+			'a SWIFT message starting on the line that ends the one before has its own header',
+			SWIFT_HEADER,
+			'-}{5:{CHK:0123456789AB}}{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:',
+			[],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
 			'a SWIFT message right after a statement with no -} shares no header',
 			SWIFT_HEADER,
 			null,
