@@ -214,7 +214,7 @@ describe('inferRecurringIdentities', () => {
 			'a payee with mixed purposes',
 			() => [
 				row({counterpartyName: 'Example School', category: 'EDUCATION'}),
-				row({counterpartyName: 'Example School', category: 'OTHER'}),
+				row({counterpartyName: 'Example School', category: 'SHOPPING'}),
 				row({
 					counterpartyName: null,
 					description: 'To Example School',

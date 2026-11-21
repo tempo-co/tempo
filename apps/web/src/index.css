@@ -111,7 +111,6 @@
   --color-category-refund: rgb(var(--category-refund));
   --color-category-transfer-in: rgb(var(--category-transfer-in));
   --color-category-transfer-out: rgb(var(--category-transfer-out));
-  --color-category-other: rgb(var(--category-other));
 
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
@@ -238,7 +237,6 @@
     --category-refund: 72 119 49;
     --category-transfer-in: 82 77 106;
     --category-transfer-out: 108 92 75;
-    --category-other: 98 94 102;
 
     --destructive: 6 62% 42%;
     --destructive-foreground: 8 60% 96%;
@@ -319,7 +317,6 @@
     --category-refund: 148 209 117;
     --category-transfer-in: 168 163 194;
     --category-transfer-out: 191 173 155;
-    --category-other: 183 176 186;
 
     --destructive: 4 70% 66%;
     --destructive-foreground: 4 40% 12%;

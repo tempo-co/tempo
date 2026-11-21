@@ -3,7 +3,7 @@ import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 import {Logger} from '@nestjs/common';
 import {
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-	BANK_TRANSACTION_UNCATEGORIZED,
+	BANK_TRANSACTION_UNCATEGORIZED_DEFINITION,
 	BREAKDOWN_DIMENSIONS,
 	BREAKDOWN_INTERVALS,
 	type BankBalanceTrend,
@@ -172,11 +172,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 					type: 'text',
 					text: JSON.stringify([
 						...BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-						{
-							value: BANK_TRANSACTION_UNCATEGORIZED,
-							label: 'Uncategorized',
-							description: 'Filter transactions without a category.',
-						},
+						BANK_TRANSACTION_UNCATEGORIZED_DEFINITION,
 					]),
 				},
 			],

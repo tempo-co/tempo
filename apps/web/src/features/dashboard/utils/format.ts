@@ -1,12 +1,16 @@
+import {BANK_TRANSACTION_UNCATEGORIZED_LABEL} from '@/features/banking/types/bank-transaction';
 import {BANK_TRANSACTION_CATEGORY_META} from '@/features/banking/utils/bank-transaction-category-meta';
 
 import {formatWholeMoney} from './money';
 
 type CategoryKey = keyof typeof BANK_TRANSACTION_CATEGORY_META;
 
-/** A stored category the list no longer has reads as Uncategorized, like a row with no category. */
+/** A stored category the list no longer has reads as Not categorized, like a row with no category. */
 export function categoryLabel(key: string) {
-  return BANK_TRANSACTION_CATEGORY_META[key as CategoryKey]?.label ?? 'Uncategorized';
+  return (
+    BANK_TRANSACTION_CATEGORY_META[key as CategoryKey]?.label ??
+    BANK_TRANSACTION_UNCATEGORIZED_LABEL
+  );
 }
 
 /** "+€13,139" / "−€2,100" from cents. */

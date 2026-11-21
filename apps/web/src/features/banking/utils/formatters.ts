@@ -14,6 +14,7 @@ import {
   BANK_TRANSACTION_ACTIVITY_LABELS,
   BANK_TRANSACTION_CATEGORY_LABELS,
   BANK_TRANSACTION_FINANCIAL_EVENT_LABELS,
+  BANK_TRANSACTION_UNCATEGORIZED_LABEL,
 } from '../types/bank-transaction';
 import {formatBankAccountLabel} from './bank-account-label';
 
@@ -168,7 +169,9 @@ export function toBankTransactionCategory(value: string | null | undefined) {
 
 export function formatBankTransactionCategory(value: string | null | undefined) {
   const category = toBankTransactionCategory(value);
-  return category ? BANK_TRANSACTION_CATEGORY_LABELS[category] : 'Not categorized';
+  return category
+    ? BANK_TRANSACTION_CATEGORY_LABELS[category]
+    : BANK_TRANSACTION_UNCATEGORIZED_LABEL;
 }
 
 export function formatBankTransactionCategoryStatus(
@@ -179,7 +182,7 @@ export function formatBankTransactionCategoryStatus(
   if (normalized === 'FAILED') return 'Categorization failed. Choose a category manually.';
   if (normalized === 'COMPLETED') return 'Categorized';
   if (normalized === 'NOT_APPLICABLE') return 'Category not applicable';
-  return 'Not categorized';
+  return BANK_TRANSACTION_UNCATEGORIZED_LABEL;
 }
 
 const CATEGORY_SOURCE_LABELS: Record<BankTransactionCategorizationSource, string> = {

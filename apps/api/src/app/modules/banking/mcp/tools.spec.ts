@@ -263,7 +263,7 @@ describe('MCP tool registration', () => {
 	it('lists the shared category definitions with an uncategorized filter without reading', async () => {
 		expect(json(await call('list_categories'))).toEqual([
 			...BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-			{value: 'UNCATEGORIZED', label: 'Uncategorized', description: 'Filter transactions without a category.'},
+			{value: 'UNCATEGORIZED', label: 'Not categorized', description: 'Filter transactions without a category.'},
 		]);
 		expect(calls).toEqual([]);
 	});

@@ -28,7 +28,7 @@ const ORDINARY_ATTEMPTS = 3;
 
 describe('CategorizationPipeline provider behavior versions', () => {
 	it('versions the categorization prompt separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v21');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v22');
 	});
 });
 
@@ -290,7 +290,7 @@ describe('CategorizationPipeline', () => {
 		});
 		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
-			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
+			providerResult: [{correlationId: transaction.id, category: 'NEEDS_REVIEW', confidence: 0.5}],
 		});
 
 		await pipeline.processTransactionJob([transaction.id]);

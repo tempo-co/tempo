@@ -1,9 +1,11 @@
+import {BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
 import {format, isSameDay, startOfDay} from 'date-fns';
 
 import {useActiveBankAccounts} from '@/features/banking/api/use-active-bank-accounts';
 import {
   BANK_TRANSACTION_CATEGORY_LABELS,
   BANK_TRANSACTION_FILTER_KEYS,
+  BANK_TRANSACTION_UNCATEGORIZED_LABEL,
   type BankTransactionFilterParams,
 } from '@/features/banking/types/bank-transaction';
 import {DATE_FILTER_PRESETS} from '@/features/banking/utils/date-filter-presets';
@@ -46,7 +48,9 @@ export function useBankTransactionFilterLabels(filters: BankTransactionFilterPar
       key: 'categories',
       label: list(
         filters.categories.map((value) =>
-          value === 'UNCATEGORIZED' ? 'Not categorized' : BANK_TRANSACTION_CATEGORY_LABELS[value],
+          value === BANK_TRANSACTION_UNCATEGORIZED
+            ? BANK_TRANSACTION_UNCATEGORIZED_LABEL
+            : BANK_TRANSACTION_CATEGORY_LABELS[value],
         ),
         'categories',
       ),

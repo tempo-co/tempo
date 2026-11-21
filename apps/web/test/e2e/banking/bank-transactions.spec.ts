@@ -238,7 +238,7 @@ test.describe('bank transactions', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(24);
+    await expect(page.getByRole('option')).toHaveCount(23);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
       'Home improvement',
@@ -263,10 +263,9 @@ test.describe('bank transactions', () => {
       'Transfer in',
       'Transfer out',
       'Needs review',
-      'Other',
     ]);
     // Every option has a category icon; the selected one also shows a check mark.
-    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(24);
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(23);
     const targetOption = page.getByRole('option', {name: target.name, exact: true});
     await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
     await targetOption.click();

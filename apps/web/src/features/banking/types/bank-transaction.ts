@@ -59,8 +59,10 @@ export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, s
   TRANSFER_IN: 'Transfer in',
   TRANSFER_OUT: 'Transfer out',
   NEEDS_REVIEW: 'Needs review',
-  OTHER: 'Other',
 };
+
+/** What every screen calls a transaction without a category. */
+export const BANK_TRANSACTION_UNCATEGORIZED_LABEL = 'Not categorized';
 
 /** The two kinds of internal movement in the cash-flow filter. */
 export const BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS = [
