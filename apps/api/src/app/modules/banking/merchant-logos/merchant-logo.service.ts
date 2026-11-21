@@ -125,14 +125,14 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 
 	/**
 	 * Called after a sync persisted rows: adds the merchants of those rows (all of the owner's without ids) and queues
-	 * identification right away, without failing the sync; the hourly reconcile picks up anything missed, such as a
+	 * the owner's identifications right away, without failing the sync; the hourly reconcile picks up anything missed, such as a
 	 * row that stopped being an own transfer.
 	 */
 	async enqueueForOwnerSafely(accountId: string, transactionIds?: readonly string[]): Promise<void> {
 		if (!this.canAcquire()) return;
 		try {
 			await this.addMerchants(accountId, transactionIds);
-			await this.enqueuePendingIdentifications();
+			await this.enqueuePendingIdentifications(accountId);
 		} catch (error) {
 			this.logger.warn(`Merchant logo enqueue failed: ${safeErrorName(error)}`);
 		}
@@ -381,10 +381,15 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		);
 	}
 
-	private async enqueuePendingIdentifications(): Promise<void> {
+	/** Queues the pending identifications of one owner, or of every owner. */
+	private async enqueuePendingIdentifications(accountId?: string): Promise<void> {
 		const pending = await this.merchants.find({
 			select: {id: true, accountId: true},
-			where: {status: PENDING, retryAfter: Or(IsNull(), LessThanOrEqual(new Date()))},
+			where: {
+				...(accountId && {accountId}),
+				status: PENDING,
+				retryAfter: Or(IsNull(), LessThanOrEqual(new Date())),
+			},
 			order: {id: 'ASC'},
 		});
 		// Each batch holds one owner's merchants, so the model never sees another account's names.

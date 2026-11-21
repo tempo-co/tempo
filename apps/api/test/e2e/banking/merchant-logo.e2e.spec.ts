@@ -797,11 +797,16 @@ describe('Merchant logos', () => {
 			await fixtures.createBankAccount(await fixtures.createConnection({id: neighbour.id})),
 			bookedRow('2026-10-06', '-5.00', {description: 'Example Pay', transactionType: 'CARD_PAYMENT'}),
 		);
+		identifySpy.mockClear();
 		await app.get(MerchantLogoService).enqueueForOwnerSafely(neighbour.id);
 		await waitFor(
 			() => queue.getJobCounts('waiting', 'active', 'delayed', 'prioritized'),
 			(counts) => Object.values(counts).every((count) => count === 0),
 		);
+		// A sync queues only its own owner's merchants.
+		expect(
+			identifySpy.mock.calls.map(([inputs]: [MerchantIdentificationInput[]]) => inputs.map(({name}) => name)),
+		).toEqual([['Example Pay']]);
 
 		// A job naming both owners' merchants sends only one owner's.
 		const [mine, theirs] = await Promise.all([
