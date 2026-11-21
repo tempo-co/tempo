@@ -129,6 +129,13 @@ test('the heat table model names each income source and opens its rows by source
   });
 });
 
+test('the heat table model names a stored category the list no longer has as Uncategorized', () => {
+  const table = model(homeHistory({spending: () => ({RETIRED_CATEGORY: 400})}))!;
+  expect(table.top.map((row) => [row.category, row.name])).toEqual([
+    ['RETIRED_CATEGORY', 'Uncategorized'],
+  ]);
+});
+
 test('the heat table model has no table when nothing came in', () => {
   expect(model(homeHistory({income: () => ({})}), 'source')).toBeNull();
 });
