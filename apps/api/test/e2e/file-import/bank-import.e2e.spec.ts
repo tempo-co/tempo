@@ -1767,6 +1767,79 @@ describe('Bank imports', () => {
 			[null, null],
 			[null, null],
 		]);
+
+		// Ids that spell another bank's account, stated without a BIC, are accounts of their own.
+		const lookAlikes = await drop(agent, [
+			Buffer.from(
+				camt053(
+					['bic:EXMPNL2A/001234', 'at-bank:001234', eurB.id].map((otherId) => ({
+						otherId,
+						servicerBic: null,
+						entries: [{amount: '3.00', indicator: 'DBIT', bookingDate: '2026-10-28', info: 'Example Shop'}],
+					})),
+				),
+			),
+		]).expect(201);
+		const lookAlikeAccounts = (lookAlikes.body as BankImportSummary).accounts;
+		expect(lookAlikeAccounts.map(({created}) => created)).toEqual([true, true, true]);
+		expect(
+			(await bankAccounts.findBy({id: In(lookAlikeAccounts.map(({id}) => id))})).map(
+				({bankIdentity}) => bankIdentity,
+			),
+		).toEqual([null, null, null]);
+	});
+
+	it('tells two banks naming one local account number apart within one drop, also after an import that named no bank', async () => {
+		const {agent} = await createOwner();
+		const statementOf = (servicerBic: string | null, bookingDate: string) => ({
+			otherId: '001234',
+			servicerBic,
+			entries: [{amount: '4.00', indicator: 'DBIT' as const, bookingDate, info: 'Example Shop'}],
+		});
+		const first = await drop(agent, [Buffer.from(camt053([statementOf(null, '2026-10-10')]))]).expect(201);
+		const [unnamed] = (first.body as BankImportSummary).accounts;
+
+		const both = await drop(agent, [
+			Buffer.from(camt053([statementOf('EXMPNL2A', '2026-10-21'), statementOf('EXMPDEFF', '2026-10-20')])),
+		]).expect(201);
+
+		const accounts = (both.body as BankImportSummary).accounts;
+		expect(new Set(accounts.map(({id}) => id)).size).toBe(2);
+		expect(accounts.map(({id}) => id)).toContain(unnamed.id);
+		expect(
+			(await bankAccounts.findBy({id: In(accounts.map(({id}) => id))}))
+				.map(({bankIdentity}) => bankIdentity)
+				.sort(),
+		).toEqual(['bic:EXMPDEFF', 'bic:EXMPNL2A']);
+	});
+
+	it("imports a statement once, into one account, whether or not each copy states its bank's BIC or its branch", async () => {
+		const {agent} = await createOwner();
+		const copy = (servicerBic: string | null) =>
+			Buffer.from(
+				camt053([
+					{
+						otherId: '001234',
+						servicerBic,
+						opening: '100.00',
+						closing: '100.00',
+						entries: [
+							{amount: '10.00', indicator: 'DBIT', bookingDate: '2026-10-20', info: 'Example Shop'},
+							{amount: '10.00', indicator: 'CRDT', bookingDate: '2026-10-20', info: 'Example Refund'},
+						],
+					},
+				]),
+			);
+		const first = await drop(agent, [copy(null)]).expect(201);
+		const [account] = (first.body as BankImportSummary).accounts;
+		expect(first.body).toMatchObject({rowsAdded: 2});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: null});
+
+		const again = await drop(agent, [copy('EXMPDEFF'), copy('EXMPDEFFXXX'), copy(null)]).expect(201);
+
+		expect(again.body).toMatchObject({rowsAdded: 0, accounts: [{id: account.id, created: false}]});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+		expect(await transactions.countBy({bankAccountId: account.id})).toBe(2);
 	});
 
 	it("pairs an exchange between an account kept from a removed Revolut connection and a Revolut statement's account", async () => {

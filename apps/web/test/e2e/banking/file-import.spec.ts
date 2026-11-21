@@ -1422,8 +1422,11 @@ test.describe('statement file import on Connections', () => {
 
     const preview = dialog.getByTestId('bank-import-layout-preview');
     const failed = preview.getByRole('alert').filter({hasText: "Couldn't load your banks"});
-    await expect(failed).toBeVisible();
+    await expect(failed).toHaveCount(1);
     await expect(failed).toContainText('429');
+    // The failure is said once: in the picker's place, with no toast besides. Counted now, since a waiting
+    // assertion would pass once a toast timed out.
+    expect(await page.locator('[data-sonner-toast]').count()).toBe(0);
     await expect(preview.getByLabel('Bank', {exact: true})).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeDisabled();
 

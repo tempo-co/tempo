@@ -5,7 +5,7 @@ import {CSV_LAYOUTS, namesNoAccount} from '../parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from '../parsers/currency-codes';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {
-	BIC,
+	INSTITUTION_BIC,
 	NormalizedRow,
 	NormalizedStatement,
 	PARSE_REFUSAL_CODES,
@@ -188,7 +188,7 @@ function validBalance(value: unknown): StatementBalance | null {
 
 function validBic(value: unknown): string | null {
 	if (value === null) return null;
-	if (typeof value !== 'string' || !BIC.test(value)) throw new ParseRefusal('parse_failed');
+	if (typeof value !== 'string' || !INSTITUTION_BIC.test(value)) throw new ParseRefusal('parse_failed');
 	return value;
 }
 

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 
 import {BankConnection} from './bank-connection.entity';
+import type {BankIdentity} from './bank-identity';
 
 @Entity('bank_accounts')
 @Index('idx_bank_accounts_connection_identification_hash', ['bankConnection', 'identificationHash'])
@@ -77,7 +78,7 @@ export class BankAccount {
 	 * connection pair only within one.
 	 */
 	@Column({type: 'varchar', nullable: true})
-	bankIdentity: string | null;
+	bankIdentity: BankIdentity | null;
 
 	@Column({type: 'boolean', default: true})
 	isActive: boolean;

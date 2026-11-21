@@ -430,7 +430,12 @@ export type BankImportLayout = {
  */
 export type BankImportBanks = {banks: string[]};
 
+/** A bank name as Tempo shows and keeps it: trimmed, with single spaces. */
+export function bankNameSpelling(name: string): string {
+	return name.trim().replace(/\s+/g, ' ');
+}
+
 /** How bank names compare wherever an owner names or picks a bank: ignoring case and spacing. */
 export function bankNameKey(name: string): string {
-	return name.trim().replace(/\s+/g, ' ').toLowerCase();
+	return bankNameSpelling(name).toLowerCase();
 }

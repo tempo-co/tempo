@@ -47,7 +47,8 @@ export function useConfirmLayout() {
 export function useBankImportBanks() {
   return useQuery({
     queryKey: bankImportQueryKeys.banks,
-    queryFn: () => api.get<BankImportBanks>('/bank-imports/banks'),
+    // The preview step shows its own failed-load state, so the wrapper's toast would report the failure twice.
+    queryFn: () => api.get<BankImportBanks>('/bank-imports/banks', {quiet: true}),
     select: ({banks}) => banks,
   });
 }

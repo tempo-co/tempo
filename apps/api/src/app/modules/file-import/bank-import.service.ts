@@ -9,13 +9,21 @@ import type {
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
 } from '@tempo/contracts';
+import {bankNameKey} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import {bicBankIdentity, nameBankIdentity, strongerBankIdentity} from '@modules/banking/bank-identity';
+import {
+	BankIdentity,
+	bicBankIdentity,
+	differentBanks,
+	identityBankName,
+	nameBankIdentity,
+	strongerBankIdentity,
+} from '@modules/banking/bank-identity';
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
@@ -104,9 +112,10 @@ type AccountRows = {
 	learnedBank: string | null;
 	/**
 	 * The strongest evidence of the account's bank its statements give (`statementBankIdentity`,
-	 * `strongerBankIdentity`); null when none does. For an account named by an id that is no IBAN, part of the account.
+	 * `strongerBankIdentity`); null when none does. Never part of the account key: it only tells two banks apart
+	 * (`groupByAccount`, `findFileAccountIn`).
 	 */
-	bankIdentity: string | null;
+	bankIdentity: BankIdentity | null;
 	currency: string;
 	/** `learned`: read by one of the owner's saved layouts. */
 	byFormat: {
@@ -811,7 +820,7 @@ export class BankImportService {
 		const learnedBanks = new Map(owned.map(({id, bank}) => [id, bank]));
 		const statements: NormalizedStatement[] = [];
 		const kinds = new Map<string, FileKind>();
-		const seen = new Set<string>();
+		const seen = new Map<string, NormalizedStatement>();
 		let rows = 0;
 		for (const [index, file] of files.entries()) {
 			const outcome = await this.parseRunner.parse(file, owned);
@@ -825,10 +834,15 @@ export class BankImportService {
 				kinds.set(format, {format, layout: null});
 			for (const layout of layouts) kinds.set(`csv:${layout}`, {format: 'csv', layout});
 			for (const statement of outcome.result.statements) {
-				// A statement dropped twice in one go (an archive and its own files) is the same statement.
-				const key = JSON.stringify(statement);
-				if (seen.has(key)) continue;
-				seen.add(key);
+				// A statement dropped twice in one go (an archive and its own files) is the same statement, also when only
+				// one copy states its bank's BIC.
+				const key = JSON.stringify({...statement, servicerBic: null});
+				const copy = seen.get(key);
+				if (copy) {
+					copy.servicerBic = minBic(copy.servicerBic, statement.servicerBic);
+					continue;
+				}
+				seen.set(key, statement);
 				rows += statement.rows.length;
 				if (rows > MAX_ROWS_PER_DROP) throw new BankImportRefusalException('too_many_rows', index + 1);
 				statements.push(statement);
@@ -893,7 +907,7 @@ export class BankImportService {
 								(iban
 									? normalizeStoredIban(account.iban) === iban ||
 										verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
-									: account.bankConnection.aspspName.trim().toLowerCase() === bank!.toLowerCase()),
+									: bankNameKey(account.bankConnection.aspspName) === bankNameKey(bank!)),
 						)
 					: holders[index];
 			// Without an IBAN, an account bank sync no longer reports (closed, or left out of the consent) fits only when
@@ -972,26 +986,17 @@ export class BankImportService {
 			.map(({index, candidates}) => ({
 				rows: accountRows[index],
 				bank: banks[index]!,
-				providerAccountId: fileAccountIdentity(newAccountRows(accountRows[index], banks[index]!))
-					.providerAccountId,
 				candidates,
 			}));
 		// `new` goes to the imported-files account of the bank and currency once it exists, so it is offered as itself.
-		const fileAccounts =
-			asked.length > 0
-				? await this.dataSource.getRepository(BankAccount).find({
-						where: {
-							bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-							providerAccountId: In(asked.map(({providerAccountId}) => providerAccountId)),
-						},
-						relations: {bankConnection: true},
-					})
-				: [];
+		const fileAccounts = await Promise.all(
+			asked.map(({rows, bank}) => this.findFileAccount(ownerId, newAccountRows(rows, bank))),
+		);
 		throw new BankImportRefusalException(
 			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
 			null,
-			asked.map(({rows, bank, providerAccountId, candidates}) => {
-				const fileAccount = fileAccounts.find((account) => account.providerAccountId === providerAccountId);
+			asked.map(({rows, bank, candidates}, askedIndex) => {
+				const fileAccount = fileAccounts[askedIndex];
 				const unlisted = fileAccount && !candidates.some(({id}) => id === fileAccount.id);
 				return {
 					bank,
@@ -1084,7 +1089,7 @@ export class BankImportService {
 		const {iban, bank, currency} = accountRows[0];
 		if (account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE) {
 			// A file that names no account fits any account in its currency.
-			if (!bank && account.providerAccountId !== fileAccountIdentity(accountRows[0]).providerAccountId) {
+			if (!bank && (await this.findFileAccount(ownerId, accountRows[0]))?.id !== account.id) {
 				throw new BankImportRefusalException('target_account_mismatch');
 			}
 			return {kind: 'file', account};
@@ -1158,34 +1163,42 @@ export class BankImportService {
 		return accounts;
 	}
 
-	/** The owner's imported-files account the rows would go to, if it exists already. */
+	/** The owner's imported-files account the rows would go to, if it exists already (`findFileAccountIn`). */
 	private async findFileAccount(ownerId: Account['id'], rows: AccountRows): Promise<BankAccount | null> {
-		return this.dataSource.getRepository(BankAccount).findOne({
-			where: {
-				bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-				providerAccountId: fileAccountIdentity(rows).providerAccountId,
-			},
-			relations: {bankConnection: true},
-		});
+		const {account} = await findFileAccountIn(this.dataSource.manager, ownerId, null, rows);
+		return account;
 	}
 
+	/**
+	 * The imported-files account the rows go to (`findFileAccountIn`), created when it does not exist yet. An account
+	 * without a bank takes the rows' bank right away, so another statement of the drop with the same id tells the two
+	 * banks apart.
+	 */
 	private async findOrCreateFileAccount(
 		manager: EntityManager,
 		connection: BankConnection,
 		rows: AccountRows,
 	): Promise<ImportedAccount> {
 		const bankAccounts = manager.getRepository(BankAccount);
-		const {providerAccountId, hashSeed, name} = fileAccountIdentity(rows);
-		const existing = await bankAccounts.findOne({where: {bankConnection: {id: connection.id}, providerAccountId}});
-		if (existing) return {account: existing, connection, created: false};
+		const {account: existing, identity} = await findFileAccountIn(
+			manager,
+			connection.accountId,
+			connection.id,
+			rows,
+		);
+		if (existing) {
+			await recordBankIdentity(manager, connection.accountId, existing, rows.bankIdentity);
+			return {account: existing, connection, created: false};
+		}
 		const account = await bankAccounts.save(
 			bankAccounts.create({
 				bankConnection: {id: connection.id},
-				providerAccountId,
-				identificationHash: `file:${createHash('sha256').update(hashSeed).digest('hex')}`,
+				providerAccountId: identity.providerAccountId,
+				identificationHash: `file:${createHash('sha256').update(identity.hashSeed).digest('hex')}`,
 				iban: rows.iban,
-				name,
+				name: identity.name,
 				currency: rows.currency,
+				bankIdentity: rows.bankIdentity,
 				isActive: true,
 			}),
 		);
@@ -1429,15 +1442,32 @@ function groupByAccount(
 			}[];
 		}
 	>();
-	for (const statement of ordered) {
-		const [kind, identifier] = statement.accountIban
+	const accountOf = (statement: NormalizedStatement): [string, string] =>
+		statement.accountIban
 			? ['iban', statement.accountIban]
 			: statement.accountOtherId
 				? ['other', statement.accountOtherId]
 				: ['bank', statement.bank as string];
-		const evidence = statementBankIdentity(statement, learnedBanks);
-		// An id that is no IBAN is unique only at its bank, so statements of two banks with the same id are two accounts.
-		const key = JSON.stringify([kind, identifier, kind === 'other' ? evidence : null, statement.accountCurrency]);
+	const evidence = new Map(ordered.map((statement) => [statement, statementBankIdentity(statement, learnedBanks)]));
+	// An id that is no IBAN is unique only at its bank: statements naming it with evidence of two banks are two accounts.
+	const idBanks = new Map<string, BankIdentity[]>();
+	for (const statement of ordered) {
+		const [kind, identifier] = accountOf(statement);
+		const bank = evidence.get(statement);
+		if (kind !== 'other' || !bank) continue;
+		const key = JSON.stringify([identifier, statement.accountCurrency]);
+		idBanks.set(key, [...(idBanks.get(key) ?? []), bank]);
+	}
+	for (const statement of ordered) {
+		const [kind, identifier] = accountOf(statement);
+		const split =
+			kind === 'other'
+				? splitBank(
+						evidence.get(statement)!,
+						idBanks.get(JSON.stringify([identifier, statement.accountCurrency])) ?? [],
+					)
+				: null;
+		const key = JSON.stringify([kind, identifier, statement.accountCurrency, split]);
 		const group = groups.get(key) ?? {
 			identifier,
 			iban: statement.accountIban,
@@ -1447,7 +1477,7 @@ function groupByAccount(
 			currency: statement.accountCurrency,
 			parts: [],
 		};
-		group.bankIdentity = strongerBankIdentity(group.bankIdentity, evidence);
+		group.bankIdentity = split ?? strongerBankIdentity(group.bankIdentity, evidence.get(statement)!);
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
 		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
@@ -1612,16 +1642,95 @@ async function recordBankIdentities(
 	accountRows: readonly AccountRows[],
 ): Promise<void> {
 	for (const [index, {account, connection}] of accounts.entries()) {
-		const {bankIdentity} = accountRows[index];
-		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || !bankIdentity || account.bankIdentity) continue;
-		await manager.query(
-			`UPDATE "bank_accounts" SET "bankIdentity" = $3
-			WHERE "id" = $1 AND "bankIdentity" IS NULL
-				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
-			[account.id, ownerId, bankIdentity, BANK_CONNECTION_PROVIDERS.FILE],
-		);
-		account.bankIdentity = bankIdentity;
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
+		await recordBankIdentity(manager, ownerId, account, accountRows[index].bankIdentity);
 	}
+}
+
+/** Records `bankIdentity` on the owner's imported-files account when it records no bank yet. */
+async function recordBankIdentity(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	account: BankAccount,
+	bankIdentity: BankIdentity | null,
+): Promise<void> {
+	if (!bankIdentity || account.bankIdentity) return;
+	await manager.query(
+		`UPDATE "bank_accounts" SET "bankIdentity" = $3
+		WHERE "id" = $1 AND "bankIdentity" IS NULL
+			AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
+		[account.id, ownerId, bankIdentity, BANK_CONNECTION_PROVIDERS.FILE],
+	);
+	account.bankIdentity = bankIdentity;
+}
+
+/**
+ * The bank evidence statements naming one id that is no IBAN are told apart by: when they give two different names,
+ * or else two different BICs, each statement's own one of that kind, and the first-sorting one for a statement that
+ * gives none of that kind. Null when nothing tells them apart, so they are one account.
+ */
+function splitBank(own: BankIdentity | null, banks: readonly BankIdentity[]): BankIdentity | null {
+	const distinct = [...new Set(banks)].sort();
+	const names = distinct.filter((bank) => identityBankName(bank) !== null);
+	const bics = distinct.filter((bank) => identityBankName(bank) === null);
+	const kind = names.length > 1 ? names : bics.length > 1 ? bics : null;
+	if (!kind) return null;
+	return own && kind.includes(own) ? own : kind[0];
+}
+
+/** Of two copies' BICs, the one stated, the first-sorting when both are. */
+function minBic(left: string | null, right: string | null): string | null {
+	if (left === null || right === null) return left ?? right;
+	return left <= right ? left : right;
+}
+
+/**
+ * The owner's imported-files account the rows go to, if it exists, and the identity it has or gets
+ * (`fileAccountIdentity`). Rows of a file that names no account go to the account of their bank, named ignoring case
+ * and spacing, and currency. Rows named by an IBAN go to the account of that IBAN and currency; rows named by another
+ * id to the account of that id and currency, unless that account records a bank the rows' evidence proves different
+ * (`differentBanks`): then to the account of the id at the rows' bank (`bankFileAccountIdentity`). `connectionId`: the owner's imported-files connection, when known.
+ */
+async function findFileAccountIn(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	connectionId: BankConnection['id'] | null,
+	rows: AccountRows,
+): Promise<{account: BankAccount | null; identity: FileAccountIdentity}> {
+	const accounts = await manager.getRepository(BankAccount).find({
+		where: {
+			bankConnection: {
+				...(connectionId ? {id: connectionId} : {}),
+				accountId: ownerId,
+				provider: BANK_CONNECTION_PROVIDERS.FILE,
+			},
+			currency: rows.currency,
+		},
+		relations: {bankConnection: true},
+		order: {id: 'ASC'},
+	});
+	const identity = fileAccountIdentity(rows);
+	if (rows.bank) {
+		const bank = rows.bank;
+		const ofBank = accounts.filter(({providerAccountId}) =>
+			fileBankAccountOf(providerAccountId, bank, rows.currency),
+		);
+		return {
+			account:
+				ofBank.find(({providerAccountId}) => providerAccountId === identity.providerAccountId) ??
+				ofBank[0] ??
+				null,
+			identity,
+		};
+	}
+	const account = accounts.find(({providerAccountId}) => providerAccountId === identity.providerAccountId) ?? null;
+	// An IBAN names one account everywhere; another id only at its bank.
+	if (!account || rows.iban || !differentBanks(account.bankIdentity, rows.bankIdentity)) return {account, identity};
+	const atBank = bankFileAccountIdentity(rows, rows.bankIdentity!);
+	return {
+		account: accounts.find(({providerAccountId}) => providerAccountId === atBank.providerAccountId) ?? null,
+		identity: atBank,
+	};
 }
 
 /**
@@ -1632,7 +1741,7 @@ async function recordBankIdentities(
 function statementBankIdentity(
 	{format, layout, servicerBic}: NormalizedStatement,
 	learnedBanks: ReadonlyMap<string, string>,
-): string | null {
+): BankIdentity | null {
 	const bank =
 		FORMAT_BANKS[format] ??
 		(layout ? (CSV_LAYOUTS.find(({id}) => id === layout)?.bank ?? learnedBanks.get(layout)) : undefined);
@@ -1654,25 +1763,46 @@ function importNumbering({format, layout}: BankImport): string | null {
  * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
  * bank whose files name no account, by that bank and currency (one such account per currency).
  */
-function fileAccountIdentity({identifier, iban, bank, bankIdentity, currency}: AccountRows): {
-	providerAccountId: string;
-	hashSeed: string;
-	name: string;
-} {
+function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): FileAccountIdentity {
 	if (bank) {
 		return {
-			providerAccountId: `file-bank:${bank}:${currency}`,
+			providerAccountId: `${FILE_BANK_ACCOUNT_PREFIX}${bank}:${currency}`,
 			hashSeed: `bank:${bank}:${currency}`,
 			name: `${bank} ${currency}`,
 		};
 	}
-	// An IBAN is unique everywhere; another id only at its bank, so its bank's evidence is part of the account.
-	const key = iban || !bankIdentity ? identifier : `${bankIdentity}/${identifier}`;
 	return {
-		providerAccountId: fileAccountProviderId(key, currency),
-		hashSeed: `${key}:${currency}`,
+		providerAccountId: fileAccountProviderId(identifier, currency),
+		hashSeed: `${identifier}:${currency}`,
 		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
 	};
+}
+
+type FileAccountIdentity = {providerAccountId: string; hashSeed: string; name: string};
+
+const FILE_BANK_ACCOUNT_PREFIX = 'file-bank:';
+
+/**
+ * The account of an id at one bank, for a statement whose id another bank's account already has. Its key is a hash
+ * under its own prefix, so no id a file states (`fileAccountProviderId`) or bank name can make it.
+ */
+function bankFileAccountIdentity({identifier, currency}: AccountRows, bankIdentity: BankIdentity): FileAccountIdentity {
+	const seed = JSON.stringify([bankIdentity, identifier, currency]);
+	return {
+		providerAccountId: `file-at-bank:${createHash('sha256').update(seed).digest('hex')}:${currency}`,
+		hashSeed: `at-bank:${seed}`,
+		name: identifier,
+	};
+}
+
+/** Whether an account key is the bank-named account (`fileAccountIdentity`) of the bank, ignoring case and spacing. */
+function fileBankAccountOf(providerAccountId: string, bank: string, currency: string): boolean {
+	const suffix = `:${currency}`;
+	return (
+		providerAccountId.startsWith(FILE_BANK_ACCOUNT_PREFIX) &&
+		providerAccountId.endsWith(suffix) &&
+		bankNameKey(providerAccountId.slice(FILE_BANK_ACCOUNT_PREFIX.length, -suffix.length)) === bankNameKey(bank)
+	);
 }
 
 /**
@@ -1704,8 +1834,8 @@ function askedBanks(
 
 /** The bank of the synced accounts holding a statement's account number, when they are at one bank. */
 function holdersBank(holders: readonly BankAccount[]): string | null {
-	const names = [...new Set(holders.map(({bankConnection}) => bankConnection.aspspName.trim()))];
-	return names.length === 1 ? names[0] : null;
+	const names = new Map(holders.map(({bankConnection: {aspspName}}) => [bankNameKey(aspspName), aspspName.trim()]));
+	return names.size === 1 ? [...names.values()][0] : null;
 }
 
 /**

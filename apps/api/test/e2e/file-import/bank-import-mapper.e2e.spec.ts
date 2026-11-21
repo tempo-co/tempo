@@ -235,7 +235,7 @@ describe('Bank import column mapper', () => {
 		const kept = JSON.stringify([stored.headerCells, stored.columnShapes, stored.layout]);
 		for (const value of DEBIT_CREDIT_CONTENT) expect(kept).not.toContain(value);
 
-		const saved = await confirm(agent, proposed.body.id, {bankName: ' Example Bank '}).expect(201);
+		const saved = await confirm(agent, proposed.body.id, {bankName: ' Example  Bank '}).expect(201);
 		expect(saved.body).toEqual({id: expect.any(String), bankName: 'Example Bank', createdAt: expect.any(String)});
 		expect(await proposals.findOneByOrFail({id: proposed.body.id})).toMatchObject({status: 'confirmed'});
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(409);
@@ -261,6 +261,8 @@ describe('Bank import column mapper', () => {
 		// Authorizations that never connected hold no bank of the owner's.
 		for (const status of ['PENDING_AUTHORIZATION', 'CANCELLED', 'FAILED'])
 			await fixtures.createConnection(owner, {aspspName: `Example ${status} Bank`, aspspCountry: 'NL', status});
+		// A layout's bank is at most 60 characters, so a longer connection name is not offered.
+		await fixtures.createConnection(owner, {aspspName: `Example ${'Long '.repeat(12)}Bank`, aspspCountry: 'NL'});
 		const files = await fixtures.connections.findOneByOrFail({accountId: owner.id, provider: 'file'});
 		await fixtures.createBankAccounts(files, [
 			{bankIdentity: 'name:knab'},
@@ -676,5 +678,26 @@ describe('Bank import column mapper', () => {
 			iban: null,
 			currency: 'HRK',
 		});
+	});
+
+	it("imports a file that names no account into its bank's account however an earlier layout spelled the bank", async () => {
+		const {owner, agent} = await createOwner();
+		mapLayout.mockResolvedValueOnce(ANSWER.balance);
+		const proposed = await propose(agent, BALANCE_CSV).expect(201);
+		await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'EUR'}).expect(201);
+		const files = await fixtures.createConnection(owner, {
+			provider: 'file',
+			aspspName: 'Imported files',
+			aspspCountry: 'ZZ',
+		});
+		const earlier = await fixtures.createBankAccount(files, {
+			providerAccountId: 'file-bank:example  BANK:EUR',
+			currency: 'EUR',
+		});
+
+		const imported = await drop(agent, BALANCE_CSV).expect(201);
+
+		expect(imported.body).toMatchObject({rowsAdded: 4, accounts: [{id: earlier.id, created: false}]});
+		expect(await bankAccounts.countBy({bankConnection: {id: files.id}})).toBe(1);
 	});
 });

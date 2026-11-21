@@ -73,6 +73,13 @@ export type StatementBalance = {date: string; amount: string};
 
 /** A BIC: institution, country, location and an optional branch. */
 export const BIC = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
+/** The institution part of a BIC: institution, country and location, without the branch. */
+export const INSTITUTION_BIC = /^[A-Z]{6}[A-Z0-9]{2}$/;
+
+/** The institution of a written BIC (`INSTITUTION_BIC`), so copies with and without a branch name one bank. */
+export function institutionBic(bic: string | null): string | null {
+	return bic && BIC.test(bic) ? bic.slice(0, 8) : null;
+}
 
 export type NormalizedStatement = {
 	format: StatementFormat;
@@ -88,8 +95,8 @@ export type NormalizedStatement = {
 	 */
 	bank: string | null;
 	/**
-	 * The BIC of the bank holding the account, as the file states it (CAMT `Acct/Svcr/FinInstnId/BIC` or `BICFI`, the
-	 * MT940 header); null when it states none.
+	 * The institution BIC of the bank holding the account (`institutionBic` of CAMT `Acct/Svcr/FinInstnId/BIC` or
+	 * `BICFI`, or of the MT940 header); null when the file states none.
 	 */
 	servicerBic: string | null;
 	accountCurrency: string;

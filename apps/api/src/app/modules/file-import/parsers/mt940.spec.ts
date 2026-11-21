@@ -431,6 +431,7 @@ describe('parseMt940', () => {
 			'EXMPDEFF',
 		],
 		["a header of the sender's BIC over the message type", ['EXMPDEFF', '940', 'EXMPDEFF'], 'EXMPDEFF'],
+		['a header of a BIC with its branch', ['EXMPDEFFXXX', '940', 'EXMPDEFFXXX'], 'EXMPDEFF'],
 		['a header naming no BIC', ['EXAMPLEBANK'], null],
 		['no header', [], null],
 	])("reads the bank's BIC from %s", (_caseName, header, servicerBic) => {
@@ -465,6 +466,32 @@ describe('parseMt940', () => {
 		).toEqual([
 			[OTHER_EXAMPLE_IBAN, 'EXMPDEFF', 1],
 			[POLISH_IBAN, 'EXMPNL2A', 1],
+		]);
+	});
+
+	it("gives every statement under one shared header that header's BIC", () => {
+		const block = (iban: string) =>
+			[
+				':20:EXAMPLE',
+				`:25:${iban}`,
+				':28C:00001/001',
+				':60F:C261005EUR100,00',
+				':61:261005D10,00NTRFNONREF',
+				':86:Example Shop',
+				':62F:C261005EUR90,00',
+				'-',
+			].join('\r\n');
+		const file = [
+			'{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:',
+			block(OTHER_EXAMPLE_IBAN),
+			block(POLISH_IBAN),
+		].join('\r\n');
+
+		expect(
+			parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic}) => [accountIban, servicerBic]),
+		).toEqual([
+			[OTHER_EXAMPLE_IBAN, 'EXMPDEFF'],
+			[POLISH_IBAN, 'EXMPDEFF'],
 		]);
 	});
 

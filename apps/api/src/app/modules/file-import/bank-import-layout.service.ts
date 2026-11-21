@@ -9,15 +9,20 @@ import type {
 	BankImportLayout as BankImportLayoutResponse,
 	ConfirmBankImportLayoutProposalRequest,
 } from '@tempo/contracts';
-import {BANK_IMPORT_CURRENCIES, BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} from '@tempo/contracts';
+import {
+	BANK_IMPORT_CURRENCIES,
+	BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY,
+	bankNameKey,
+	bankNameSpelling,
+} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
-import {DataSource, EntityManager, In, Like, MoreThan, Not} from 'typeorm';
+import {DataSource, EntityManager, In, MoreThan, Not} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import {NAME_BANK_IDENTITY_PATTERN, identityBankName, nameBankIdentity} from '@modules/banking/bank-identity';
+import {identityBankName, nameBankIdentity, namedBankIdentities} from '@modules/banking/bank-identity';
 import {
 	BANK_CONNECTION_PROVIDERS,
 	DESTRUCTIVE_CONNECTION_STATUSES,
@@ -104,14 +109,14 @@ export class BankImportLayoutService {
 				select: {bankIdentity: true},
 				where: {
 					bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-					bankIdentity: Like(NAME_BANK_IDENTITY_PATTERN),
+					bankIdentity: namedBankIdentities(),
 				},
 			}),
 		]);
 		const owned = [...connections.map(({aspspName}) => aspspName), ...layouts.map(({bankName}) => bankName)];
 		const spellings = new Map<string, string>();
 		for (const bank of [...owned, ...Object.values(FORMAT_BANKS), ...CSV_LAYOUTS.map((layout) => layout.bank)]) {
-			const name = bank.trim().replace(/\s+/g, ' ');
+			const name = bankNameSpelling(bank);
 			if (name && !spellings.has(nameBankIdentity(name))) spellings.set(nameBankIdentity(name), name);
 		}
 		const identities = new Set([
@@ -120,10 +125,11 @@ export class BankImportLayoutService {
 				identityBankName(bankIdentity) === null ? [] : [bankIdentity!],
 			),
 		]);
-		for (const bank of STATEMENT_BANKS) identities.delete(nameBankIdentity(bank));
 		return {
+			// Only names a layout can be saved under: never Revolut's, never one too long.
 			banks: [...identities]
 				.map((identity) => spellings.get(identity) ?? identityBankName(identity)!)
+				.filter((bank) => layoutBankName(bank) === bank && !reservedBank(bank))
 				.sort((left, right) => left.localeCompare(right, 'en', {sensitivity: 'base'})),
 		};
 	}
@@ -230,10 +236,9 @@ export class BankImportLayoutService {
 		proposalId: string,
 		request: ConfirmBankImportLayoutProposalRequest,
 	): Promise<BankImportLayoutResponse> {
-		const bankName =
-			typeof request.bankName === 'string' ? request.bankName.replace(CONTROL_CHARACTERS, ' ').trim() : '';
-		if (!bankName || bankName.length > MAX_BANK_NAME_LENGTH) throw new BadRequestException(INVALID_BANK_NAME);
-		const reserved = STATEMENT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase());
+		const bankName = typeof request.bankName === 'string' ? layoutBankName(request.bankName) : null;
+		if (bankName === null) throw new BadRequestException(INVALID_BANK_NAME);
+		const reserved = reservedBank(bankName);
 		if (reserved) throw new BadRequestException(reservedBankName(reserved));
 		return this.dataSource.transaction(async (manager) => {
 			await lockOwner(manager, ownerId);
@@ -364,6 +369,20 @@ async function lockOwner(manager: EntityManager, ownerId: Account['id']): Promis
 
 function toLayoutResponse(row: BankImportLayout): BankImportLayoutResponse {
 	return {id: row.id, bankName: row.bankName, createdAt: row.createdAt.toISOString()};
+}
+
+/**
+ * The bank name a layout is saved under: plain text (`bankNameSpelling`) of 1 to 60 characters; null when the name
+ * cannot be saved.
+ */
+function layoutBankName(name: string): string | null {
+	const spelling = bankNameSpelling(name.replace(CONTROL_CHARACTERS, ' '));
+	return spelling && spelling.length <= MAX_BANK_NAME_LENGTH ? spelling : null;
+}
+
+/** The bank of `STATEMENT_BANKS` the name names, ignoring case and spacing. */
+function reservedBank(name: string): string | undefined {
+	return STATEMENT_BANKS.find((bank) => bankNameKey(bank) === bankNameKey(name));
 }
 
 /** The model's bank guess as plain text of at most 60 characters; null when it gave none. */

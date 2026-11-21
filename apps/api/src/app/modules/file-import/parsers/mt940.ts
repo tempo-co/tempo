@@ -3,7 +3,7 @@ import {ABN_AMRO_BIC, abnAmroDescriptionFields, abnAmroIban} from './abn-amro';
 import {isCalendarDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
 import {InformationFields, informationFields} from './mt940-information';
-import {BIC, NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
+import {NormalizedRow, NormalizedStatement, ParseRefusal, institutionBic} from './parse-result';
 
 const TAG = /^:(\d{2}[A-Z]?):(.*)$/;
 const BALANCE = /^([CD])(\d{6})([A-Z]{3})(\d{1,15},\d*)$/;
@@ -85,7 +85,12 @@ function splitStatements(text: string): RawStatement[] {
 	for (const line of text.split(/\r?\n/)) {
 		const tag = TAG.exec(line);
 		if (tag?.[1] === '20') {
-			current = {header, fields: [], closed: false};
+			// A statement with no header lines of its own shares the one above the statements before it.
+			current = {
+				header: header.length > 0 ? header : (statements.at(-1)?.header ?? []),
+				fields: [],
+				closed: false,
+			};
 			statements.push(current);
 			header = [];
 		}
@@ -169,7 +174,7 @@ function headerBic(header: readonly string[]): string | null {
 	const swift = OUTPUT_HEADER.exec(text)?.[1] ?? BASIC_HEADER.exec(text)?.[1];
 	if (swift) return swift;
 	const typeLine = header.indexOf('940');
-	return typeLine > 0 && BIC.test(header[typeLine - 1]) ? header[typeLine - 1] : null;
+	return typeLine > 0 ? institutionBic(header[typeLine - 1]) : null;
 }
 
 /**

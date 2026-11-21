@@ -296,7 +296,7 @@ describe('Currency exchange recompute', () => {
 	);
 
 	it.each([
-		['the same BIC, with and without a branch', bicBankIdentity('EXMPDEFFXXX'), bicBankIdentity('exmpdeff')],
+		['the same BIC', bicBankIdentity('EXMPDEFF'), bicBankIdentity('EXMPDEFF')],
 		[
 			'the bank an owner typed and the same bank as named elsewhere',
 			nameBankIdentity('  ing '),
