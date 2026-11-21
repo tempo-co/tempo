@@ -2,8 +2,10 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 import {OTHER_EXAMPLE_IBAN} from '../../../../../test/fixtures/statement-file.fixture';
+import {PARSE_TIMEOUT_MS} from '../runner/parse-runner';
 import {parseMt940} from './mt940';
 import {parseFile} from './parse-file';
+import {MAX_FILE_BYTES, MAX_ROWS_PER_DROP} from './parse-limits';
 import {NormalizedRow, ParseRefusal} from './parse-result';
 
 /** A synthetic Polish IBAN. */
@@ -489,20 +491,28 @@ describe('parseMt940', () => {
 		],
 		['a bare statement after a SWIFT message closed by -} has no header', SWIFT_HEADER, '-}', [], '-', null],
 		[
-			'a statement under its own BIC header right after one with no - has its own',
+			'a statement starting while one under a BIC header is open has no header',
+			['EXMPDEFF', '940', 'EXMPDEFF'],
+			null,
+			[],
+			'-',
+			null,
+		],
+		[
+			'a statement under a BIC header right after one with no - has none, its header read as text',
 			['EXMPDEFF', '940', 'EXMPDEFF'],
 			null,
 			['EXMPBEBB', '940', 'EXMPBEBB'],
 			'-',
-			'EXMPBEBB',
+			null,
 		],
 		[
-			'a SWIFT message right after a statement with no -} has its own header',
+			'a SWIFT message right after a statement with no -} shares no header',
 			SWIFT_HEADER,
 			null,
 			['{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:'],
 			'-}',
-			'EXMPBEBB',
+			null,
 		],
 	])(
 		'reads the BIC of a header above the statements: %s',
@@ -532,6 +542,38 @@ describe('parseMt940', () => {
 				[POLISH_IBAN, secondBic],
 			]);
 		},
+	);
+
+	it('reads a description line of only 940 as description text', () => {
+		const row = only(
+			statement([':61:261005D10,00NTRFNONREF', ':86:Invoice', '940'], '90,00', ['EXMPDEFF', '940', 'EXMPDEFF']),
+		);
+
+		expect(row).toMatchObject({amount: '-10.00'});
+		expect(row.description).toBe('Invoice 940');
+	});
+
+	it(
+		'reads a file as large as an upload takes, of as many entries as a drop takes over many lines, within the parse deadline',
+		() => {
+			const entries = Array.from({length: MAX_ROWS_PER_DROP}, (_entry, index) => [
+				':61:261005C1,00NTRFNONREF',
+				`:86:Example Shop ${index}`,
+				...Array.from({length: 9}, (_line, line) => `Example description line ${line + 1}`),
+			]).flat();
+			const file = Buffer.from(
+				statement(entries, `${100 + MAX_ROWS_PER_DROP},00`, ['EXMPDEFF', '940', 'EXMPDEFF']),
+				'latin1',
+			);
+			expect(file.byteLength).toBeLessThanOrEqual(MAX_FILE_BYTES);
+
+			const started = Date.now();
+			const [{rows}] = parseMt940(file);
+
+			expect(rows).toHaveLength(MAX_ROWS_PER_DROP);
+			expect(Date.now() - started).toBeLessThan(PARSE_TIMEOUT_MS);
+		},
+		2 * PARSE_TIMEOUT_MS,
 	);
 
 	it('finds the statement after blank lines and a header', () => {

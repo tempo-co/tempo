@@ -1815,10 +1815,39 @@ describe('Bank imports', () => {
 			.field('accountChoices', JSON.stringify({'Revolut:EUR': account.id}))
 			.expect(201);
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'name:revolut'});
+		// The BIC a live import recorded still refuses another bank's statement of the number.
+		const hidden = await drop(agent, [
+			localAccountStatement('EXMPBEBB', [debit('8.00', '2026-10-28', 'Example Shop')]),
+		]).expect(422);
+		expect(hidden.body).toMatchObject({code: 'account_bank_conflict', file: 1});
 
 		await undo(agent, named.body.id);
 
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+	});
+
+	it('keeps the bank of an account made from files when the import that gave it goes with a removed bank connection', async () => {
+		const {owner, agent} = await createOwner();
+		const synced = await fixtures.createConnection(owner, {nextSyncAt: new Date('2030-01-01T00:00:00.000Z')});
+		const syncedAccount = await fixtures.createBankAccount(synced, {iban: EXAMPLE_IBAN});
+		// One drop into the synced account and a local account number: its record hangs on the synced connection.
+		const mixed = await drop(agent, [
+			Buffer.from(camt053([{entries: [{amount: '4.00', reference: 'SYNCED-1', bookingDate: '2026-10-15'}]}])),
+			localAccountStatement('EXMPDEFF', [debit('2.00', '2026-10-15', 'Example Shop')]),
+		]).expect(201);
+		const local = (mixed.body as BankImportSummary).accounts.find(({id}) => id !== syncedAccount.id)!;
+		expect(await bankAccounts.findOneByOrFail({id: local.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+
+		await agent.delete(`/bank-connections/${synced.id}`).send({confirmation: 'DELETE'}).expect(204);
+
+		expect(await imports.countBy({id: mixed.body.id})).toBe(0);
+		expect(await transactions.countBy({bankAccountId: local.id})).toBe(1);
+		await drop(agent, [localAccountStatement(null, [debit('3.00', '2026-10-20', 'Example Shop')])]).expect(201);
+		expect(await bankAccounts.findOneByOrFail({id: local.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+		const other = await drop(agent, [
+			localAccountStatement('EXMPBEBB', [debit('4.00', '2026-10-25', 'Example Shop')]),
+		]).expect(422);
+		expect(other.body).toMatchObject({code: 'account_bank_conflict', file: 1});
 	});
 
 	it('refuses a drop whose statements give one local account number two banks, even as copies of one statement', async () => {

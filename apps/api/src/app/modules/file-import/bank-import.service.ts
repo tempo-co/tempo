@@ -112,12 +112,8 @@ type AccountRows = {
 	 */
 	learnedBank: string | null;
 	/**
-	 * The strongest evidence of the account's bank its statements give (`statementBankIdentity`,
-	 * `strongerBankIdentity`); null when none does. Never part of the account key.
-	 */
-	bankIdentity: BankIdentity | null;
-	/**
-	 * Each piece of bank evidence its statements give, with the 1-based file of the first statement giving it. For an
+	 * Each piece of bank evidence its statements give (`statementBankIdentity`), with the 1-based file of the first
+	 * statement giving it; never part of the account key. For an
 	 * account named by an id that is no IBAN, checked against the bank the stored account records, then against each
 	 * other (`refuseBankConflicts`).
 	 */
@@ -242,7 +238,14 @@ export class BankImportService {
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
 				const accountStatements = accounts.map((imported, index) => ({...imported, rows: accountRows[index]}));
-				refuseBankConflicts(accountStatements);
+				refuseBankConflicts(
+					accountStatements,
+					await recordedBankEvidence(
+						manager,
+						ownerId,
+						accounts.map(({account}) => account),
+					),
+				);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
 				);
@@ -295,11 +298,7 @@ export class BankImportService {
 					}),
 				);
 
-				await refreshFileBankIdentities(
-					manager,
-					ownerId,
-					accounts.map(({account}) => account),
-				);
+				await strengthenFileBankIdentities(manager, ownerId, accountStatements);
 
 				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
@@ -499,7 +498,7 @@ export class BankImportService {
 						{undoneAt: new Date(), rowsDoubtful: 0, rowsNotInBank: 0, rowsRemovedBySync: 0},
 					);
 				// The bank its accounts made from files record goes back to what their other imports give.
-				await refreshFileBankIdentities(manager, ownerId, ownedAccounts);
+				await recomputeFileBankIdentities(manager, ownerId, ownedAccounts);
 				if (fileConnection) {
 					await manager.query(
 						`DELETE FROM "bank_accounts" bank_account
@@ -1478,7 +1477,6 @@ function groupByAccount(
 			iban: statement.accountIban,
 			bank: statement.accountIban || statement.accountOtherId ? null : statement.bank,
 			learnedBank: null,
-			bankIdentity: null,
 			bankEvidence: [],
 			currency: statement.accountCurrency,
 			parts: [],
@@ -1487,7 +1485,6 @@ function groupByAccount(
 		if (identity && !group.bankEvidence.some((known) => known.identity === identity)) {
 			group.bankEvidence.push({identity, file: evidenceFiles.get(statement)!});
 		}
-		group.bankIdentity = strongerBankIdentity(group.bankIdentity, identity);
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
 		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
@@ -1647,14 +1644,18 @@ type AccountStatements = ImportedAccount & {rows: AccountRows};
 /**
  * Refuses the drop with `account_bank_conflict` when statements naming an account by an id that is no IBAN give
  * evidence of two banks of the same kind (`differentBanks`): the same id at another bank, which Tempo cannot tell
- * apart. A statement disagreeing with the bank the imported-files account records is named first, then a later
- * statement disagreeing with an earlier one of the drop.
+ * apart. A statement disagreeing with the bank the imported-files account records, or with any its imports that are
+ * not undone recorded (`recorded`), is named first, then a later statement disagreeing with an earlier one of the drop.
  */
-function refuseBankConflicts(statementsByAccount: readonly AccountStatements[]): void {
+function refuseBankConflicts(
+	statementsByAccount: readonly AccountStatements[],
+	recorded: ReadonlyMap<BankAccount['id'], readonly BankIdentity[]>,
+): void {
 	const local = statementsByAccount.filter(({rows}) => !rows.iban && !rows.bank);
 	for (const {account, connection, rows} of local) {
 		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
-		const conflict = rows.bankEvidence.find(({identity}) => differentBanks(account.bankIdentity, identity));
+		const known = [account.bankIdentity, ...(recorded.get(account.id) ?? [])];
+		const conflict = rows.bankEvidence.find(({identity}) => known.some((bank) => differentBanks(bank, identity)));
 		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
 	}
 	for (const {rows} of local) {
@@ -1673,49 +1674,88 @@ function madeFromFiles(account: BankAccount): boolean {
 	return account.identificationHash.startsWith(FILE_IDENTIFICATION_PREFIX);
 }
 
-/** Per account made from files, the strongest bank the drop's statements routed to it give (`strongerBankIdentity`). */
+/** Per account made from files, each bank the drop's statements routed to it give. */
 function fileBankEvidence(statementsByAccount: readonly AccountStatements[]): BankImportBankIdentity[] {
-	const evidence = new Map<BankAccount['id'], BankIdentity>();
+	const evidence = new Map<string, BankImportBankIdentity>();
 	for (const {account, rows} of statementsByAccount) {
 		if (!madeFromFiles(account)) continue;
-		const identity = strongerBankIdentity(evidence.get(account.id) ?? null, rows.bankIdentity);
-		if (identity) evidence.set(account.id, identity);
+		for (const {identity} of rows.bankEvidence) {
+			evidence.set(JSON.stringify([account.id, identity]), {bankAccountId: account.id, bankIdentity: identity});
+		}
 	}
-	return [...evidence].map(([bankAccountId, bankIdentity]) => ({bankAccountId, bankIdentity}));
+	return [...evidence.values()];
 }
 
-/**
- * Records on each of `accounts` made from files the strongest bank its imports that are not undone give, or none,
- * inside the write's transaction. An account kept from a bank connection keeps its connection's bank.
- */
-async function refreshFileBankIdentities(
+/** Each bank the owner's imports that are not undone recorded for each of `accounts` made from files. */
+async function recordedBankEvidence(
 	manager: EntityManager,
 	ownerId: Account['id'],
 	accounts: readonly BankAccount[],
-): Promise<void> {
-	const fromFiles = [...new Map(accounts.filter(madeFromFiles).map((account) => [account.id, account])).values()];
-	if (fromFiles.length === 0) return;
+): Promise<Map<BankAccount['id'], BankIdentity[]>> {
+	const recorded = new Map<BankAccount['id'], BankIdentity[]>();
+	const ids = [...new Set(accounts.filter(madeFromFiles).map(({id}) => id))];
+	if (ids.length === 0) return recorded;
 	const evidence = await manager.query<BankImportBankIdentity[]>(
 		`SELECT evidence->>'bankAccountId' AS "bankAccountId", evidence->>'bankIdentity' AS "bankIdentity"
 		FROM "bank_imports" record, jsonb_array_elements(record."bankIdentities") evidence
 		WHERE record."accountId" = $1 AND record."undoneAt" IS NULL AND evidence->>'bankAccountId' = ANY($2::text[])`,
-		[ownerId, fromFiles.map(({id}) => id)],
+		[ownerId, ids],
 	);
-	for (const account of fromFiles) {
-		const identity = evidence
-			.filter(({bankAccountId}) => bankAccountId === account.id)
-			.reduce<BankIdentity | null>(
-				(strongest, {bankIdentity}) => strongerBankIdentity(strongest, bankIdentity),
-				null,
-			);
-		await manager.query(
-			`UPDATE "bank_accounts" SET "bankIdentity" = $3
-			WHERE "id" = $1 AND "bankIdentity" IS DISTINCT FROM $3
-				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
-			[account.id, ownerId, identity, BANK_CONNECTION_PROVIDERS.FILE],
-		);
-		account.bankIdentity = identity;
+	for (const {bankAccountId, bankIdentity} of evidence) {
+		recorded.set(bankAccountId, [...(recorded.get(bankAccountId) ?? []), bankIdentity]);
 	}
+	return recorded;
+}
+
+/**
+ * Records on each account made from files the drop writes to the stronger of its bank and the drop's
+ * (`strongerBankIdentity`), inside the import's transaction: an import adds or strengthens a bank, never clears one.
+ */
+async function strengthenFileBankIdentities(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	statementsByAccount: readonly AccountStatements[],
+): Promise<void> {
+	for (const {account, rows} of statementsByAccount) {
+		if (!madeFromFiles(account)) continue;
+		const identity = rows.bankEvidence.reduce(
+			(strongest, {identity: given}) => strongerBankIdentity(strongest, given),
+			account.bankIdentity,
+		);
+		if (identity !== account.bankIdentity) await writeFileBankIdentity(manager, ownerId, account, identity);
+	}
+}
+
+/**
+ * Records on each of `accounts` made from files the strongest bank its imports that are not undone give, or none,
+ * inside the undo's transaction. An account kept from a bank connection keeps its connection's bank.
+ */
+async function recomputeFileBankIdentities(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	accounts: readonly BankAccount[],
+): Promise<void> {
+	const recorded = await recordedBankEvidence(manager, ownerId, accounts);
+	const fromFiles = new Map(accounts.filter(madeFromFiles).map((account) => [account.id, account]));
+	for (const account of fromFiles.values()) {
+		const identity = (recorded.get(account.id) ?? []).reduce<BankIdentity | null>(strongerBankIdentity, null);
+		if (identity !== account.bankIdentity) await writeFileBankIdentity(manager, ownerId, account, identity);
+	}
+}
+
+async function writeFileBankIdentity(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	account: BankAccount,
+	identity: BankIdentity | null,
+): Promise<void> {
+	await manager.query(
+		`UPDATE "bank_accounts" SET "bankIdentity" = $3
+		WHERE "id" = $1
+			AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
+		[account.id, ownerId, identity, BANK_CONNECTION_PROVIDERS.FILE],
+	);
+	account.bankIdentity = identity;
 }
 
 /**

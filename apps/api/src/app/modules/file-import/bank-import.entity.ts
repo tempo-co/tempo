@@ -8,7 +8,7 @@ import type {BankIdentity} from '@modules/banking/bank-identity';
 /** A closing balance an import's statements state for one account: a decimal string as of the end of `date`. */
 export type BankImportClosingBalance = {bankAccountId: string; date: string; amount: string};
 
-/** The strongest evidence of an account's bank an import's statements give (`strongerBankIdentity`). */
+/** A bank an import's statements give an account. */
 export type BankImportBankIdentity = {bankAccountId: string; bankIdentity: BankIdentity};
 
 /** One drop of statement files. The files themselves are discarded after parsing; only this record is kept. */
@@ -104,8 +104,9 @@ export class BankImport {
 	closingBalances: BankImportClosingBalance[];
 
 	/**
-	 * Per account made from files, the bank its statements in the drop give, if any. Such an account records the
-	 * strongest of its imports that are not undone (`refreshFileBankIdentities`).
+	 * Per account made from files, each bank its statements in the drop give. An account named by an id that is no IBAN
+	 * takes no statement of another bank than any of them gives while the import is not undone, and undoing it gives
+	 * the account the strongest bank its other imports give (`recomputeFileBankIdentities`).
 	 */
 	@Column({type: 'jsonb', default: () => `'[]'::jsonb`})
 	bankIdentities: BankImportBankIdentity[];

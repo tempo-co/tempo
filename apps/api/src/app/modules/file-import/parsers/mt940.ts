@@ -81,21 +81,16 @@ function letters(text: string): number {
 function splitStatements(text: string): RawStatement[] {
 	const statements: RawStatement[] = [];
 	let header: string[] = [];
-	// The header above the statements since the last one ended: a statement after a `-` or `-}` has only its own.
+	// The SWIFT message header the statements after it share until a `-` or `-}`, or a line starting another message.
 	let messageHeader: string[] = [];
 	let current: RawStatement | null = null;
-	const lines = text.split(/\r?\n/);
-	lines.forEach((line, index) => {
+	for (const line of text.split(/\r?\n/)) {
 		const tag = TAG.exec(line);
-		if (!tag && startsHeader(lines, index)) {
-			// A header starts the next message, so the statement before ends here even without its `-`.
-			messageHeader = [];
-			current = null;
-		}
 		if (tag?.[1] === '20') {
-			// A statement with no header lines of its own shares the header of the statement before it in one message.
-			if (header.length > 0) messageHeader = header;
-			current = {header: messageHeader, fields: [], closed: false};
+			// A statement takes the header lines right above it; one starting while another is still open takes only the
+			// SWIFT message's header, and the first after a `-` or `-}` none.
+			if (header.length > 0) messageHeader = BASIC_HEADER.test(header.join('')) ? header : [];
+			current = {header: header.length > 0 ? header : messageHeader, fields: [], closed: false};
 			statements.push(current);
 			header = [];
 		}
@@ -107,21 +102,14 @@ function splitStatements(text: string): RawStatement[] {
 			messageHeader = [];
 			current = null;
 		} else if (current) {
-			// A field continues on the lines up to the next tag.
+			// A field continues on the lines up to the next tag; one starting a SWIFT message ends the message's header.
+			if (line.trim().startsWith('{1:')) messageHeader = [];
 			current.fields.at(-1)!.lines.push(line);
 		} else if (line.trim()) {
 			header.push(line.trim());
 		}
-	});
+	}
 	return statements;
-}
-
-/** A SWIFT basic header (`{1:`), a message type line (`940`), or a BIC on the line above one. */
-function startsHeader(lines: readonly string[], index: number): boolean {
-	const line = lines[index].trim();
-	if (line.startsWith('{1:') || line === '940') return true;
-	const next = lines.slice(index + 1).find((later) => later.trim());
-	return institutionBic(line) !== null && next?.trim() === '940';
 }
 
 /** The `:61:` line, its supplementary details line if any, and the lines of each `:86:` field after it. */
