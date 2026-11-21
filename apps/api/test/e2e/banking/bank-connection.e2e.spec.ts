@@ -2059,7 +2059,7 @@ describe('BankConnectionController', () => {
 		]);
 		await app
 			.get(BankTransactionPersistenceService)
-			.persistTransactions(bankTransactionRepository, bankAccount, [incoming], 'ABN AMRO', 'enable-banking');
+			.persistTransactions(bankTransactionRepository, bankAccount, [incoming], 'ABN AMRO');
 
 		expect(await bankTransactionRepository.findOneByOrFail({id: otherRow.id})).toEqual(otherRowBefore);
 		expect(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id})).toEqual([

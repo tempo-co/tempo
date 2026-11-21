@@ -1,10 +1,14 @@
 import {INestApplication} from '@nestjs/common';
-import {DataSource, EntityManager} from 'typeorm';
+import {getRepositoryToken} from '@nestjs/typeorm';
+import {DataSource, EntityManager, Repository} from 'typeorm';
 
+import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {addDays} from '@modules/banking/banking.utils';
+import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {lockReportingCurrencyForChange} from '@modules/banking/reporting-currency';
 import {AccountHistoryWriterService} from '@modules/banking/services/account-history-writer.service';
 import {BankConnectionRemovalService} from '@modules/banking/services/bank-connection-removal.service';
@@ -14,6 +18,7 @@ import {
 } from '@modules/banking/services/bank-transaction-persistence.service';
 import {BankingConsentRevocationService} from '@modules/banking/services/banking-consent-revocation.service';
 import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
+import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
@@ -70,7 +75,6 @@ describe('AccountHistoryWriterService', () => {
 			account,
 			[row(ref, amount)],
 			connection.aspspName,
-			connection.provider,
 		);
 
 	it('waits for a reporting-currency change under way, then stores no amount in the old currency', async () => {
@@ -171,5 +175,239 @@ describe('AccountHistoryWriterService', () => {
 		expect(
 			await fixtures.bankAccounts.findOneOrFail({where: {id: bankAccount.id}, relations: {bankConnection: true}}),
 		).toMatchObject({bankConnection: {provider: BANK_CONNECTION_PROVIDERS.FILE}});
+	});
+
+	describe('recording a bank fetch for an account', () => {
+		const today = dateInAppTimeZone(new Date());
+		const day = (daysAgo: number) => addDays(today, -daysAgo);
+
+		type Fetch = {
+			transactions: EnableBankingTransaction[];
+			dateFrom: string;
+			succeeded?: boolean;
+			complete?: boolean;
+		};
+
+		/** Records one fetch of the account as a sync run does, reading the account as the run found it. */
+		async function recordFetch(
+			owner: Account,
+			connection: BankConnection,
+			bankAccountId: string,
+			{transactions, dateFrom, succeeded = true, complete = true}: Fetch,
+		) {
+			const bankAccount = await fixtures.bankAccounts.findOneByOrFail({id: bankAccountId});
+			return writer.write(owner.id, {}, (write) =>
+				writer.recordBankFetch(write, {
+					connection,
+					bankAccount,
+					transactions,
+					fetchOptions: {strategy: 'default', dateFrom},
+					succeeded,
+					complete,
+					fetchedThrough: today,
+				}),
+			);
+		}
+
+		const booked = (fields: Partial<EnableBankingTransaction>): EnableBankingTransaction => ({
+			amount: '12.00',
+			currency: 'EUR',
+			creditDebitIndicator: 'DBIT',
+			status: 'BOOK',
+			...fields,
+		});
+		/** A pending card payment as the client reads it: both missing dates filled from the transaction date. */
+		const pending = (entryReference: string, amount: string, onDay: string) =>
+			booked({
+				entryReference,
+				amount,
+				status: 'PDNG',
+				transactionDate: onDay,
+				bookingDate: onDay,
+				bookingDateFilled: true,
+				valueDate: onDay,
+				valueDateFilled: true,
+				description: `Example Card ${entryReference}`,
+			});
+
+		async function rowsOf(bankAccountId: string) {
+			return fixtures.transactions.find({where: {bankAccountId}, order: {amount: 'ASC', id: 'ASC'}});
+		}
+
+		it('stores the fetched rows by identity, books pending rows into them, removes the ones gone, extends coverage and the watermark, and returns what it wrote', async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await fixtures.bankAccounts.update(
+				{id: bankAccount.id},
+				{syncCoveredFrom: day(30), syncCoveredThrough: day(5), transactionsFetchedThrough: day(5)},
+			);
+			const savings = await fixtures.createBankAccount(connection, {name: 'Savings'});
+			const [counterpart] = await fixtures.createTransactions(savings, [{amount: '7.50', bookingDate: day(2)}]);
+			const shop = booked({
+				bookingDate: day(4),
+				valueDate: day(4),
+				description: 'Example Shop',
+				counterpartyLocation: {city: 'Exampletown', region: 'Example Region', country: 'NL'},
+			});
+
+			const first = await recordFetch(owner, connection, bankAccount.id, {
+				dateFrom: day(12),
+				// Two identical rows without a reference are two payments.
+				transactions: [pending('CARD-1', '20.00', day(3)), pending('CARD-2', '7.50', day(2)), shop, shop],
+			});
+			const stored = await rowsOf(bankAccount.id);
+			expect(first).toEqual({
+				transactionsAdded: 4,
+				change: {
+					kind: 'sync-write',
+					writtenIds: expect.arrayContaining(stored.map(({id}) => id)),
+					formerCounterpartIds: [],
+				},
+			});
+			expect(first.change.writtenIds).toHaveLength(4);
+			expect(stored.find(({description}) => description === 'Example Shop')).toMatchObject({
+				merchantLocation: {city: 'Exampletown', region: 'Example Region', country: 'NL'},
+			});
+			const card1 = stored.find(({entryReference}) => entryReference === 'CARD-1')!;
+			const card2 = stored.find(({entryReference}) => entryReference === 'CARD-2')!;
+			const shopIds = stored.filter(({description}) => description === 'Example Shop').map(({id}) => id);
+			await fixtures.transactions.update({id: card2.id}, {ownTransferCounterpartId: counterpart.id});
+
+			const second = await recordFetch(owner, connection, bankAccount.id, {
+				dateFrom: day(12),
+				transactions: [
+					// Booking changes the dates, never what the payment was for.
+					{
+						...pending('CARD-1', '20.00', day(3)),
+						status: 'BOOK',
+						bookingDate: day(2),
+						bookingDateFilled: false,
+						valueDate: day(1),
+						valueDateFilled: false,
+					},
+					{...shop, description: 'Example Shop Amsterdam'},
+					{...shop, description: 'Example Shop Amsterdam'},
+				],
+			});
+
+			expect(second).toEqual({
+				transactionsAdded: 0,
+				change: {
+					kind: 'sync-write',
+					writtenIds: expect.arrayContaining([card1.id, ...shopIds]),
+					formerCounterpartIds: [counterpart.id],
+				},
+			});
+			expect(second.change.writtenIds).toHaveLength(3);
+			expect(
+				(await rowsOf(bankAccount.id)).map(({id, transactionStatus, description}) => ({
+					id,
+					transactionStatus,
+					description,
+				})),
+			).toEqual(
+				expect.arrayContaining([
+					{id: card1.id, transactionStatus: 'BOOK', description: 'Example Card CARD-1'},
+					...shopIds.map((id) => ({id, transactionStatus: 'BOOK', description: 'Example Shop Amsterdam'})),
+				]),
+			);
+			expect(await fixtures.transactions.countBy({bankAccountId: bankAccount.id})).toBe(3);
+			expect(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+				syncCoveredFrom: day(30),
+				syncCoveredThrough: today,
+				transactionsFetchedThrough: today,
+			});
+		});
+
+		it('removes the imported rows the bank never sent from the days it is final for, which end before its oldest pending row', async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await fixtures.bankAccounts.update(
+				{id: bankAccount.id},
+				{syncCoveredFrom: day(60), syncCoveredThrough: day(5), transactionsFetchedThrough: day(5)},
+			);
+			const stillPending = pending('CARD-KEPT', '30.00', day(12));
+			await recordFetch(owner, connection, bankAccount.id, {
+				dateFrom: day(20),
+				transactions: [pending('CARD-GONE', '40.00', day(15)), stillPending],
+			});
+			const savings = await fixtures.createBankAccount(connection, {name: 'Savings'});
+			const [counterpart] = await fixtures.createTransactions(savings, [{amount: '9.00', bookingDate: day(30)}]);
+			const record = await app.get<Repository<BankImport>>(getRepositoryToken(BankImport)).save({
+				accountId: owner.id,
+				bankConnectionId: connection.id,
+				fileHash: 'a'.repeat(64),
+				format: 'camt053',
+				filesCount: 1,
+				rowsParsed: 3,
+				rowsAdded: 3,
+				rowsAlreadyPresent: 0,
+				bankAccountIds: [bankAccount.id],
+				createdBankAccountIds: [],
+			});
+			const imported = (onDay: string, amount: string, ownTransferCounterpartId: string | null = null) => ({
+				importId: record.id,
+				amount,
+				bookingDate: onDay,
+				valueDate: onDay,
+				description: `Example Market ${amount}`,
+				ownTransferCounterpartId,
+			});
+			const [farBack, beforePending, afterPending] = await fixtures.createTransactions(bankAccount, [
+				imported(day(30), '-1.00', counterpart.id),
+				imported(day(14), '-2.00'),
+				imported(day(11), '-3.00'),
+			]);
+
+			const recorded = await recordFetch(owner, connection, bankAccount.id, {
+				dateFrom: day(20),
+				transactions: [stillPending],
+			});
+
+			// Final through the day before the oldest pending row left after the removal: 13 days ago.
+			const remaining = (await rowsOf(bankAccount.id)).map(({id}) => id);
+			expect(remaining).toEqual(expect.arrayContaining([afterPending.id]));
+			expect(remaining).not.toContain(farBack.id);
+			expect(remaining).not.toContain(beforePending.id);
+			expect(remaining).toHaveLength(2);
+			expect(recorded.change.formerCounterpartIds).toEqual([counterpart.id]);
+		});
+
+		it.each([
+			['every page fetched but a row unreadable', true, today],
+			['a page failed', false, day(5)],
+		])(
+			'stores the rows of a fetch with %s, keeps pending rows and coverage, and moves the watermark only when every page came',
+			async (_case, succeeded, watermark) => {
+				const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+				await fixtures.bankAccounts.update(
+					{id: bankAccount.id},
+					{syncCoveredFrom: day(30), syncCoveredThrough: day(5), transactionsFetchedThrough: day(5)},
+				);
+				await recordFetch(owner, connection, bankAccount.id, {
+					dateFrom: day(12),
+					transactions: [pending('CARD-1', '20.00', day(3))],
+					succeeded: false,
+					complete: false,
+				});
+				await fixtures.bankAccounts.update({id: bankAccount.id}, {transactionsFetchedThrough: day(5)});
+
+				const recorded = await recordFetch(owner, connection, bankAccount.id, {
+					dateFrom: day(12),
+					transactions: [booked({entryReference: 'SHOP-1', bookingDate: day(2), valueDate: day(2)})],
+					succeeded,
+					complete: false,
+				});
+
+				expect(recorded).toMatchObject({transactionsAdded: 1, change: {formerCounterpartIds: []}});
+				expect((await rowsOf(bankAccount.id)).map(({entryReference}) => entryReference).sort()).toEqual([
+					'CARD-1',
+					'SHOP-1',
+				]);
+				expect(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).toMatchObject({
+					syncCoveredFrom: day(30),
+					syncCoveredThrough: day(5),
+					transactionsFetchedThrough: watermark,
+				});
+			},
+		);
 	});
 });

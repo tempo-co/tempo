@@ -578,7 +578,6 @@ describe('BankTransactionAmountConversionService', () => {
 						},
 					],
 					'Example Bank',
-					'enable_banking',
 				);
 				written();
 				await syncHolds;

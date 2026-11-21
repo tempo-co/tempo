@@ -58,6 +58,7 @@ function createBankingSyncService(
 		accountHistoryWriter: new AccountHistoryWriterService(
 			(dependencies.dataSource ?? {}) as DataSource,
 			(dependencies.connectionLockService ?? {}) as BankingConnectionLockService,
+			new BankTransactionPersistenceService(),
 		),
 		...dependencies,
 	};
@@ -66,19 +67,6 @@ function createBankingSyncService(
 			(name) => dependencies[name] ?? DEFAULT_DEPENDENCIES[name] ?? {},
 		) as ConstructorParameters<typeof BankingSyncService>),
 	);
-}
-
-function createInsertQueryBuilder(raw: Array<{id: string; inserted: boolean}>) {
-	return {
-		insert: jest.fn().mockReturnThis(),
-		into: jest.fn().mockReturnThis(),
-		values: jest.fn().mockReturnThis(),
-		orIgnore: jest.fn().mockReturnThis(),
-		orUpdate: jest.fn().mockReturnThis(),
-		returning: jest.fn().mockReturnThis(),
-		updateEntity: jest.fn().mockReturnThis(),
-		execute: jest.fn().mockResolvedValue({raw}),
-	};
 }
 
 describe('BankingSyncService disabled integration', () => {
@@ -351,70 +339,6 @@ describe('BankingSyncService synchronization lock', () => {
 		expect(enableBankingClient.getSessionAccounts).not.toHaveBeenCalled();
 	});
 
-	it('reports only transactions that were added during synchronization', async () => {
-		const transactions = [
-			{
-				providerTransactionId: 'existing-transaction',
-				amount: '10.00',
-				currency: 'EUR',
-				counterpartyLocation: {
-					city: 'Exampletown',
-					region: 'Example Region',
-					country: 'NL',
-					streetName: 'Private Street',
-				},
-			},
-			{providerTransactionId: 'new-transaction', amount: '20.00', currency: 'EUR'},
-		];
-		const insertQueryBuilder = createInsertQueryBuilder([
-			{id: 'existing-transaction-id', inserted: false},
-			{id: 'new-transaction-id', inserted: true},
-		]);
-		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
-		// Sync reads back the rows it wrote, by identity, to hand them to categorization and logos.
-		transactionRepository.find
-			.mockResolvedValueOnce([])
-			.mockResolvedValueOnce([{id: 'existing-transaction-id'}, {id: 'new-transaction-id'}]);
-		enableBankingClient.getAccountTransactions.mockResolvedValue({transactions, unparseableCount: 0});
-		bankSyncRunRepository.findOneBy.mockResolvedValue({
-			id: 'run-id',
-			status: 'SUCCEEDED',
-			startedAt: new Date(),
-			finishedAt: new Date(),
-			requestedFrom: null,
-			requestedTo: '2026-09-09',
-			accountsFetched: 1,
-			balancesFetched: 0,
-			transactionsFetched: 2,
-			errorMessage: null,
-		} as unknown as BankSyncRun);
-
-		await expect(service.synchronizeAutomatically('connection-id')).resolves.toMatchObject({
-			status: 'SUCCEEDED',
-			transactionsFetched: 2,
-			transactionsAdded: 1,
-		});
-		expect(insertQueryBuilder.values).toHaveBeenCalledWith(
-			expect.arrayContaining([
-				expect.objectContaining({
-					merchantLocation: {city: 'Exampletown', region: 'Example Region', country: 'NL'},
-				}),
-			]),
-		);
-		expect(transactionRepository.update).toHaveBeenCalledWith(
-			expect.objectContaining({
-				id: 'connection-id',
-				syncStatus: 'RUNNING',
-				syncStartedAt: expect.any(Date),
-			}),
-			expect.objectContaining({
-				syncStatus: 'SUCCEEDED',
-				syncFailureCount: 0,
-				nextSyncAt: expect.any(Date),
-			}),
-		);
-	});
-
 	it.each([
 		['a Retry-After inside the window', 'ASPSP_RATE_LIMIT_EXCEEDED', 429, 7_200, 7_200],
 		['no Retry-After, whatever the background interval', 'ASPSP_RATE_LIMIT_EXCEEDED', 400, undefined, 21_600],
@@ -518,39 +442,6 @@ describe('BankingSyncService synchronization lock', () => {
 			}),
 		);
 		expect(redis.eval.mock.calls.some(([script]) => String(script).includes('expire'))).toBe(true);
-	});
-
-	it('imports the readable rows and marks the run partial when the provider sends unreadable transactions', async () => {
-		const insertQueryBuilder = createInsertQueryBuilder([{id: 'readable-transaction-id', inserted: true}]);
-		transactionRepository.createQueryBuilder.mockReturnValue(insertQueryBuilder);
-		enableBankingClient.getAccountTransactions.mockResolvedValue({
-			transactions: [{providerTransactionId: 'readable-transaction', amount: '20.00', currency: 'EUR'}],
-			unparseableCount: 3,
-		});
-
-		await service.synchronizeAutomatically('connection-id');
-
-		expect(insertQueryBuilder.values).toHaveBeenCalledWith([
-			expect.objectContaining({providerTransactionId: 'readable-transaction'}),
-		]);
-		expect(transactionRepository.update).toHaveBeenCalledWith(
-			{id: 'run-id'},
-			expect.objectContaining({
-				status: 'PARTIAL',
-				transactionsFetched: 1,
-				errorMessage: 'Some bank data could not be synchronized.',
-				failures: [
-					{
-						kind: 'transactions',
-						bankAccountId: 'bank-account-id',
-						code: 'unparseable_transactions',
-						httpStatus: null,
-						retryAfter: false,
-						droppedTransactions: 3,
-					},
-				],
-			}),
-		);
 	});
 
 	it('returns a committed run when lock renewal fails after the commit', async () => {

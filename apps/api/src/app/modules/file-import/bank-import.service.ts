@@ -321,14 +321,13 @@ export class BankImportService {
 						const newRows = new Set(rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new'));
 						if (newRows.size > 0) {
 							// Stored newest first, so the transaction list shows a day's rows in that order.
-							const persisted = await this.persistence.persistTransactions(
+							const persisted = await this.persistence.insertImportedTransactions(
 								manager.getRepository(BankTransaction),
 								account,
 								newestFirst
 									.filter((row) => newRows.has(row))
 									.map((row) => toTransactionInput(row, account.currency)),
 								connection.aspspName,
-								connection.provider,
 								{importId: record.id, statementNumbering: numbering},
 							);
 							persistedTransactionIds.push(...persisted.insertedTransactionIds);
@@ -584,12 +583,11 @@ export class BankImportService {
 					resolvedTransactionId = candidate.id;
 					record.rowsAlreadyPresent += 1;
 				} else {
-					const persisted = await this.persistence.persistTransactions(
+					const persisted = await this.persistence.insertImportedTransactions(
 						manager.getRepository(BankTransaction),
 						account,
 						[toTransactionInput(current.row, account.currency)],
 						connection.aspspName,
-						connection.provider,
 						{importId: record.id, statementNumbering: importNumbering(record)},
 					);
 					insertedTransactionIds.push(...persisted.insertedTransactionIds);
@@ -713,12 +711,11 @@ export class BankImportService {
 				for (const row of current) {
 					const account = accountsById.get(row.bankAccountId)!;
 					// One row per call, so each never-sent row records the transaction it became.
-					const persisted = await this.persistence.persistTransactions(
+					const persisted = await this.persistence.insertImportedTransactions(
 						manager.getRepository(BankTransaction),
 						account,
 						[toTransactionInput(row.row, account.currency)],
 						account.bankConnection.aspspName,
-						account.bankConnection.provider,
 						{importId: record.id, statementNumbering: importNumbering(record)},
 					);
 					const [transactionId] = persisted.insertedTransactionIds;

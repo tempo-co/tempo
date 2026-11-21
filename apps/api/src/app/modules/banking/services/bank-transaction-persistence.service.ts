@@ -76,19 +76,11 @@ const BANK_TRANSACTION_IDENTITY_SELECT = {
 	transactionStatus: true,
 } satisfies FindOptionsSelect<BankTransaction>;
 
-export type PersistTransactionsOptions = {
-	/**
-	 * Writes the rows as new rows of this file import: each gets the next free occurrence of its identity group and
-	 * is inserted, never matched to or updating a stored row. The caller has already left out the duplicates.
-	 */
-	importId?: string;
-	/** With `importId`: the scheme the statement numbered the rows in (`BankTransaction.statementNumbering`). */
-	statementNumbering?: string | null;
-	/**
-	 * Bank sync: the account's coverage once this fetch is recorded. Sync never asks about an imported row on a day
-	 * inside it: the day becomes final, and the row is then taken over or removed.
-	 */
-	syncCoverage?: SyncCoverage | null;
+export type ImportedTransactionsTarget = {
+	/** The file import the rows are new rows of. */
+	importId: string;
+	/** The scheme the statement numbered the rows in (`BankTransaction.statementNumbering`). */
+	statementNumbering: string | null;
 };
 
 /** An owner's choices on a row that move with it: a manual category and an own-transfer choice. */
@@ -215,27 +207,22 @@ export class BankTransactionPersistenceService {
 		return occupied;
 	}
 
+	/**
+	 * Writes a bank fetch's rows to the account by identity: a row matching a stored one updates it, and imported rows
+	 * it lands on are taken over. `syncCoverage` is the account's coverage once this fetch is recorded: sync never
+	 * asks about an imported row on a day inside it, since the day becomes final and the row is then taken over or
+	 * removed.
+	 */
 	async persistTransactions(
 		repository: Repository<BankTransaction>,
 		bankAccount: BankAccount,
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
-		// Nothing stored depends on the provider; the parameter keeps the callers' shared signature.
-		_provider: string,
-		options: PersistTransactionsOptions = {},
+		syncCoverage: SyncCoverage | null = null,
 	): Promise<PersistTransactionsResult> {
 		const unassignedTransactionValues = transactions.map((transaction) =>
 			this.toBankTransactionValues(bankAccount, transaction, aspspName),
 		);
-		if (options.importId) {
-			return this.insertImportedTransactions(
-				repository,
-				bankAccount,
-				unassignedTransactionValues,
-				options.importId,
-				options.statementNumbering ?? null,
-			);
-		}
 		const stableIdentityGroupKeys = [
 			...new Set(unassignedTransactionValues.map(({stableIdentityGroupKey}) => stableIdentityGroupKey)),
 		];
@@ -321,7 +308,7 @@ export class BankTransactionPersistenceService {
 					bankAccount,
 					transactionValues,
 					existingTransactions,
-					options.syncCoverage ?? null,
+					syncCoverage,
 				)
 			: {takenOverIds: [], questions: new Map<string, ImportQuestion>()};
 		// The exchange recompute after the sync decides which marked rows are exchanges.
@@ -435,15 +422,19 @@ export class BankTransactionPersistenceService {
 
 	/**
 	 * Inserts a file import's new rows, each at the next free occurrence of its identity group, tagged with the
-	 * import. Plain inserts: a key collision fails the import instead of overwriting a stored row.
+	 * import, never matched to or updating a stored row: the caller has already left out the duplicates. Plain
+	 * inserts: a key collision fails the import instead of overwriting a stored row.
 	 */
-	private async insertImportedTransactions(
+	async insertImportedTransactions(
 		repository: Repository<BankTransaction>,
 		bankAccount: BankAccount,
-		unassignedTransactionValues: BankTransactionValues[],
-		importId: string,
-		statementNumbering: string | null,
+		transactions: readonly BankTransactionInput[],
+		aspspName: string,
+		{importId, statementNumbering}: ImportedTransactionsTarget,
 	): Promise<PersistTransactionsResult> {
+		const unassignedTransactionValues = transactions.map((transaction) =>
+			this.toBankTransactionValues(bankAccount, transaction, aspspName),
+		);
 		const newRowsByGroup = new Map<string, number>();
 		for (const {stableIdentityGroupKey} of unassignedTransactionValues) {
 			newRowsByGroup.set(stableIdentityGroupKey, (newRowsByGroup.get(stableIdentityGroupKey) ?? 0) + 1);
