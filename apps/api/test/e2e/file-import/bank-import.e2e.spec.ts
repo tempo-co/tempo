@@ -49,6 +49,7 @@ import {MAX_DROP_BYTES} from '@modules/file-import/parsers/parse-limits';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {
+	CamtEntry,
 	CamtStatement,
 	EXAMPLE_IBAN,
 	OTHER_EXAMPLE_IBAN,
@@ -432,6 +433,19 @@ describe('Bank imports', () => {
 			.put(`/bank-connections/${connectionId}/accounts/${bankAccountId}/balance`)
 			.set('Origin', ORIGIN)
 			.send({amount});
+	}
+
+	/** A CAMT.053 statement of local account `001234`, which has no IBAN, stating its bank's BIC or none. */
+	function localAccountStatement(
+		servicerBic: string | null,
+		entries: CamtEntry[],
+		balances: Pick<CamtStatement, 'opening' | 'closing'> = {},
+	) {
+		return Buffer.from(camt053([{otherId: '001234', servicerBic, ...balances, entries}]));
+	}
+
+	function debit(amount: string, bookingDate: string, info: string): CamtEntry {
+		return {amount, indicator: 'DBIT', bookingDate, info};
 	}
 
 	function undo(agent: TestAgent, importId: string) {
@@ -1444,6 +1458,25 @@ describe('Bank imports', () => {
 		expect((await imports.findOneByOrFail({id: together.body.id})).bankAccountIds).toEqual([account.id]);
 	});
 
+	it('records on an account without a bank the strongest bank of every statement a drop sends to it', async () => {
+		const {agent} = await createOwner();
+		const first = await drop(agent, [
+			localAccountStatement(null, [debit('1.00', '2026-10-01', 'Example Shop')]),
+		]).expect(201);
+		const [account] = (first.body as BankImportSummary).accounts;
+
+		// The statement stating a BIC comes first; the Revolut one, routed to the account by the owner, names its bank.
+		const together = await drop(agent, [
+			localAccountStatement('EXMPDEFF', [debit('2.00', '2026-10-20', 'Example Shop')]),
+			revolutStatement([['2026-10-27', '-7.00', 'EUR']]),
+		])
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': account.id}))
+			.expect(201);
+
+		expect(together.body).toMatchObject({accounts: [{id: account.id, created: false}]});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'name:revolut'});
+	});
+
 	it('lists an import that recorded an account twice with that account once', async () => {
 		const {agent} = await createOwner();
 		const imported = (await drop(agent, [STATEMENT_FILES[0]]).expect(201)).body as BankImportSummary;
@@ -1711,23 +1744,15 @@ describe('Bank imports', () => {
 
 	it("refuses a statement whose BIC is another bank's than its local account number's account records, and imports one stating no BIC there", async () => {
 		const {owner, agent} = await createOwner();
-		const statementOf = (servicerBic: string | null, bookingDate: string, amount = '5.00') =>
-			Buffer.from(
-				camt053([
-					{
-						otherId: '001234',
-						servicerBic,
-						entries: [{amount, indicator: 'DBIT', bookingDate, info: 'Example Shop'}],
-					},
-				]),
-			);
-		const first = await drop(agent, [statementOf('EXMPDEFF', '2026-10-20')]).expect(201);
+		const first = await drop(agent, [
+			localAccountStatement('EXMPDEFF', [debit('5.00', '2026-10-20', 'Example Shop')]),
+		]).expect(201);
 		const [account] = (first.body as BankImportSummary).accounts;
 
 		// Two copies of one statement, of which only the second file states the other bank's BIC.
 		const refused = await drop(agent, [
-			statementOf(null, '2026-10-22'),
-			statementOf('EXMPNL2A', '2026-10-22'),
+			localAccountStatement(null, [debit('5.00', '2026-10-22', 'Example Shop')]),
+			localAccountStatement('EXMPNL2A', [debit('5.00', '2026-10-22', 'Example Shop')]),
 		]).expect(422);
 
 		expect(refused.body).toMatchObject({code: 'account_bank_conflict', file: 2});
@@ -1735,61 +1760,66 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: account.id})).toBe(1);
 		expect(await imports.countBy({accountId: owner.id})).toBe(1);
 
-		const unnamed = await drop(agent, [statementOf(null, '2026-11-20', '7.00')]).expect(201);
+		const unnamed = await drop(agent, [
+			localAccountStatement(null, [debit('7.00', '2026-11-20', 'Example Shop')]),
+		]).expect(201);
 		expect(unnamed.body).toMatchObject({rowsAdded: 1, accounts: [{id: account.id, created: false}]});
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
 	});
 
-	it('forgets the bank only an undone import gave an account, and keeps one another import gave too', async () => {
+	it('forgets the bank an account recorded from files when an import of it is undone, until another import gives one', async () => {
 		const {agent} = await createOwner();
-		const statementOf = (servicerBic: string | null, bookingDate: string, amount: string) =>
-			Buffer.from(
-				camt053([
-					{
-						otherId: '001234',
-						servicerBic,
-						entries: [{amount, indicator: 'DBIT', bookingDate, info: 'Example Shop'}],
-					},
-				]),
-			);
-		const first = await drop(agent, [statementOf(null, '2026-09-01', '1.00')]).expect(201);
+		const first = await drop(agent, [
+			localAccountStatement(null, [debit('1.00', '2026-09-01', 'Example Shop')]),
+		]).expect(201);
 		const [account] = (first.body as BankImportSummary).accounts;
-		const mistaken = await drop(agent, [statementOf('EXMPNL2A', '2026-09-10', '2.00')]).expect(201);
+		const mistaken = await drop(agent, [
+			localAccountStatement('EXMPNL2A', [debit('2.00', '2026-09-10', 'Example Shop')]),
+		]).expect(201);
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPNL2A'});
 
 		await undo(agent, mistaken.body.id);
 
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: null});
-		const right = await drop(agent, [statementOf('EXMPDEFF', '2026-09-20', '3.00')]).expect(201);
-		expect(right.body).toMatchObject({accounts: [{id: account.id, created: false}]});
-		const again = await drop(agent, [statementOf('EXMPDEFF', '2026-09-30', '4.00')]).expect(201);
+		await drop(agent, [localAccountStatement('EXMPDEFF', [debit('3.00', '2026-09-20', 'Example Shop')])]).expect(
+			201,
+		);
+		const again = await drop(agent, [
+			localAccountStatement('EXMPDEFF', [debit('4.00', '2026-09-30', 'Example Shop')]),
+		]).expect(201);
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
 
+		// Undoing either import that gave the bank forgets it, so any later statement of the account is taken.
 		await undo(agent, again.body.id);
 
-		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: null});
+		const later = await drop(agent, [
+			localAccountStatement('EXMPNL2A', [debit('6.00', '2026-10-10', 'Example Shop')]),
+		]).expect(201);
+		expect(later.body).toMatchObject({accounts: [{id: account.id, created: false}]});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPNL2A'});
 	});
 
 	it('refuses a drop whose statements give one local account number two banks, even as copies of one statement', async () => {
 		const {owner, agent} = await createOwner();
-		const copy = (servicerBic: string | null, amount = '5.00', bookingDate = '2026-10-20') =>
-			Buffer.from(
-				camt053([
-					{
-						otherId: '001234',
-						servicerBic,
-						entries: [{amount, indicator: 'DBIT', bookingDate, info: 'Monthly fee'}],
-					},
-				]),
-			);
+		const fee = () => [debit('5.00', '2026-10-20', 'Monthly fee')];
 
-		const fresh = await drop(agent, [copy('EXMPDEFF'), copy('EXMPNL2A')]).expect(422);
+		const fresh = await drop(agent, [
+			localAccountStatement('EXMPDEFF', fee()),
+			localAccountStatement('EXMPNL2A', fee()),
+		]).expect(422);
 		expect(fresh.body).toMatchObject({code: 'account_bank_conflict', file: 2});
 		expect(await bankAccounts.countBy({bankConnection: {accountId: owner.id}})).toBe(0);
 
 		// Also when the account the id names records no bank yet.
-		const first = await drop(agent, [copy(null, '9.00', '2026-09-20')]).expect(201);
+		const first = await drop(agent, [
+			localAccountStatement(null, [debit('9.00', '2026-09-20', 'Monthly fee')]),
+		]).expect(201);
 		const [account] = (first.body as BankImportSummary).accounts;
-		const refused = await drop(agent, [copy('EXMPDEFF'), copy('EXMPNL2A')]).expect(422);
+		const refused = await drop(agent, [
+			localAccountStatement('EXMPDEFF', fee()),
+			localAccountStatement('EXMPNL2A', fee()),
+		]).expect(422);
 
 		expect(refused.body).toMatchObject({code: 'account_bank_conflict', file: 2});
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: null});
@@ -1799,19 +1829,13 @@ describe('Bank imports', () => {
 	it("imports a statement once, into one account, whether or not each copy states its bank's BIC or its branch", async () => {
 		const {agent} = await createOwner();
 		const copy = (servicerBic: string | null) =>
-			Buffer.from(
-				camt053([
-					{
-						otherId: '001234',
-						servicerBic,
-						opening: '100.00',
-						closing: '100.00',
-						entries: [
-							{amount: '10.00', indicator: 'DBIT', bookingDate: '2026-10-20', info: 'Example Shop'},
-							{amount: '10.00', indicator: 'CRDT', bookingDate: '2026-10-20', info: 'Example Refund'},
-						],
-					},
-				]),
+			localAccountStatement(
+				servicerBic,
+				[
+					debit('10.00', '2026-10-20', 'Example Shop'),
+					{amount: '10.00', indicator: 'CRDT', bookingDate: '2026-10-20', info: 'Example Refund'},
+				],
+				{opening: '100.00', closing: '100.00'},
 			);
 		const first = await drop(agent, [copy(null)]).expect(201);
 		const [account] = (first.body as BankImportSummary).accounts;

@@ -214,7 +214,6 @@ export class BankConnectionRemovalService {
 					bankConnection: {id: fileConnection.id},
 					providerAccountId,
 					bankIdentity: nameBankIdentity(connection.aspspName),
-					bankIdentityImportId: null,
 					statedBalanceAmount: reported ? account.currentBalanceAmount : null,
 					statedBalanceDate: reported ? dateInTimeZone(account.balanceUpdatedAt!, owner.timeZone) : null,
 				})

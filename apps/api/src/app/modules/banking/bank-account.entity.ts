@@ -80,19 +80,6 @@ export class BankAccount {
 	@Column({type: 'varchar', nullable: true})
 	bankIdentity: BankIdentity | null;
 
-	/**
-	 * The file import whose statements alone gave `bankIdentity`; null when a connection recorded it, or when more
-	 * than one import gave it. Undoing that import clears both.
-	 */
-	@Column({type: 'uuid', nullable: true})
-	bankIdentityImportId: string | null;
-
-	// Named by string and typed by its id alone: the import record belongs to the file-import module, which depends on
-	// banking.
-	@ManyToOne('BankImport', {onDelete: 'SET NULL', nullable: true})
-	@JoinColumn({name: 'bankIdentityImportId', foreignKeyConstraintName: 'fk_bank_accounts_bank_identity_import'})
-	bankIdentityImport?: {id: string} | null;
-
 	@Column({type: 'boolean', default: true})
 	isActive: boolean;
 

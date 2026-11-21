@@ -374,8 +374,7 @@ export class BankAuthorizationService {
 		for (const account of accounts) {
 			if (!account.uid) continue;
 
-			// The connection's bank, which no import undo clears.
-			const values = {...this.toBankAccountValues(account), bankIdentity, bankIdentityImportId: null};
+			const values = {...this.toBankAccountValues(account), bankIdentity};
 			let bankAccount = await bankAccountRepository.findOne({
 				where: {bankConnection: {id: connectionId, accountId: ownerId}, providerAccountId: account.uid},
 			});

@@ -1093,6 +1093,10 @@ describe('BankConnectionController', () => {
 			// It can still be undone.
 			await owner.agent.delete(`/bank-imports/${earlier.id}`).set('Origin', 'http://localhost:5173').expect(204);
 			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id, importId: earlier.id})).toBe(0);
+			// The bank the account kept from its connection stays.
+			expect(await bankAccountRepository.findOneByOrFail({id: synced.id})).toMatchObject({
+				bankIdentity: 'name:abn amro',
+			});
 
 			// A statement of the account goes to it.
 			const dropped = await dropStatement('7.00', '2026-09-01');

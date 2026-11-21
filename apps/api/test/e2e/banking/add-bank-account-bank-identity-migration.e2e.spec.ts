@@ -33,7 +33,6 @@ describe('AddBankAccountBankIdentity migration', () => {
 		try {
 			await migration!.down(runner);
 			expect(await runner.hasColumn('bank_accounts', 'bankIdentity')).toBe(false);
-			expect(await runner.hasColumn('bank_accounts', 'bankIdentityImportId')).toBe(false);
 			const before = await fingerprints(runner);
 
 			await migration!.up(runner);
@@ -163,7 +162,7 @@ async function fingerprints(runner: QueryRunner) {
 		const columns = (
 			(await runner.query(
 				`SELECT column_name FROM information_schema.columns
-				WHERE table_name = $1 AND column_name NOT IN ('bankIdentity', 'bankIdentityImportId') ORDER BY column_name`,
+				WHERE table_name = $1 AND column_name <> 'bankIdentity' ORDER BY column_name`,
 				[table],
 			)) as Array<{column_name: string}>
 		).map(({column_name}) => `"${column_name}"`);

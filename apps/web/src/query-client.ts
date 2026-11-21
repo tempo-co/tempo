@@ -67,13 +67,12 @@ const handleAuthError = (error: Error) => {
 
 /**
  * Retrying cannot fix an auth error, nor a reply that belongs to a previous session. A rate limit
- * lasts longer than the retry delays, so retrying it only extends the limit. A conflict answers the
- * state of what was asked for, such as a layout proposal already saved, which a retry does not change.
+ * lasts longer than the retry delays, so retrying it only extends the limit.
  */
 const isFinalError = (error: Error) =>
   isAuthError(error) ||
   error instanceof SessionChangedError ||
-  (error instanceof HttpError && (error.status === 429 || error.status === 409));
+  (error instanceof HttpError && error.status === 429);
 
 /**
  * A 401 from the signed-in check is how signed-out pages learn there is no session, so it must not

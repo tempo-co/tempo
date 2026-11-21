@@ -81,13 +81,13 @@ function letters(text: string): number {
 function splitStatements(text: string): RawStatement[] {
 	const statements: RawStatement[] = [];
 	let header: string[] = [];
-	// The header of the message the statements are in, until a SWIFT message closes with `-}`.
+	// The header above the statements since the last one ended: a statement after a `-` or `-}` has only its own.
 	let messageHeader: string[] = [];
 	let current: RawStatement | null = null;
 	for (const line of text.split(/\r?\n/)) {
 		const tag = TAG.exec(line);
 		if (tag?.[1] === '20') {
-			// A statement with no header lines of its own shares its message's.
+			// A statement with no header lines of its own shares the header of the statement before it in one message.
 			if (header.length > 0) messageHeader = header;
 			current = {header: messageHeader, fields: [], closed: false};
 			statements.push(current);
@@ -98,7 +98,7 @@ function splitStatements(text: string): RawStatement[] {
 			current.fields.push({tag: tag[1], lines: [tag[2]]});
 			if (/^62[FM]$/.test(tag[1])) current.closed = true;
 		} else if (current?.closed && MESSAGE_END.test(line.trim())) {
-			if (line.trim().startsWith('-}')) messageHeader = [];
+			messageHeader = [];
 			current = null;
 		} else if (current) {
 			// A field continues on the lines up to the next tag.

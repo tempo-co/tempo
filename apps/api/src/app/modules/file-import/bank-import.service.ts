@@ -292,7 +292,7 @@ export class BankImportService {
 					}),
 				);
 
-				await recordBankIdentities(manager, ownerId, record.id, accountStatements);
+				await recordBankIdentities(manager, ownerId, accountStatements);
 
 				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
@@ -485,12 +485,13 @@ export class BankImportService {
 					[record.id, ownerId],
 				);
 				await manager.getRepository(BankImportDoubtfulRow).delete({importId: record.id, resolution: IsNull()});
-				// A bank only this import's statements gave goes with it.
+				// The bank its accounts record from files may have come from this import, so it goes; the next import
+				// gives it again. An account kept from a bank connection carries the bank's hash and keeps that bank.
 				await manager.query(
-					`UPDATE "bank_accounts" SET "bankIdentity" = NULL, "bankIdentityImportId" = NULL
-					WHERE "bankIdentityImportId" = $1
+					`UPDATE "bank_accounts" SET "bankIdentity" = NULL
+					WHERE "id" = ANY($1) AND "bankIdentity" IS NOT NULL AND "identificationHash" LIKE 'file:%'
 						AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $3)`,
-					[record.id, ownerId, BANK_CONNECTION_PROVIDERS.FILE],
+					[record.bankAccountIds, ownerId, BANK_CONNECTION_PROVIDERS.FILE],
 				);
 				await manager
 					.getRepository(BankImport)
@@ -1662,30 +1663,29 @@ function refuseBankConflicts(statementsByAccount: readonly AccountStatements[]):
 }
 
 /**
- * Records on each imported-files account without a bank the one its statements give, inside the import's transaction,
- * with the import that gave it (`bankIdentityImportId`), so undoing the import clears it. An account given the bank
- * it records by another import too keeps it whichever is undone. An account of a bank connection records its
- * connection's bank, and one with a bank keeps it.
+ * Records on each imported-files account without a bank the strongest evidence of the drop's statements routed to it
+ * (`strongerBankIdentity` over all of them, so their order does not matter), inside the import's transaction. An
+ * account of a bank connection records its connection's bank, and one with a bank keeps it.
  */
 async function recordBankIdentities(
 	manager: EntityManager,
 	ownerId: Account['id'],
-	importId: BankImport['id'],
 	statementsByAccount: readonly AccountStatements[],
 ): Promise<void> {
+	const evidence = new Map<BankAccount['id'], {account: BankAccount; identity: BankIdentity}>();
 	for (const {account, connection, rows} of statementsByAccount) {
-		const {bankIdentity} = rows;
-		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || !bankIdentity) continue;
-		const recorded = account.bankIdentity;
-		if (recorded && (recorded !== bankIdentity || !account.bankIdentityImportId)) continue;
-		const recordedImport = recorded ? null : importId;
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || account.bankIdentity) continue;
+		const identity = strongerBankIdentity(evidence.get(account.id)?.identity ?? null, rows.bankIdentity);
+		if (identity) evidence.set(account.id, {account, identity});
+	}
+	for (const {account, identity} of evidence.values()) {
 		await manager.query(
-			`UPDATE "bank_accounts" SET "bankIdentity" = $3, "bankIdentityImportId" = $5
-			WHERE "id" = $1
+			`UPDATE "bank_accounts" SET "bankIdentity" = $3
+			WHERE "id" = $1 AND "bankIdentity" IS NULL
 				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
-			[account.id, ownerId, bankIdentity, BANK_CONNECTION_PROVIDERS.FILE, recordedImport],
+			[account.id, ownerId, identity, BANK_CONNECTION_PROVIDERS.FILE],
 		);
-		Object.assign(account, {bankIdentity, bankIdentityImportId: recordedImport});
+		account.bankIdentity = identity;
 	}
 }
 

@@ -21,8 +21,8 @@ import {useIsMobile} from '@/hooks/use-is-mobile';
 import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
+import {useBankImportBanks} from '../api/use-bank-import-banks';
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
-import {useBankImportBanks} from '../api/use-layout-proposals';
 import {plural, summaryTitle} from '../utils/import-format';
 import {OTHER_BANK, guessedBankChoice} from '../utils/layout-mapping';
 import {type ImportFailure, accountQuestionKey} from '../utils/refusal-copy';

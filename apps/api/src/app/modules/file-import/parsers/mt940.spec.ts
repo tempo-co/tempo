@@ -469,11 +469,25 @@ describe('parseMt940', () => {
 		]);
 	});
 
+	const SWIFT_HEADER = ['{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:'];
 	it.each([
-		['shares its header with each statement inside it', ['-', '-}'], 'EXMPDEFF'],
-		['keeps its header from a statement after it closes', ['-}', '-'], null],
-	])('reads a SWIFT message that %s', (_caseName, [firstEnd, secondEnd], secondBic) => {
-		const block = (iban: string, end: string) =>
+		[
+			'statements of one SWIFT message with nothing between them share its header',
+			SWIFT_HEADER,
+			null,
+			'-}',
+			'EXMPDEFF',
+		],
+		[
+			'a bare statement after a headed one ended by - has no header',
+			['EXMPDEFF', '940', 'EXMPDEFF'],
+			'-',
+			'-',
+			null,
+		],
+		['a bare statement after a SWIFT message closed by -} has no header', SWIFT_HEADER, '-}', '-', null],
+	])('reads the BIC of a header above the statements: %s', (_caseName, header, firstEnd, secondEnd, secondBic) => {
+		const block = (iban: string, end: string | null) =>
 			[
 				':20:EXAMPLE',
 				`:25:${iban}`,
@@ -482,13 +496,9 @@ describe('parseMt940', () => {
 				':61:261005D10,00NTRFNONREF',
 				':86:Example Shop',
 				':62F:C261005EUR90,00',
-				end,
+				...(end === null ? [] : [end]),
 			].join('\r\n');
-		const file = [
-			'{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:',
-			block(OTHER_EXAMPLE_IBAN, firstEnd),
-			block(POLISH_IBAN, secondEnd),
-		].join('\r\n');
+		const file = [...header, block(OTHER_EXAMPLE_IBAN, firstEnd), block(POLISH_IBAN, secondEnd)].join('\r\n');
 
 		expect(
 			parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic}) => [accountIban, servicerBic]),

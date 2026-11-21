@@ -1450,9 +1450,9 @@ test.describe('statement file import on Connections', () => {
       await held;
       await route.fallback();
     });
-    await failed.getByRole('button', {name: 'Try again'}).click();
     const bank = preview.getByLabel('Bank', {exact: true});
     try {
+      await failed.getByRole('button', {name: 'Try again'}).click();
       await expect(failed).toHaveCount(0);
       await expect(bank).toHaveText('Loading your banks…');
       await expect(bank).toBeDisabled();

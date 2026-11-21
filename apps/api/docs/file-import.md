@@ -25,7 +25,7 @@ Known formats never call a model. With the mapper off, failing or out of credit,
 
 The upload answers with the summary (rows added, already present, doubtful, never sent, removed by sync, date range, accounts, statement gaps). Uploaded bytes are never stored. `bank_import_doubtful_rows.kind` tells a question (`doubtful`) from a row the bank never sent: one the import left out (`not_in_bank`) or one a later sync removed from a final day (`removed_by_sync`). Both are listed and added through the never-sent endpoints; an added row is resolved `new` with the row it became. Log lines count never-sent and removed rows, never their content.
 
-Undo (`DELETE /bank-imports/:id`) deletes the rows that import inserted (never-sent rows the user added among them) and its open doubtful and never-sent rows, removed ones included, and a bank only it gave (`bankIdentityImportId`); rows a later sync took over stay.
+Undo (`DELETE /bank-imports/:id`) deletes the rows that import inserted (never-sent rows the user added among them) and its open doubtful and never-sent rows, removed ones included, and its accounts' file-recorded bank; rows a later sync took over stay.
 
 ## Imported rows and later syncs
 

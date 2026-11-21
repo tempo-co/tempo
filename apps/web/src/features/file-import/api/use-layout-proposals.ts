@@ -1,6 +1,5 @@
 import {queryOptions, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {
-  BankImportBanks,
   BankImportLayout,
   BankImportLayoutProposal,
   ConfirmBankImportLayoutProposalRequest,
@@ -42,23 +41,6 @@ export function useConfirmLayout() {
       ]),
   });
   return {confirmLayout: mutateAsync};
-}
-
-/**
- * The owner's own banks to name the proposal's layout after without typing one: connected, imported and saved, sorted,
- * and only those its confirmation accepts.
- */
-export function useBankImportBanks(proposalId: string, {enabled}: {enabled: boolean}) {
-  return useQuery({
-    enabled,
-    queryKey: [...bankImportQueryKeys.banks, proposalId],
-    // The preview step shows its own failed-load state, so the wrapper's toast would report the failure twice.
-    queryFn: () =>
-      api.get<BankImportBanks>(`/bank-imports/layout-proposals/${proposalId}/banks`, {
-        quiet: true,
-      }),
-    select: ({banks}) => banks,
-  });
 }
 
 /** Discards a proposal the owner said is not right. */
