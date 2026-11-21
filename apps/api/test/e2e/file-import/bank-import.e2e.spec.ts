@@ -57,7 +57,7 @@ import {
 import {enableFileImportE2e, getApp, getSessionCookie} from '../../setup/e2e.setup';
 import {createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
-import {waitFor} from '../../utils/wait-utils';
+import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 enableFileImportE2e();
 
@@ -210,6 +210,7 @@ describe('Bank imports', () => {
 
 	let app: INestApplication;
 	let httpServer: Server;
+	let dataSource: DataSource;
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
 	let connections: Repository<BankConnection>;
@@ -221,6 +222,7 @@ describe('Bank imports', () => {
 	beforeAll(() => {
 		app = getApp();
 		httpServer = app.getHttpServer();
+		dataSource = app.get(DataSource);
 		fixtures = new BankingFixtures(app);
 		accounts = app.get(getRepositoryToken(Account));
 		connections = fixtures.connections;
@@ -398,15 +400,6 @@ describe('Bank imports', () => {
 			return recompute(...args);
 		});
 		return {reached, release, restore: () => spy.mockRestore()};
-	}
-
-	/** How many database sessions of the test database wait on a lock. */
-	async function lockWaits() {
-		const [{waiting}] = await transactions.query<Array<{waiting: number}>>(
-			`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
-			WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-		);
-		return waiting;
 	}
 
 	/** The three fields the balance trend reads, as stored. */
@@ -1018,7 +1011,10 @@ describe('Bank imports', () => {
 			await saveReached;
 			const resolution = resolve(row.id);
 			// The resolution then waits on a lock the save holds.
-			await waitFor(lockWaits, (waiting) => waiting > 0);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting > 0,
+			);
 			release();
 
 			expect((await save).status).toBe(200);
@@ -1059,7 +1055,7 @@ describe('Bank imports', () => {
 			const resolution = resolve(otherRow.id);
 			// The resolution waits for the drop: for its sync lock, or (out of order) for the connection it holds.
 			await waitFor(
-				async () => ({locks: await lockWaits(), leases: leases.mock.calls.length}),
+				async () => ({locks: await lockWaits(dataSource), leases: leases.mock.calls.length}),
 				({locks, leases: asked}) => locks > 0 || asked > leasesAsked,
 			);
 			releaseImport();
@@ -1120,6 +1116,7 @@ describe('Bank imports', () => {
 		);
 		await imports.update({id: mixed.body.id}, {rowsRemovedBySync: 1});
 		return {
+			owner,
 			agent,
 			synced,
 			fileAccountId,
@@ -1144,7 +1141,10 @@ describe('Bank imports', () => {
 			await saveReached;
 			const addedBack = addBack();
 			// The add waits on a lock the save holds, then recomputes the balance over the saved one.
-			await waitFor(lockWaits, (waiting) => waiting > 0);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting > 0,
+			);
 			release();
 
 			expect((await save).status).toBe(200);
@@ -1159,18 +1159,29 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(3);
 	});
 
-	it('refuses to add back a row of a drop into a synced account while that connection syncs, and adds nothing', async () => {
-		const {synced, removedId, addBack} = await keptAccountWithRemovedRow();
+	it('refuses to add back a row of a drop into a synced account while that connection syncs, also once an authorization took the account back to another bank, and adds nothing', async () => {
+		const {owner, synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
 		const syncRuns = await app.get(BankingConnectionLockService).acquire(synced.id);
 		try {
 			const busy = await addBack();
 			expect(busy.status).toBe(409);
 			expect(busy.body).toMatchObject({code: 'account_busy'});
+
+			// The record still hangs on the syncing connection, which no account of the add is on now.
+			const otherBank = await fixtures.createConnection(owner, {
+				aspspName: 'Example Bank',
+				nextSyncAt: new Date('2030-01-01T00:00:00.000Z'),
+			});
+			await bankAccounts.update(fileAccountId, {bankConnection: {id: otherBank.id}});
+			const stillBusy = await addBack();
+			expect(stillBusy.status).toBe(409);
+			expect(stillBusy.body).toMatchObject({code: 'account_busy'});
 		} finally {
 			syncRuns.stop();
 			await syncRuns.release();
 		}
 		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
 	});
 
 	/**
@@ -2577,7 +2588,10 @@ describe('Bank imports', () => {
 		await listen();
 		const addingNew = add(final.body.id, [notSentNew.id]).then((reply) => reply);
 		try {
-			await waitFor(lockWaits, (waiting) => waiting === 1);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
 		} finally {
 			commitChange();
 		}

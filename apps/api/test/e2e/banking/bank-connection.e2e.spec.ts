@@ -46,9 +46,9 @@ import {
 import {camt053} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
-import {fetchedTransactions} from '../../utils/banking-utils';
+import {createBankingOwner, fetchedTransactions} from '../../utils/banking-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
-import {waitFor} from '../../utils/wait-utils';
+import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 // Kept accounts take statement files.
 enableFileImportE2e();
@@ -1733,14 +1733,6 @@ describe('BankConnectionController', () => {
 				{uid: 'provider-account-deleted-owner', identificationHash: 'hash-deleted-owner', currency: 'EUR'},
 			],
 		});
-		const lockWaits = async () => {
-			const [{waiting}] = await dataSource.query<Array<{waiting: number}>>(
-				`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
-				WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-			);
-			return waiting;
-		};
-
 		// The pending connection stays locked until the deletion waits too, so both are under way at once.
 		let pendingLocked!: () => void;
 		const holdsPending = new Promise<void>((resolve) => (pendingLocked = resolve));
@@ -1759,9 +1751,15 @@ describe('BankConnectionController', () => {
 		const authorized = authorization.then((response) => response);
 		let deletion: Promise<unknown> | undefined;
 		try {
-			await waitFor(lockWaits, (waiting) => waiting === 1);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
 			deletion = app.get(AccountDeletionService).deleteAccount(owner.id, owner.credentials.password);
-			await waitFor(lockWaits, (waiting) => waiting === 2);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 2,
+			);
 		} finally {
 			releasePending();
 		}
@@ -2091,8 +2089,10 @@ describe('BankConnectionController', () => {
 	});
 
 	it('writes converted amounts only to rows of the synced account, leaving another account’s to the conversion', async () => {
-		const {connection, bankAccount} = await createAuthorizedConnection('scoped-write-session');
-		const {bankAccount: otherBankAccount} = await createAuthorizedConnection('scoped-write-other-session');
+		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const otherBankAccount = await fixtures.createBankAccount(
+			await fixtures.createConnection(owner, {aspspName: 'Example Bank'}),
+		);
 		const [incoming] = makeTransactions('scoped-write');
 		// Stored before methods were recorded, in the reporting currency: the conversion corrects its amount.
 		const otherRow = await fixtures.createTransaction(otherBankAccount, {
@@ -2101,24 +2101,18 @@ describe('BankConnectionController', () => {
 			baseAmountMethod: null,
 		});
 		const otherRowBefore = await bankTransactionRepository.findOneByOrFail({id: otherRow.id});
-		const accounts = app.get(DataSource).getRepository(Account);
-		await accounts.update({id: account.id}, {baseCurrency: 'EUR'});
 		const writer = app.get(AccountHistoryWriterService);
-		try {
-			await writer.write(account.id, {syncedConnectionIds: [connection.id]}, (write) =>
-				writer.recordBankFetch(write, {
-					bankAccount,
-					connection,
-					transactions: [incoming],
-					fetchOptions: {strategy: 'default', dateFrom: incoming.bookingDate},
-					succeeded: false,
-					complete: false,
-					fetchedThrough: dateInAppTimeZone(new Date()),
-				}),
-			);
-		} finally {
-			await accounts.update({id: account.id}, {baseCurrency: null});
-		}
+		await writer.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
+			writer.recordBankFetch(write, {
+				bankAccount,
+				connection,
+				transactions: [incoming],
+				fetchOptions: {strategy: 'default', dateFrom: incoming.bookingDate},
+				succeeded: false,
+				complete: false,
+				fetchedThrough: dateInAppTimeZone(new Date()),
+			}),
+		);
 
 		expect(await bankTransactionRepository.findOneByOrFail({id: otherRow.id})).toEqual(otherRowBefore);
 		expect(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id})).toEqual([

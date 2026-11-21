@@ -23,7 +23,7 @@ import {BankImport} from '@modules/file-import/bank-import.entity';
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {getApp} from '../../setup/e2e.setup';
 import {createBankingOwner} from '../../utils/banking-utils';
-import {waitFor} from '../../utils/wait-utils';
+import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 const row = (entryReference: string, amount: string): BankTransactionInput => ({
 	entryReference,
@@ -50,15 +50,6 @@ describe('AccountHistoryWriterService', () => {
 	});
 
 	afterEach(() => jest.restoreAllMocks());
-
-	/** How many database sessions of the test database wait on a lock. */
-	async function lockWaits() {
-		const [{waiting}] = await dataSource.query<Array<{waiting: number}>>(
-			`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
-			WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-		);
-		return waiting;
-	}
 
 	/** Records a fetch of one row of the account inside the write the writer opened. */
 	const writeRow = (
@@ -102,7 +93,10 @@ describe('AccountHistoryWriterService', () => {
 			writeRow(write, bankAccount, connection, 'DURING', '12.50'),
 		);
 		try {
-			await waitFor(lockWaits, (waiting) => waiting === 1);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
 		} finally {
 			commitChange();
 		}
@@ -157,7 +151,10 @@ describe('AccountHistoryWriterService', () => {
 		const write = writer.write(owner.id, {fileConnection: 'existing'}, async ({manager, fileConnection}) => {
 			expect(fileConnection).not.toBeNull();
 			fileLocked();
-			await waitFor(lockWaits, (waiting) => waiting === 1);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
 			await manager.getRepository(BankConnection).findOneOrFail({
 				where: {id: connection.id},
 				lock: {mode: 'pessimistic_write'},
@@ -195,7 +192,10 @@ describe('AccountHistoryWriterService', () => {
 		await removalHolds;
 		const write = writer.write(owner.id, {fileConnection: 'create'}, async ({fileConnection}) => fileConnection);
 		try {
-			await waitFor(lockWaits, (waiting) => waiting === 1);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
 		} finally {
 			resumeRemoval();
 		}
@@ -588,6 +588,55 @@ describe('AccountHistoryWriterService', () => {
 			]);
 			expect(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).toMatchObject({
 				currentBalanceAmount: '250.00000000',
+			});
+		});
+
+		it('adds rows to an imported-files account once a reporting-currency change under way commits, leaving their amounts to the conversion', async () => {
+			const {owner} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const fileConnection = (await writer.write(
+				owner.id,
+				{fileConnection: 'create'},
+				async ({fileConnection}) => fileConnection,
+			))!;
+			const fileAccount = await fixtures.createBankAccount(fileConnection, {currency: 'EUR'});
+			const record = await saveImport(owner, fileConnection.id, fileAccount.id);
+
+			// The change holds the reporting-currency lock, then locks the owner's row once the write waits.
+			let commitChange!: () => void;
+			const changeHolds = new Promise<void>((resolve) => (commitChange = resolve));
+			let changeStarted!: () => void;
+			const changeLocked = new Promise<void>((resolve) => (changeStarted = resolve));
+			const change = dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForChange(manager, owner.id);
+				changeStarted();
+				await changeHolds;
+				await manager
+					.getRepository(Account)
+					.findOneOrFail({where: {id: owner.id}, lock: {mode: 'pessimistic_write'}});
+				await manager.getRepository(Account).update({id: owner.id}, {baseCurrency: 'GBP'});
+			});
+			await changeLocked;
+			const write = writer.write(owner.id, {fileConnection: 'existing'}, (write) =>
+				writer.addFileRows(
+					write,
+					{account: fileAccount, connection: fileConnection, importId: record.id},
+					({insert}) => insert([fileRow('FILE-1', '5.00', day(3))], {statementNumbering: null}),
+				),
+			);
+			try {
+				await waitFor(
+					() => lockWaits(dataSource),
+					(waiting) => waiting === 1,
+				);
+			} finally {
+				commitChange();
+			}
+			const [, added] = await Promise.all([change, write]);
+
+			expect(await fixtures.transactions.findOneByOrFail({id: added.result[0]})).toMatchObject({
+				importId: record.id,
+				amountInBaseCurrency: null,
+				baseAmountMethod: null,
 			});
 		});
 

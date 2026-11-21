@@ -261,6 +261,7 @@ export class AccountHistoryWriterService {
 				if (rows.length === 0) return [];
 				const {insertedTransactionIds} = await this.persistence.insertImportedTransactions(
 					transactions,
+					ownerId,
 					account,
 					rows,
 					connection.aspspName,

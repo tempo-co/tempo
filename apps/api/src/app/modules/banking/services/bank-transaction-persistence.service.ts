@@ -172,6 +172,7 @@ export class BankTransactionPersistenceService {
 	 */
 	private async findOccupiedTransactionIdentityKeys(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		groups: ReadonlyArray<{groupKey: string; newRows: number; storedRows: number}>,
 	): Promise<Set<string>> {
@@ -192,9 +193,12 @@ export class BankTransactionPersistenceService {
 				BATCH_WRITE_CHUNK_SIZE,
 			)) {
 				const rows: Array<{stableIdentityKey: string}> = await repository.query(
-					`SELECT "stableIdentityKey" FROM "bank_transactions"
-					WHERE "bankAccountId" = $1 AND "stableIdentityKey" = ANY($2::varchar[])`,
-					[bankAccountId, keys],
+					`SELECT t."stableIdentityKey" FROM "bank_transactions" t
+					INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
+					INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+					WHERE t."bankAccountId" = $1 AND connection."accountId" = $3
+						AND t."stableIdentityKey" = ANY($2::varchar[])`,
+					[bankAccountId, keys, ownerId],
 				);
 				for (const {stableIdentityKey} of rows) occupied.add(stableIdentityKey);
 			}
@@ -263,6 +267,7 @@ export class BankTransactionPersistenceService {
 		const storedRowsByGroup = countByGroup(existingTransactions);
 		const occupiedIdentityKeys = await this.findOccupiedTransactionIdentityKeys(
 			repository,
+			ownerId,
 			bankAccount.id,
 			stableIdentityGroupKeys.map((groupKey) => ({
 				groupKey,
@@ -426,6 +431,7 @@ export class BankTransactionPersistenceService {
 	 */
 	async insertImportedTransactions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccount: BankAccount,
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
@@ -440,6 +446,7 @@ export class BankTransactionPersistenceService {
 		}
 		const usedKeys = await this.findOccupiedTransactionIdentityKeys(
 			repository,
+			ownerId,
 			bankAccount.id,
 			[...newRowsByGroup].map(([groupKey, newRows]) => ({groupKey, newRows, storedRows: 0})),
 		);

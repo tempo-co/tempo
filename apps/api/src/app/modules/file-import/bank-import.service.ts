@@ -378,7 +378,10 @@ export class BankImportService {
 					rowsAlreadyPresent:
 						counts.rowsMatchedByReference + counts.rowsMatchedByBalance + counts.rowsMatchedByDate,
 				});
-				await imports.update({id: record.id}, {...counts, rowsAlreadyPresent: record.rowsAlreadyPresent});
+				await imports.update(
+					{id: record.id, accountId: ownerId},
+					{...counts, rowsAlreadyPresent: record.rowsAlreadyPresent},
+				);
 				if (counts.rowsNotInBank > 0) {
 					// Counts only: a bank that keeps leaving out a kind of payment shows up here.
 					this.logger.log(
@@ -422,17 +425,19 @@ export class BankImportService {
 		const fileConnectionId = ownedAccounts.find(
 			({bankConnection}) => bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
 		)?.bankConnection.id;
+		const recordedUnderFiles = await this.isRecordedUnderFiles(ownerId, owned);
 		await this.write(
 			ownerId,
 			{
-				syncedConnectionIds: ownedAccounts.flatMap((account) =>
-					account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE
-						? []
-						: [account.bankConnection.id],
-				),
-				...(fileConnectionId || (await this.isRecordedUnderFiles(ownerId, owned))
-					? {fileConnection: 'existing'}
-					: {}),
+				syncedConnectionIds: [
+					...ownedAccounts.flatMap((account) =>
+						account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE
+							? []
+							: [account.bankConnection.id],
+					),
+					...recordSyncLease(owned, recordedUnderFiles),
+				],
+				...(fileConnectionId || recordedUnderFiles ? {fileConnection: 'existing'} : {}),
 			},
 			async ({manager, fileConnection: lockedFileConnection}) => {
 				const fileConnection = lockedFileConnection?.id === fileConnectionId ? lockedFileConnection : null;
@@ -451,7 +456,7 @@ export class BankImportService {
 				await manager
 					.getRepository(BankImport)
 					.update(
-						{id: record.id},
+						{id: record.id, accountId: ownerId},
 						{undoneAt: new Date(), rowsDoubtful: 0, rowsNotInBank: 0, rowsRemovedBySync: 0},
 					);
 				if (fileConnection) {
@@ -557,18 +562,17 @@ export class BankImportService {
 		if (!doubtful || !account?.bankConnection) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 		const connection = account.bankConnection;
 		const toFiles = connection.provider === BANK_CONNECTION_PROVIDERS.FILE;
+		const recordedUnderFiles = await this.isRecordedUnderFiles(ownerId, owned);
 		const resolved = await this.write(
 			ownerId,
 			{
 				syncedConnectionIds: [
 					...(toFiles ? [] : [connection.id]),
-					// A drop into a synced and an imported-files account is recorded under the synced connection:
-					// its sync lease too, as imports and undo take it.
-					...(owned.bankConnectionId === connection.id ? [] : [owned.bankConnectionId]),
+					...recordSyncLease(owned, recordedUnderFiles),
 				],
 				// An imported-files account's connection, so its balance is recomputed over rows and an entered
 				// balance no one else is changing; or the record's own (`lockImport`).
-				...(toFiles || (await this.isRecordedUnderFiles(ownerId, owned)) ? {fileConnection: 'existing'} : {}),
+				...(toFiles || recordedUnderFiles ? {fileConnection: 'existing'} : {}),
 			},
 			async (write) => {
 				const {manager, fileConnection} = write;
@@ -618,7 +622,7 @@ export class BankImportService {
 				record.rowsDoubtful -= 1;
 				await rows.update({id: current.id}, {resolution: request.decision, resolvedTransactionId});
 				await manager.getRepository(BankImport).update(
-					{id: record.id},
+					{id: record.id, accountId: ownerId},
 					{
 						rowsAdded: record.rowsAdded,
 						rowsAlreadyPresent: record.rowsAlreadyPresent,
@@ -688,6 +692,7 @@ export class BankImportService {
 		const fileConnectionId = accounts.find(
 			({bankConnection}) => bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
 		)?.bankConnection.id;
+		const recordedUnderFiles = await this.isRecordedUnderFiles(ownerId, owned);
 		const added = await this.write(
 			ownerId,
 			{
@@ -695,17 +700,11 @@ export class BankImportService {
 					...accounts.flatMap(({bankConnection}) =>
 						bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [bankConnection.id],
 					),
-					// An account its bank's removal kept is on the imported-files connection while the record may still
-					// hang on a synced one: that one's sync lease too, as imports and undo take it.
-					...(fileConnectionId && owned.bankConnectionId !== fileConnectionId
-						? [owned.bankConnectionId]
-						: []),
+					...recordSyncLease(owned, recordedUnderFiles),
 				],
 				// So a kept account's balance is recomputed over rows and an entered balance no one else is changing;
 				// or the record's own (`lockImport`).
-				...(fileConnectionId || (await this.isRecordedUnderFiles(ownerId, owned))
-					? {fileConnection: 'existing'}
-					: {}),
+				...(fileConnectionId || recordedUnderFiles ? {fileConnection: 'existing'} : {}),
 			},
 			async (write) => {
 				const {manager, fileConnection} = write;
@@ -763,7 +762,7 @@ export class BankImportService {
 				record.rowsNotInBank -= current.length - removedBySync;
 				record.rowsRemovedBySync -= removedBySync;
 				await manager.getRepository(BankImport).update(
-					{id: record.id},
+					{id: record.id, accountId: ownerId},
 					{
 						rowsAdded: record.rowsAdded,
 						rowsNotInBank: record.rowsNotInBank,
@@ -1347,6 +1346,15 @@ export class BankImportService {
 			relations: {bankConnection: true},
 		});
 	}
+}
+
+/**
+ * The sync lease of the synced connection the import is recorded under, which a write to it takes as imports do: a
+ * drop into a synced and an imported-files account is recorded under the synced connection, which may then be none of
+ * the write's accounts' (an account its bank's removal kept, or one an authorization took back to another bank).
+ */
+function recordSyncLease(owned: BankImport, recordedUnderFiles: boolean): BankConnection['id'][] {
+	return recordedUnderFiles ? [] : [owned.bankConnectionId];
 }
 
 /**
