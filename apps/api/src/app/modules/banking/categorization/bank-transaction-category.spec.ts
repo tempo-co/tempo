@@ -80,6 +80,7 @@ describe('bank transaction categorization contract', () => {
 		expect(description('SERVICES')).toContain('software, apps, cloud storage, and online tools');
 		expect(description('SERVICES')).toContain('streaming and media services belong in Entertainment');
 		expect(description('SHOPPING')).toContain('software and apps belong in Services');
+		expect(description('SHOPPING')).toContain('shopping memberships such as delivery or marketplace subscriptions');
 		expect(description('LOANS_AND_DEBT')).toContain('buy-now-pay-later');
 		expect(description('LOANS_AND_DEBT')).toContain('a mortgage belongs in Housing and utilities');
 		expect(description('LOANS_AND_DEBT')).toContain(
