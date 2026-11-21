@@ -33,7 +33,12 @@ export function useConfirmLayout() {
       ...request
     }: ConfirmBankImportLayoutProposalRequest & {proposalId: string}) =>
       api.post<BankImportLayout>(`/bank-imports/layout-proposals/${proposalId}/confirm`, request),
-    onSuccess: () => queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+        // Later proposals read their banks afresh; the saved one's list is never read again.
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.banks, refetchType: 'none'}),
+      ]),
   });
   return {confirmLayout: mutateAsync};
 }
@@ -66,7 +71,11 @@ export function useRemoveLayout() {
       queryClient.setQueryData<BankImportLayout[]>(bankImportQueryKeys.layouts, (layouts) =>
         layouts?.filter(({id}) => id !== layoutId),
       ),
-    onSettled: () => queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.banks}),
+      ]),
   });
   return {removeLayout: mutateAsync};
 }

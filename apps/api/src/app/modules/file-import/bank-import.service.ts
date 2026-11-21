@@ -9,12 +9,20 @@ import type {
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
 } from '@tempo/contracts';
+import {bankNameKey} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {
+	BankIdentity,
+	bicBankIdentity,
+	differentBanks,
+	nameBankIdentity,
+	strongerBankIdentity,
+} from '@modules/banking/bank-identity';
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
@@ -47,8 +55,15 @@ import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
+import {CSV_LAYOUTS} from './parsers/csv-layouts';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
-import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
+import {
+	FORMAT_BANKS,
+	NormalizedRow,
+	NormalizedStatement,
+	StatementBalance,
+	StatementFormat,
+} from './parsers/parse-result';
 import {recordedAccounts} from './recorded-accounts';
 import {ParseRunnerService} from './runner/parse-runner.service';
 import {RepeatedRows, StatementGap, gapsOutsideCoverage, joinStatements} from './statement-chain';
@@ -59,6 +74,8 @@ const BANK_IMPORT_NOT_SAVED = 'The import could not be saved. Please try again.'
 const BANK_IMPORT_DOUBTFUL_ROW_RESOLVED = 'This row has already been decided.';
 const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may be.';
 const BANK_IMPORT_ROW_ADDED = 'One of these rows has already been added.';
+/** How the identification hash of an account made from files starts. */
+const FILE_IDENTIFICATION_PREFIX = 'file:';
 /**
  * A statement that names no account, routed by its bank to a synced account, is only checked against that account
  * when at least this many of its rows fall within the dates the account already holds; with fewer there is too little
@@ -94,6 +111,13 @@ type AccountRows = {
 	 * layout did. Its IBAN then came from a column or line the model chose, so it must be confirmed like a bank.
 	 */
 	learnedBank: string | null;
+	/**
+	 * Each piece of bank evidence its statements give (`statementBankIdentity`), with the 1-based file of the first
+	 * statement giving it; never part of the account key. For an
+	 * account named by an id that is no IBAN, checked against the bank the stored account records, then against each
+	 * other (`refuseBankConflicts`).
+	 */
+	bankEvidence: Array<{identity: BankIdentity; file: number}>;
 	currency: string;
 	/** `learned`: read by one of the owner's saved layouts. */
 	byFormat: {
@@ -187,8 +211,8 @@ export class BankImportService {
 		files: readonly Buffer[],
 		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
-		const accountRows = groupByAccount(statements, learnedBanks);
+		const {statements, evidenceFiles, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
+		const accountRows = groupByAccount(statements, learnedBanks, evidenceFiles);
 		const allRows = statements.flatMap(({rows}) => rows);
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
 		const rowsParsed = allRows.length;
@@ -213,6 +237,8 @@ export class BankImportService {
 				const {manager, fileConnection} = write;
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
+				const accountStatements = accounts.map((imported, index) => ({...imported, rows: accountRows[index]}));
+				refuseBankConflicts(accountStatements);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
 				);
@@ -263,6 +289,8 @@ export class BankImportService {
 						}),
 					}),
 				);
+
+				await recordBankIdentities(manager, ownerId, accountStatements);
 
 				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
@@ -790,6 +818,8 @@ export class BankImportService {
 		files: readonly Buffer[],
 	): Promise<{
 		statements: NormalizedStatement[];
+		/** The 1-based file each statement's bank evidence came from: its own, or the copy that stated its BIC. */
+		evidenceFiles: ReadonlyMap<NormalizedStatement, number>;
 		kinds: Map<string, FileKind>;
 		learnedBanks: ReadonlyMap<string, string>;
 	}> {
@@ -797,7 +827,8 @@ export class BankImportService {
 		const learnedBanks = new Map(owned.map(({id, bank}) => [id, bank]));
 		const statements: NormalizedStatement[] = [];
 		const kinds = new Map<string, FileKind>();
-		const seen = new Set<string>();
+		const seen = new Map<string, NormalizedStatement[]>();
+		const evidenceFiles = new Map<NormalizedStatement, number>();
 		let rows = 0;
 		for (const [index, file] of files.entries()) {
 			const outcome = await this.parseRunner.parse(file, owned);
@@ -811,16 +842,33 @@ export class BankImportService {
 				kinds.set(format, {format, layout: null});
 			for (const layout of layouts) kinds.set(`csv:${layout}`, {format: 'csv', layout});
 			for (const statement of outcome.result.statements) {
-				// A statement dropped twice in one go (an archive and its own files) is the same statement.
-				const key = JSON.stringify(statement);
-				if (seen.has(key)) continue;
-				seen.add(key);
+				// A statement dropped twice in one go (an archive and its own files) is the same statement, also when only
+				// one copy states its bank's BIC. Copies naming two BICs for an id that is no IBAN are two banks'
+				// statements, which `groupByAccount` refuses.
+				const key = JSON.stringify({...statement, servicerBic: null});
+				const copies = seen.get(key) ?? [];
+				const copy = copies.find(
+					({servicerBic}) =>
+						statement.accountIban !== null ||
+						servicerBic === null ||
+						statement.servicerBic === null ||
+						servicerBic === statement.servicerBic,
+				);
+				if (copy) {
+					if (copy.servicerBic === null && statement.servicerBic !== null) {
+						copy.servicerBic = statement.servicerBic;
+						evidenceFiles.set(copy, index + 1);
+					}
+					continue;
+				}
+				seen.set(key, [...copies, statement]);
+				evidenceFiles.set(statement, index + 1);
 				rows += statement.rows.length;
 				if (rows > MAX_ROWS_PER_DROP) throw new BankImportRefusalException('too_many_rows', index + 1);
 				statements.push(statement);
 			}
 		}
-		return {statements, kinds, learnedBanks};
+		return {statements, evidenceFiles, kinds, learnedBanks};
 	}
 
 	/**
@@ -879,7 +927,7 @@ export class BankImportService {
 								(iban
 									? normalizeStoredIban(account.iban) === iban ||
 										verifyIbanAgainstIdentificationHash(account.identificationHash, iban, currency)
-									: account.bankConnection.aspspName.trim().toLowerCase() === bank!.toLowerCase()),
+									: bankNameKey(account.bankConnection.aspspName) === bankNameKey(bank!)),
 						)
 					: holders[index];
 			// Without an IBAN, an account bank sync no longer reports (closed, or left out of the consent) fits only when
@@ -958,26 +1006,17 @@ export class BankImportService {
 			.map(({index, candidates}) => ({
 				rows: accountRows[index],
 				bank: banks[index]!,
-				providerAccountId: fileAccountIdentity(newAccountRows(accountRows[index], banks[index]!))
-					.providerAccountId,
 				candidates,
 			}));
 		// `new` goes to the imported-files account of the bank and currency once it exists, so it is offered as itself.
-		const fileAccounts =
-			asked.length > 0
-				? await this.dataSource.getRepository(BankAccount).find({
-						where: {
-							bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-							providerAccountId: In(asked.map(({providerAccountId}) => providerAccountId)),
-						},
-						relations: {bankConnection: true},
-					})
-				: [];
+		const fileAccounts = await Promise.all(
+			asked.map(({rows, bank}) => this.findFileAccount(ownerId, newAccountRows(rows, bank))),
+		);
 		throw new BankImportRefusalException(
 			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
 			null,
-			asked.map(({rows, bank, providerAccountId, candidates}) => {
-				const fileAccount = fileAccounts.find((account) => account.providerAccountId === providerAccountId);
+			asked.map(({rows, bank, candidates}, askedIndex) => {
+				const fileAccount = fileAccounts[askedIndex];
 				const unlisted = fileAccount && !candidates.some(({id}) => id === fileAccount.id);
 				return {
 					bank,
@@ -1070,7 +1109,7 @@ export class BankImportService {
 		const {iban, bank, currency} = accountRows[0];
 		if (account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE) {
 			// A file that names no account fits any account in its currency.
-			if (!bank && account.providerAccountId !== fileAccountIdentity(accountRows[0]).providerAccountId) {
+			if (!bank && (await this.findFileAccount(ownerId, accountRows[0]))?.id !== account.id) {
 				throw new BankImportRefusalException('target_account_mismatch');
 			}
 			return {kind: 'file', account};
@@ -1144,33 +1183,33 @@ export class BankImportService {
 		return accounts;
 	}
 
-	/** The owner's imported-files account the rows would go to, if it exists already. */
+	/** The owner's imported-files account the rows would go to, if it exists already (`findFileAccountIn`). */
 	private async findFileAccount(ownerId: Account['id'], rows: AccountRows): Promise<BankAccount | null> {
-		return this.dataSource.getRepository(BankAccount).findOne({
-			where: {
-				bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-				providerAccountId: fileAccountIdentity(rows).providerAccountId,
-			},
-			relations: {bankConnection: true},
-		});
+		const {account} = await findFileAccountIn(this.dataSource.manager, ownerId, null, rows);
+		return account;
 	}
 
+	/** The imported-files account the rows go to (`findFileAccountIn`), created when it does not exist yet. */
 	private async findOrCreateFileAccount(
 		manager: EntityManager,
 		connection: BankConnection,
 		rows: AccountRows,
 	): Promise<ImportedAccount> {
 		const bankAccounts = manager.getRepository(BankAccount);
-		const {providerAccountId, hashSeed, name} = fileAccountIdentity(rows);
-		const existing = await bankAccounts.findOne({where: {bankConnection: {id: connection.id}, providerAccountId}});
+		const {account: existing, identity} = await findFileAccountIn(
+			manager,
+			connection.accountId,
+			connection.id,
+			rows,
+		);
 		if (existing) return {account: existing, connection, created: false};
 		const account = await bankAccounts.save(
 			bankAccounts.create({
 				bankConnection: {id: connection.id},
-				providerAccountId,
-				identificationHash: `file:${createHash('sha256').update(hashSeed).digest('hex')}`,
+				providerAccountId: identity.providerAccountId,
+				identificationHash: `${FILE_IDENTIFICATION_PREFIX}${createHash('sha256').update(identity.hashSeed).digest('hex')}`,
 				iban: rows.iban,
-				name,
+				name: identity.name,
 				currency: rows.currency,
 				isActive: true,
 			}),
@@ -1402,6 +1441,7 @@ async function refuseMovedAccounts(
 function groupByAccount(
 	statements: readonly NormalizedStatement[],
 	learnedBanks: ReadonlyMap<string, string>,
+	evidenceFiles: ReadonlyMap<NormalizedStatement, number>,
 ): AccountRows[] {
 	const ordered = [...statements].sort(compareStatements);
 	const groups = new Map<
@@ -1427,9 +1467,14 @@ function groupByAccount(
 			iban: statement.accountIban,
 			bank: statement.accountIban || statement.accountOtherId ? null : statement.bank,
 			learnedBank: null,
+			bankEvidence: [],
 			currency: statement.accountCurrency,
 			parts: [],
 		};
+		const identity = statementBankIdentity(statement, learnedBanks);
+		if (identity && !group.bankEvidence.some((known) => known.identity === identity)) {
+			group.bankEvidence.push({identity, file: evidenceFiles.get(statement)!});
+		}
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
 		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
@@ -1583,6 +1628,122 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 	};
 }
 
+/** An account an import writes to, with the statements' rows it takes. */
+type AccountStatements = ImportedAccount & {rows: AccountRows};
+
+/**
+ * Refuses the drop with `account_bank_conflict` when statements naming an account by an id that is no IBAN give
+ * evidence of two banks of the same kind (`differentBanks`): the same id at another bank, which Tempo cannot tell
+ * apart. A statement disagreeing with the bank the imported-files account records is named first, then a later
+ * statement disagreeing with an earlier one of the drop.
+ */
+function refuseBankConflicts(statementsByAccount: readonly AccountStatements[]): void {
+	const local = statementsByAccount.filter(({rows}) => !rows.iban && !rows.bank);
+	for (const {account, connection, rows} of local) {
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
+		const conflict = rows.bankEvidence.find(({identity}) => differentBanks(account.bankIdentity, identity));
+		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
+	}
+	for (const {rows} of local) {
+		const conflict = rows.bankEvidence.find(({identity}, index) =>
+			rows.bankEvidence.slice(0, index).some((known) => differentBanks(known.identity, identity)),
+		);
+		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
+	}
+}
+
+/**
+ * Gives each account made from files that has no bank the strongest evidence of all the drop's statements routed to
+ * it (`strongerBankIdentity`), written once per account inside the import's transaction. A bank once given stays while
+ * the account has rows; it goes with the account when an undo leaves it none. An account kept from a bank connection
+ * (its bank's hash, not a file one) keeps its connection's bank.
+ */
+async function recordBankIdentities(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	statementsByAccount: readonly AccountStatements[],
+): Promise<void> {
+	const evidence = new Map<BankAccount['id'], BankIdentity>();
+	for (const {account, rows} of statementsByAccount) {
+		if (account.bankIdentity || !account.identificationHash.startsWith(FILE_IDENTIFICATION_PREFIX)) continue;
+		for (const {identity} of rows.bankEvidence) {
+			evidence.set(account.id, strongerBankIdentity(evidence.get(account.id) ?? null, identity)!);
+		}
+	}
+	for (const [accountId, identity] of evidence) {
+		await manager.query(
+			`UPDATE "bank_accounts" SET "bankIdentity" = $3
+			WHERE "id" = $1
+				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
+			[accountId, ownerId, identity, BANK_CONNECTION_PROVIDERS.FILE],
+		);
+	}
+	// Two statement groups of the drop can hold two copies of one account.
+	for (const {account} of statementsByAccount) {
+		account.bankIdentity = evidence.get(account.id) ?? account.bankIdentity;
+	}
+}
+
+/**
+ * The owner's imported-files account the rows go to, if it exists, and the identity it has or gets
+ * (`fileAccountIdentity`). Rows of a file that names no account go to the account of their bank, named ignoring case
+ * and spacing, and currency; rows named by an IBAN or other id to the account of that id and currency.
+ * `connectionId`: the owner's imported-files connection, when known.
+ */
+async function findFileAccountIn(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	connectionId: BankConnection['id'] | null,
+	rows: AccountRows,
+): Promise<{account: BankAccount | null; identity: FileAccountIdentity}> {
+	const accounts = await manager.getRepository(BankAccount).find({
+		where: {
+			bankConnection: {
+				...(connectionId ? {id: connectionId} : {}),
+				accountId: ownerId,
+				provider: BANK_CONNECTION_PROVIDERS.FILE,
+			},
+			currency: rows.currency,
+		},
+		relations: {bankConnection: true},
+		order: {id: 'ASC'},
+	});
+	const identity = fileAccountIdentity(rows);
+	if (rows.bank) {
+		const bank = rows.bank;
+		const ofBank = accounts.filter(({providerAccountId}) =>
+			fileBankAccountOf(providerAccountId, bank, rows.currency),
+		);
+		return {
+			account:
+				ofBank.find(({providerAccountId}) => providerAccountId === identity.providerAccountId) ??
+				ofBank[0] ??
+				null,
+			identity,
+		};
+	}
+	return {
+		account: accounts.find(({providerAccountId}) => providerAccountId === identity.providerAccountId) ?? null,
+		identity,
+	};
+}
+
+/**
+ * The bank a statement's account is held at, by the best evidence the file gives: the bank its format or CSV layout
+ * belongs to (an owner's saved layout under the bank the owner named), else the servicer's BIC it states; null for any
+ * other file.
+ */
+function statementBankIdentity(
+	{format, layout, servicerBic}: NormalizedStatement,
+	learnedBanks: ReadonlyMap<string, string>,
+): BankIdentity | null {
+	const bank =
+		FORMAT_BANKS[format] ??
+		(layout ? (CSV_LAYOUTS.find(({id}) => id === layout)?.bank ?? learnedBanks.get(layout)) : undefined);
+	if (bank) return nameBankIdentity(bank);
+	return servicerBic ? bicBankIdentity(servicerBic) : null;
+}
+
 /** The scheme a statement numbers its rows in: its format, and the layout of a CSV-style file. */
 function statementNumbering(format: StatementFormat, layout: string | null): string {
 	return layout ? `${format}:${layout}` : format;
@@ -1597,14 +1758,10 @@ function importNumbering({format, layout}: BankImport): string | null {
  * How an imported-files account is found again on the next drop: by its IBAN or other id and currency, or, for a
  * bank whose files name no account, by that bank and currency (one such account per currency).
  */
-function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
-	providerAccountId: string;
-	hashSeed: string;
-	name: string;
-} {
+function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): FileAccountIdentity {
 	if (bank) {
 		return {
-			providerAccountId: `file-bank:${bank}:${currency}`,
+			providerAccountId: `${FILE_BANK_ACCOUNT_PREFIX}${bank}:${currency}`,
 			hashSeed: `bank:${bank}:${currency}`,
 			name: `${bank} ${currency}`,
 		};
@@ -1614,6 +1771,20 @@ function fileAccountIdentity({identifier, iban, bank, currency}: AccountRows): {
 		hashSeed: `${identifier}:${currency}`,
 		name: iban ? iban.replace(/(.{4})(?=.)/g, '$1 ') : identifier,
 	};
+}
+
+type FileAccountIdentity = {providerAccountId: string; hashSeed: string; name: string};
+
+const FILE_BANK_ACCOUNT_PREFIX = 'file-bank:';
+
+/** Whether an account key is the bank-named account (`fileAccountIdentity`) of the bank, ignoring case and spacing. */
+function fileBankAccountOf(providerAccountId: string, bank: string, currency: string): boolean {
+	const suffix = `:${currency}`;
+	return (
+		providerAccountId.startsWith(FILE_BANK_ACCOUNT_PREFIX) &&
+		providerAccountId.endsWith(suffix) &&
+		bankNameKey(providerAccountId.slice(FILE_BANK_ACCOUNT_PREFIX.length, -suffix.length)) === bankNameKey(bank)
+	);
 }
 
 /**
@@ -1645,8 +1816,8 @@ function askedBanks(
 
 /** The bank of the synced accounts holding a statement's account number, when they are at one bank. */
 function holdersBank(holders: readonly BankAccount[]): string | null {
-	const names = [...new Set(holders.map(({bankConnection}) => bankConnection.aspspName.trim()))];
-	return names.length === 1 ? names[0] : null;
+	const names = new Map(holders.map(({bankConnection: {aspspName}}) => [bankNameKey(aspspName), aspspName.trim()]));
+	return names.size === 1 ? [...names.values()][0] : null;
 }
 
 /**

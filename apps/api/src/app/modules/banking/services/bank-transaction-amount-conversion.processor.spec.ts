@@ -31,7 +31,7 @@ describe('BankTransactionAmountConversionProcessor', () => {
 	const job = (name: string) => ({name}) as Job<BankTransactionAmountConversionJobData>;
 	const setup = (enabled: boolean | Record<string, boolean>) => {
 		const conversionService = {backfill: jest.fn().mockResolvedValue(undefined)};
-		const derivedDataRefreshService = {recomputeAllOwnTransfers: jest.fn().mockResolvedValue(undefined)};
+		const derivedDataRefreshService = {recomputeAllLabels: jest.fn().mockResolvedValue(undefined)};
 		const recurringSeriesService = {foldAllChangeNotes: jest.fn().mockResolvedValue(undefined)};
 		const processor = createProcessor({
 			conversionService,
@@ -51,7 +51,7 @@ describe('BankTransactionAmountConversionProcessor', () => {
 		await processor.process(job(RECOMPUTE_OWN_TRANSFERS_JOB));
 
 		expect(conversionService.backfill).not.toHaveBeenCalled();
-		expect(derivedDataRefreshService.recomputeAllOwnTransfers).not.toHaveBeenCalled();
+		expect(derivedDataRefreshService.recomputeAllLabels).not.toHaveBeenCalled();
 		expect(recurringSeriesService.foldAllChangeNotes).not.toHaveBeenCalled();
 	});
 
@@ -61,7 +61,7 @@ describe('BankTransactionAmountConversionProcessor', () => {
 		await processor.process(job(BANK_TRANSACTION_AMOUNT_CONVERSION_JOB));
 
 		expect(conversionService.backfill).toHaveBeenCalledTimes(1);
-		expect(derivedDataRefreshService.recomputeAllOwnTransfers).not.toHaveBeenCalled();
+		expect(derivedDataRefreshService.recomputeAllLabels).not.toHaveBeenCalled();
 	});
 
 	it('converts imported statements while bank synchronization is off', async () => {
@@ -77,9 +77,9 @@ describe('BankTransactionAmountConversionProcessor', () => {
 
 		await processor.process(job(RECOMPUTE_OWN_TRANSFERS_JOB));
 
-		expect(derivedDataRefreshService.recomputeAllOwnTransfers).toHaveBeenCalledTimes(1);
+		expect(derivedDataRefreshService.recomputeAllLabels).toHaveBeenCalledTimes(1);
 		expect(recurringSeriesService.foldAllChangeNotes).toHaveBeenCalledTimes(1);
-		expect(derivedDataRefreshService.recomputeAllOwnTransfers.mock.invocationCallOrder[0]).toBeLessThan(
+		expect(derivedDataRefreshService.recomputeAllLabels.mock.invocationCallOrder[0]).toBeLessThan(
 			recurringSeriesService.foldAllChangeNotes.mock.invocationCallOrder[0],
 		);
 		expect(conversionService.backfill).not.toHaveBeenCalled();

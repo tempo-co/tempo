@@ -203,6 +203,7 @@ function parseStatement(statement: OfxElement, accountElement: 'BANKACCTFROM' | 
 		accountIban: iban,
 		accountOtherId: iban ? null : otherId,
 		bank: null,
+		servicerBic: null,
 		accountCurrency,
 		sequenceNumber: null,
 		entriesSkipped: 0,

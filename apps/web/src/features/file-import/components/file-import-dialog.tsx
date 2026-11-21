@@ -21,8 +21,10 @@ import {useIsMobile} from '@/hooks/use-is-mobile';
 import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
+import {useBankImportBanks} from '../api/use-bank-import-banks';
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
 import {plural, summaryTitle} from '../utils/import-format';
+import {OTHER_BANK, guessedBankChoice} from '../utils/layout-mapping';
 import {type ImportFailure, accountQuestionKey} from '../utils/refusal-copy';
 import {AccountQuestions} from './account-questions';
 import {DoubtfulRowsReview} from './doubtful-rows-review';
@@ -248,6 +250,8 @@ function ChooseStep({
 }
 
 /** Refusals that offer to work out a file's columns, rather than report a try at it that failed. */
+const NO_BANKS: readonly string[] = [];
+
 const offersColumns = (failure: Extract<ImportFailure, {kind: 'refused'}>) =>
   failure.mapFile !== null && failure.code !== 'mapper_unavailable';
 
@@ -316,9 +320,21 @@ function PreviewStep({
   onReject: () => void;
 }) {
   const {proposal} = step;
-  const [bankName, setBankName] = useState(proposal.bankName ?? '');
-  const [currency, setCurrency] = useState(proposal.defaultCurrency);
   const [pending, setPending] = useState(false);
+  // Read while the owner chooses; once confirming, the proposal is saved and its list is not read again.
+  const bankList = useBankImportBanks(proposal.id, {enabled: !pending});
+  const banks = bankList.data ?? NO_BANKS;
+  // Until the owner picks, the choice follows Tempo's guess as the list of banks arrives.
+  const [pickedBank, setPickedBank] = useState<string | null>(null);
+  const bankChoice = pickedBank ?? guessedBankChoice(proposal.bankName, banks);
+  const [otherBankName, setOtherBankName] = useState(proposal.bankName ?? '');
+  // Nothing is chosen until the owner's banks have loaded.
+  const bankName = !bankList.isSuccess
+    ? ''
+    : bankChoice === OTHER_BANK
+      ? otherBankName
+      : bankChoice;
+  const [currency, setCurrency] = useState(proposal.defaultCurrency);
   // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
   const [bankError, setBankError] = useState<string | null>(null);
   const name = bankName.trim();
@@ -348,12 +364,24 @@ function PreviewStep({
       body={
         <LayoutPreview
           proposal={proposal}
-          bankName={bankName}
-          bankError={bankError}
-          onBankName={(value) => {
-            setBankName(value);
+          banks={
+            bankList.isSuccess
+              ? banks
+              : bankList.isError
+                ? {error: bankList.error, retry: bankList.refetch}
+                : 'pending'
+          }
+          bankChoice={bankChoice}
+          onBankChoice={(value) => {
+            setPickedBank(value);
             setBankError(null);
           }}
+          otherBankName={otherBankName}
+          onOtherBankName={(value) => {
+            setOtherBankName(value);
+            setBankError(null);
+          }}
+          bankError={bankError}
           currency={currency}
           onCurrency={setCurrency}
           disabled={pending}

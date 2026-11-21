@@ -89,7 +89,7 @@ describe('runParseChild', () => {
 		{
 			name: 'returns rows that fail validation',
 			args: script(
-				`process.stdout.write(JSON.stringify({ok: true, files: 1, formats: ['camt053'], layouts: [], statements: [{format: 'camt053', layout: null, accountIban: 'NL91ABNA0417164300', accountOtherId: null, bank: null, accountCurrency: 'EUR', sequenceNumber: null, entriesSkipped: 0, rows: [{amount: 12.5}]}]}))`,
+				`process.stdout.write(JSON.stringify({ok: true, files: 1, formats: ['camt053'], layouts: [], statements: [{format: 'camt053', layout: null, accountIban: 'NL91ABNA0417164300', accountOtherId: null, bank: null, servicerBic: null, accountCurrency: 'EUR', sequenceNumber: null, entriesSkipped: 0, rows: [{amount: 12.5}]}]}))`,
 			),
 		},
 	])('refuses a child that $name', async ({args}) => {

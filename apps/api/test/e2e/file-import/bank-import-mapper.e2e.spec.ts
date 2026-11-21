@@ -154,6 +154,10 @@ describe('Bank import column mapper', () => {
 	}
 
 	/** Proposes and confirms a layout for the file, the model answering `answer`. */
+	function banksFor(agent: TestAgent, proposalId: string) {
+		return agent.get(`/bank-imports/layout-proposals/${proposalId}/banks`);
+	}
+
 	async function saveLayout(agent: TestAgent, file: Buffer, answer: LayoutAnswer, body: Record<string, unknown>) {
 		mapLayout.mockResolvedValueOnce(answer);
 		const proposal = await propose(agent, file).expect(201);
@@ -235,7 +239,10 @@ describe('Bank import column mapper', () => {
 		const kept = JSON.stringify([stored.headerCells, stored.columnShapes, stored.layout]);
 		for (const value of DEBIT_CREDIT_CONTENT) expect(kept).not.toContain(value);
 
-		const saved = await confirm(agent, proposed.body.id, {bankName: ' Example Bank '}).expect(201);
+		// A file that names its account may take the bank of a built-in layout whose files name none.
+		await fixtures.createConnection(owner, {aspspName: 'Rabobank', aspspCountry: 'NL'});
+		expect((await banksFor(agent, proposed.body.id).expect(200)).body).toEqual({banks: ['Rabobank']});
+		const saved = await confirm(agent, proposed.body.id, {bankName: ' Example  Bank '}).expect(201);
 		expect(saved.body).toEqual({id: expect.any(String), bankName: 'Example Bank', createdAt: expect.any(String)});
 		expect(await proposals.findOneByOrFail({id: proposed.body.id})).toMatchObject({status: 'confirmed'});
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(409);
@@ -249,13 +256,42 @@ describe('Bank import column mapper', () => {
 			accounts: [{name: 'DE89 3704 0044 0532 0130 00', currency: 'EUR', created: true}],
 		});
 		expect((await agent.get('/bank-imports/layouts').expect(200)).body).toEqual([saved.body]);
+		// The account the layout created records the bank the owner named.
+		expect(await bankAccounts.findOneByOrFail({id: imported.body.accounts[0].id})).toMatchObject({
+			bankIdentity: 'name:example bank',
+		});
+		// The banks the owner can pick for the next layout are their own, each once: their connections', their
+		// imported-files accounts' (kept ones, from earlier imports), spelled as Tempo knows the bank, and their saved
+		// layouts'. Not a bank they have no account at, a BIC, or Revolut, whose own files name their accounts.
+		await fixtures.createConnection(owner, {aspspName: 'Example  Savings Bank', aspspCountry: 'DE'});
+		await fixtures.createConnection(owner, {aspspName: 'ing', aspspCountry: 'NL', status: 'EXPIRED'});
+		// Authorizations that never connected hold no bank of the owner's.
+		for (const status of ['PENDING_AUTHORIZATION', 'CANCELLED', 'FAILED'])
+			await fixtures.createConnection(owner, {aspspName: `Example ${status} Bank`, aspspCountry: 'NL', status});
+		// A layout's bank is at most 60 characters, so a longer connection name is not offered.
+		await fixtures.createConnection(owner, {aspspName: `Example ${'Long '.repeat(12)}Bank`, aspspCountry: 'NL'});
+		const files = await fixtures.connections.findOneByOrFail({accountId: owner.id, provider: 'file'});
+		await fixtures.createBankAccounts(files, [
+			{bankIdentity: 'name:knab'},
+			{bankIdentity: 'name:example credit union'},
+			{bankIdentity: 'bic:EXMPDEFF'},
+			{bankIdentity: 'name:revolut'},
+		]);
+		// Offered for the next proposal, of a file that names no account, so not Rabobank either.
+		mapLayout.mockResolvedValueOnce(ANSWER.balance);
+		const next = await propose(agent, BALANCE_CSV).expect(201);
+		expect((await banksFor(agent, next.body.id).expect(200)).body).toEqual({
+			banks: ['Example Bank', 'example credit union', 'Example Savings Bank', 'ing', 'Knab'],
+		});
+		await banksFor(agent, proposed.body.id).expect(409);
 
 		const other = await createOwner();
 		expect((await drop(other.agent, DEBIT_CREDIT_CSV).expect(422)).body).toMatchObject({code: 'layout_unknown'});
 		await other.agent.get('/bank-imports/layouts').expect(200, []);
+		await banksFor(other.agent, next.body.id).expect(404);
 		await confirm(other.agent, proposed.body.id, {bankName: 'Example Bank'}).expect(404);
 		await other.agent.delete(`/bank-imports/layouts/${saved.body.id}`).set('Origin', ORIGIN).expect(404);
-		expect(mapLayout).toHaveBeenCalledTimes(1);
+		expect(mapLayout).toHaveBeenCalledTimes(2);
 	});
 
 	it('discards a rejected proposal and refuses to confirm one an hour old', async () => {
@@ -625,6 +661,8 @@ describe('Bank import column mapper', () => {
 		});
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(400);
 		await confirm(agent, proposed.body.id, {bankName: '', currency: 'HRK'}).expect(400);
+		// 61 characters as written, though single spacing would make them 60.
+		await confirm(agent, proposed.body.id, {bankName: `Example  ${'B'.repeat(52)}`, currency: 'HRK'}).expect(400);
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'HRK'}).expect(201);
 
 		const connection = await fixtures.createConnection(owner, {aspspName: 'Example Bank'});
@@ -653,5 +691,26 @@ describe('Bank import column mapper', () => {
 			iban: null,
 			currency: 'HRK',
 		});
+	});
+
+	it("imports a file that names no account into its bank's account however an earlier layout spelled the bank", async () => {
+		const {owner, agent} = await createOwner();
+		mapLayout.mockResolvedValueOnce(ANSWER.balance);
+		const proposed = await propose(agent, BALANCE_CSV).expect(201);
+		await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'EUR'}).expect(201);
+		const files = await fixtures.createConnection(owner, {
+			provider: 'file',
+			aspspName: 'Imported files',
+			aspspCountry: 'ZZ',
+		});
+		const earlier = await fixtures.createBankAccount(files, {
+			providerAccountId: 'file-bank:example  BANK:EUR',
+			currency: 'EUR',
+		});
+
+		const imported = await drop(agent, BALANCE_CSV).expect(201);
+
+		expect(imported.body).toMatchObject({rowsAdded: 4, accounts: [{id: earlier.id, created: false}]});
+		expect(await bankAccounts.countBy({bankConnection: {id: files.id}})).toBe(1);
 	});
 });

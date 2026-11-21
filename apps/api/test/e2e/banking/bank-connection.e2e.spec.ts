@@ -18,6 +18,7 @@ import {AccountService} from '@modules/account/account.service';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {nameBankIdentity} from '@modules/banking/bank-identity';
 import {BankSyncRun} from '@modules/banking/bank-sync-run.entity';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
@@ -913,8 +914,8 @@ describe('BankConnectionController', () => {
 				description: 'Pending card payment',
 				status: 'PDNG',
 			};
-			// Half of a EUR to USD exchange, on the day of the earliest row so the bank's coverage stays as it is; the USD
-			// half arrives in a statement of an account the bank does not hold.
+			// A marked EUR debit on the day of the earliest row, so the bank's coverage stays as it is; a marked USD credit
+			// of that day arrives in a CAMT.053 statement of an account the bank does not hold, which names its bank by BIC.
 			const exchangeDebit: EnableBankingTransaction = {
 				providerTransactionId: 'provider-transaction-kept-exchange',
 				entryReference: 'provider-entry-kept-exchange',
@@ -956,6 +957,8 @@ describe('BankConnectionController', () => {
 				(run) => run !== null,
 			);
 			const synced = await bankAccountRepository.findOneByOrFail({bankConnection: {id: connection.id}});
+			// Authorization records the connection's bank on its accounts.
+			expect(synced.bankIdentity).toBe('name:abn amro');
 			const bookedRow = await bankTransactionRepository.findOneByOrFail({
 				bankAccountId: synced.id,
 				providerTransactionId: booked.providerTransactionId,
@@ -989,6 +992,7 @@ describe('BankConnectionController', () => {
 							{
 								iban: 'GB82WEST12345698765432',
 								currency: 'USD',
+								servicerBic: 'ABNANL2A',
 								entries: [
 									{
 										amount: '23.00',
@@ -1018,8 +1022,18 @@ describe('BankConnectionController', () => {
 					currencyExchangeCounterpartId,
 				}));
 			const unpaired = {financialEventType: null, currencyExchangeCounterpartId: null};
+			const paired = async () => {
+				const [debit, credit] = await exchangeRows();
+				const exchange = BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE;
+				return [
+					{financialEventType: exchange, currencyExchangeCounterpartId: credit.id},
+					{financialEventType: exchange, currencyExchangeCounterpartId: debit.id},
+				];
+			};
 			// An exchange pairs legs of one connection only, so the bank's half and the file's half stay apart.
 			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			// The dollar account as one whose statements named ABN AMRO.
+			await bankAccountRepository.update(dollarAccount.id, {bankIdentity: nameBankIdentity('ABN AMRO')});
 			deleteSession.mockClear();
 
 			await owner.agent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
@@ -1032,10 +1046,12 @@ describe('BankConnectionController', () => {
 			});
 			expect(kept).toMatchObject({
 				bankConnection: {provider: 'file'},
+				bankIdentity: 'name:abn amro',
 				currentBalanceAmount: synced.currentBalanceAmount,
 			});
-			// Removal leaves exchanges as they were, so both halves stay apart until the next import.
-			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			// Both rows now sit on the imported-files connection, in accounts recording one bank, so the removal's exchange
+			// recompute pairs them.
+			expect(await exchangeLabels()).toEqual(await paired());
 			// Every row stays, with its edits, the imported one included.
 			const keptRows = await bankTransactionRepository.findBy({bankAccountId: synced.id});
 			expect(keptRows.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
@@ -1077,6 +1093,10 @@ describe('BankConnectionController', () => {
 			// It can still be undone.
 			await owner.agent.delete(`/bank-imports/${earlier.id}`).set('Origin', 'http://localhost:5173').expect(204);
 			expect(await bankTransactionRepository.countBy({bankAccountId: synced.id, importId: earlier.id})).toBe(0);
+			// The bank the account kept from its connection stays.
+			expect(await bankAccountRepository.findOneByOrFail({id: synced.id})).toMatchObject({
+				bankIdentity: 'name:abn amro',
+			});
 
 			// A statement of the account goes to it.
 			const dropped = await dropStatement('7.00', '2026-09-01');
@@ -1085,18 +1105,8 @@ describe('BankConnectionController', () => {
 				bankAccountId: synced.id,
 				importId: (dropped.body as {id: string}).id,
 			});
-			// The import recomputes exchanges, and both halves are now imported files, so they pair.
-			const [keptDebit, dollarCredit] = await exchangeRows();
-			expect(await exchangeLabels()).toEqual([
-				{
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-					currencyExchangeCounterpartId: dollarCredit.id,
-				},
-				{
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-					currencyExchangeCounterpartId: keptDebit.id,
-				},
-			]);
+			// The import recomputes exchanges over the whole history and keeps the pair.
+			expect(await exchangeLabels()).toEqual(await paired());
 
 			// The bank sends the kept rows again with a new one, and no longer the pending one; the account picks up
 			// where it was.
@@ -1116,8 +1126,7 @@ describe('BankConnectionController', () => {
 					accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
 				});
 				await callback({state: secondState, code: 'kept-again-code'}, 'connected');
-				// The EUR account is the bank's again and the USD one stays an imported file, so the authorization splits
-				// the exchange.
+				// Back on its connection, the bank's half is apart from the file's again.
 				expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
 			} finally {
 				releaseSync();
@@ -1136,6 +1145,7 @@ describe('BankConnectionController', () => {
 				await bankAccountRepository.findOneOrFail({where: {id: synced.id}, relations: {bankConnection: true}}),
 			).toMatchObject({
 				bankConnection: {id: reconnected.id},
+				bankIdentity: 'name:abn amro',
 				iban,
 			});
 			const resynced = await bankTransactionRepository.findBy({bankAccountId: synced.id});
