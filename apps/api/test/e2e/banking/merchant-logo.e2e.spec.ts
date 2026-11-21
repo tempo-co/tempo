@@ -817,6 +817,12 @@ describe('Merchant logos', () => {
 		await app.get(MerchantLogoService).identifyMerchants([mine.id, theirs.id]);
 		expect(identifySpy).toHaveBeenCalledTimes(1);
 		expect(identifySpy.mock.calls[0][0]).toHaveLength(1);
+		// A merchant waiting out a retry delay is not sent before it ends.
+		await merchants.update(theirs.id, {retryAfter: new Date(Date.now() + DAY_MS)});
+		identifySpy.mockClear();
+		await app.get(MerchantLogoService).identifyMerchants([theirs.id]);
+		expect(identifySpy).not.toHaveBeenCalled();
+		await merchants.update(theirs.id, {retryAfter: null});
 
 		routesUnavailable = false;
 		identifySpy.mockClear();

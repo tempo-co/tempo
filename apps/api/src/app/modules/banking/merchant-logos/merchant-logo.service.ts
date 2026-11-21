@@ -159,7 +159,11 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		const ids = In([...new Set(merchantIds)].slice(0, BATCH_SIZE));
 		// A job queued before batches were split per owner can still name several owners: only the first one's
 		// merchants are sent, and the rest stay pending for their own batch.
-		const found = await this.merchants.find({where: {id: ids, status: PENDING}, order: {id: 'ASC'}});
+		// A merchant waiting out a retry delay is left to the job that runs after it.
+		const found = await this.merchants.find({
+			where: {id: ids, status: PENDING, retryAfter: Or(IsNull(), LessThanOrEqual(new Date()))},
+			order: {id: 'ASC'},
+		});
 		const merchants = found.filter(({accountId}) => accountId === found[0]?.accountId);
 		const byId = new Map(merchants.map((merchant) => [merchant.id, merchant]));
 		const inputs: MerchantIdentificationInput[] = [];
