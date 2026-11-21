@@ -424,8 +424,8 @@ export type BankImportLayout = {
 };
 
 /**
- * `GET /bank-imports/banks`: the banks an owner can name a saved layout after without typing one: the banks they
- * connected, the banks of Tempo's built-in formats a layout may take the name of, and their saved layouts' banks.
- * Each bank once, ignoring case and spacing, sorted by name.
+ * `GET /bank-imports/banks`: the owner's own banks, to name a saved layout after without typing one: their bank
+ * connections', their imported-files accounts' (kept from a removed connection or from earlier imports) and their
+ * saved layouts'. Each bank once, ignoring case and spacing, sorted by name.
  */
 export type BankImportBanks = {banks: string[]};

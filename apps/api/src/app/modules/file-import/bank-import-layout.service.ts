@@ -11,10 +11,11 @@ import type {
 } from '@tempo/contracts';
 import {BANK_IMPORT_CURRENCIES, BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
-import {DataSource, EntityManager, MoreThan} from 'typeorm';
+import {DataSource, EntityManager, Like, MoreThan, Not} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
+import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {nameBankIdentity} from '@modules/banking/bank-identity';
 import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
@@ -76,38 +77,44 @@ export class BankImportLayoutService {
 	) {}
 
 	/**
-	 * The banks the owner can pick for a layout (`BankImportBanks`): connected banks, built-in format banks other than
-	 * those whose own files already name a bank account by bank (`STATEMENT_BANKS`), and saved layouts' banks. Each
-	 * bank once, under its first spelling in that order.
+	 * The banks the owner can pick for a layout (`BankImportBanks`): their own banks only, those of their bank
+	 * connections, of their imported-files accounts that record a bank by name (kept from a removed connection, or
+	 * from earlier imports) and of their saved layouts; never Revolut, whose own files already name their accounts'
+	 * bank. Each bank once, spelled as a connection, saved layout or Tempo's built-in format writes it, else as the
+	 * account records it.
 	 */
 	async knownBanks(ownerId: Account['id']): Promise<BankImportBanks> {
-		const [connections, layouts] = await Promise.all([
+		const [connections, layouts, fileAccounts] = await Promise.all([
 			this.dataSource.getRepository(BankConnection).find({
-				select: {aspspName: true, provider: true},
-				where: {accountId: ownerId},
+				select: {aspspName: true},
+				where: {accountId: ownerId, provider: Not(BANK_CONNECTION_PROVIDERS.FILE)},
 			}),
 			this.dataSource
 				.getRepository(BankImportLayout)
 				.find({select: {bankName: true}, where: {accountId: ownerId}}),
+			this.dataSource.getRepository(BankAccount).find({
+				select: {bankIdentity: true},
+				where: {
+					bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+					bankIdentity: Like(`${nameBankIdentity('')}%`),
+				},
+			}),
 		]);
-		const reserved = new Set<string>(STATEMENT_BANKS.map(nameBankIdentity));
-		const byIdentity = new Map<string, string>();
-		for (const bank of [
-			...connections.flatMap(({aspspName, provider}) =>
-				provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [aspspName],
-			),
-			...Object.values(FORMAT_BANKS),
-			...CSV_LAYOUTS.map(({bank: layoutBank}) => layoutBank),
-			...layouts.map(({bankName}) => bankName),
-		]) {
+		const owned = [...connections.map(({aspspName}) => aspspName), ...layouts.map(({bankName}) => bankName)];
+		const spellings = new Map<string, string>();
+		for (const bank of [...owned, ...Object.values(FORMAT_BANKS), ...CSV_LAYOUTS.map((layout) => layout.bank)]) {
 			const name = bank.trim().replace(/\s+/g, ' ');
-			const identity = nameBankIdentity(name);
-			if (name && !reserved.has(identity) && !byIdentity.has(identity)) byIdentity.set(identity, name);
+			if (name && !spellings.has(nameBankIdentity(name))) spellings.set(nameBankIdentity(name), name);
 		}
+		const identities = new Set([
+			...owned.filter((bank) => bank.trim()).map(nameBankIdentity),
+			...fileAccounts.flatMap(({bankIdentity}) => (bankIdentity ? [bankIdentity] : [])),
+		]);
+		for (const bank of STATEMENT_BANKS) identities.delete(nameBankIdentity(bank));
 		return {
-			banks: [...byIdentity.values()].sort((left, right) =>
-				left.localeCompare(right, 'en', {sensitivity: 'base'}),
-			),
+			banks: [...identities]
+				.map((identity) => spellings.get(identity) ?? identity.slice(nameBankIdentity('').length))
+				.sort((left, right) => left.localeCompare(right, 'en', {sensitivity: 'base'})),
 		};
 	}
 

@@ -253,23 +253,26 @@ describe('Bank import column mapper', () => {
 		expect(await bankAccounts.findOneByOrFail({id: imported.body.accounts[0].id})).toMatchObject({
 			bankIdentity: 'name:example bank',
 		});
-		// The banks the owner can pick for the next layout: those of their connections, Tempo's own formats but Revolut,
-		// whose files already go to Revolut accounts, and their saved layouts', each once.
+		// The banks the owner can pick for the next layout are their own, each once: their connections', their
+		// imported-files accounts' (kept ones, from earlier imports), spelled as Tempo knows the bank, and their saved
+		// layouts'. Not a bank they have no account at, a BIC, or Revolut, whose own files name their accounts.
 		await fixtures.createConnection(owner, {aspspName: 'Example  Savings Bank', aspspCountry: 'DE'});
 		await fixtures.createConnection(owner, {aspspName: 'ing', aspspCountry: 'NL'});
-		const builtIn = ['ABN AMRO', 'ASN Bank', 'bunq', 'Knab', 'Rabobank', 'Triodos Bank'];
+		const files = await fixtures.connections.findOneByOrFail({accountId: owner.id, provider: 'file'});
+		await fixtures.createBankAccounts(files, [
+			{bankIdentity: 'name:knab'},
+			{bankIdentity: 'name:example credit union'},
+			{bankIdentity: 'bic:EXMPDEFF'},
+			{bankIdentity: 'name:revolut'},
+		]);
 		expect((await agent.get('/bank-imports/banks').expect(200)).body).toEqual({
-			banks: [...builtIn, 'Example Bank', 'Example Savings Bank', 'ing'].sort((left, right) =>
-				left.localeCompare(right, 'en', {sensitivity: 'base'}),
-			),
+			banks: ['Example Bank', 'example credit union', 'Example Savings Bank', 'ing', 'Knab'],
 		});
 
 		const other = await createOwner();
 		expect((await drop(other.agent, DEBIT_CREDIT_CSV).expect(422)).body).toMatchObject({code: 'layout_unknown'});
 		await other.agent.get('/bank-imports/layouts').expect(200, []);
-		expect((await other.agent.get('/bank-imports/banks').expect(200)).body).toEqual({
-			banks: ['ABN AMRO', 'ASN Bank', 'bunq', 'ING', 'Knab', 'Rabobank', 'Triodos Bank'],
-		});
+		await other.agent.get('/bank-imports/banks').expect(200, {banks: []});
 		await confirm(other.agent, proposed.body.id, {bankName: 'Example Bank'}).expect(404);
 		await other.agent.delete(`/bank-imports/layouts/${saved.body.id}`).set('Origin', ORIGIN).expect(404);
 		expect(mapLayout).toHaveBeenCalledTimes(1);

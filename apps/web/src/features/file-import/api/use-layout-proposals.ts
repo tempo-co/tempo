@@ -43,7 +43,7 @@ export function useConfirmLayout() {
   return {confirmLayout: mutateAsync};
 }
 
-/** The banks the owner can name a layout after without typing one: connected, built in and saved, sorted. */
+/** The owner's own banks to name a layout after without typing one: connected, imported and saved, sorted. */
 export function useBankImportBanks() {
   return useQuery({
     queryKey: bankImportQueryKeys.banks,

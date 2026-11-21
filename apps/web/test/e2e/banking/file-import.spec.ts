@@ -28,8 +28,8 @@ const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
 const SYNCED_LINE =
   'These are almost always in Tempo already from your bank, so leaving them without an answer loses nothing.';
 const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
-/** The banks the owner can pick a layout's bank from, as the API sorts them. */
-const KNOWN_BANKS = ['ABN AMRO', 'Example Bank', 'ING', 'Rabobank'];
+/** The owner's own banks to pick a layout's bank from, as the API sorts them. */
+const KNOWN_BANKS = ['ABN AMRO', 'Example Bank', 'ING'];
 const RESERVED_BANK_NAME =
   "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
 
