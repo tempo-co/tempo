@@ -228,7 +228,7 @@ function burgerTransaction(index: number, fields: Partial<BankTransaction> = {})
     direction: 'EXPENSE',
     transactionType: 'CARD_PAYMENT',
     transactionStatus: 'BOOK',
-    category: 'FOOD_AND_DRINK',
+    category: 'GROCERIES',
     categoryStatus: 'COMPLETED',
     categorySource: 'AI',
     cashFlowTreatment: 'EXPENSE',

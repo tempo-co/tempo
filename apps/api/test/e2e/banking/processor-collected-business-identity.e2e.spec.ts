@@ -184,7 +184,7 @@ describe('Processor-collected business identity', () => {
 				description: collectedDescription(business),
 				counterpartyName: PROCESSOR,
 				transactionType: 'DIRECT_DEBIT',
-				category: 'SUBSCRIPTIONS',
+				category: 'ENTERTAINMENT',
 				categoryInputHash: 'example-input-hash',
 			});
 		try {
@@ -250,7 +250,7 @@ describe('Processor-collected business identity', () => {
 					description: collectedDescription(name),
 					counterpartyName: PROCESSOR,
 					displayDescription: name,
-					category: 'SUBSCRIPTIONS',
+					category: 'ENTERTAINMENT',
 					categorySource: 'MANUAL',
 				});
 				const {body: impact} = await agent

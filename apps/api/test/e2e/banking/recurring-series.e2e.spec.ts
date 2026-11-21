@@ -46,7 +46,7 @@ const MONTHS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'
 
 // These fixtures are bills unless a test explicitly supplies ordinary retail or another payment purpose.
 const bookedRow: typeof fixtureBookedRow = (date, amount, overrides = {}) =>
-	fixtureBookedRow(date, amount, {category: 'SUBSCRIPTIONS', ...overrides});
+	fixtureBookedRow(date, amount, {category: 'SERVICES', ...overrides});
 
 type SeriesBody = {
 	key: string;
@@ -132,7 +132,7 @@ describe('RecurringSeries', () => {
 		const otherBankAccount = await fixtures.createBankAccount(await fixtures.createConnection(otherOwner));
 
 		await fixtures.createTransactions(ownerBankAccount, [
-			...monthly('03', '-29.99', 'Example Gym', {category: 'SUBSCRIPTIONS'}),
+			...monthly('03', '-29.99', 'Example Gym', {category: 'HEALTH'}),
 			// Price step on the last payment.
 			...monthly('08', '-10.00', 'Example Streaming').slice(0, 5),
 			bookedRow('2026-10-08', '-11.50', {
@@ -597,7 +597,7 @@ describe('RecurringSeries', () => {
 				bookedRow(date, '-8.00', {
 					counterpartyName: 'Example Ordinary Grocery',
 					description: 'Example Ordinary Grocery',
-					category: 'FOOD_AND_DRINK',
+					category: 'GROCERIES',
 				}),
 			),
 			...monthly('09', '-16.00', 'Example Ordinary Shop', {category: 'SHOPPING'}),
@@ -636,7 +636,7 @@ describe('RecurringSeries', () => {
 				bookedRow(date, '-8.00', {
 					counterpartyName: 'Example Weekly Lessons',
 					description: 'Example Weekly Lessons',
-					category: 'SUBSCRIPTIONS',
+					category: 'EDUCATION',
 				}),
 			),
 			...weeklyDates.map((date) =>
@@ -650,21 +650,21 @@ describe('RecurringSeries', () => {
 				bookedRow(date, '-24.00', {
 					counterpartyName: 'Example Four-Week Membership',
 					description: 'Example Four-Week Membership',
-					category: 'SUBSCRIPTIONS',
+					category: 'HEALTH',
 				}),
 			),
 			...['2026-04-05', '2026-07-05', '2026-10-05'].map((date, index) =>
 				bookedRow(date, ['-90.00', '-150.00', '-120.00'][index], {
 					counterpartyName: 'Example Quarterly Bill',
 					description: 'Example Quarterly Bill',
-					category: 'SUBSCRIPTIONS',
+					category: 'SERVICES',
 				}),
 			),
 			...MONTHS.map((month, index) =>
 				bookedRow(`${month}-07`, '-20.00', {
 					counterpartyName: 'Example Mixed Purpose',
 					description: 'Example Mixed Purpose',
-					category: index === 0 ? 'SHOPPING' : 'SUBSCRIPTIONS',
+					category: index === 0 ? 'SHOPPING' : 'SERVICES',
 				}),
 			),
 		]);
@@ -719,7 +719,7 @@ describe('RecurringSeries', () => {
 				bookedRow(`${month}-09`, index < 3 ? '-12.00' : '-24.00', {
 					counterpartyName: name,
 					description: name,
-					category: 'FOOD_AND_DRINK',
+					category: 'GROCERIES',
 				}),
 			),
 		);
@@ -1103,7 +1103,7 @@ describe('RecurringSeries', () => {
 					flags: [],
 					priceChange: null,
 					hidden: false,
-					category: 'SUBSCRIPTIONS',
+					category: 'HEALTH',
 					merchantLogoUrl: null,
 				}),
 				// The same shop in another currency is its own series, costed in the base currency.
@@ -1606,7 +1606,7 @@ describe('RecurringSeries', () => {
 					bookedRow(`${month}-09`, index < 3 ? '-24.00' : '-48.00', {
 						counterpartyName: name,
 						description: name,
-						category: 'SUBSCRIPTIONS',
+						category: 'SERVICES',
 					}),
 				),
 			);
@@ -1650,7 +1650,7 @@ describe('RecurringSeries', () => {
 
 	it('keeps a series hidden through a price change without hiding a concurrent plan', async () => {
 		const name = 'Example Parallel Memberships';
-		const samePayee = {counterpartyName: name, description: name, category: 'SUBSCRIPTIONS' as const};
+		const samePayee = {counterpartyName: name, description: name, category: 'SERVICES' as const};
 		await fixtures.createTransactions(ownerBankAccount, [
 			...MONTHS.slice(0, 3).map((month) => bookedRow(`${month}-07`, '-24.00', samePayee)),
 			...MONTHS.map((month) => bookedRow(`${month}-19`, '-96.00', samePayee)),
@@ -1678,12 +1678,13 @@ describe('RecurringSeries', () => {
 		expect(byName((await list(ownerAgent)).series, name)).toHaveLength(2);
 	});
 
-	it('needs stronger evidence for an annual suggestion than two ordinary purchases', async () => {
+	it('suggests an annual series from two payments of one amount, except for ordinary purchases', async () => {
 		const variants = [
-			['Example Annual Grocery', 'FOOD_AND_DRINK', 2],
-			['Example Annual Unknown', null, 2],
-			['Example Annual Membership', 'SUBSCRIPTIONS', 2],
-			['Example Annual Cover', 'INSURANCE', 3],
+			['Example Annual Grocery', 'GROCERIES', 2, false],
+			['Example Annual Dinner', 'EATING_OUT', 2, false],
+			['Example Annual Unknown', null, 2, true],
+			['Example Annual Membership', 'HEALTH', 2, true],
+			['Example Annual Cover', 'INSURANCE', 3, true],
 		] as const;
 		for (const [name, category, count] of variants) {
 			await fixtures.createTransactions(
@@ -1694,10 +1695,11 @@ describe('RecurringSeries', () => {
 			);
 		}
 		const {series} = await list(ownerAgent);
-		for (const [name, , count] of variants) {
+		for (const [name, , count, suggested] of variants) {
 			const entries = byName(series, name);
-			if (name.endsWith('Grocery') || name.endsWith('Unknown')) expect(entries).toEqual([]);
-			else expect(entries).toEqual([expect.objectContaining({cadence: 'YEARLY', transactionCount: count})]);
+			if (suggested)
+				expect(entries).toEqual([expect.objectContaining({cadence: 'YEARLY', transactionCount: count})]);
+			else expect(entries).toEqual([]);
 		}
 	});
 
@@ -2365,7 +2367,7 @@ describe('RecurringSeries', () => {
 		async (inputs) => {
 			const extra = await fixtures.createTransactions(
 				ownerBankAccount,
-				monthly('17', '-9.00', 'Example Shared Bill', {category: 'SUBSCRIPTIONS'}),
+				monthly('17', '-9.00', 'Example Shared Bill', {category: 'SERVICES'}),
 			);
 			const server = app.getHttpServer();
 			await app.listen(0, '127.0.0.1');
@@ -2457,7 +2459,7 @@ describe('RecurringSeries', () => {
 			// A new payment is detected on the next read.
 			const extra = await fixtures.createTransactions(
 				ownerBankAccount,
-				monthly('16', '-7.00', 'Example Cache Bill', {category: 'SUBSCRIPTIONS'}),
+				monthly('16', '-7.00', 'Example Cache Bill', {category: 'SERVICES'}),
 			);
 			expect(byName((await list(ownerAgent)).series, 'Example Cache Bill')).toHaveLength(1);
 			expect(detect).toHaveBeenCalled();
@@ -2467,21 +2469,21 @@ describe('RecurringSeries', () => {
 			await fixtures.transactions
 				.createQueryBuilder()
 				.update()
-				.set({category: 'FOOD_AND_DRINK', updatedAt: () => '"updatedAt"'})
+				.set({category: 'GROCERIES', updatedAt: () => '"updatedAt"'})
 				.whereInIds(extra.map(({id}) => id))
 				.execute();
 			expect(byName((await list(ownerAgent)).series, 'Example Cache Bill')).toEqual([]);
 			expect(detect).toHaveBeenCalled();
 			await fixtures.transactions.delete(extra.map(({id}) => id));
 
-			// Moving text between fields is a change too: a yearly plan of two payments counts only as a subscription.
+			// Moving text between fields is a change too: a yearly plan of two payments never counts as ordinary retail.
 			const annual = await fixtures.createTransactions(
 				ownerBankAccount,
 				['2025-09-21', '2026-09-21'].map((date) =>
 					bookedRow(date, '-60.00', {
 						counterpartyName: 'Example Cache Annual',
 						description: 'Example Cache Annual',
-						category: 'SUBSCRIPTIONS',
+						category: 'SERVICES',
 					}),
 				),
 			);
@@ -2490,8 +2492,8 @@ describe('RecurringSeries', () => {
 				.createQueryBuilder()
 				.update()
 				.set({
-					category: null,
-					description: 'SUBSCRIPTIONS|Example Cache Annual',
+					category: 'GROCERIES',
+					description: 'GROCERIES|Example Cache Annual',
 					updatedAt: () => '"updatedAt"',
 				})
 				.whereInIds(annual.map(({id}) => id))
@@ -2504,7 +2506,7 @@ describe('RecurringSeries', () => {
 			const probeAccount = await fixtures.createBankAccount(probeConnection);
 			const [probe, other] = await fixtures.createTransactions(
 				probeAccount,
-				monthly('22', '-6.00', 'Example Probe Bill', {category: 'SUBSCRIPTIONS'}),
+				monthly('22', '-6.00', 'Example Probe Bill', {category: 'SERVICES'}),
 			);
 			const inputs: Array<Partial<Record<keyof BankTransaction, unknown>>> = [
 				{bankAccountId: ownerBankAccount.id},
@@ -2598,7 +2600,7 @@ describe('RecurringSeries', () => {
 					},
 					{counterpartyName: pick([null, ...names])},
 					{displayDescription: pick(names)},
-					{category: pick(['SUBSCRIPTIONS', 'SHOPPING', 'REFUND', null])},
+					{category: pick(['SERVICES', 'SHOPPING', 'REFUND', null])},
 					{transactionStatus: pick(['BOOK', 'PDNG'])},
 					{bankAccountId: pick(accounts).id},
 					{categoryStatus: pick(['PENDING', 'DONE'])},

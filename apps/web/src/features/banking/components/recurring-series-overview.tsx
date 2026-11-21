@@ -100,7 +100,7 @@ export function RecurringSeriesOverview({
       <StateMessage
         icon={Repeat}
         title='No recurring payments found yet'
-        description='Payments to the same place on a regular rhythm show up here. Annual subscriptions count after two payments; other patterns need at least three.'
+        description='Payments to the same place on a regular rhythm show up here. A yearly payment of the same amount counts after two payments; other patterns need at least three.'
       />
     );
   }

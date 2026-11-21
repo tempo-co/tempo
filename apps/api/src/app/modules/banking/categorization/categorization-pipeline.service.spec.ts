@@ -28,7 +28,7 @@ const ORDINARY_ATTEMPTS = 3;
 
 describe('CategorizationPipeline provider behavior versions', () => {
 	it('versions the categorization prompt separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v20');
+		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v21');
 	});
 });
 
@@ -88,7 +88,7 @@ describe('CategorizationPipeline', () => {
 				inputs.map(({correlationId}) =>
 					withRoute({
 						correlationId,
-						category: options?.searchQuery === 'Example Cafe' ? 'FOOD_AND_DRINK' : 'SHOPPING',
+						category: options?.searchQuery === 'Example Cafe' ? 'EATING_OUT' : 'SHOPPING',
 						confidence: 0.9,
 						...(options?.searchQuery === 'Example Cafe' ? {searchTrace} : {}),
 					}),
@@ -117,7 +117,7 @@ describe('CategorizationPipeline', () => {
 		expect(unnamedCall[2]).toEqual({});
 		for (const row of [cafeLunch, cafeDinner])
 			expect(row).toMatchObject({
-				category: 'FOOD_AND_DRINK',
+				category: 'EATING_OUT',
 				categoryStatus: 'COMPLETED',
 				categorySearchTrace: searchTrace,
 				categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION,
@@ -265,7 +265,7 @@ describe('CategorizationPipeline', () => {
 		const claimable = createBankTransaction({id: 'claimable-transaction', counterpartyName: 'Bakery'});
 		const {pipeline, provider, repository} = createCategorizationServices({
 			rows: [failing, claimable],
-			providerResult: [{correlationId: claimable.id, category: 'FOOD_AND_DRINK', confidence: 0.9}],
+			providerResult: [{correlationId: claimable.id, category: 'EATING_OUT', confidence: 0.9}],
 		});
 		const claimError = new Error('connection lost');
 		repository.update.mockImplementation(({id}: {id: string}) =>
@@ -276,7 +276,7 @@ describe('CategorizationPipeline', () => {
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0]).toEqual([expect.objectContaining({correlationId: claimable.id})]);
-		expect(claimable.category).toBe('FOOD_AND_DRINK');
+		expect(claimable.category).toBe('EATING_OUT');
 		expect(failing.categoryStatus).toBe('PENDING');
 	});
 
@@ -304,7 +304,7 @@ describe('CategorizationPipeline', () => {
 		const transaction = createBankTransaction({id: 'routed-transaction'});
 		const result = {
 			correlationId: transaction.id,
-			category: 'FOOD_AND_DRINK' as const,
+			category: 'EATING_OUT' as const,
 			confidence: 0.9,
 			provider: 'claude-api',
 			model: 'actual-model',
@@ -412,7 +412,7 @@ describe('CategorizationPipeline', () => {
 		});
 		const queryBuilder = createUpdateQueryBuilder();
 		queryBuilder.getRawMany.mockResolvedValueOnce([
-			{merchantKey: 'EXPENSE:example rides', category: 'FOOD_AND_DRINK', count: 2},
+			{merchantKey: 'EXPENSE:example rides', category: 'EATING_OUT', count: 2},
 			{merchantKey: 'EXPENSE:example rides', category: 'TRANSPORTATION', count: 1},
 		] as never);
 		const {pipeline, provider} = createCategorizationServices({rows: [transaction], queryBuilder});
@@ -421,7 +421,7 @@ describe('CategorizationPipeline', () => {
 
 		expect(provider.categorize).toHaveBeenCalledTimes(1);
 		expect(provider.categorize.mock.calls[0][0][0].previousManualCategories).toEqual([
-			{category: 'FOOD_AND_DRINK', count: 2, recentExamples: []},
+			{category: 'EATING_OUT', count: 2, recentExamples: []},
 			{category: 'TRANSPORTATION', count: 1, recentExamples: []},
 		]);
 		const categoryFilters = [...queryBuilder.where.mock.calls, ...queryBuilder.andWhere.mock.calls].filter(

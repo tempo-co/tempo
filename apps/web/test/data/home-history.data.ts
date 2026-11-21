@@ -100,7 +100,7 @@ export const HOME_FIRST_MONTH = '2024-12';
 /** A usual month's spending by category. */
 export const USUAL_SPENDING = {
   HOUSING_AND_UTILITIES: 1200,
-  FOOD_AND_DRINK: 500,
+  GROCERIES: 500,
   SHOPPING: 200,
   TRANSPORTATION: 60,
   ENTERTAINMENT: 30,

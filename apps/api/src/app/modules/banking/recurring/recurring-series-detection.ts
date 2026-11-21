@@ -14,6 +14,7 @@ import {createHash} from 'node:crypto';
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';
 import {parseMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {divideRounded, formatCents, medianCents} from '../summary/bank-transaction-summary';
+import {isOrdinaryRetailCategory} from './recurring-series-eligibility';
 
 /** One settled, non-internal payment with a merchant identity; amounts are positive magnitudes in cents. */
 export type RecurringCandidate = {
@@ -148,7 +149,7 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 		minCount: 3,
 		allowsVariable: true,
 	},
-	// Two yearly payments need subscription evidence; other categories need at least three occurrences.
+	// Two yearly payments of one amount qualify unless both are ordinary retail; otherwise a yearly series needs three.
 	{
 		cadence: 'YEARLY',
 		medianGap: [350, 380],
@@ -197,7 +198,6 @@ const MIN_USUAL_PAYMENTS = 3;
 /** Other payments to the same payee tolerated inside a yearly series' span. */
 const MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN = 3;
 const DAY_MS = 86_400_000;
-const SUBSCRIPTIONS = 'SUBSCRIPTIONS' satisfies BankTransactionCategory;
 /** A payment may arrive this many days after its expected date; the series shows as late until then, then stops. */
 const GRACE_DAYS = 5;
 /** Middle payment days further apart than this are two billing days, not one; averaging them would fit neither. */
@@ -344,7 +344,9 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 		const rule = matchCadence(chain);
 		if (rule?.cadence !== 'YEARLY') return rule;
 		const coincidence = person || chain.some(isPersonTransferCategory) || isBusyPayee(rows, chain);
-		const enoughHistory = chain.length >= 3 || chain.every(({category}) => category === SUBSCRIPTIONS);
+		const enoughHistory =
+			chain.length >= 3 ||
+			(isOneAmount(chain) && !chain.every(({category}) => isOrdinaryRetailCategory(category)));
 		return coincidence || !enoughHistory ? null : rule;
 	};
 	const chains = chainByAmount(rows);
@@ -603,6 +605,11 @@ export function isPersonTransferCategory({category}: Pick<RecurringCandidate, 'c
 
 export function foldName(name: string): string {
 	return name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Payments no further apart than a price change: the same amount each time. */
+function isOneAmount(rows: readonly RecurringCandidate[]): boolean {
+	return rows.every(({amountCents}) => !exceeds(amountCents, rows[0].amountCents, PRICE_CHANGE));
 }
 
 /**

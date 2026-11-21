@@ -37,14 +37,14 @@ test('the heat table model has each row by year, a month on average, with small 
   // Largest first; transport, entertainment and health are each under 3% of all spending.
   expect(table.top.map((row) => row.name)).toEqual([
     'Housing and utilities',
-    'Food and drink',
+    'Groceries',
     'Shopping',
     'Travel',
   ]);
   expect(table.folded.map((row) => row.name)).toEqual([
     'Transportation',
     'Entertainment',
-    'Health',
+    'Health and fitness',
   ]);
   expect(table.more?.name).toBe('3 more categories');
 
@@ -100,7 +100,7 @@ test('the heat table model has each row by year, a month on average, with small 
     folded: [
       {key: 'TRANSPORTATION', name: 'Transportation', month: `${eur(60)} a month`},
       {key: 'ENTERTAINMENT', name: 'Entertainment', month: `${eur(30)} a month`},
-      {key: 'HEALTH', name: 'Health', month: `${eur(10)} a month`},
+      {key: 'HEALTH', name: 'Health and fitness', month: `${eur(10)} a month`},
     ],
   });
 

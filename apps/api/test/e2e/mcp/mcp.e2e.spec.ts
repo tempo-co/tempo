@@ -209,9 +209,9 @@ describe('Hosted MCP', () => {
 			}),
 		);
 		const recurringFixtures = [
-			{name: 'Example Subscription Alpha', day: '03', amount: '-9.99', category: 'SUBSCRIPTIONS'},
-			{name: 'Example Subscription Beta', day: '08', amount: '-12.50', category: 'SUBSCRIPTIONS'},
-			{name: 'Example Subscription Gamma', day: '12', amount: '-25.01', category: 'SUBSCRIPTIONS'},
+			{name: 'Example Subscription Alpha', day: '03', amount: '-9.99', category: 'ENTERTAINMENT'},
+			{name: 'Example Subscription Beta', day: '08', amount: '-12.50', category: 'ENTERTAINMENT'},
+			{name: 'Example Subscription Gamma', day: '12', amount: '-25.01', category: 'ENTERTAINMENT'},
 			{name: 'Example Payroll', day: '20', amount: '1200.00', category: 'SALARY'},
 		] as const;
 		for (const {name, day, amount, category} of recurringFixtures)
@@ -227,7 +227,7 @@ describe('Hosted MCP', () => {
 				bookedRow(`2025-${month}-05`, '-777.00', {
 					description: 'Example Other Subscription',
 					counterpartyName: 'Example Other Subscription',
-					category: 'SUBSCRIPTIONS',
+					category: 'ENTERTAINMENT',
 				}),
 			),
 		);
@@ -525,7 +525,7 @@ describe('Hosted MCP', () => {
 				);
 				const alternateRow = await fixtures.createTransaction(
 					alternateBank,
-					bookedRow('2026-01-09', '-3.33', {category: 'FOOD_AND_DRINK'}),
+					bookedRow('2026-01-09', '-3.33', {category: 'GROCERIES'}),
 				);
 				const ownedRowIds = new Set([...savedRows.map(({id}) => id), alternateRow.id]);
 				for (const by of ['date', 'amount', 'category', 'source']) {

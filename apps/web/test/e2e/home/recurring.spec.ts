@@ -25,7 +25,7 @@ const summary: RecurringSummary = {
       typicalAmount: '30.00',
       amountKind: 'FIXED',
       currency: 'EUR',
-      category: 'SUBSCRIPTIONS',
+      category: 'HEALTH',
       merchantLogoUrl: null,
       flags: [],
     },

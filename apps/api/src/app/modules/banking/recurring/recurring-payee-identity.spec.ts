@@ -16,7 +16,7 @@ function row(overrides: Partial<RecurringEvidence> = {}): RecurringEvidence {
 		counterpartyName: 'Example Service' as string | null,
 		description: null as string | null,
 		transactionType: 'OTHER' as string | null,
-		category: 'SUBSCRIPTIONS' as BankTransactionCategory | null,
+		category: 'SERVICES' as BankTransactionCategory | null,
 		...overrides,
 	};
 	const indicator = overrides.merchantKey?.startsWith('INCOME:') ? 'CRDT' : 'DBIT';
@@ -206,7 +206,7 @@ describe('inferRecurringIdentities', () => {
 					counterpartyName: null,
 					description: 'To Example School',
 					transactionType: 'TRANSFER',
-					category: 'FOOD_AND_DRINK',
+					category: 'GROCERIES',
 				}),
 			],
 		],
