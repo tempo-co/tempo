@@ -181,16 +181,22 @@ export async function seedOwnTransferData(
 
 	const dataSource = app.get(DataSource);
 	// The amounts in EUR, which exchange pairing compares, as the conversion job stores them: the USD legs with the
-	// ECB rate of their days (Friday's for the Sunday one). The rate is synthetic, so it leaves the shared rate cache
-	// once the amounts are stored, and no other owner's conversion reads it.
+	// ECB rate of their days (Friday's for the Sunday one). The rate is synthetic: it is added only where the shared
+	// rate cache has none for that day, and an added one leaves the cache once the amounts are stored, so no other
+	// owner's conversion reads it.
 	const seededRate = {currency: 'USD', rateDate: '2026-08-14'};
 	await dataSource.transaction(async (manager) => {
-		await manager
-			.getRepository(BankTransactionFxRate)
-			.upsert({...seededRate, rateToEur: '1.1529', provider: 'ECB'}, ['currency', 'rateDate']);
 		await lockReportingCurrencyForAmountWrites(manager, account.id);
+		const added = await manager
+			.createQueryBuilder()
+			.insert()
+			.into(BankTransactionFxRate)
+			.values({...seededRate, rateToEur: '1.1529', provider: 'ECB'})
+			.orIgnore()
+			.returning(['currency'])
+			.execute();
 		await convertOwnerAmounts(manager, account.id, 'EUR');
-		await manager.getRepository(BankTransactionFxRate).delete(seededRate);
+		if (added.raw.length > 0) await manager.getRepository(BankTransactionFxRate).delete(seededRate);
 	});
 	// Exchanges first, as in the derived-data refresh: own-transfer detection skips exchange legs.
 	const exchanges = await dataSource.transaction((manager) => recomputeCurrencyExchanges(manager, account.id));
