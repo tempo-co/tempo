@@ -689,7 +689,14 @@ export class BankTransactionPersistenceService {
 		if (removedIds.length === 0) return {removedCount: 0, recomputeIds: []};
 		// Locked, so an edit saved meanwhile either lands before the snapshot or finds the row gone.
 		const removed = await repository.find({
-			where: {id: In(removedIds.map(({id}) => id)), bankAccountId: bankAccount.id},
+			// The owner's accounts by subquery: a relation filter's outer join cannot be locked.
+			where: {
+				id: In(removedIds.map(({id}) => id)),
+				bankAccountId: Raw((column) => `${column} = :bankAccountId AND ${OWNED_BANK_ACCOUNT_SQL}`, {
+					bankAccountId: bankAccount.id,
+					ownerId,
+				}),
+			},
 			order: {bookingDate: 'ASC', id: 'ASC'},
 			lock: {mode: 'pessimistic_write'},
 		});

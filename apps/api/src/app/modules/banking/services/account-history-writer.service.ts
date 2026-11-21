@@ -1,8 +1,9 @@
-import {ConflictException, Injectable, Logger} from '@nestjs/common';
+import {ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {DataSource, EntityManager} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
+import {BANKING_ACCOUNT_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {BankTransaction} from '../bank-transaction.entity';
@@ -238,7 +239,8 @@ export class AccountHistoryWriterService {
 	}
 
 	/**
-	 * Adds file rows to one account inside the write, in one call per account and write: the work gets the account's
+	 * Adds file rows to one of the owner's accounts inside the write, in one call per account and write, refusing an
+	 * account that is not the owner's (404) before anything is written: the work gets the account's
 	 * final sync days, to decide which rows are new, and inserts them as rows of the import, a row in the reporting
 	 * currency with its own amount, and none on a final day unless `onFinalDays` adds them. Then an account on the
 	 * imported-files connection (one kept when its bank was removed too) has its balance recomputed from its rows; a
@@ -252,6 +254,7 @@ export class AccountHistoryWriterService {
 	): Promise<AddedFileRows<T>> {
 		const transactions = manager.getRepository(BankTransaction);
 		const writtenIds: string[] = [];
+		await lockOwnedAccount(manager, ownerId, account.id);
 		const finalDays = await this.findFinalSyncDays(manager, ownerId, {...account, bankConnection: connection});
 		const result = await work({
 			finalDays,
@@ -335,6 +338,25 @@ export class AccountHistoryWriterService {
  */
 function fileRowDay(row: BankTransactionInput): string | null {
 	return (row.bookingDateFilled ? null : row.bookingDate) ?? row.valueDate ?? null;
+}
+
+/**
+ * Holds one of the owner's accounts for the write, as its rows' foreign key does, so it stays until commit; refuses an
+ * account that is not the owner's.
+ */
+async function lockOwnedAccount(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	bankAccountId: BankAccount['id'],
+): Promise<void> {
+	const owned: Array<{id: string}> = await manager.query(
+		`SELECT bank_account."id" FROM "bank_accounts" bank_account
+		INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+		WHERE bank_account."id" = $1 AND connection."accountId" = $2
+		FOR KEY SHARE OF bank_account`,
+		[bankAccountId, ownerId],
+	);
+	if (owned.length === 0) throw new NotFoundException(BANKING_ACCOUNT_NOT_FOUND);
 }
 
 /** Updates one of the owner's accounts, as a repository update does, its `updatedAt` too. */

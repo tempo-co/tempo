@@ -1,4 +1,4 @@
-import {INestApplication} from '@nestjs/common';
+import {INestApplication, NotFoundException} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import {DataSource, Repository} from 'typeorm';
 
@@ -15,6 +15,7 @@ import {
 } from '@modules/banking/services/account-history-writer.service';
 import {BankConnectionRemovalService} from '@modules/banking/services/bank-connection-removal.service';
 import {BankTransactionInput} from '@modules/banking/services/bank-transaction-persistence.service';
+import {BankingConnectionLockService} from '@modules/banking/services/banking-connection-lock.service';
 import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
 import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
@@ -103,6 +104,43 @@ describe('AccountHistoryWriterService', () => {
 		await Promise.all([change, write]);
 
 		expect(await fixtures.transactions.findOneByOrFail({entryReference: 'DURING'})).toMatchObject({
+			amountInBaseCurrency: null,
+			baseAmountMethod: null,
+		});
+	});
+
+	it('lets a reporting-currency change commit while a write waits for a sync lease, then stores no amount in the old currency', async () => {
+		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const leases = app.get(BankingConnectionLockService);
+		const sync = await leases.acquire(connection.id);
+		// The write says when it asks for the lease the sync holds.
+		const acquire = leases.acquire.bind(leases);
+		let leaseAsked!: () => void;
+		const writeAsks = new Promise<void>((resolve) => (leaseAsked = resolve));
+		jest.spyOn(leases, 'acquire').mockImplementationOnce(async (...args) => {
+			leaseAsked();
+			return acquire(...args);
+		});
+		let writeSettled = false;
+		const write = writer
+			.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
+				writeRow(write, bankAccount, connection, 'AFTER', '12.50'),
+			)
+			.finally(() => (writeSettled = true));
+		try {
+			await writeAsks;
+			await dataSource.transaction(async (manager) => {
+				await lockReportingCurrencyForChange(manager, owner.id);
+				await manager.getRepository(Account).update({id: owner.id}, {baseCurrency: 'GBP'});
+			});
+			expect(writeSettled).toBe(false);
+		} finally {
+			sync.stop();
+			await sync.release();
+		}
+		await write;
+
+		expect(await fixtures.transactions.findOneByOrFail({entryReference: 'AFTER'})).toMatchObject({
 			amountInBaseCurrency: null,
 			baseAmountMethod: null,
 		});
@@ -638,6 +676,23 @@ describe('AccountHistoryWriterService', () => {
 				amountInBaseCurrency: null,
 				baseAmountMethod: null,
 			});
+		});
+
+		it("refuses rows for another owner's account and writes nothing", async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const {owner: other} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const record = await saveImport(owner, connection.id, bankAccount.id);
+			const account = await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id});
+
+			await expect(
+				writer.write(other.id, {}, (write) =>
+					writer.addFileRows(write, {account, connection, importId: record.id}, ({insert}) =>
+						insert([fileRow('FILE-1', '5.00', day(3))], {statementNumbering: null}),
+					),
+				),
+			).rejects.toBeInstanceOf(NotFoundException);
+
+			expect(await fixtures.transactions.findBy({bankAccountId: bankAccount.id})).toEqual([]);
 		});
 
 		it("moves the balance of an account its bank's removal kept with the rows added to it, and gives it no final days", async () => {

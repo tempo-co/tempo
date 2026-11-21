@@ -440,9 +440,10 @@ export class BankImportService {
 				],
 				...(fileConnectionId || recordedUnderFiles ? {fileConnection: 'existing'} : {}),
 			},
-			async ({manager, fileConnection: lockedFileConnection}) => {
+			async (write) => {
+				const {manager, fileConnection: lockedFileConnection} = write;
 				const fileConnection = lockedFileConnection?.id === fileConnectionId ? lockedFileConnection : null;
-				const {record} = await this.lockImport(manager, ownerId, owned);
+				const {record} = await this.lockImport(write, ownerId, owned, recordedUnderFiles);
 				await refuseMovedAccounts(manager, ownerId, ownedAccounts);
 				await manager.query(
 					`DELETE FROM "bank_transactions" bank_transaction
@@ -577,7 +578,7 @@ export class BankImportService {
 			},
 			async (write) => {
 				const {manager, fileConnection} = write;
-				const {record} = await this.lockImport(manager, ownerId, owned);
+				const {record} = await this.lockImport(write, ownerId, owned, recordedUnderFiles);
 				if (toFiles && fileConnection?.id !== connection.id) {
 					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 				}
@@ -709,7 +710,7 @@ export class BankImportService {
 			},
 			async (write) => {
 				const {manager, fileConnection} = write;
-				const {record} = await this.lockImport(manager, ownerId, owned);
+				const {record} = await this.lockImport(write, ownerId, owned, recordedUnderFiles);
 				if (fileConnectionId && fileConnection?.id !== fileConnectionId) {
 					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 				}
@@ -1319,7 +1320,7 @@ export class BankImportService {
 
 	/**
 	 * Whether the import is recorded under the owner's imported-files connection, which its write then asks the writer
-	 * for, so `lockImport` takes that lock only inside the writer's order.
+	 * to lock, so only the writer takes that lock.
 	 */
 	private async isRecordedUnderFiles(ownerId: Account['id'], owned: BankImport): Promise<boolean> {
 		return this.dataSource.getRepository(BankConnection).exists({
@@ -1329,23 +1330,29 @@ export class BankImportService {
 
 	/**
 	 * Locks the import's connection, then the import record: the same order as an import and connection removal. A
-	 * record under the imported-files connection is locked by the writer already.
+	 * record under the imported-files connection has that lock from the writer (`fileConnection`), which takes it for
+	 * the write; one under a synced connection locks that connection here.
 	 */
 	private async lockImport(
-		manager: EntityManager,
+		{manager, fileConnection}: AccountHistoryWrite,
 		ownerId: Account['id'],
 		owned: BankImport,
-	): Promise<{connection: BankConnection; record: BankImport}> {
-		const connection = await manager.getRepository(BankConnection).findOne({
-			where: {id: owned.bankConnectionId, accountId: ownerId},
-			lock: {mode: 'pessimistic_write'},
-		});
+		recordedUnderFiles: boolean,
+	): Promise<{record: BankImport}> {
+		const connection = recordedUnderFiles
+			? fileConnection?.id === owned.bankConnectionId
+				? fileConnection
+				: null
+			: await manager.getRepository(BankConnection).findOne({
+					where: {id: owned.bankConnectionId, accountId: ownerId},
+					lock: {mode: 'pessimistic_write'},
+				});
 		const record = await manager.getRepository(BankImport).findOne({
 			where: {id: owned.id, accountId: ownerId, undoneAt: IsNull()},
 			lock: {mode: 'pessimistic_write'},
 		});
 		if (!connection || !record) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
-		return {connection, record};
+		return {record};
 	}
 
 	private async findOwnedAccounts(ownerId: Account['id'], ids: readonly string[]): Promise<BankAccount[]> {
