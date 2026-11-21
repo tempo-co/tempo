@@ -323,7 +323,12 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		const transaction = {
 			...input(),
 			ownerBank: {name: 'Example Bank', country: 'NL'},
-			merchantLocation: {city: 'Example City', region: null, country: 'NL'},
+			bookingDate: '2026-09-02',
+			valueDate: '2026-09-01',
+			bankTransactionCode: 'PMNT',
+			bankTransactionSubCode: 'CCRD',
+			bankTransactionDescription: 'Example card purchase',
+			merchantLocation: {city: 'Example City', region: 'Example Region', country: 'NL'},
 			amount: '-42.17',
 			remittanceInformation: 'synthetic-private-note',
 			previousManualCategories: [
@@ -342,7 +347,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					source: 'MANUAL' as const,
 					text: 'synthetic-note',
 				},
-				{date: '2026-07-01', category: 'EATING_OUT' as const, source: 'AI' as const, text: null},
+				{date: '2026-07-01', category: 'EATING_OUT' as const, source: 'AI' as const, text: 'synthetic-ai-note'},
 			],
 			counterpartyHistory: [
 				{
@@ -380,20 +385,20 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			transactions: [{...transaction, correlationId: '0'}],
 			merchantSearch: {query: SEARCH_QUERY, results: SEARCH_RESULTS},
 		});
-		// Any change to what these requests send, or to the input schema, changes the hash: bump the prompt version with it.
-		const requests = create.mock.calls.map(([{system, tools, tool_choice, messages}]) => ({
+		// A change to the prompt, tools or messages these requests send, or to the input schema, changes the hash: bump the prompt version with it.
+		const promptRequestFields = create.mock.calls.map(([{system, tools, tool_choice, messages}]) => ({
 			system,
 			tools,
 			tool_choice,
 			messages,
 		}));
 		const promptHash = createHash('sha256')
-			.update(JSON.stringify({requests, input: toInputContract().input}))
+			.update(JSON.stringify({requests: promptRequestFields, input: toInputContract().input}))
 			.digest('hex')
 			.slice(0, 16);
 		expect({version: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION, promptHash}).toEqual({
 			version: 'bank-transaction-categorization-v21',
-			promptHash: '86f887d6b00e6ac2',
+			promptHash: '5522886a28f41b4f',
 		});
 	});
 
