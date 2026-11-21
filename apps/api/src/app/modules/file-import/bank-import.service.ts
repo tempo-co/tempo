@@ -311,6 +311,7 @@ export class BankImportService {
 									// keeps its references, as sync's set-aside decision rests on sync's references alone.
 									const candidates = await this.findMatchCandidates(
 										manager,
+										ownerId,
 										account.id,
 										rows,
 										fileIbanConfirmed ? numbering : null,
@@ -589,7 +590,7 @@ export class BankImportService {
 				let resolvedTransactionId: string;
 				const insertedTransactionIds: string[] = [];
 				if (current.importedTransactionId) {
-					await this.resolveImportedRowQuestion(manager, record, current, request);
+					await this.resolveImportedRowQuestion(manager, ownerId, record, current, request);
 					return {record, insertedTransactionIds};
 				}
 				if (request.decision === 'duplicate') {
@@ -737,6 +738,7 @@ export class BankImportService {
 								if (row.ownerEdits) {
 									await this.persistence.applyOwnerEdits(
 										manager.getRepository(BankTransaction),
+										ownerId,
 										transactionId,
 										row.ownerEdits,
 										account.bankConnection.aspspName,
@@ -1045,7 +1047,7 @@ export class BankImportService {
 		}
 		if (!largest || largest.inRange.length < UNCONFIRMED_TARGET_MIN_OVERLAP_ROWS) return true;
 		const incoming = largest.rows.map(toMatchRow);
-		const candidates = await this.findMatchCandidates(this.dataSource.manager, account.id, largest.rows);
+		const candidates = await this.findMatchCandidates(this.dataSource.manager, ownerId, account.id, largest.rows);
 		const outcomes = bankCodeAndAccount(rows)
 			? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true}).outcomes
 			: matchTransactions(incoming, candidates);
@@ -1183,6 +1185,7 @@ export class BankImportService {
 	 */
 	private async findMatchCandidates(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		rows: readonly NormalizedRow[],
 		numbering: string | null = null,
@@ -1210,6 +1213,7 @@ export class BankImportService {
 			},
 			where: {
 				bankAccountId,
+				bankAccount: {bankConnection: {accountId: ownerId}},
 				bookingDate: Raw(
 					(column) =>
 						`COALESCE(${column}, "valueDate", "transactionDate") BETWEEN (:from)::date - ${MATCH_WINDOW_DAYS} AND (:to)::date + ${MATCH_WINDOW_DAYS}`,
@@ -1241,6 +1245,7 @@ export class BankImportService {
 	 */
 	private async resolveImportedRowQuestion(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		record: BankImport,
 		question: BankImportDoubtfulRow,
 		request: ResolveBankImportDoubtfulRowRequest,
@@ -1267,6 +1272,7 @@ export class BankImportService {
 			// saved on it meanwhile is kept.
 			await this.persistence.applyOwnerEdits(
 				transactions,
+				ownerId,
 				candidate.id,
 				{
 					category: isManualCategorySource(imported.categorySource) ? imported.category : null,
@@ -1290,7 +1296,7 @@ export class BankImportService {
 		);
 		if (request.decision === 'duplicate') await transactions.delete({id: imported.id, importId: record.id});
 		await manager.getRepository(BankImport).update(
-			{id: record.id},
+			{id: record.id, accountId: ownerId},
 			{
 				rowsAdded: record.rowsAdded,
 				rowsAlreadyPresent: record.rowsAlreadyPresent,

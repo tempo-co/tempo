@@ -91,6 +91,13 @@ const PENDING_ROW_SQL = `UPPER(BTRIM("transactionStatus")) = 'PDNG'`;
 /** A pending row's earliest date: a fetch window starting on or before it covers the row whichever date the bank filters on. */
 const PENDING_ROW_START_SQL = 'LEAST("transactionDate", "bookingDate", "valueDate")';
 
+/** Limits a `bank_transactions` statement to rows of the owner's bank accounts (parameter `ownerId`). */
+const OWNED_BANK_ACCOUNT_SQL = `"bankAccountId" IN (
+	SELECT bank_account."id" FROM "bank_accounts" bank_account
+	INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+	WHERE connection."accountId" = :ownerId
+)`;
+
 export type PersistTransactionsResult = {
 	transactionsAdded: number;
 	/** The rows this call inserted; the others already existed and were updated. */
@@ -436,7 +443,7 @@ export class BankTransactionPersistenceService {
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
 		{importId, statementNumbering}: ImportedTransactionsTarget,
-	): Promise<PersistTransactionsResult> {
+	): Promise<{insertedTransactionIds: string[]}> {
 		const unassignedTransactionValues = transactions.map((transaction) =>
 			this.toBankTransactionValues(bankAccount, transaction, aspspName),
 		);
@@ -472,13 +479,7 @@ export class BankTransactionPersistenceService {
 				.execute();
 			insertedTransactionIds.push(...(result.raw as Array<{id: string}>).map(({id}) => id));
 		}
-		return {
-			transactionsAdded: insertedTransactionIds.length,
-			insertedTransactionIds,
-			persistedTransactionIds: insertedTransactionIds,
-			takenOverImportedIds: [],
-			previousRows: [],
-		};
+		return {insertedTransactionIds};
 	}
 
 	/**
@@ -747,7 +748,7 @@ export class BankTransactionPersistenceService {
 		for (const row of withEdits) {
 			const target = targets.get(row.id);
 			if (!target) continue;
-			const applied = await this.applyOwnerEdits(repository, target, editsOf(row)!, aspspName);
+			const applied = await this.applyOwnerEdits(repository, ownerId, target, editsOf(row)!, aspspName);
 			if (applied.category || applied.ownTransferOverride) moved += 1;
 			if (applied.ownTransferOverride) recomputeIds.push(target);
 		}
@@ -790,13 +791,17 @@ export class BankTransactionPersistenceService {
 	 */
 	async applyOwnerEdits(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		transactionId: string,
 		edits: OwnerEdits,
 		aspspName: string | undefined,
 	): Promise<{category: boolean; ownTransferOverride: boolean}> {
 		const applied = {category: false, ownTransferOverride: false};
 		if (edits.category) {
-			const target = await repository.findOneBy({id: transactionId});
+			const target = await repository.findOneBy({
+				id: transactionId,
+				bankAccount: {bankConnection: {accountId: ownerId}},
+			});
 			if (target && !isManualCategorySource(target.categorySource)) {
 				const inputHash = createBankTransactionCategorizationInputHash(
 					toBankTransactionCategorizationInput({...target, aspspName}),
@@ -814,6 +819,7 @@ export class BankTransactionPersistenceService {
 						categoryUpdatedAt: new Date(),
 					})
 					.where('id = :id', {id: transactionId})
+					.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
 					.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
 					.execute();
 				applied.category = (result.affected ?? 0) > 0;
@@ -825,6 +831,7 @@ export class BankTransactionPersistenceService {
 				.update()
 				.set({ownTransferOverride: edits.ownTransferOverride})
 				.where('id = :id', {id: transactionId})
+				.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
 				.andWhere(`"ownTransferOverride" IS NULL`)
 				.execute();
 			applied.ownTransferOverride = (result.affected ?? 0) > 0;
