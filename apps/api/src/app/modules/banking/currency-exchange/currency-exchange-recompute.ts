@@ -5,6 +5,7 @@ import {
 	detectCurrencyExchangeMarker,
 } from '../bank-transaction-financial-event';
 import {BATCH_WRITE_CHUNK_SIZE, buildPostgresValuesList, chunkArray} from '../banking.utils';
+import {categoryResetSql} from '../categorization/category-fields';
 import {compareIds} from '../own-transfer/own-transfer-detection';
 import type {OwnTransferSqlExecutor} from '../own-transfer/own-transfer-recompute';
 import {BANK_CONNECTION_PROVIDERS} from '../services/banking-sync.constants';
@@ -51,11 +52,6 @@ const CURRENCY_EXCHANGE = BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHAN
 const OWNER_ACCOUNTS_SQL = `SELECT account."id" FROM "bank_accounts" account
 	JOIN "bank_connections" connection ON connection."id" = account."bankConnectionId"
 	WHERE connection."accountId" = $1`;
-
-const CATEGORIZATION_RESET_SQL = `"category" = NULL, "categorySource" = NULL, "categoryConfidence" = NULL,
-	"categoryAppliedInputHash" = NULL, "categoryProvider" = NULL, "categoryModel" = NULL,
-	"categoryPromptVersion" = NULL, "categorySearchTrace" = NULL, "categoryLastError" = NULL,
-	"categoryUpdatedAt" = NULL`;
 
 /**
  * A bank connection's legs form one group. The imported-files connection holds the files of every bank, so there legs
@@ -184,7 +180,7 @@ export async function recomputeCurrencyExchanges(
 	// (for example a manual category) commits first.
 	for (const ids of chunkArray(becameExchange, BATCH_WRITE_CHUNK_SIZE)) {
 		await executor.query(
-			`UPDATE "bank_transactions" SET ${CATEGORIZATION_RESET_SQL}, "categoryStatus" = 'NOT_APPLICABLE'
+			`UPDATE "bank_transactions" SET ${categoryResetSql('NOT_APPLICABLE')}
 			WHERE "id" = ANY($2::uuid[]) AND "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 				AND "financialEventType" = $3 AND "categorySource" IS DISTINCT FROM 'MANUAL'`,
 			[ownerId, ids, CURRENCY_EXCHANGE],
@@ -193,7 +189,7 @@ export async function recomputeCurrencyExchanges(
 	const requeuedIds: string[] = [];
 	for (const ids of chunkArray(leftExchange, BATCH_WRITE_CHUNK_SIZE)) {
 		const result = (await executor.query(
-			`UPDATE "bank_transactions" SET ${CATEGORIZATION_RESET_SQL}, "categoryStatus" = 'PENDING'
+			`UPDATE "bank_transactions" SET ${categoryResetSql('PENDING')}
 			WHERE "id" = ANY($2::uuid[]) AND "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 				AND "financialEventType" IS NULL AND "categoryStatus" = 'NOT_APPLICABLE'
 				AND "categorySource" IS DISTINCT FROM 'MANUAL'

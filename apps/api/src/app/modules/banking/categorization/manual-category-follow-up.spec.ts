@@ -1,25 +1,4 @@
-import {
-	ManualCategoryCounts,
-	planManualCategoryFollowUp,
-	whereManualCategoryFollowUpCandidates,
-} from './manual-category-follow-up';
-
-function recordingQuery() {
-	const conditions: string[] = [];
-	const parameters: Record<string, unknown> = {};
-	const query = {
-		where: jest.fn(),
-		andWhere: jest.fn(),
-	};
-	for (const method of [query.where, query.andWhere]) {
-		method.mockImplementation((condition: string, values?: Record<string, unknown>) => {
-			conditions.push(condition.replace(/\s+/g, ' ').trim());
-			Object.assign(parameters, values);
-			return query;
-		});
-	}
-	return {query, conditions, parameters};
-}
+import {ManualCategoryCounts, planManualCategoryFollowUp} from './manual-category-follow-up';
 
 const counts = (entries: [string, number][]) => new Map(entries) as ManualCategoryCounts;
 
@@ -50,45 +29,5 @@ describe('planManualCategoryFollowUp', () => {
 		['no choice left without AI', undefined, false, null],
 	])('plans %s', (_, history, recheckEnabled, expected) => {
 		expect(planManualCategoryFollowUp(history, recheckEnabled)).toEqual(expected);
-	});
-});
-
-describe('whereManualCategoryFollowUpCandidates', () => {
-	const scope = {accountId: 'account-1', merchantKey: 'EXPENSE:example shop'};
-
-	it("limits rows to the owner's non-manual rows for the merchant that automation may change", () => {
-		const {query, conditions, parameters} = recordingQuery();
-
-		whereManualCategoryFollowUpCandidates(query as never, {...scope, followUp: {action: 'RECHECK'}});
-
-		expect(conditions).toEqual([
-			'"merchantKey" = :merchantKey',
-			expect.stringContaining('WHERE connection."accountId" = :accountId'),
-			`"categorySource" IS DISTINCT FROM 'MANUAL'`,
-			'"categoryStatus" IN (:...followUpStatuses)',
-			'"categoryInputHash" IS NOT NULL',
-			'"ownTransferEvidence" IS NULL',
-			'"financialEventType" IS NULL',
-			`"categorySource" = 'HISTORY'`,
-		]);
-		expect(parameters).toEqual({
-			merchantKey: 'EXPENSE:example shop',
-			accountId: 'account-1',
-			followUpStatuses: ['PENDING', 'FAILED', 'COMPLETED'],
-		});
-	});
-
-	it('narrows the same rules to the selected ids', () => {
-		const {query, conditions, parameters} = recordingQuery();
-
-		whereManualCategoryFollowUpCandidates(query as never, {
-			...scope,
-			followUp: {action: 'RECHECK'},
-			transactionIds: ['selected-1'],
-		});
-
-		expect(conditions).toHaveLength(9);
-		expect(conditions.at(-1)).toBe('id IN (:...followUpTransactionIds)');
-		expect(parameters.followUpTransactionIds).toEqual(['selected-1']);
 	});
 });

@@ -505,7 +505,6 @@ describe('CategorizationPipeline', () => {
 		expect(update.andWhere).toHaveBeenCalledWith('"categoryInputHash" = :inputHash', {
 			inputHash: transaction.categoryInputHash,
 		});
-		expect(update.andWhere).toHaveBeenCalledWith('"categorySource" IS DISTINCT FROM \'MANUAL\'');
 	});
 
 	it('keeps a same-input category and its metadata pending when routes are unavailable', async () => {

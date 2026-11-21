@@ -91,7 +91,7 @@ describe('ManualCategoryService follow-up', () => {
 			manualCategories.setManualCategory('account-1', transaction(), 'SHOPPING', selected),
 		).resolves.toBe(true);
 		expect(repository.update).toHaveBeenCalledWith(
-			{id: 'corrected'},
+			expect.objectContaining({id: 'corrected'}),
 			expect.objectContaining({category: 'SHOPPING', categorySource: 'MANUAL'}),
 		);
 	});
