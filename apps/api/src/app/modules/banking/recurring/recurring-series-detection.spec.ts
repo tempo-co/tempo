@@ -1145,6 +1145,7 @@ describe('detectRecurringSeries', () => {
 		['shopping', ['SHOPPING', 'SHOPPING'], ['120.00', '120.00']],
 		['mixed retail', ['GROCERIES', 'SHOPPING'], ['120.00', '120.00']],
 		['two amounts', ['INSURANCE', 'INSURANCE'], ['120.00', '240.00']],
+		['a price change', ['INSURANCE', 'INSURANCE'], ['120.00', '125.00']],
 	] as const)('needs a third annual payment for %s', (_label, categories, amounts) => {
 		const rows = ['2025-03-10', '2026-03-12'].map((date, index) =>
 			payment(date, amounts[index], {category: categories[index]}),

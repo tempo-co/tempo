@@ -149,7 +149,7 @@ const CADENCE_RULES: readonly CadenceRule[] = [
 		minCount: 3,
 		allowsVariable: true,
 	},
-	// Two yearly payments of one amount qualify unless both are ordinary retail; otherwise a yearly series needs three.
+	// Two yearly payments of the same amount qualify unless both are ordinary retail; otherwise a yearly series needs three.
 	{
 		cadence: 'YEARLY',
 		medianGap: [350, 380],
@@ -346,7 +346,7 @@ function recognizePartition(rows: RecurringCandidate[], person: boolean): Recogn
 		const coincidence = person || chain.some(isPersonTransferCategory) || isBusyPayee(rows, chain);
 		const enoughHistory =
 			chain.length >= 3 ||
-			(isOneAmount(chain) && !chain.every(({category}) => isOrdinaryRetailCategory(category)));
+			(isSameAmount(chain) && !chain.every(({category}) => isOrdinaryRetailCategory(category)));
 		return coincidence || !enoughHistory ? null : rule;
 	};
 	const chains = chainByAmount(rows);
@@ -607,9 +607,8 @@ export function foldName(name: string): string {
 	return name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-/** Payments no further apart than a price change: the same amount each time. */
-function isOneAmount(rows: readonly RecurringCandidate[]): boolean {
-	return rows.every(({amountCents}) => !exceeds(amountCents, rows[0].amountCents, PRICE_CHANGE));
+function isSameAmount(rows: readonly RecurringCandidate[]): boolean {
+	return rows.every(({amountCents}) => amountCents === rows[0].amountCents);
 }
 
 /**

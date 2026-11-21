@@ -1,4 +1,8 @@
-import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
+import {
+  BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
+  BANK_TRANSACTION_UNCATEGORIZED,
+  type BankTransactionCategoryFilterValue,
+} from '@tempo/contracts';
 import {parse} from 'date-fns';
 
 import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';
@@ -47,15 +51,24 @@ export function sourceDrill(
   return {...flowDrill('INCOME', from, to, hasMissingBaseAmounts), incomeSource: source};
 }
 
-/** Exactly the spending rows behind one or more category totals between two dates. */
+function toCategoryFilterValue(key: string): BankTransactionCategoryFilterValue {
+  return (BANK_TRANSACTION_CATEGORY_FILTER_VALUES as readonly string[]).includes(key)
+    ? (key as BankTransactionCategoryFilterValue)
+    : BANK_TRANSACTION_UNCATEGORIZED;
+}
+
+/**
+ * The spending rows behind one or more breakdown keys between two dates. A stored category the list no longer has
+ * opens the uncategorized rows, as its label reads Uncategorized.
+ */
 export function categoryDrill(
-  categories: BankTransactionCategoryFilterValue | BankTransactionCategoryFilterValue[],
+  keys: string | string[],
   from: string,
   to: string,
   hasMissingBaseAmounts: boolean,
 ): BankTransactionDrillSearch {
   return {
     ...flowDrill('SPENDING', from, to, hasMissingBaseAmounts),
-    categories: Array.isArray(categories) ? categories : [categories],
+    categories: [...new Set((Array.isArray(keys) ? keys : [keys]).map(toCategoryFilterValue))],
   };
 }
