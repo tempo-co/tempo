@@ -152,17 +152,20 @@ export function LayoutPreview({
           <div className='grid gap-1.5'>
             <Label htmlFor={bankField}>Bank</Label>
             <Select
-              value={bankChoice}
+              value={banks === 'pending' ? '' : bankChoice}
               onValueChange={onBankChoice}
               disabled={disabled || banks === 'pending'}
             >
               <SelectTrigger
                 id={bankField}
                 className='max-sm:h-11'
+                aria-busy={banks === 'pending' ? true : undefined}
                 aria-invalid={bankError && bankChoice !== OTHER_BANK ? true : undefined}
                 aria-describedby={bankChoice === OTHER_BANK ? undefined : bankHint}
               >
-                <SelectValue placeholder='Choose a bank' />
+                <SelectValue
+                  placeholder={banks === 'pending' ? 'Loading your banks…' : 'Choose a bank'}
+                />
               </SelectTrigger>
               <SelectContent>
                 {listed.map((bank) => (
@@ -174,7 +177,7 @@ export function LayoutPreview({
                 <SelectItem value={OTHER_BANK}>Other</SelectItem>
               </SelectContent>
             </Select>
-            {bankChoice === OTHER_BANK && (
+            {banks !== 'pending' && bankChoice === OTHER_BANK && (
               <>
                 <Label htmlFor={otherBankField} className='mt-2.5'>
                   Bank name

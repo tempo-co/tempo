@@ -320,7 +320,7 @@ function PreviewStep({
   onReject: () => void;
 }) {
   const {proposal} = step;
-  const bankList = useBankImportBanks();
+  const bankList = useBankImportBanks(proposal.id);
   const banks = bankList.data ?? NO_BANKS;
   // Until the owner picks, the choice follows Tempo's guess as the list of banks arrives.
   const [pickedBank, setPickedBank] = useState<string | null>(null);

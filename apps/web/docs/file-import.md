@@ -74,11 +74,12 @@ No copy calls import a fallback or assumes a bank is connected.
   always-visible outline Undo named with its date. An undone import stays listed, muted, without
   the button. Undo confirms with the destructive variant and says what goes and what stays.
 - **Column preview.** The bank a layout is saved under is a `Select` labelled Bank: the owner's own banks
-  (`GET /bank-imports/banks`: their connected or once-connected banks, the banks their imported-files
-  accounts record by name and their saved layouts' banks; never Revolut, whose own files Tempo reads, nor a
-  name over 60 characters, which a layout cannot be saved under),
+  (`GET /bank-imports/layout-proposals/:proposalId/banks`: their connected or once-connected banks, the
+  banks their imported-files accounts record by name and their saved layouts' banks; only names this
+  proposal's confirmation accepts, so never Revolut, a name over 60 characters, or, for a file naming no
+  account, a bank whose built-in export names none),
   then a separator and **Other**, which reveals a "Bank name" input (60 characters at most). While the
-  list loads the picker is disabled; a failed load takes its place as a section `LoadErrorState`
+  list loads the picker is disabled and reads "Loading your banks…"; a failed load takes its place as a section `LoadErrorState`
   ("Couldn't load your banks", Try again) and no toast (`quiet`), and Looks right stays disabled until it loads.
   Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
   the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API

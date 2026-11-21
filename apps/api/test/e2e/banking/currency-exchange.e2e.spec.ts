@@ -275,7 +275,7 @@ describe('Currency exchange recompute', () => {
 
 	it.each([
 		['different banks', nameBankIdentity('Example Bank A'), nameBankIdentity('Example Bank B')],
-		['different BICs', bicBankIdentity('EXMPDEFFXXX'), bicBankIdentity('EXMPNL2A')],
+		['different BICs', bicBankIdentity('EXMPDEFF'), bicBankIdentity('EXMPNL2A')],
 		['no recorded bank', null, null],
 		['a bank name and a BIC', nameBankIdentity('ABN AMRO'), bicBankIdentity('ABNANL2A')],
 	])(

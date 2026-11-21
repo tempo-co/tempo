@@ -18,6 +18,7 @@ import {AccountService} from '@modules/account/account.service';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {nameBankIdentity} from '@modules/banking/bank-identity';
 import {BankSyncRun} from '@modules/banking/bank-sync-run.entity';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
@@ -1021,8 +1022,18 @@ describe('BankConnectionController', () => {
 					currencyExchangeCounterpartId,
 				}));
 			const unpaired = {financialEventType: null, currencyExchangeCounterpartId: null};
+			const paired = async () => {
+				const [debit, credit] = await exchangeRows();
+				const exchange = BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE;
+				return [
+					{financialEventType: exchange, currencyExchangeCounterpartId: credit.id},
+					{financialEventType: exchange, currencyExchangeCounterpartId: debit.id},
+				];
+			};
 			// An exchange pairs legs of one connection only, so the bank's half and the file's half stay apart.
 			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			// The dollar account as one whose statements named ABN AMRO.
+			await bankAccountRepository.update(dollarAccount.id, {bankIdentity: nameBankIdentity('ABN AMRO')});
 			deleteSession.mockClear();
 
 			await owner.agent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
@@ -1038,12 +1049,9 @@ describe('BankConnectionController', () => {
 				bankIdentity: 'name:abn amro',
 				currentBalanceAmount: synced.currentBalanceAmount,
 			});
-			// Both rows now sit on the imported-files connection, but one account records its bank by name and the other
-			// by BIC, which never match, so the removal's exchange recompute leaves them apart.
-			expect(await bankAccountRepository.findOneByOrFail({id: dollarAccount.id})).toMatchObject({
-				bankIdentity: 'bic:ABNANL2A',
-			});
-			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			// Both rows now sit on the imported-files connection, in accounts recording one bank, so the removal's exchange
+			// recompute pairs them.
+			expect(await exchangeLabels()).toEqual(await paired());
 			// Every row stays, with its edits, the imported one included.
 			const keptRows = await bankTransactionRepository.findBy({bankAccountId: synced.id});
 			expect(keptRows.map(({providerTransactionId}) => providerTransactionId).sort()).toEqual(
@@ -1093,8 +1101,8 @@ describe('BankConnectionController', () => {
 				bankAccountId: synced.id,
 				importId: (dropped.body as {id: string}).id,
 			});
-			// The import recomputes exchanges over the whole history, and the rows of two banks still stay apart.
-			expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+			// The import recomputes exchanges over the whole history and keeps the pair.
+			expect(await exchangeLabels()).toEqual(await paired());
 
 			// The bank sends the kept rows again with a new one, and no longer the pending one; the account picks up
 			// where it was.
@@ -1114,6 +1122,7 @@ describe('BankConnectionController', () => {
 					accounts: [{uid: 'provider-account-kept-again', currency: 'EUR', ...reconnectedAccount}],
 				});
 				await callback({state: secondState, code: 'kept-again-code'}, 'connected');
+				// Back on its connection, the bank's half is apart from the file's again.
 				expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
 			} finally {
 				releaseSync();

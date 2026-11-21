@@ -89,9 +89,15 @@ export class BankImportLayoutService {
 	 * connections, of their imported-files accounts that record a bank by name (kept from a removed connection, or
 	 * from earlier imports) and of their saved layouts; never Revolut, whose own files already name their accounts'
 	 * bank. Each bank once, spelled as a connection, saved layout or Tempo's built-in format writes it, else as the
-	 * account records it.
+	 * account records it. Only names the proposal's layout can be confirmed under (`layoutBankRefusal`).
 	 */
-	async knownBanks(ownerId: Account['id']): Promise<BankImportBanks> {
+	async knownBanks(ownerId: Account['id'], proposalId: string): Promise<BankImportBanks> {
+		const proposal = await this.dataSource
+			.getRepository(BankImportLayoutProposal)
+			.findOne({where: {id: proposalId, accountId: ownerId}});
+		if (!proposal) throw new NotFoundException(LAYOUT_PROPOSAL_NOT_FOUND);
+		if (proposal.status !== 'proposed' || !proposal.layout) throw new ConflictException(LAYOUT_PROPOSAL_DECIDED);
+		const {layout} = proposal;
 		const [connections, layouts, fileAccounts] = await Promise.all([
 			this.dataSource.getRepository(BankConnection).find({
 				select: {aspspName: true},
@@ -126,10 +132,9 @@ export class BankImportLayoutService {
 			),
 		]);
 		return {
-			// Only names a layout can be saved under: never Revolut's, never one too long.
 			banks: [...identities]
 				.map((identity) => spellings.get(identity) ?? identityBankName(identity)!)
-				.filter((bank) => layoutBankName(bank) === bank && !reservedBank(bank))
+				.filter((bank) => layoutBankName(bank) === bank && layoutBankRefusal(bank, layout) === null)
 				.sort((left, right) => left.localeCompare(right, 'en', {sensitivity: 'base'})),
 		};
 	}
@@ -238,6 +243,7 @@ export class BankImportLayoutService {
 	): Promise<BankImportLayoutResponse> {
 		const bankName = typeof request.bankName === 'string' ? layoutBankName(request.bankName) : null;
 		if (bankName === null) throw new BadRequestException(INVALID_BANK_NAME);
+		// Revolut needs no layout, so it is refused before the proposal is read; the full check runs under the lock.
 		const reserved = reservedBank(bankName);
 		if (reserved) throw new BadRequestException(reservedBankName(reserved));
 		return this.dataSource.transaction(async (manager) => {
@@ -245,12 +251,8 @@ export class BankImportLayoutService {
 			const proposal = await this.lockProposal(manager, ownerId, proposalId);
 			if (proposal.expiresAt.getTime() <= Date.now())
 				throw new BankImportRefusalException('layout_proposal_expired');
-			// A layout whose files name no account goes by its bank, so it cannot take a built-in one's. Unlike the
-			// Revolut check above, this one needs the proposal's layout, so it runs under the lock.
-			const builtIn = namesNoAccount(proposal.layout)
-				? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase())
-				: undefined;
-			if (builtIn) throw new BadRequestException(reservedBankName(builtIn));
+			const refusal = layoutBankRefusal(bankName, proposal.layout);
+			if (refusal) throw new BadRequestException(refusal);
 			if (proposal.currencyNeeded) {
 				if (typeof request.currency !== 'string' || !IMPORT_CURRENCY_CODES.has(request.currency)) {
 					throw new BadRequestException(INVALID_CURRENCY);
@@ -383,6 +385,20 @@ function layoutBankName(name: string): string | null {
 /** The bank of `STATEMENT_BANKS` the name names, ignoring case and spacing. */
 function reservedBank(name: string): string | undefined {
 	return STATEMENT_BANKS.find((bank) => bankNameKey(bank) === bankNameKey(name));
+}
+
+/**
+ * Why a layout cannot be saved under the bank name (`layoutBankName` of it), null when it can: Revolut's files need
+ * no layout, and a layout whose files name no account goes by its bank, so it cannot take the bank of a built-in one
+ * that names none either.
+ */
+function layoutBankRefusal(bankName: string, layout: CsvLayout): string | null {
+	const reserved =
+		reservedBank(bankName) ??
+		(namesNoAccount(layout)
+			? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bankNameKey(bank) === bankNameKey(bankName))
+			: undefined);
+	return reserved ? reservedBankName(reserved) : null;
 }
 
 /** The model's bank guess as plain text of at most 60 characters; null when it gave none. */

@@ -28,3 +28,9 @@ describe('differentBanks', () => {
 		expect(differentBanks(right, left)).toBe(different);
 	});
 });
+
+describe('bicBankIdentity', () => {
+	it.each(['EXMPDEFFXXX', 'exmpdeff', 'Example Bank'])('refuses %s, which is no institution BIC', (bic) => {
+		expect(() => bicBankIdentity(bic)).toThrow();
+	});
+});

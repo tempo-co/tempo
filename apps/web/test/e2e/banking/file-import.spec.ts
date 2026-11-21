@@ -194,7 +194,7 @@ async function mockFileImport(
     /** The answer to each proposal in turn. */
     proposals?: ((route: Route) => Promise<void>)[];
     layouts?: BankImportLayout[];
-    /** The banks `GET /bank-imports/banks` lists. */
+    /** The banks `GET /bank-imports/layout-proposals/:proposalId/banks` lists. */
     banks?: string[];
     /** How many reads of the banks fail first (429, which the query does not retry). */
     banksFailures?: number;
@@ -292,7 +292,8 @@ async function mockFileImport(
   });
   await page.route(`${API_URL}/bank-imports/layouts`, (route) => fulfillJson(route, api.layouts));
   let banksFailed = 0;
-  await page.route(`${API_URL}/bank-imports/banks`, (route) => {
+  await page.route(`${API_URL}/bank-imports/layout-proposals/*/banks`, (route) => {
+    if (route.request().resourceType() === 'document') return route.continue();
     if (banksFailed < banksFailures) {
       banksFailed += 1;
       return fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429);
@@ -1430,10 +1431,25 @@ test.describe('statement file import on Connections', () => {
     await expect(preview.getByLabel('Bank', {exact: true})).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeDisabled();
 
+    // The list loading again shows as such until it arrives.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`${API_URL}/bank-imports/layout-proposals/*/banks`, async (route) => {
+      await held;
+      await route.fallback();
+    });
     await failed.getByRole('button', {name: 'Try again'}).click();
+    const bank = preview.getByLabel('Bank', {exact: true});
+    try {
+      await expect(failed).toHaveCount(0);
+      await expect(bank).toHaveText('Loading your banks…');
+      await expect(bank).toBeDisabled();
+      await expect(preview.getByLabel('Bank name')).toHaveCount(0);
+    } finally {
+      release();
+    }
 
-    await expect(failed).toHaveCount(0);
-    await expect(preview.getByLabel('Bank', {exact: true})).toHaveText('Example Bank');
+    await expect(bank).toHaveText('Example Bank');
     await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeEnabled();
   });
 

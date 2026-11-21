@@ -20,8 +20,12 @@ export function nameBankIdentity(name: string): BankIdentity {
 	return `${NAME_PREFIX}${bankNameKey(name)}` as BankIdentity;
 }
 
-/** The bank a statement's BIC names: its institution, the first eight characters as the parsers give them. */
+/** An institution BIC: institution, country and location, without the branch. */
+const INSTITUTION_BIC = /^[A-Z]{6}[A-Z0-9]{2}$/;
+
+/** The bank a statement's BIC names: its institution BIC, as the parsers give it; any other value is refused. */
 export function bicBankIdentity(bic: string): BankIdentity {
+	if (!INSTITUTION_BIC.test(bic)) throw new Error('Not an institution BIC');
 	return `${BIC_PREFIX}${bic}` as BankIdentity;
 }
 

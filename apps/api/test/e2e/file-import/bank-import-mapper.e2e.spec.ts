@@ -154,6 +154,10 @@ describe('Bank import column mapper', () => {
 	}
 
 	/** Proposes and confirms a layout for the file, the model answering `answer`. */
+	function banksFor(agent: TestAgent, proposalId: string) {
+		return agent.get(`/bank-imports/layout-proposals/${proposalId}/banks`);
+	}
+
 	async function saveLayout(agent: TestAgent, file: Buffer, answer: LayoutAnswer, body: Record<string, unknown>) {
 		mapLayout.mockResolvedValueOnce(answer);
 		const proposal = await propose(agent, file).expect(201);
@@ -235,6 +239,9 @@ describe('Bank import column mapper', () => {
 		const kept = JSON.stringify([stored.headerCells, stored.columnShapes, stored.layout]);
 		for (const value of DEBIT_CREDIT_CONTENT) expect(kept).not.toContain(value);
 
+		// A file that names its account may take the bank of a built-in layout whose files name none.
+		await fixtures.createConnection(owner, {aspspName: 'Rabobank', aspspCountry: 'NL'});
+		expect((await banksFor(agent, proposed.body.id).expect(200)).body).toEqual({banks: ['Rabobank']});
 		const saved = await confirm(agent, proposed.body.id, {bankName: ' Example  Bank '}).expect(201);
 		expect(saved.body).toEqual({id: expect.any(String), bankName: 'Example Bank', createdAt: expect.any(String)});
 		expect(await proposals.findOneByOrFail({id: proposed.body.id})).toMatchObject({status: 'confirmed'});
@@ -270,17 +277,21 @@ describe('Bank import column mapper', () => {
 			{bankIdentity: 'bic:EXMPDEFF'},
 			{bankIdentity: 'name:revolut'},
 		]);
-		expect((await agent.get('/bank-imports/banks').expect(200)).body).toEqual({
+		// Offered for the next proposal, of a file that names no account, so not Rabobank either.
+		mapLayout.mockResolvedValueOnce(ANSWER.balance);
+		const next = await propose(agent, BALANCE_CSV).expect(201);
+		expect((await banksFor(agent, next.body.id).expect(200)).body).toEqual({
 			banks: ['Example Bank', 'example credit union', 'Example Savings Bank', 'ing', 'Knab'],
 		});
+		await banksFor(agent, proposed.body.id).expect(409);
 
 		const other = await createOwner();
 		expect((await drop(other.agent, DEBIT_CREDIT_CSV).expect(422)).body).toMatchObject({code: 'layout_unknown'});
 		await other.agent.get('/bank-imports/layouts').expect(200, []);
-		await other.agent.get('/bank-imports/banks').expect(200, {banks: []});
+		await banksFor(other.agent, next.body.id).expect(404);
 		await confirm(other.agent, proposed.body.id, {bankName: 'Example Bank'}).expect(404);
 		await other.agent.delete(`/bank-imports/layouts/${saved.body.id}`).set('Origin', ORIGIN).expect(404);
-		expect(mapLayout).toHaveBeenCalledTimes(1);
+		expect(mapLayout).toHaveBeenCalledTimes(2);
 	});
 
 	it('discards a rejected proposal and refuses to confirm one an hour old', async () => {

@@ -47,6 +47,11 @@ export const BANK_IMPORT_ERROR_CODES = [
 	 */
 	'target_account_unconfirmed',
 	'target_account_mismatch',
+	/**
+	 * A statement names an account by an id that is no IBAN which another bank's statements already use: its BIC or
+	 * bank differs from the one the imported account records, or from another statement's in the drop.
+	 */
+	'account_bank_conflict',
 	'account_busy',
 	'multiple_bank_connections',
 	/** Other drops took every upload slot for too long (HTTP 503 with `Retry-After`): the same files can be sent again. */
@@ -424,9 +429,10 @@ export type BankImportLayout = {
 };
 
 /**
- * `GET /bank-imports/banks`: the owner's own banks, to name a saved layout after without typing one: their connected
- * or once-connected banks, the banks their imported-files accounts record by name (kept from a removed connection or
- * from earlier imports) and their saved layouts'; never Revolut. Each bank once, ignoring case and spacing, sorted.
+ * `GET /bank-imports/layout-proposals/:proposalId/banks`: the owner's own banks, to name the proposal's layout after
+ * without typing one: their connected or once-connected banks, the banks their imported-files accounts record by name
+ * (kept from a removed connection or from earlier imports) and their saved layouts'; only those its confirmation
+ * accepts. Each bank once, ignoring case and spacing, sorted.
  */
 export type BankImportBanks = {banks: string[]};
 

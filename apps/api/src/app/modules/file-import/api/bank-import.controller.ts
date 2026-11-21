@@ -126,9 +126,12 @@ export class BankImportController {
 		return this.layoutService.findLayouts(account.id);
 	}
 
-	@Get('banks')
-	async findBanks(@CurrentAccount() account: Account): Promise<BankImportBanks> {
-		return this.layoutService.knownBanks(account.id);
+	@Get('layout-proposals/:proposalId/banks')
+	async findBanks(
+		@Param('proposalId', UUID_PIPE) proposalId: string,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportBanks> {
+		return this.layoutService.knownBanks(account.id, proposalId);
 	}
 
 	@Delete('layouts/:layoutId')
