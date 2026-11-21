@@ -66,7 +66,7 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 		kind: 'BUSINESS',
 		brand: 'Other Example Shop',
 		company: 'Other Example Shop',
-		domain: 'other-shop.example.test',
+		domain: 'other.example.test',
 		domainConfident: true,
 	},
 	'Jane Example': {kind: 'PERSON', brand: null, company: null, domain: null, domainConfident: false},
@@ -76,6 +76,14 @@ const IDENTITIES: Record<string, Omit<MerchantIdentification, 'correlationId'>> 
 		company: 'Exampleshop',
 		domain: 'exampleshop.test',
 		domainConfident: false,
+	},
+	// A hostname whose extra labels could carry other merchant names to its name server.
+	'Deep Example': {
+		kind: 'BUSINESS',
+		brand: 'Deep Example',
+		company: 'Deep Example',
+		domain: 'example-shop-example-pay.deep.example.test',
+		domainConfident: true,
 	},
 	'Walled Example': {
 		kind: 'BUSINESS',
@@ -148,6 +156,7 @@ describe('Merchant logos', () => {
 	let largeIcon: Buffer;
 	let identifySpy: jest.SpyInstance;
 	let fetchSpy: jest.SpyInstance;
+	let logoDevSpy: jest.SpyInstance;
 	let queue: Queue;
 	let routesUnavailable = false;
 	/** Hostnames whose pages and icons currently fail to load. */
@@ -202,9 +211,11 @@ describe('Merchant logos', () => {
 					}),
 				}));
 			});
-		jest.spyOn(app.get(LogoDevClient), 'findLogo').mockImplementation(
-			async (domain: string) => logoDevNow.get(domain) ?? LOGO_DEV[domain] ?? {status: 'none'},
-		);
+		logoDevSpy = jest
+			.spyOn(app.get(LogoDevClient), 'findLogo')
+			.mockImplementation(
+				async (domain: string) => logoDevNow.get(domain) ?? LOGO_DEV[domain] ?? {status: 'none'},
+			);
 		const sites: Record<string, MerchantSiteResponse> = {
 			// logo.dev's downloads, enlarged to the requested size whatever the original's.
 			[`${LOGO_DEV_ASSET}shop?format=png&size=256`]: {url: `${LOGO_DEV_ASSET}shop`, bytes: largeIcon},
@@ -237,12 +248,12 @@ describe('Merchant logos', () => {
 				bytes: icon,
 			},
 			// The model named a site that calls itself something else.
-			'https://other-shop.example.test/': {
-				url: 'https://other-shop.example.test/',
+			'https://other.example.test/': {
+				url: 'https://other.example.test/',
 				bytes: Buffer.from('<title>Unrelated Business</title>'),
 			},
-			'https://other-shop.example.test/favicon.ico': {
-				url: 'https://other-shop.example.test/favicon.ico',
+			'https://other.example.test/favicon.ico': {
+				url: 'https://other.example.test/favicon.ico',
 				bytes: icon,
 			},
 		};
@@ -678,24 +689,28 @@ describe('Merchant logos', () => {
 
 		await app.get(MerchantLogoService).enqueueForOwnerSafely(other.id);
 		await waitFor(
-			() => logos.findOneBy({domain: 'other-shop.example.test'}),
+			() => logos.findOneBy({domain: 'other.example.test'}),
 			(logo) => logo?.status === 'READY',
 		);
 
 		const response = await other.agent.get(`/bank-transactions/${transaction.id}`).expect(200);
 		expect(response.body.merchantLogoUrl).toBeNull();
-		expect(fetchSpy).toHaveBeenCalledWith('https://other-shop.example.test/', expect.anything());
+		expect(fetchSpy).toHaveBeenCalledWith('https://other.example.test/', expect.anything());
 
 		// Homepages that refuse the server: a logo shows only for a site the model was sure of, since nothing on the
 		// site confirmed the brand, and it is the site's own large icon rather than logo.dev's or the favicon service's
 		// small one. A guess whose hostname spells the brand is not enough.
-		const [guessed, walled] = await fixtures.createTransactions(bankAccount, [
+		const [guessed, walled, deep] = await fixtures.createTransactions(bankAccount, [
 			bookedRow('2026-10-03', '-9.00', {
 				description: 'BEA, Betaalpas Exampleshop,PAS123 NR:XX004, 03.10.26/09:00 Example City',
 				transactionType: 'CARD_PAYMENT',
 			}),
 			bookedRow('2026-10-04', '-6.00', {
 				description: 'BEA, Betaalpas Walled Example,PAS123 NR:XX007, 04.10.26/09:00 Example City',
+				transactionType: 'CARD_PAYMENT',
+			}),
+			bookedRow('2026-10-05', '-7.00', {
+				description: 'BEA, Betaalpas Deep Example,PAS123 NR:XX008, 05.10.26/09:00 Example City',
 				transactionType: 'CARD_PAYMENT',
 			}),
 		]);
@@ -725,6 +740,27 @@ describe('Merchant logos', () => {
 		expect(guessedLogo!.retryAfter!.getTime() - guessedLogo!.fetchedAt!.getTime()).toBe(DAY_MS);
 		const guessedResponse = await other.agent.get(`/bank-transactions/${guessed.id}`).expect(200);
 		expect(guessedResponse.body.merchantLogoUrl).toBeNull();
+
+		// A hostname deeper than one short label below its registrable domain is never looked up or fetched.
+		expect(await merchants.findOneByOrFail({accountId: other.id, key: 'deep example'})).toMatchObject({
+			status: 'IDENTIFIED',
+			brand: 'Deep Example',
+			domain: null,
+			domainConfident: false,
+			logoId: null,
+		});
+		expect(await logos.countBy({domain: 'example-shop-example-pay.deep.example.test'})).toBe(0);
+		const requested = [...fetchSpy.mock.calls, ...logoDevSpy.mock.calls].map(([value]) => String(value));
+		expect(requested.filter((value) => value.includes('deep.example.test'))).toEqual([]);
+		const deepResponse = await other.agent.get(`/bank-transactions/${deep.id}`).expect(200);
+		expect(deepResponse.body.merchantLogoUrl).toBeNull();
+
+		// A deep domain already stored is not fetched either, and is not picked up again.
+		const stored = await logos.save(logos.create({domain: 'a.b.example.test'}));
+		await app.get(MerchantLogoService).fetchLogo(stored.id);
+		expect(await logos.findOneByOrFail({id: stored.id})).toMatchObject({status: 'MISSING', retryAfter: null});
+		const storedRequests = [...fetchSpy.mock.calls, ...logoDevSpy.mock.calls].map(([value]) => String(value));
+		expect(storedRequests.filter((value) => value.includes('a.b.example.test'))).toEqual([]);
 	});
 
 	it('keeps merchants pending while both model routes are unavailable, identifies them once one recovers, and records the company of each business', async () => {
@@ -755,12 +791,48 @@ describe('Merchant logos', () => {
 			attempts: 0,
 		});
 
+		// Another owner's merchant is pending at the same time.
+		const neighbour = await createVerifiedAccount(app.getHttpServer(), MAILPIT_API_URL);
+		await fixtures.createTransaction(
+			await fixtures.createBankAccount(await fixtures.createConnection({id: neighbour.id})),
+			bookedRow('2026-10-06', '-5.00', {description: 'Example Pay', transactionType: 'CARD_PAYMENT'}),
+		);
+		await app.get(MerchantLogoService).enqueueForOwnerSafely(neighbour.id);
+		await waitFor(
+			() => queue.getJobCounts('waiting', 'active', 'delayed', 'prioritized'),
+			(counts) => Object.values(counts).every((count) => count === 0),
+		);
+
+		// A job naming both owners' merchants sends only one owner's.
+		const [mine, theirs] = await Promise.all([
+			merchants.findOneByOrFail({accountId: account.id}),
+			merchants.findOneByOrFail({accountId: neighbour.id}),
+		]);
+		identifySpy.mockClear();
+		await app.get(MerchantLogoService).identifyMerchants([mine.id, theirs.id]);
+		expect(identifySpy).toHaveBeenCalledTimes(1);
+		expect(identifySpy.mock.calls[0][0]).toHaveLength(1);
+
 		routesUnavailable = false;
+		identifySpy.mockClear();
 		await app.get(MerchantLogoService).reconcile();
 		const response = await waitFor(
 			() => account.agent.get(`/bank-transactions/${transaction.id}`).expect(200),
 			(result) => result.body.merchantLogoUrl !== null,
 		);
+		await waitFor(
+			() => merchants.findOneBy({accountId: neighbour.id}),
+			(merchant) => merchant?.status === 'IDENTIFIED',
+		);
+		// Each model request holds one owner's merchants.
+		const pendingOwners = await Promise.all(
+			identifySpy.mock.calls.map(async ([inputs]: [MerchantIdentificationInput[]]) => {
+				const rows = await merchants.findBy({id: In(inputs.map(({correlationId}) => correlationId))});
+				return [...new Set(rows.map(({accountId}) => accountId))];
+			}),
+		);
+		expect(pendingOwners.flat()).toEqual(expect.arrayContaining([account.id, neighbour.id]));
+		expect(pendingOwners.every((owners) => owners.length === 1)).toBe(true);
 		// The shared site was fetched once for the first owner; this owner's merchant reuses its logo.
 		expect(response.body.merchantLogoUrl).toMatch(/^\/merchant-logos\//);
 		expect(await logos.countBy({domain: 'shop.example.test'})).toBe(1);
