@@ -1,14 +1,12 @@
-import {BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
-
 import {BANK_TRANSACTION_CATEGORY_META} from '@/features/banking/utils/bank-transaction-category-meta';
 
 import {formatWholeMoney} from './money';
 
 type CategoryKey = keyof typeof BANK_TRANSACTION_CATEGORY_META;
 
+/** A stored category the list no longer has reads as Uncategorized, like a row with no category. */
 export function categoryLabel(key: string) {
-  if (key === BANK_TRANSACTION_UNCATEGORIZED) return 'Uncategorized';
-  return BANK_TRANSACTION_CATEGORY_META[key as CategoryKey]?.label ?? key;
+  return BANK_TRANSACTION_CATEGORY_META[key as CategoryKey]?.label ?? 'Uncategorized';
 }
 
 /** "+€13,139" / "−€2,100" from cents. */

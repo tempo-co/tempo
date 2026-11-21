@@ -109,10 +109,10 @@ test('category save refreshes a drill that did not previously contain the transa
 test('category-only and source-only lists update immediately and are refetched', async () => {
   const updated = {id: 'example-transaction', category: 'OTHER', categorySource: 'MANUAL'};
   const {client, hook} = mutationHarness(updated);
-  const removedKey = bankQueryKeys.transactions({categories: ['FOOD_AND_DRINK']}, undefined);
+  const removedKey = bankQueryKeys.transactions({categories: ['GROCERIES']}, undefined);
   const retainedKey = bankQueryKeys.transactions({categorySources: ['MANUAL']}, undefined);
-  const original = {id: updated.id, category: 'FOOD_AND_DRINK', categorySource: 'MANUAL'};
-  const other = {id: 'example-other-transaction', category: 'FOOD_AND_DRINK'};
+  const original = {id: updated.id, category: 'GROCERIES', categorySource: 'MANUAL'};
+  const other = {id: 'example-other-transaction', category: 'GROCERIES'};
   // The corrected row sits on the second page "Load more" fetched; every page carries the list's total.
   for (const key of [removedKey, retainedKey])
     client.setQueryData(

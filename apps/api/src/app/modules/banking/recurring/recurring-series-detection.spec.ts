@@ -20,7 +20,7 @@ function payment(date: string, amount: string, overrides: Partial<RecurringCandi
 		amountCents: cents,
 		baseAmountCents: cents,
 		name: 'Example Gym',
-		category: 'SUBSCRIPTIONS',
+		category: 'HEALTH',
 		...overrides,
 	};
 }
@@ -1125,31 +1125,43 @@ describe('detectRecurringSeries', () => {
 	});
 
 	it.each([
-		['food', ['FOOD_AND_DRINK', 'FOOD_AND_DRINK']],
-		['shopping', ['SHOPPING', 'SHOPPING']],
-		['uncategorized', [null, null]],
-		['mixed', ['SUBSCRIPTIONS', 'INSURANCE']],
 		['insurance', ['INSURANCE', 'INSURANCE']],
-	] as const)('needs more than two annual payments for %s', (_label, categories) => {
-		for (const amounts of [
-			['120.00', '120.00'],
-			['120.00', '240.00'],
-		]) {
-			const rows = ['2025-03-10', '2026-03-12'].map((date, index) =>
-				payment(date, amounts[index], {category: categories[index]}),
-			);
+		['uncategorized', [null, null]],
+		['mixed', ['HEALTH', 'INSURANCE']],
+		['retail and a service', ['GROCERIES', 'SERVICES']],
+	] as const)('suggests a yearly series from two payments of one amount for %s', (_label, categories) => {
+		const rows = ['2025-03-10', '2026-03-12'].map((date, index) =>
+			payment(date, '120.00', {category: categories[index]}),
+		);
 
-			expect(detectRecurringSeries(rows, TODAY)).toEqual([]);
-		}
+		expect(detectRecurringSeries(rows, TODAY)).toEqual([
+			expect.objectContaining({cadence: 'YEARLY', amountKind: 'FIXED', transactionIds: rows.map(({id}) => id)}),
+		]);
+	});
+
+	it.each([
+		['groceries', ['GROCERIES', 'GROCERIES'], ['120.00', '120.00']],
+		['eating out', ['EATING_OUT', 'EATING_OUT'], ['120.00', '120.00']],
+		['shopping', ['SHOPPING', 'SHOPPING'], ['120.00', '120.00']],
+		['mixed retail', ['GROCERIES', 'SHOPPING'], ['120.00', '120.00']],
+		['two amounts', ['INSURANCE', 'INSURANCE'], ['120.00', '240.00']],
+		['a price change', ['INSURANCE', 'INSURANCE'], ['120.00', '125.00']],
+	] as const)('needs a third annual payment for %s', (_label, categories, amounts) => {
+		const rows = ['2025-03-10', '2026-03-12'].map((date, index) =>
+			payment(date, amounts[index], {category: categories[index]}),
+		);
+
+		expect(detectRecurringSeries(rows, TODAY)).toEqual([]);
 	});
 
 	it.each([
 		[['120.00', '120.00', '120.00'], 'INSURANCE', 'FIXED', '120.00', 1000n],
 		[['120.00', '240.00', '180.00'], 'INSURANCE', 'VARIABLE', '180.00', 1500n],
-		[['120.00', '240.00'], 'SUBSCRIPTIONS', 'VARIABLE', '180.00', 1500n],
+		[['120.00', '120.00', '120.00'], 'GROCERIES', 'FIXED', '120.00', 1000n],
 	] as const)('accepts eligible annual amounts %j in %s', (amounts, category, amountKind, typicalAmount, cost) => {
-		const dates = amounts.length === 2 ? ['2025-03-10', '2026-03-12'] : ['2024-03-10', '2025-03-11', '2026-03-12'];
-		const rows = dates.map((date, index) => payment(date, amounts[index], {category}));
+		const rows = ['2024-03-10', '2025-03-11', '2026-03-12'].map((date, index) =>
+			payment(date, amounts[index], {category}),
+		);
 
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([
 			expect.objectContaining({
@@ -1415,7 +1427,7 @@ describe('detectRecurringSeries', () => {
 		// Two purchases a day apart rule out one bill; the monthly-looking rest must not become one either.
 		const rows = [
 			payment('2026-04-29', '86.52', {...shop, category: 'SHOPPING'}),
-			payment('2026-06-01', '4.99', {...shop, category: 'SUBSCRIPTIONS'}),
+			payment('2026-06-01', '4.99', {...shop, category: 'SERVICES'}),
 			payment('2026-09-01', '86.52', {...shop, category: 'SHOPPING'}),
 			payment('2026-09-28', '121.12', {...shop, category: 'SHOPPING'}),
 			payment('2026-09-29', '0.49', {...shop, category: 'SHOPPING'}),
@@ -1476,7 +1488,7 @@ describe('detectRecurringSeries', () => {
 		const rows = ['61.20', '95.40', '48.10', '120.00', '77.70', '88.30'].map((amount, index) =>
 			payment(isoMonth(2026, 3 + index, 20), amount, {
 				...energy,
-				category: index < 3 ? 'HOUSING_AND_UTILITIES' : 'SUBSCRIPTIONS',
+				category: index < 3 ? 'HOUSING_AND_UTILITIES' : 'SERVICES',
 			}),
 		);
 		expect(detectRecurringSeries(rows, '2026-08-22')).toEqual([
@@ -1554,7 +1566,7 @@ describe('detectRecurringSeries', () => {
 		const shop = {
 			merchantKey: 'EXPENSE:example corner shop',
 			name: 'Example Corner Shop',
-			category: 'SUBSCRIPTIONS',
+			category: 'SERVICES',
 		} as const;
 		const amounts = ['14.10', '31.80', '9.40', '22.25', '18.00', '27.80', '8.15', '33.90'];
 		const rows = amounts.map((amount, index) => payment(isoMonth(2024, 1, 3 + 7 * index), amount, shop));

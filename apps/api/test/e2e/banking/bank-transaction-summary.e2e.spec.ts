@@ -73,16 +73,16 @@ describe('BankTransactionSummary', () => {
 
 		await fixtures.createTransactions(ownerBankAccount, [
 			// Baseline months.
-			bookedRow('2026-07-05', '-20.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-07-05', '-20.00', {category: 'GROCERIES'}),
 			bookedRow('2026-07-10', '1000.00', {category: 'INCOME'}),
-			bookedRow('2026-07-20', '-100.00', {category: 'FOOD_AND_DRINK'}),
-			bookedRow('2026-08-18', '-30.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-07-20', '-100.00', {category: 'GROCERIES'}),
+			bookedRow('2026-08-18', '-30.00', {category: 'GROCERIES'}),
 			bookedRow('2026-08-31', '-300.00'),
 			bookedRow('2026-09-01', '-60.00', {category: 'TRANSFER_OUT'}),
-			bookedRow('2026-09-30', '-15.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-09-30', '-15.00', {category: 'GROCERIES'}),
 			// Viewed month.
-			bookedRow('2026-10-01', '-12.30', {category: 'FOOD_AND_DRINK', description: 'Example filter match'}),
-			bookedRow('2026-10-03', '-7.70', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-10-01', '-12.30', {category: 'GROCERIES', description: 'Example filter match'}),
+			bookedRow('2026-10-03', '-7.70', {category: 'GROCERIES'}),
 			bookedRow('2026-10-05', '-50.00', {category: 'TRANSFER_OUT'}),
 			bookedRow('2026-10-06', '5.00', {category: 'REFUND'}),
 			bookedRow('2026-10-07', '-3.00', {category: null}),
@@ -92,21 +92,21 @@ describe('BankTransactionSummary', () => {
 			bookedRow('2026-10-10', '-40.00', exchange),
 			bookedRow('2026-10-12', '-9.99', {amountInBaseCurrency: null}),
 			// After the cut-off day, and not booked yet.
-			bookedRow('2026-10-19', '-1000.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-10-19', '-1000.00', {category: 'GROCERIES'}),
 			bookedRow(null, '-20.00', {transactionStatus: 'PDNG'}),
 		]);
 		await fixtures.createTransactions(ownerGbpAccount, [
 			bookedRow('2026-10-02', '-10.00', {
 				currency: 'GBP',
 				amountInBaseCurrency: '-11.60',
-				category: 'FOOD_AND_DRINK',
+				category: 'GROCERIES',
 			}),
 		]);
 		await fixtures.createTransactions(otherBankAccount, [
-			bookedRow('2026-09-10', '-40.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-09-10', '-40.00', {category: 'GROCERIES'}),
 			// A credit not categorized yet still counts as income.
 			bookedRow('2026-09-12', '25.00', {category: null}),
-			bookedRow('2026-10-02', '-999.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-10-02', '-999.00', {category: 'GROCERIES'}),
 		]);
 	});
 
@@ -151,7 +151,7 @@ describe('BankTransactionSummary', () => {
 
 		expect(body.categories).toEqual([
 			{category: 'TRANSFER_OUT', spending: '50.00', count: 1, baselineAverage: '20.00'},
-			{category: 'FOOD_AND_DRINK', spending: '31.60', count: 3, baselineAverage: '16.67'},
+			{category: 'GROCERIES', spending: '31.60', count: 3, baselineAverage: '16.67'},
 			{category: 'UNCATEGORIZED', spending: '3.00', count: 1, baselineAverage: null},
 			{category: 'REFUND', spending: '-5.00', count: 1, baselineAverage: null},
 		]);
@@ -205,12 +205,12 @@ describe('BankTransactionSummary', () => {
 			{
 				'filter[search]': 'Example filter',
 				'filter[date][from]': '2026-10-01',
-				'filter[categories][]': 'FOOD_AND_DRINK',
+				'filter[categories][]': 'GROCERIES',
 			},
 			{'filter[categorySources][]': 'AI'},
 			{'filter[financialEventTypes][]': 'CURRENCY_EXCHANGE'},
 			{'filter[categoryStatuses][]': 'FAILED'},
-			{'filter[categories][]': 'FOOD_AND_DRINK'},
+			{'filter[categories][]': 'GROCERIES'},
 			{'filter[bankAccountIds][]': otherBankAccount.id},
 			{'filter[cashFlows][]': 'INTERNAL'},
 			{'filter[baseAmount]': 'MISSING'},
@@ -327,7 +327,7 @@ describe('BankTransactionSummary', () => {
 		expect(body.baseline).toMatchObject({months: ['2026-09'], spendingRangeByThrough: null});
 		expect(body.baseline.daily[17]).toEqual({day: 18, average: '40.00', low: null, high: null});
 		expect(body.categories).toEqual([
-			{category: 'FOOD_AND_DRINK', spending: '999.00', count: 1, baselineAverage: '40.00'},
+			{category: 'GROCERIES', spending: '999.00', count: 1, baselineAverage: '40.00'},
 		]);
 	});
 
@@ -347,7 +347,7 @@ describe('BankTransactionSummary', () => {
 		expect(body.baseline.daily[29]).toEqual({day: 30, average: '75.00', low: '30.00', high: '120.00'});
 		expect(body.categories).toEqual([
 			{category: 'TRANSFER_OUT', spending: '60.00', count: 1, baselineAverage: '0.00'},
-			{category: 'FOOD_AND_DRINK', spending: '15.00', count: 1, baselineAverage: '75.00'},
+			{category: 'GROCERIES', spending: '15.00', count: 1, baselineAverage: '75.00'},
 		]);
 	});
 
@@ -361,10 +361,10 @@ describe('BankTransactionSummary', () => {
 
 	it('includes every day of longer baseline months when viewing completed February', async () => {
 		const extra = await fixtures.createTransactions(ownerBankAccount, [
-			bookedRow('2027-01-28', '-10.00', {category: 'FOOD_AND_DRINK'}),
-			bookedRow('2027-01-31', '-90.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2027-01-28', '-10.00', {category: 'GROCERIES'}),
+			bookedRow('2027-01-31', '-90.00', {category: 'GROCERIES'}),
 			bookedRow('2027-01-31', '300.00', {category: 'INCOME'}),
-			bookedRow('2027-02-01', '-15.00', {category: 'FOOD_AND_DRINK'}),
+			bookedRow('2027-02-01', '-15.00', {category: 'GROCERIES'}),
 		]);
 		try {
 			const {body} = await ownerAgent.get(SUMMARY).query({month: '2027-02', asOf: '2027-03-01'}).expect(200);
@@ -376,7 +376,7 @@ describe('BankTransactionSummary', () => {
 			});
 			expect(body.baseline.daily[27]).toEqual({day: 28, average: '3.33', low: '0.00', high: '10.00'});
 			expect(body.categories).toEqual([
-				{category: 'FOOD_AND_DRINK', spending: '15.00', count: 1, baselineAverage: '33.33'},
+				{category: 'GROCERIES', spending: '15.00', count: 1, baselineAverage: '33.33'},
 			]);
 		} finally {
 			await fixtures.transactions.delete(extra.map(({id}) => id));
@@ -393,9 +393,7 @@ describe('BankTransactionSummary', () => {
 			spendingRangeByThrough: null,
 			incomeByThrough: null,
 		});
-		expect(body.categories).toEqual([
-			{category: 'FOOD_AND_DRINK', spending: '120.00', count: 2, baselineAverage: null},
-		]);
+		expect(body.categories).toEqual([{category: 'GROCERIES', spending: '120.00', count: 2, baselineAverage: null}]);
 	});
 
 	it.each([

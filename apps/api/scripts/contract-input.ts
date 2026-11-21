@@ -2,11 +2,13 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {format, resolveConfig} from 'prettier';
 
+import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
+
 import {toInputContract} from '../src/app/modules/banking/categorization/bank-transaction-categorization-input.schema';
 
 /**
- * Writes the request schemas into the categorization contract's `input`, generated from the API's zod input schema
- * (`docs/categorization.md`).
+ * Writes the request schemas into the categorization contract's `input`, generated from the API's zod input schema,
+ * and the answer's category enum from the shared category list (`docs/categorization.md`).
  *
  *   npm run contract:input
  */
@@ -17,6 +19,7 @@ async function writeContractInput(): Promise<void> {
 	);
 	const contract = JSON.parse(readFileSync(path, 'utf8'));
 	contract.input = toInputContract().input;
+	contract.schema.properties.classifications.items.properties.category.enum = [...BANK_TRANSACTION_CATEGORIES];
 	const {useTabs, tabWidth, printWidth, bracketSpacing, endOfLine} = (await resolveConfig(path)) ?? {};
 	const formatted = await format(JSON.stringify(contract, null, '\t'), {
 		parser: 'json',

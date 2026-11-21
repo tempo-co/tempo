@@ -1913,7 +1913,7 @@ describe('BankConnectionController', () => {
 			categoryStatus: 'COMPLETED',
 		});
 		await bankTransactionRepository.update(storedAi.id, {
-			category: 'FOOD_AND_DRINK',
+			category: 'GROCERIES',
 			categorySource: 'AI',
 			categoryStatus: 'COMPLETED',
 			categoryAppliedInputHash: storedAi.categoryInputHash,
@@ -1946,7 +1946,7 @@ describe('BankConnectionController', () => {
 		});
 		expect(byId.get(storedAi.id)).toMatchObject({
 			bookingDate: '2026-08-26',
-			category: 'FOOD_AND_DRINK',
+			category: 'GROCERIES',
 			categorySource: 'AI',
 			categoryStatus: 'COMPLETED',
 			categoryInputHash: storedAi.categoryInputHash,
@@ -1961,7 +1961,7 @@ describe('BankConnectionController', () => {
 		const described = (row: typeof booked) => ({...row, remittance_information: ['Example Pharmacy card payment']});
 		await synchronizeProviderRows(connection.id, [described(booked), described(bookedAi)]);
 		const rechecked = await bankTransactionRepository.findOneByOrFail({id: storedAi.id});
-		expect(rechecked).toMatchObject({category: 'FOOD_AND_DRINK', categorySource: 'AI', categoryStatus: 'PENDING'});
+		expect(rechecked).toMatchObject({category: 'GROCERIES', categorySource: 'AI', categoryStatus: 'PENDING'});
 		expect(rechecked.categoryInputHash).not.toBe(storedAi.categoryInputHash);
 		expect(await bankTransactionRepository.findOneByOrFail({id: stored.id})).toMatchObject({
 			category: 'GROCERIES',
