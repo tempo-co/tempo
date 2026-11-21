@@ -2988,6 +2988,10 @@ test.describe('statement file import on Connections', () => {
       expect(await look(addOnlyRow)).toEqual(await look(addGroup));
       const [groupBox, rowBox] = await Promise.all([boxOf(addGroup), boxOf(addRow)]);
       expect(Math.abs(groupBox.x + groupBox.width - rowBox.x - rowBox.width)).toBeLessThan(1);
+      // Names the owner adds from wrap in full, so rows that differ only at the end tell apart.
+      await expectWrappedInFull(groups.first().getByText(LONG_ACCOUNT, {exact: true}));
+      await expectWrappedInFull(groups.first().getByText(`${LONG_ACCOUNT} 0`, {exact: true}));
+      await expectWrappedInFull(dialog.getByText(`${LONG_ACCOUNT} 5`, {exact: true}));
       await expectNothingWiderThan(dialog);
       await dialog.getByRole('button', {name: 'Show 6 more'}).click();
       await expect(groups).toHaveCount(56);
@@ -2999,6 +3003,8 @@ test.describe('statement file import on Connections', () => {
       await expect(dialog.getByTestId('bank-import-doubtful-row')).toHaveCount(40);
       // On phones the file row's amount and its choice's amount still share one right edge.
       const block = dialog.getByTestId('bank-import-doubtful-row').first();
+      await expectWrappedInFull(block.getByText(`${LONG_ACCOUNT} payment 0`, {exact: true}));
+      await expectWrappedInFull(block.getByText(LONG_ACCOUNT, {exact: true}));
       const [fileAmount, candidateAmount] = await Promise.all([
         boxOf(block.locator('.numeric').first()),
         boxOf(block.locator('.numeric').last()),
@@ -3081,6 +3087,19 @@ async function expectInsideViewport(page: Page, locator: ReturnType<Page['locato
       return box.y >= 0 && box.y + box.height <= viewport.height;
     })
     .toBe(true);
+}
+
+/** `locator` wraps past two lines and shows all of its text, with no line cut off. */
+async function expectWrappedInFull(locator: Locator) {
+  const {lines, cut} = await locator.evaluate((element) => {
+    const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+    return {
+      lines: Math.round(element.getBoundingClientRect().height / lineHeight),
+      cut: element.scrollHeight > element.clientHeight + 0.5,
+    };
+  });
+  expect(lines).toBeGreaterThan(2);
+  expect(cut).toBe(false);
 }
 
 /** No element in `scope` reaches past the viewport's right edge. */
