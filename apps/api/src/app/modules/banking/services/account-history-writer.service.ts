@@ -108,7 +108,7 @@ export type AddedFileRows<T> = {
  * Opens every write to an owner's transaction history (sync, import, doubtful and never-sent rows, undo) with its
  * locks taken in one order: the sync leases of the synced connections, in id order; then, in the transaction, the
  * reporting-currency lock as its first statement, and the owner's account row and imported-files connection when the
- * write asks for it; then whatever the work locks (an import record and its connection). Account deletion, connection
+ * write asks for it; then whatever the work locks (a sync's own connection, or an import record and its connection). Account deletion, connection
  * removal and authorization lock the account row, then the imported-files connection, before the bank's connections.
  */
 @Injectable()
