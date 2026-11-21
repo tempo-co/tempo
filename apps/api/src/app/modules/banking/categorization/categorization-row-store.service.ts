@@ -1,16 +1,10 @@
 import {Injectable} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {
-	BankTransactionCategorizationSource,
-	BankTransactionCategorizationStatus,
-	BankTransactionCategory,
-} from '@tempo/contracts';
+import type {BankTransactionCategorizationSource} from '@tempo/contracts';
 import {In, IsNull, Repository} from 'typeorm';
 
-import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {chunkArray} from '../banking.utils';
-import {isOwnTransferCategorized, notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
@@ -19,12 +13,17 @@ import {
 	BankTransactionCategorizationProviderError,
 	BankTransactionCategorizationUnavailableError,
 } from './bank-transaction-categorization.provider';
+import {BankTransactionCategorizationInput} from './bank-transaction-categorization.types';
 import {
-	BankTransactionCategorizationInput,
-	BankTransactionCategorizationSearchTrace,
-	CLAIMABLE_CATEGORIZATION_STATUSES,
-	notManualCategorySourceSql,
-} from './bank-transaction-categorization.types';
+	CategoryFieldsUpdate,
+	claimableCondition,
+	isCounterpartyPayment,
+	modelCategorizableSql,
+	modelClaimRenewalValues,
+	modelClaimValues,
+	modelCompletionValues,
+	modelFailureValues,
+} from './category-fields';
 
 export type ClaimedTransaction = {
 	transaction: BankTransaction;
@@ -32,63 +31,16 @@ export type ClaimedTransaction = {
 	inputHash: string;
 };
 
-export type CategorizationUpdate = {
-	category?: BankTransactionCategory | null;
-	categoryStatus?: BankTransactionCategorizationStatus;
-	categorySource?: BankTransactionCategorizationSource | null;
-	categoryConfidence?: string | null;
-	categoryAppliedInputHash?: string | null;
-	categoryProvider?: string | null;
-	categoryModel?: string | null;
-	categoryPromptVersion?: string | null;
-	categorySearchTrace?: BankTransactionCategorizationSearchTrace | null;
-	categoryUpdatedAt?: Date;
-	categoryLastError?: string | null;
-};
+/** The model's answer for a row; the store adds status, source and provenance. */
+export type CompletionValues = Parameters<typeof modelCompletionValues>[0];
 
-export type CompletionValues = Pick<
-	CategorizationUpdate,
-	| 'category'
-	| 'categoryConfidence'
-	| 'categoryProvider'
-	| 'categoryModel'
-	| 'categoryPromptVersion'
-	| 'categorySearchTrace'
->;
-
-/**
- * How long a PROCESSING claim holds before another worker may take the row. The pipeline renews its claims before
- * every provider call after the first, so this only has to outlast one row group (up to two 90 s API calls and a
- * 10 s web search between them) with the database work around it. A worker that died leaves its rows for the next sweep after this.
- */
-const STALE_PROCESSING_AFTER_MS = 15 * 60 * 1000;
 /** Bounds the concurrent hash refreshes so a batch does not take the whole connection pool. */
 const REFRESH_CONCURRENCY = 5;
 const MAX_ERROR_LENGTH = 500;
 
 /**
- * The condition for rows a worker may claim: claimable statuses, or a PROCESSING claim older than the stale window.
- * `alias` qualifies the columns in a select; updates use bare column names.
- */
-export function claimableCondition(
-	alias?: string,
-	statuses: readonly string[] = CLAIMABLE_CATEGORIZATION_STATUSES,
-): {sql: string; parameters: Record<string, unknown>} {
-	const status = alias ? `${alias}."categoryStatus"` : '"categoryStatus"';
-	const updatedAt = alias ? `${alias}."categoryUpdatedAt"` : '"categoryUpdatedAt"';
-	return {
-		sql: `(${status} IN (:...claimableStatuses) OR (${status} = :processingStatus AND (${updatedAt} IS NULL OR ${updatedAt} < :staleBefore)))`,
-		parameters: {
-			claimableStatuses: statuses,
-			processingStatus: 'PROCESSING',
-			staleBefore: new Date(Date.now() - STALE_PROCESSING_AFTER_MS),
-		},
-	};
-}
-
-/**
  * Reads and writes the categorization columns of transaction rows. Every write is guarded: it skips owner-set,
- * own-transfer and currency-exchange rows and rows whose input changed since they were read, so a stale worker never
+ * own-transfer and financial-event rows (see `category-fields.ts`) and rows whose input changed since they were read, so a stale worker never
  * overwrites newer data.
  */
 @Injectable()
@@ -118,19 +70,15 @@ export class CategorizationRowStore {
 		}
 		if (prepared.length === 0) return {claimed: [], error};
 
-		const claimedAt = new Date();
+		const claimValues = modelClaimValues(new Date());
 		const condition = claimableCondition();
-		const result = await this.guardedUpdate(
-			{categoryStatus: 'PROCESSING', categoryUpdatedAt: claimedAt},
-			claimedInputs(prepared),
-		)
+		const result = await this.guardedUpdate(claimValues, claimedInputs(prepared))
 			.andWhere(condition.sql, condition.parameters)
 			.returning('id')
 			.execute();
 		const claimedIds = new Set(((result.raw ?? []) as {id: string}[]).map(({id}) => id));
 		const claimed = prepared.filter(({transaction}) => claimedIds.has(transaction.id));
-		for (const {transaction} of claimed)
-			Object.assign(transaction, {categoryStatus: 'PROCESSING', categoryUpdatedAt: claimedAt});
+		for (const {transaction} of claimed) Object.assign(transaction, claimValues);
 		return {claimed, error};
 	}
 
@@ -140,7 +88,7 @@ export class CategorizationRowStore {
 	 */
 	async renewClaims(batch: readonly ClaimedTransaction[]): Promise<Set<string>> {
 		if (batch.length === 0) return new Set();
-		const result = await this.guardedUpdate({categoryUpdatedAt: new Date()}, claimedInputs(batch))
+		const result = await this.guardedUpdate(modelClaimRenewalValues(), claimedInputs(batch))
 			.andWhere('"categoryStatus" = :processingStatus', {processingStatus: 'PROCESSING'})
 			.returning('id')
 			.execute();
@@ -152,17 +100,11 @@ export class CategorizationRowStore {
 		values: CompletionValues,
 		source: BankTransactionCategorizationSource | null = 'AI',
 	): Promise<void> {
-		const completionValues: CategorizationUpdate = {
-			...values,
-			categoryStatus: 'COMPLETED',
-			categorySource: source,
-			categoryAppliedInputHash: claimed.inputHash,
-			categoryLastError: null,
-		};
+		const completionValues = modelCompletionValues(values, source, claimed.inputHash);
 		const applied = await this.updateWithGuard(
 			claimed.transaction.id,
 			claimed.inputHash,
-			{...completionValues, categoryUpdatedAt: new Date()},
+			completionValues,
 			'PROCESSING',
 		);
 		if (applied) Object.assign(claimed.transaction, completionValues);
@@ -178,13 +120,8 @@ export class CategorizationRowStore {
 		const categoryStatus = error instanceof BankTransactionCategorizationUnavailableError ? 'PENDING' : 'FAILED';
 		await Promise.all(
 			batch.map(async ({transaction, inputHash}) => {
-				const values: CategorizationUpdate = {categoryStatus, categoryLastError: safeMessage};
-				const failed = await this.updateWithGuard(
-					transaction.id,
-					inputHash,
-					{...values, categoryUpdatedAt: new Date()},
-					'PROCESSING',
-				);
+				const values = modelFailureValues(categoryStatus, safeMessage);
+				const failed = await this.updateWithGuard(transaction.id, inputHash, values, 'PROCESSING');
 				if (failed) Object.assign(transaction, values);
 			}),
 		);
@@ -192,12 +129,9 @@ export class CategorizationRowStore {
 
 	/** The row's input and hash once its stored hash is current, or null when it is not for the model. */
 	private async prepare(transaction: BankTransaction): Promise<ClaimedTransaction | null> {
-		// Own transfers get their transfer category from the own-transfer rule, without a model call.
-		if (
-			transaction.financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE ||
-			isOwnTransferCategorized(transaction)
-		)
-			return null;
+		// Own transfers get their transfer category from the own-transfer rule, without a model call; the claim's guard
+		// skips manual rows.
+		if (!isCounterpartyPayment(transaction)) return null;
 
 		const input = toBankTransactionCategorizationInput({
 			...transaction,
@@ -226,24 +160,20 @@ export class CategorizationRowStore {
 		return true;
 	}
 
-	/** An update of the rows `where` selects that skips owner-set, own-transfer and currency-exchange rows. */
-	private guardedUpdate(values: CategorizationUpdate, where: {sql: string; parameters: Record<string, unknown>}) {
+	/** An update of the rows `where` selects that skips owner-set, own-transfer and financial-event rows. */
+	private guardedUpdate(values: CategoryFieldsUpdate, where: {sql: string; parameters: Record<string, unknown>}) {
 		return this.repository
 			.createQueryBuilder()
 			.update(BankTransaction)
 			.set(values)
 			.where(where.sql, where.parameters)
-			.andWhere(notManualCategorySourceSql())
-			.andWhere(notOwnTransferCategorizedSql())
-			.andWhere('"financialEventType" IS DISTINCT FROM :financialEventType', {
-				financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-			});
+			.andWhere(modelCategorizableSql());
 	}
 
 	private async updateWithGuard(
 		id: string,
 		inputHash: string,
-		values: CategorizationUpdate,
+		values: CategoryFieldsUpdate,
 		status?: string,
 	): Promise<boolean> {
 		const query = this.guardedUpdate(values, {sql: 'id = :id', parameters: {id}}).andWhere(

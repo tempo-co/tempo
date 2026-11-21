@@ -18,11 +18,6 @@ export function isManualCategorySource(source: string | null | undefined): boole
 	return source === 'MANUAL';
 }
 
-/** SQL condition for rows whose category automation may still change; `column` is the quoted categorySource. */
-export function notManualCategorySourceSql(column = '"categorySource"'): string {
-	return `${column} IS DISTINCT FROM 'MANUAL'`;
-}
-
 export const BANK_TRANSACTION_CATEGORIZATION_SEARCH_EVIDENCE_TYPES = [
 	'PURCHASE_CONTEXT',
 	'MERCHANT_IDENTITY_ONLY',

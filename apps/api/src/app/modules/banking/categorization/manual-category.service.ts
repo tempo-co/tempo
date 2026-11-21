@@ -1,7 +1,7 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {BankTransactionCategory} from '@tempo/contracts';
-import {Repository} from 'typeorm';
+import {Raw, Repository} from 'typeorm';
 
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
@@ -9,11 +9,10 @@ import {createBankTransactionCategorizationInputHash} from './bank-transaction-c
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
 	BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-	BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
 } from './bank-transaction-categorization.constants';
 import {CategorizationContextLoader, transactionDateSql} from './categorization-context-loader.service';
-import type {CategorizationUpdate} from './categorization-row-store.service';
 import {CategorizationScheduler, ManualCategoryFollowUpJobData} from './categorization-scheduler.service';
+import {historyCategoryValues, historyRecheckValues, manualCategoryValues} from './category-fields';
 import {
 	MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS,
 	ManualCategoryFollowUp,
@@ -98,16 +97,21 @@ export class ManualCategoryService {
 		followUpTransactionIds: readonly string[] = [],
 	): Promise<boolean> {
 		const inputHash = createBankTransactionCategorizationInputHash(transaction);
-		const values: CategorizationUpdate & {categoryInputHash: string} = {
-			...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-			category,
-			categoryStatus: 'COMPLETED',
-			categorySource: 'MANUAL',
-			categoryInputHash: inputHash,
-			categoryAppliedInputHash: inputHash,
-			categoryUpdatedAt: new Date(),
-		};
-		const result = await this.repository.update({id: transaction.id}, values);
+		const values = manualCategoryValues(category, inputHash);
+		const result = await this.repository.update(
+			{
+				id: transaction.id,
+				bankAccountId: Raw(
+					(column) => `${column} IN (
+						SELECT bank_account.id FROM bank_accounts bank_account
+						INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
+						WHERE connection."accountId" = :accountId
+					)`,
+					{accountId},
+				),
+			},
+			values,
+		);
 		if (result.affected === 0) return false;
 		Object.assign(transaction, values);
 		const {merchantKey} = transaction;
@@ -147,26 +151,20 @@ export class ManualCategoryService {
 		);
 		if (followUp.action === 'APPLY') {
 			await query
-				.set({
-					...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-					category: followUp.category,
-					categoryConfidence: '1',
-					categoryProvider: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
-					categoryModel: null,
-					categoryPromptVersion: BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
-					categorySearchTrace: null,
-					categoryStatus: 'COMPLETED',
-					categorySource: 'HISTORY',
-					categoryAppliedInputHash: () => '"categoryInputHash"',
-					categoryUpdatedAt: new Date(),
-				})
+				.set(
+					historyCategoryValues(
+						followUp.category,
+						BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+						BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+					),
+				)
 				.execute();
 			return;
 		}
 
 		const result = await query
 			// The category stays until the model replaces it, so a failed enqueue never leaves a row empty.
-			.set({categoryStatus: 'PENDING', categoryUpdatedAt: new Date()})
+			.set(historyRecheckValues())
 			.returning(['id'])
 			.execute();
 		const ids = ((result.raw ?? []) as {id: string}[]).map(({id}) => id);

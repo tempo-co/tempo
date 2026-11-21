@@ -23,6 +23,7 @@ import {
 } from './bank-transaction-categorization.types';
 import {getMerchantKeyName, getMerchantKeysForName} from './bank-transaction-merchant-key';
 import type {ClaimedTransaction} from './categorization-row-store.service';
+import {counterpartyPaymentSql} from './category-fields';
 import {ManualCategoryCounts, REUSABLE_MANUAL_CATEGORIES} from './manual-category-follow-up';
 
 type ManualCategoryExample = PreviousManualCategory['recentExamples'][number];
@@ -342,8 +343,7 @@ export class CategorizationContextLoader {
 			.innerJoin('transaction.bankAccount', 'bankAccount')
 			.innerJoin('bankAccount.bankConnection', 'connection')
 			.where('connection."accountId" = :accountId', {accountId})
-			.andWhere('transaction."ownTransferEvidence" IS NULL')
-			.andWhere('transaction."financialEventType" IS NULL');
+			.andWhere(counterpartyPaymentSql('transaction'));
 	}
 
 	/**

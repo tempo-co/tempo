@@ -1,14 +1,12 @@
 import {Injectable, Logger} from '@nestjs/common';
+import type {BankTransactionCategory} from '@tempo/contracts';
 import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from 'typeorm';
 
 import type {Account} from '@modules/account/account.entity';
 
 import {BankAccount} from '../bank-account.entity';
 import type {CreditDebitIndicator} from '../bank-transaction-direction';
-import {
-	BANK_TRANSACTION_FINANCIAL_EVENT_TYPES,
-	detectCurrencyExchangeMarker,
-} from '../bank-transaction-financial-event';
+import {detectCurrencyExchangeMarker} from '../bank-transaction-financial-event';
 import {
 	allocateNextBankTransactionStableIdentityKey,
 	assignBankTransactionStableIdentityKeys,
@@ -26,13 +24,9 @@ import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
 } from '../categorization/bank-transaction-categorization-input';
-import {BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES} from '../categorization/bank-transaction-categorization.constants';
-import {
-	isManualCategorySource,
-	notManualCategorySourceSql,
-} from '../categorization/bank-transaction-categorization.types';
+import {isManualCategorySource} from '../categorization/bank-transaction-categorization.types';
+import {manualCategoryValues, modelCategorizableSql, syncRecheckValues} from '../categorization/category-fields';
 import type {ConversionInputs} from '../converted-amounts';
-import {notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import {replaceHiddenSeriesPayments} from '../recurring/recurring-series-hides';
 import type {FinalSyncDays, SyncCoverage} from '../sync-coverage';
@@ -387,8 +381,6 @@ export class BankTransactionPersistenceService {
 			const currentValue = transactionByStableIdentityKey.get(existingTransaction.stableIdentityKey);
 			if (
 				!currentValue ||
-				existingTransaction.financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE ||
-				isManualCategorySource(existingTransaction.categorySource) ||
 				// A row without a stored hash has never been categorized for this input.
 				(existingTransaction.categoryInputHash !== null &&
 					createBankTransactionCategorizationInputHash(
@@ -401,19 +393,19 @@ export class BankTransactionPersistenceService {
 		}
 
 		for (const ids of chunkArray(recheckIds, BATCH_WRITE_CHUNK_SIZE)) {
+			// Eligibility is decided here, at write time, so a label the row gained or lost since the read above counts.
 			// The guards are evaluated per row, so one statement matches per-row updates exactly.
 			await repository
 				.createQueryBuilder()
 				.update(BankTransaction)
-				.set({categoryStatus: 'PENDING', categoryLastError: null})
+				.set(syncRecheckValues())
 				.where('"bankAccountId" = :bankAccountId', {bankAccountId: bankAccount.id})
+				.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
 				.andWhere('id IN (:...ids)', {ids})
-				.andWhere(notManualCategorySourceSql())
-				.andWhere(notOwnTransferCategorizedSql())
+				.andWhere(modelCategorizableSql())
 				.andWhere('"categoryStatus" IN (:...recheckStatuses)', {
 					recheckStatuses: ['COMPLETED', 'FAILED', 'NOT_APPLICABLE'],
 				})
-				.andWhere('"financialEventType" IS NULL')
 				.execute();
 		}
 
@@ -816,15 +808,7 @@ export class BankTransactionPersistenceService {
 				const result = await repository
 					.createQueryBuilder()
 					.update()
-					.set({
-						...BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES,
-						category: edits.category,
-						categoryStatus: 'COMPLETED',
-						categorySource: 'MANUAL',
-						categoryInputHash: inputHash,
-						categoryAppliedInputHash: inputHash,
-						categoryUpdatedAt: new Date(),
-					})
+					.set(manualCategoryValues(edits.category as BankTransactionCategory, inputHash))
 					.where('id = :id', {id: transactionId})
 					.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
 					.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)

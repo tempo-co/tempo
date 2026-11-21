@@ -243,10 +243,15 @@ describe('Currency exchange recompute', () => {
 		});
 	});
 
-	it('returns both legs to categorization when one loses its marker', async () => {
+	it('returns both legs to categorization, stamped with the reset time, when one loses its marker', async () => {
 		const [debit, credit] = await createExchange(owner);
 		await recomputeCount(owner.id);
 		await fixtures.transactions.update(debit.id, {description: 'Corrected provider description'});
+		// An hour-old stamp, so only the reset itself can bring it up to date.
+		await fixtures.transactions.update([debit.id, credit.id], {
+			categoryUpdatedAt: new Date(Date.now() - 3_600_000),
+		});
+		const resetAfter = new Date(Date.now() - 1000);
 
 		const {reclassifiedIds, requeuedIds} = await recompute(owner.id);
 
@@ -261,6 +266,7 @@ describe('Currency exchange recompute', () => {
 				currencyExchangeCounterpartId: null,
 				categoryStatus: 'PENDING',
 			});
+			expect((await stored(leg.id)).categoryUpdatedAt?.getTime()).toBeGreaterThanOrEqual(resetAfter.getTime());
 		}
 	});
 

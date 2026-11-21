@@ -1,7 +1,8 @@
 import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
 import type {WhereExpressionBuilder} from 'typeorm';
 
-import {CLAIMABLE_CATEGORIZATION_STATUSES, notManualCategorySourceSql} from './bank-transaction-categorization.types';
+import {CLAIMABLE_CATEGORIZATION_STATUSES} from './bank-transaction-categorization.types';
+import {modelCategorizableSql} from './category-fields';
 
 /**
  * What a manual correction does to the other rows from the same merchant that the owner selected in the preview:
@@ -69,11 +70,9 @@ export function whereManualCategoryFollowUpCandidates<T extends WhereExpressionB
 			)`,
 			{accountId},
 		)
-		.andWhere(notManualCategorySourceSql())
+		.andWhere(modelCategorizableSql())
 		.andWhere('"categoryStatus" IN (:...followUpStatuses)', {followUpStatuses: FOLLOW_UP_STATUSES})
-		.andWhere('"categoryInputHash" IS NOT NULL')
-		.andWhere('"ownTransferEvidence" IS NULL')
-		.andWhere('"financialEventType" IS NULL');
+		.andWhere('"categoryInputHash" IS NOT NULL');
 	if (followUp.action === 'APPLY') {
 		query.andWhere(
 			// A row that already has the category keeps its source: offering it would change nothing visible.

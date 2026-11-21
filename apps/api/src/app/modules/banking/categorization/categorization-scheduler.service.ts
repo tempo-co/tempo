@@ -16,12 +16,11 @@ import {
 	RECONCILE_BANK_TRANSACTION_CATEGORIZATION_JOB,
 } from '@core/queue/queue.constants';
 
-import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '../bank-transaction-financial-event';
 import {BankTransaction} from '../bank-transaction.entity';
 import {chunkArray, safeErrorName} from '../banking.utils';
 import {BankTransactionCategorizationUnavailableError} from './bank-transaction-categorization.provider';
-import {CLAIMABLE_CATEGORIZATION_STATUSES, notManualCategorySourceSql} from './bank-transaction-categorization.types';
-import {claimableCondition} from './categorization-row-store.service';
+import {CLAIMABLE_CATEGORIZATION_STATUSES} from './bank-transaction-categorization.types';
+import {claimableCondition, isModelCategorizable, modelCategorizableSql} from './category-fields';
 
 export type BankTransactionCategorizationJobData = {
 	transactionIds: string[];
@@ -93,18 +92,19 @@ export class CategorizationScheduler implements OnApplicationBootstrap {
 		if (uniqueIds.length === 0) return;
 
 		const transactions = await this.repository.find({
-			select: {id: true, categoryInputHash: true, financialEventType: true},
+			select: {
+				id: true,
+				categoryInputHash: true,
+				categorySource: true,
+				financialEventType: true,
+				ownTransferEvidence: true,
+			},
 			where: {id: In(uniqueIds)},
 		});
-		const financialEventIds = new Set(
-			transactions
-				.filter(
-					({financialEventType}) =>
-						financialEventType === BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-				)
-				.map(({id}) => id),
+		const excludedIds = new Set(
+			transactions.filter((transaction) => !isModelCategorizable(transaction)).map(({id}) => id),
 		);
-		const categorizationIds = uniqueIds.filter((id) => !financialEventIds.has(id));
+		const categorizationIds = uniqueIds.filter((id) => !excludedIds.has(id));
 		if (categorizationIds.length === 0) return;
 		const inputHashes = new Map(transactions.map(({id, categoryInputHash}) => [id, categoryInputHash]));
 		await this.queue.addBulk(
@@ -157,10 +157,7 @@ export class CategorizationScheduler implements OnApplicationBootstrap {
 			const rows = await this.repository
 				.createQueryBuilder('transaction')
 				.select('transaction.id', 'id')
-				.where(notManualCategorySourceSql('transaction."categorySource"'))
-				.andWhere('transaction."financialEventType" IS DISTINCT FROM :financialEventType', {
-					financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
-				})
+				.where(modelCategorizableSql('transaction'))
 				.andWhere(claimable.sql, claimable.parameters)
 				.getRawMany<{id: string}>();
 

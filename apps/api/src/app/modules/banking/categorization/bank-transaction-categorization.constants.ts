@@ -5,14 +5,3 @@ export const BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER = 'manual-h
 export const BANK_TRANSACTION_CATEGORIZATION_PROVIDER_NAME = 'claude';
 export const BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH = 240;
 export const BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS = 20;
-export const BANK_TRANSACTION_CATEGORIZATION_RESET_VALUES = {
-	category: null,
-	categorySource: null,
-	categoryConfidence: null,
-	categoryAppliedInputHash: null,
-	categoryProvider: null,
-	categoryModel: null,
-	categoryPromptVersion: null,
-	categorySearchTrace: null,
-	categoryLastError: null,
-} as const;
