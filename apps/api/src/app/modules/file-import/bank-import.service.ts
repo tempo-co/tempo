@@ -1263,7 +1263,11 @@ export class BankImportService {
 			const candidate =
 				request.transactionId && question.candidateTransactionIds.includes(request.transactionId)
 					? await transactions.findOne({
-							where: {id: request.transactionId, bankAccountId: question.bankAccountId},
+							where: {
+								id: request.transactionId,
+								bankAccountId: question.bankAccountId,
+								bankAccount: {bankConnection: {accountId: ownerId}},
+							},
 							relations: {bankAccount: {bankConnection: true}},
 						})
 					: null;
