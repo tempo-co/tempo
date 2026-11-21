@@ -134,6 +134,7 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		const dataSource = {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) =>
 				callback({
+					query: jest.fn().mockResolvedValue([]),
 					getRepository: jest.fn((entity: unknown) =>
 						entity === BankConnection ? transactionConnectionRepository : {},
 					),
@@ -200,7 +201,12 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		};
 		const events: string[] = [];
 		const transactionConnectionRepository = {
-			findOne: jest.fn().mockResolvedValueOnce(connection).mockResolvedValueOnce(null),
+			// No imported-files connection, the pending connection, no reusable connection.
+			findOne: jest
+				.fn()
+				.mockResolvedValueOnce(null)
+				.mockResolvedValueOnce(connection)
+				.mockResolvedValueOnce(null),
 			update: jest.fn().mockResolvedValue(undefined),
 			delete: jest.fn().mockResolvedValue(undefined),
 		};
@@ -210,6 +216,7 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		const dataSource = {
 			transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) => {
 				const result = await callback({
+					query: jest.fn().mockResolvedValue([]),
 					getRepository: jest.fn((entity: unknown) =>
 						entity === BankConnection ? transactionConnectionRepository : {findOne: jest.fn()},
 					),

@@ -57,7 +57,7 @@ import {
 import {enableFileImportE2e, getApp, getSessionCookie} from '../../setup/e2e.setup';
 import {createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
-import {waitFor} from '../../utils/wait-utils';
+import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 enableFileImportE2e();
 
@@ -210,6 +210,7 @@ describe('Bank imports', () => {
 
 	let app: INestApplication;
 	let httpServer: Server;
+	let dataSource: DataSource;
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
 	let connections: Repository<BankConnection>;
@@ -221,6 +222,7 @@ describe('Bank imports', () => {
 	beforeAll(() => {
 		app = getApp();
 		httpServer = app.getHttpServer();
+		dataSource = app.get(DataSource);
 		fixtures = new BankingFixtures(app);
 		accounts = app.get(getRepositoryToken(Account));
 		connections = fixtures.connections;
@@ -398,15 +400,6 @@ describe('Bank imports', () => {
 			return recompute(...args);
 		});
 		return {reached, release, restore: () => spy.mockRestore()};
-	}
-
-	/** How many database sessions of the test database wait on a lock. */
-	async function lockWaits() {
-		const [{waiting}] = await transactions.query<Array<{waiting: number}>>(
-			`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
-			WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-		);
-		return waiting;
 	}
 
 	/** The three fields the balance trend reads, as stored. */
@@ -1018,7 +1011,10 @@ describe('Bank imports', () => {
 			await saveReached;
 			const resolution = resolve(row.id);
 			// The resolution then waits on a lock the save holds.
-			await waitFor(lockWaits, (waiting) => waiting > 0);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting > 0,
+			);
 			release();
 
 			expect((await save).status).toBe(200);
@@ -1032,18 +1028,17 @@ describe('Bank imports', () => {
 
 		// Another drop into both accounts pauses once it holds the imported-files connection.
 		const importer = app.get(BankImportService) as unknown as {
-			lockFileConnection: (...args: unknown[]) => Promise<unknown>;
+			resolveTargets: (...args: unknown[]) => Promise<unknown>;
 		};
-		const lockFileConnection = importer.lockFileConnection.bind(importer);
+		const resolveTargets = importer.resolveTargets.bind(importer);
 		let importReached!: () => void;
 		const importHolds = new Promise<void>((resolve) => (importReached = resolve));
 		let releaseImport!: () => void;
 		const importHeld = new Promise<void>((resolve) => (releaseImport = resolve));
-		const importSpy = jest.spyOn(importer, 'lockFileConnection').mockImplementationOnce(async (...args) => {
-			const locked = await lockFileConnection(...args);
+		const importSpy = jest.spyOn(importer, 'resolveTargets').mockImplementationOnce(async (...args) => {
 			importReached();
 			await importHeld;
-			return locked;
+			return resolveTargets(...args);
 		});
 		const leases = jest.spyOn(app.get(BankingConnectionLockService), 'acquire');
 		try {
@@ -1060,7 +1055,7 @@ describe('Bank imports', () => {
 			const resolution = resolve(otherRow.id);
 			// The resolution waits for the drop: for its sync lock, or (out of order) for the connection it holds.
 			await waitFor(
-				async () => ({locks: await lockWaits(), leases: leases.mock.calls.length}),
+				async () => ({locks: await lockWaits(dataSource), leases: leases.mock.calls.length}),
 				({locks, leases: asked}) => locks > 0 || asked > leasesAsked,
 			);
 			releaseImport();
@@ -1121,10 +1116,13 @@ describe('Bank imports', () => {
 		);
 		await imports.update({id: mixed.body.id}, {rowsRemovedBySync: 1});
 		return {
+			owner,
 			agent,
 			synced,
 			fileAccountId,
 			fileConnectionId: (await fileConnection(owner))!.id,
+			importId: mixed.body.id as string,
+			doubtfulId: row.id as string,
 			removedId,
 			addBack: () =>
 				agent
@@ -1143,7 +1141,10 @@ describe('Bank imports', () => {
 			await saveReached;
 			const addedBack = addBack();
 			// The add waits on a lock the save holds, then recomputes the balance over the saved one.
-			await waitFor(lockWaits, (waiting) => waiting > 0);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting > 0,
+			);
 			release();
 
 			expect((await save).status).toBe(200);
@@ -1158,28 +1159,47 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(3);
 	});
 
-	it('refuses to add back a row of a drop into a synced account while that connection syncs, and adds nothing', async () => {
-		const {synced, removedId, addBack} = await keptAccountWithRemovedRow();
+	it('refuses to add back a row of a drop into a synced account while that connection syncs, also once an authorization took the account back to another bank, and adds nothing', async () => {
+		const {owner, synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
 		const syncRuns = await app.get(BankingConnectionLockService).acquire(synced.id);
 		try {
 			const busy = await addBack();
 			expect(busy.status).toBe(409);
 			expect(busy.body).toMatchObject({code: 'account_busy'});
+
+			// The record still hangs on the syncing connection, which no account of the add is on now.
+			const otherBank = await fixtures.createConnection(owner, {
+				aspspName: 'Example Bank',
+				nextSyncAt: new Date('2030-01-01T00:00:00.000Z'),
+			});
+			await bankAccounts.update(fileAccountId, {bankConnection: {id: otherBank.id}});
+			const stillBusy = await addBack();
+			expect(stillBusy.status).toBe(409);
+			expect(stillBusy.body).toMatchObject({code: 'account_busy'});
 		} finally {
 			syncRuns.stop();
 			await syncRuns.release();
 		}
 		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
 	});
+
+	/**
+	 * Moves the account to the connection, as an authorization taking it back to its bank does, when the next write
+	 * asks for a sync lease: after the write read the account, before it holds its locks.
+	 */
+	function takeBackOnNextLease(bankAccountId: string, connectionId: string) {
+		const leaseService = app.get(BankingConnectionLockService);
+		const acquire = leaseService.acquire.bind(leaseService);
+		return jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
+			await bankAccounts.update(bankAccountId, {bankConnection: {id: connectionId}});
+			return acquire(...args);
+		});
+	}
 
 	it('refuses to add back a row whose account an authorization takes back to its bank while the add waits for its locks, and adds nothing', async () => {
 		const {synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
-		const leaseService = app.get(BankingConnectionLockService);
-		const acquire = leaseService.acquire.bind(leaseService);
-		const takenBack = jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
-			await bankAccounts.update(fileAccountId, {bankConnection: {id: synced.id}});
-			return acquire(...args);
-		});
+		const takenBack = takeBackOnNextLease(fileAccountId, synced.id);
 		try {
 			const busy = await addBack();
 			expect(busy.status).toBe(409);
@@ -1189,6 +1209,38 @@ describe('Bank imports', () => {
 		}
 		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
+	});
+
+	it('refuses to answer a doubtful row whose account an authorization takes back to its bank while the answer waits for its locks, and adds nothing', async () => {
+		const {agent, synced, fileAccountId, importId, doubtfulId} = await keptAccountWithRemovedRow();
+		const takenBack = takeBackOnNextLease(fileAccountId, synced.id);
+		try {
+			const busy = await agent
+				.post(`/bank-imports/${importId}/doubtful-rows/${doubtfulId}/resolve`)
+				.set('Origin', ORIGIN)
+				.send({decision: 'new'});
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			takenBack.mockRestore();
+		}
+		expect(await doubtfulRows.findOneByOrFail({id: doubtfulId})).toMatchObject({resolution: null});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
+	});
+
+	it('refuses to undo an import whose account an authorization takes back to its bank while the undo waits for its locks, and removes nothing', async () => {
+		const {agent, synced, fileAccountId, importId, doubtfulId} = await keptAccountWithRemovedRow();
+		const takenBack = takeBackOnNextLease(fileAccountId, synced.id);
+		try {
+			const busy = await agent.delete(`/bank-imports/${importId}`).set('Origin', ORIGIN);
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			takenBack.mockRestore();
+		}
+		expect(await imports.findOneByOrFail({id: importId})).toMatchObject({undoneAt: null});
+		expect(await transactions.countBy({importId})).toBe(1);
+		expect(await doubtfulRows.findOneByOrFail({id: doubtfulId})).toMatchObject({resolution: null});
 	});
 
 	it('keeps an import to its owner', async () => {
@@ -2303,7 +2355,15 @@ describe('Bank imports', () => {
 			transactionId: doubtfulCandidates[3].id,
 		}).expect(200);
 		expect(afterDuplicate.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 5, rowsDoubtful: 1});
+		// The answer adds its row even once bank sync is final for the row's day.
+		const setCoverage = (from: string | null, through: string | null) =>
+			bankAccounts.query(
+				`UPDATE "bank_accounts" SET "syncCoveredFrom" = $2, "syncCoveredThrough" = $3 WHERE "id" = $1`,
+				[account.id, from, through],
+			);
+		await setCoverage('2026-03-01', '2026-03-31');
 		const afterNewDespiteNearby = await resolve(asNewDespiteNearby.id, {decision: 'new'}).expect(200);
+		await setCoverage(accountBefore.syncCoveredFrom, accountBefore.syncCoveredThrough);
 		expect(afterNewDespiteNearby.body).toMatchObject({rowsAdded: 4, rowsAlreadyPresent: 5, rowsDoubtful: 0});
 		await resolve(asNew.id, {decision: 'new'}).expect(409);
 		await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200, []);
@@ -2528,7 +2588,10 @@ describe('Bank imports', () => {
 		await listen();
 		const addingNew = add(final.body.id, [notSentNew.id]).then((reply) => reply);
 		try {
-			await waitFor(lockWaits, (waiting) => waiting === 1);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
 		} finally {
 			commitChange();
 		}

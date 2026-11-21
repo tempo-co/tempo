@@ -12,6 +12,7 @@ import {DataSource, In, Repository} from 'typeorm';
 import {BANK_CONNECTION_SYNC_QUEUE, SYNC_BANK_CONNECTION_JOB} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
+import {AccountDeletionService} from '@modules/account/account-deletion.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
@@ -27,8 +28,8 @@ import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.e
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingBalance, EnableBankingTransaction} from '@modules/banking/enable-banking.types';
+import {AccountHistoryWriterService} from '@modules/banking/services/account-history-writer.service';
 import {BankTransactionAmountConversionQueueService} from '@modules/banking/services/bank-transaction-amount-conversion.queue.service';
-import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
@@ -45,9 +46,9 @@ import {
 import {camt053} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp, loginAgent} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
-import {fetchedTransactions} from '../../utils/banking-utils';
+import {createBankingOwner, fetchedTransactions} from '../../utils/banking-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
-import {waitFor} from '../../utils/wait-utils';
+import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 // Kept accounts take statement files.
 enableFileImportE2e();
@@ -1719,6 +1720,57 @@ describe('BankConnectionController', () => {
 		expect(await bankAccountRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(1);
 	});
 
+	it('completes an authorization of an owner with imported files, then the deletion of their account requested meanwhile', async () => {
+		const dataSource = app.get(DataSource);
+		const owner = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
+		await app.get(AccountHistoryWriterService).write(owner.id, {fileConnection: 'create'}, async () => undefined);
+		const state = await authorize(owner.agent);
+		createSession.mockResolvedValueOnce({
+			sessionId: 'provider-session-deleted-owner',
+			consentValidUntil: '2031-06-01T00:00:00.000Z',
+			aspsp: {name: 'ABN AMRO', country: 'NL'},
+			accounts: [
+				{uid: 'provider-account-deleted-owner', identificationHash: 'hash-deleted-owner', currency: 'EUR'},
+			],
+		});
+		// The pending connection stays locked until the deletion waits too, so both are under way at once.
+		let pendingLocked!: () => void;
+		const holdsPending = new Promise<void>((resolve) => (pendingLocked = resolve));
+		let releasePending!: () => void;
+		const pendingReleased = new Promise<void>((resolve) => (releasePending = resolve));
+		const holder = dataSource.transaction(async (manager) => {
+			await manager.query(
+				`SELECT "id" FROM "bank_connections" WHERE "accountId" = $1 AND "status" = 'PENDING_AUTHORIZATION' FOR UPDATE`,
+				[owner.id],
+			);
+			pendingLocked();
+			await pendingReleased;
+		});
+		await holdsPending;
+		const authorization = request(httpServer).get('/bank-connections/callback').query({state, code: 'code'});
+		const authorized = authorization.then((response) => response);
+		let deletion: Promise<unknown> | undefined;
+		try {
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 1,
+			);
+			deletion = app.get(AccountDeletionService).deleteAccount(owner.id, owner.credentials.password);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting === 2,
+			);
+		} finally {
+			releasePending();
+		}
+		await holder;
+		const [response] = await Promise.all([authorized, deletion]);
+
+		expect(response.headers.location).toBe('http://localhost:5173/bank-connections?result=connected');
+		expect(await dataSource.getRepository(Account).countBy({id: owner.id})).toBe(0);
+		expect(await bankConnectionRepository.countBy({accountId: owner.id})).toBe(0);
+	});
+
 	it('does not expose one account owner’s connections to another account', async () => {
 		const response = await otherVerifiedAgent.get('/bank-connections').expect(200);
 		expect(response.body).toEqual([]);
@@ -2036,34 +2088,35 @@ describe('BankConnectionController', () => {
 		expect(rows.find(({entryReference}) => entryReference === unchanged.entryReference)).toMatchObject(converted);
 	});
 
-	it('writes only rows of the synced account, even when its stored-row snapshot names another account’s row', async () => {
-		const {connection, bankAccount} = await createAuthorizedConnection('scoped-write-session');
-		const {bankAccount: otherBankAccount} = await createAuthorizedConnection('scoped-write-other-session');
+	it('writes converted amounts only to rows of the synced account, leaving another account’s to the conversion', async () => {
+		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const otherBankAccount = await fixtures.createBankAccount(
+			await fixtures.createConnection(owner, {aspspName: 'Example Bank'}),
+		);
 		const [incoming] = makeTransactions('scoped-write');
-		expect(await synchronizeQueued(connection.id, [incoming])).toMatchObject({transactionsAdded: 1});
-		const synced = await bankTransactionRepository.findOneByOrFail({bankAccountId: bankAccount.id});
+		// Stored before methods were recorded, in the reporting currency: the conversion corrects its amount.
 		const otherRow = await fixtures.createTransaction(otherBankAccount, {
-			amount: '-5.00',
+			amount: '-6.00',
 			amountInBaseCurrency: '-5.00',
-			baseAmountMethod: 'SAME',
-			categoryInputHash: 'other-account-input-hash',
-			categoryStatus: 'FAILED',
+			baseAmountMethod: null,
 		});
 		const otherRowBefore = await bankTransactionRepository.findOneByOrFail({id: otherRow.id});
-
-		// The snapshot claims the other account's row holds the synced key, with stale category and amount inputs.
-		const find = bankTransactionRepository.find.bind(bankTransactionRepository);
-		jest.spyOn(bankTransactionRepository, 'find').mockImplementationOnce(async (options) => [
-			...(await find(options)),
-			{...otherRowBefore, stableIdentityKey: synced.stableIdentityKey, amount: '-6.00'},
-		]);
-		await app
-			.get(BankTransactionPersistenceService)
-			.persistTransactions(bankTransactionRepository, bankAccount, [incoming], 'ABN AMRO', 'enable-banking');
+		const writer = app.get(AccountHistoryWriterService);
+		await writer.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
+			writer.recordBankFetch(write, {
+				bankAccount,
+				connection,
+				transactions: [incoming],
+				fetchOptions: {strategy: 'default', dateFrom: incoming.bookingDate},
+				succeeded: false,
+				complete: false,
+				fetchedThrough: dateInAppTimeZone(new Date()),
+			}),
+		);
 
 		expect(await bankTransactionRepository.findOneByOrFail({id: otherRow.id})).toEqual(otherRowBefore);
 		expect(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id})).toEqual([
-			expect.objectContaining({id: synced.id, stableIdentityKey: synced.stableIdentityKey}),
+			expect.objectContaining({amount: '-12.50000000', amountInBaseCurrency: '-12.50', baseAmountMethod: 'SAME'}),
 		]);
 	});
 

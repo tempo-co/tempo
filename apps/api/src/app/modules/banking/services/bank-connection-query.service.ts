@@ -71,6 +71,7 @@ export class BankConnectionQueryService {
 				this.findLastSuccessfulSyncAt(accountId, connectionIds),
 				this.fileAccountBalanceService.findBalanceSources(
 					this.dataSource.manager,
+					accountId,
 					bankAccounts.map((bankAccount) => ({
 						...bankAccount,
 						provider: providers.get(bankAccount.bankConnection.id)!,

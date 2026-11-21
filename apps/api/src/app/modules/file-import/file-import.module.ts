@@ -11,6 +11,7 @@ import {BankImportLayout} from './bank-import-layout.entity';
 import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImport} from './bank-import.entity';
 import {BankImportService} from './bank-import.service';
+import {ImportedRowRecordsService} from './imported-row-records.service';
 import {LayoutMapper} from './mapper/layout-mapper';
 import {ParseRunnerService} from './runner/parse-runner.service';
 
@@ -20,7 +21,14 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 		TypeOrmModule.forFeature([BankImport, BankImportDoubtfulRow, BankImportLayout, BankImportLayoutProposal]),
 		BankingModule,
 	],
-	providers: [BankImportService, BankImportLayoutService, LayoutMapper, ParseRunnerService, BankImportUploadQueue],
+	providers: [
+		BankImportService,
+		BankImportLayoutService,
+		ImportedRowRecordsService,
+		LayoutMapper,
+		ParseRunnerService,
+		BankImportUploadQueue,
+	],
 	controllers: [BankImportController],
 })
 export class FileImportModule {}
