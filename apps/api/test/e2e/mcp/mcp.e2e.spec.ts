@@ -130,6 +130,50 @@ describe('Hosted MCP', () => {
 		});
 	}
 
+	/**
+	 * Streams Redis MONITOR lines over a plain socket. ioredis' monitor() raises a command queue error when a
+	 * monitored line arrives in the same read as the MONITOR reply, which the queue workers' polling makes likely.
+	 */
+	function monitorRedis(redis: Redis, onCommand: (args: string[]) => void) {
+		return new Promise<{stop: () => void; dropped: () => boolean}>((resolve, reject) => {
+			const socket = createConnection({host: redis.options.host, port: redis.options.port!});
+			let buffer = '';
+			let stopped = false;
+			let dropped = false;
+			const refuse = (error: Error) => {
+				socket.destroy();
+				reject(error);
+			};
+			socket.setEncoding('utf8');
+			socket.on('error', refuse);
+			socket.on('close', () => {
+				dropped = !stopped;
+				reject(new Error('Redis closed the MONITOR connection before it started'));
+			});
+			socket.on('data', (chunk: string) => {
+				buffer += chunk;
+				for (let lineEnd = buffer.indexOf('\r\n'); lineEnd >= 0; lineEnd = buffer.indexOf('\r\n')) {
+					const line = buffer.slice(0, lineEnd);
+					buffer = buffer.slice(lineEnd + 2);
+					if (line === '+OK')
+						resolve({
+							stop: () => {
+								stopped = true;
+								socket.destroy();
+							},
+							dropped: () => dropped,
+						});
+					else if (line.startsWith('-')) refuse(new Error(`Redis refused MONITOR: ${line}`));
+					else
+						onCommand(
+							[...line.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(([, arg]) => arg.replace(/\\(.)/g, '$1')),
+						);
+				}
+			});
+			socket.write('MONITOR\r\n');
+		});
+	}
+
 	/** Observe actual Redis commands: unchanged contents alone cannot prove that sessions weren't read. */
 	async function isolated(operation: () => Promise<void>) {
 		const app = getApp();
@@ -146,9 +190,8 @@ describe('Hosted MCP', () => {
 			);
 		};
 		const before = await snapshot();
-		const monitor = await redis.monitor();
 		const sessionCommands: string[] = [];
-		monitor.on('monitor', (_time: string, args: string[]) => {
+		const monitor = await monitorRedis(redis, (args) => {
 			if (args.some((arg) => arg.startsWith(prefix))) sessionCommands.push(args[0]);
 		});
 		const lastSeen = jest.spyOn(app.get(SessionService), 'updateLastSeen');
@@ -156,10 +199,11 @@ describe('Hosted MCP', () => {
 			await operation();
 			await redis.ping();
 			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(monitor.dropped()).toBe(false);
 			expect(sessionCommands).toEqual([]);
 			expect(lastSeen).not.toHaveBeenCalled();
 		} finally {
-			monitor.disconnect();
+			monitor.stop();
 			lastSeen.mockRestore();
 		}
 		expect(await snapshot()).toEqual(before);
