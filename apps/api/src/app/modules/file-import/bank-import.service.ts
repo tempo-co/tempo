@@ -530,7 +530,8 @@ export class BankImportService {
 			where: {importId: record.id, kind: 'doubtful', resolution: IsNull()},
 			order: {id: 'ASC'},
 		});
-		const candidateIds = [...new Set(rows.flatMap(({candidateTransactionIds}) => candidateTransactionIds))];
+		const addedSince = await findAddedSince(this.dataSource.manager, ownerId, rows);
+		const candidateIds = [...new Set(rows.flatMap((doubtful) => candidateIdsOf(doubtful, addedSince)))];
 		const candidates = candidateIds.length
 			? await this.dataSource.getRepository(BankTransaction).find({
 					select: {
@@ -554,7 +555,7 @@ export class BankImportService {
 				bankAccountId: doubtful.bankAccountId,
 				importedTransactionId: doubtful.importedTransactionId,
 				row: toFileRow(doubtful.row),
-				candidates: doubtful.candidateTransactionIds.flatMap((id) => {
+				candidates: candidateIdsOf(doubtful, addedSince).flatMap((id) => {
 					const candidate = candidatesById.get(id);
 					if (!candidate || candidate.bankAccountId !== doubtful.bankAccountId) return [];
 					return [
@@ -624,11 +625,16 @@ export class BankImportService {
 				}
 				if (request.decision === 'duplicate') {
 					const transactionId = request.transactionId;
+					const addedSince = await findAddedSince(manager, ownerId, [current]);
 					const candidate =
-						transactionId && current.candidateTransactionIds.includes(transactionId)
+						transactionId && candidateIdsOf(current, addedSince).includes(transactionId)
 							? await manager.getRepository(BankTransaction).findOne({
 									select: {id: true},
-									where: {id: transactionId, bankAccountId: current.bankAccountId},
+									where: {
+										id: transactionId,
+										bankAccountId: current.bankAccountId,
+										bankAccount: {bankConnection: {accountId: ownerId}},
+									},
 								})
 							: null;
 					if (!candidate) throw new BadRequestException(BANK_IMPORT_NOT_A_CANDIDATE);
@@ -1402,6 +1408,51 @@ export class BankImportService {
 			relations: {bankConnection: true},
 		});
 	}
+}
+
+/**
+ * Rows another import added to each held-out doubtful row's account since the question was asked, on its day with its
+ * amount and currency: a re-dropped file's answer `new` may have stored the very payment this question is about.
+ * Oldest first. Rows of the question's own import are other payments of the same file.
+ */
+async function findAddedSince(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	doubtfulRows: readonly BankImportDoubtfulRow[],
+): Promise<Map<BankImportDoubtfulRow['id'], string[]>> {
+	const heldOut = doubtfulRows.filter(({importedTransactionId}) => !importedTransactionId);
+	if (!heldOut.length) return new Map();
+	const found: Array<{doubtfulId: string; transactionId: string}> = await manager.query(
+		`SELECT doubtful."id" AS "doubtfulId", bank_transaction."id" AS "transactionId"
+		FROM "bank_import_doubtful_rows" doubtful
+		JOIN "bank_transactions" bank_transaction
+			ON bank_transaction."bankAccountId" = doubtful."bankAccountId"
+			AND bank_transaction."importId" IS NOT NULL
+			AND bank_transaction."importId" <> doubtful."importId"
+			AND bank_transaction."createdAt" > doubtful."createdAt"
+			AND bank_transaction."amount" = (doubtful."row"->>'amount')::numeric
+			AND bank_transaction."currency" = doubtful."row"->>'currency'
+			AND bank_transaction."bookingDate" = COALESCE(doubtful."row"->>'bookingDate', doubtful."row"->>'valueDate')::date
+		JOIN "bank_accounts" bank_account ON bank_account."id" = bank_transaction."bankAccountId"
+		JOIN "bank_connections" connection
+			ON connection."id" = bank_account."bankConnectionId" AND connection."accountId" = $2
+		WHERE doubtful."id" = ANY($1::uuid[])
+		ORDER BY bank_transaction."createdAt", bank_transaction."id"`,
+		[heldOut.map(({id}) => id), ownerId],
+	);
+	const byDoubtful = new Map<string, string[]>();
+	for (const {doubtfulId, transactionId} of found) {
+		byDoubtful.set(doubtfulId, [...(byDoubtful.get(doubtfulId) ?? []), transactionId]);
+	}
+	return byDoubtful;
+}
+
+/** The question's candidates: those the ladder found, then rows added since (`findAddedSince`). */
+function candidateIdsOf(
+	doubtful: BankImportDoubtfulRow,
+	addedSince: ReadonlyMap<BankImportDoubtfulRow['id'], string[]>,
+): string[] {
+	return [...new Set([...doubtful.candidateTransactionIds, ...(addedSince.get(doubtful.id) ?? [])])];
 }
 
 /**

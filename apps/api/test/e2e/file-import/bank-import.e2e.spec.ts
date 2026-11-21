@@ -2539,8 +2539,6 @@ describe('Bank imports', () => {
 			rowsMatchedByDate: 2,
 			rowsDoubtful: 3,
 		});
-		await agent.delete(`/bank-imports/${again.body.id}`).set('Origin', ORIGIN).expect(204);
-		expect(await doubtfulRows.countBy({importId: again.body.id})).toBe(0);
 
 		const listed = await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200);
 		const candidate = ({id}: BankTransaction) => {
@@ -2605,6 +2603,35 @@ describe('Bank imports', () => {
 		await resolve(asDuplicate.id, {decision: 'duplicate'}).expect(400);
 		const afterNew = await resolve(asNew.id, {decision: 'new'}).expect(200);
 		expect(afterNew.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 4, rowsDoubtful: 2});
+		// The re-dropped file's same question now also offers the row that answer added, and choosing it adds nothing.
+		const [addedAsNew] = await transactions.findBy({importId: imported.body.id, entryReference: 'FILE-REF-6'});
+		const againListed = (await agent.get(`/bank-imports/${again.body.id}/doubtful-rows`).expect(200))
+			.body as Array<{
+			id: string;
+			row: {bankReference: string};
+			candidates: Array<{id: string}>;
+		}>;
+		const againAsNew = againListed.find(({row}) => row.bankReference === 'FILE-REF-6')!;
+		expect(againAsNew.candidates.map(({id}) => id)).toEqual([
+			...doubtfulCandidates.slice(0, 2).map(({id}) => id),
+			addedAsNew.id,
+		]);
+		expect(
+			againListed
+				.filter(({row}) => row.bankReference !== 'FILE-REF-6')
+				.map(({candidates}) => candidates.length)
+				.sort(),
+		).toEqual([1, 2]);
+		const rowsBeforeAnswer = await transactions.countBy({bankAccountId: account.id});
+		const againAnswered = await agent
+			.post(`/bank-imports/${again.body.id}/doubtful-rows/${againAsNew.id}/resolve`)
+			.set('Origin', ORIGIN)
+			.send({decision: 'duplicate', transactionId: addedAsNew.id})
+			.expect(200);
+		expect(againAnswered.body).toMatchObject({rowsAdded: 0, rowsAlreadyPresent: 7, rowsDoubtful: 2});
+		expect(await transactions.countBy({bankAccountId: account.id})).toBe(rowsBeforeAnswer);
+		await agent.delete(`/bank-imports/${again.body.id}`).set('Origin', ORIGIN).expect(204);
+		expect(await doubtfulRows.countBy({importId: again.body.id, resolution: IsNull()})).toBe(0);
 		const afterDuplicate = await resolve(asDuplicate.id, {
 			decision: 'duplicate',
 			transactionId: doubtfulCandidates[3].id,
