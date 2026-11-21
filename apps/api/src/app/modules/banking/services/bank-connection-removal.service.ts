@@ -90,8 +90,14 @@ export class BankConnectionRemovalService {
 				const bankAccountRepository = manager.getRepository(BankAccount);
 				const candidateConnection = await findOwnedConnection(connectionRepository, accountId, connectionId);
 
-				// Lock pending reauthorizations before the existing connection. Callback persistence uses
-				// the same order, so deletion and callback cannot deadlock or recreate the connection.
+				// The imported-files connection first, as history writes and authorization lock it
+				// (`AccountHistoryWriterService`). Then pending reauthorizations before the existing connection.
+				// Callback persistence uses the same order, so deletion and callback cannot deadlock or recreate the
+				// connection.
+				const fileConnection = await connectionRepository.findOne({
+					where: {account: {id: accountId}, provider: BANK_CONNECTION_PROVIDERS.FILE},
+					lock: {mode: 'pessimistic_write'},
+				});
 				const pendingConnections = await connectionRepository.find({
 					where: {
 						account: {id: accountId},
@@ -130,7 +136,7 @@ export class BankConnectionRemovalService {
 				);
 				const kept =
 					isDestructive && keepsAccounts(connection, removal)
-						? await this.moveAccountsToFileConnection(manager, accountId, connection)
+						? await this.moveAccountsToFileConnection(manager, accountId, connection, fileConnection)
 						: [];
 				await connectionRepository.remove(connection);
 				await this.fileAccountBalanceService.recomputeAll(manager, accountId, [
@@ -166,6 +172,8 @@ export class BankConnectionRemovalService {
 		manager: EntityManager,
 		ownerId: Account['id'],
 		connection: BankConnection,
+		/** The owner's imported-files connection the removal locked first; created here when it has none yet. */
+		lockedFileConnection: BankConnection | null,
 	): Promise<BankAccount['id'][]> {
 		const bankAccountRepository = manager.getRepository(BankAccount);
 		const accounts = await bankAccountRepository.find({
@@ -173,7 +181,7 @@ export class BankConnectionRemovalService {
 			order: {id: 'ASC'},
 		});
 		if (accounts.length === 0) return [];
-		const fileConnection = await lockFileConnection(manager, ownerId);
+		const fileConnection = lockedFileConnection ?? (await lockFileConnection(manager, ownerId));
 		// Only a deletion of the whole Tempo account committing in between gets here.
 		if (!fileConnection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
 		const owner = await manager.getRepository(Account).findOneOrFail({

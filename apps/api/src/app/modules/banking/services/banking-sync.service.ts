@@ -63,8 +63,8 @@ import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
-import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
 import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
+import {AccountHistoryWriterService} from './account-history-writer.service';
 import {AspspCatalogService} from './aspsp-catalog.service';
 import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
@@ -150,6 +150,7 @@ export class BankingSyncService {
 		private readonly bankTransactionPersistenceService: BankTransactionPersistenceService,
 		private readonly aspspCatalogService: AspspCatalogService,
 		private readonly derivedDataRefresh: DerivedDataRefreshService,
+		private readonly accountHistoryWriter: AccountHistoryWriterService,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -715,8 +716,8 @@ export class BankingSyncService {
 		}
 
 		const schedulingUpdate = this.getSchedulingUpdate(connection, fetchResult, status, finishedAt);
-		await this.dataSource.transaction(async (manager) => {
-			await lockReportingCurrencyForAmountWrites(manager, connection.accountId);
+		// The run already holds the connection's sync lease.
+		await this.accountHistoryWriter.write(connection.accountId, {}, async ({manager}) => {
 			const connectionRepository = manager.getRepository(BankConnection);
 			const runRepository = manager.getRepository(BankSyncRun);
 			const balanceRepository = manager.getRepository(BankAccountBalance);

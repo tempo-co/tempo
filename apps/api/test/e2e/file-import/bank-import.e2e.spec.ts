@@ -1032,18 +1032,17 @@ describe('Bank imports', () => {
 
 		// Another drop into both accounts pauses once it holds the imported-files connection.
 		const importer = app.get(BankImportService) as unknown as {
-			lockFileConnection: (...args: unknown[]) => Promise<unknown>;
+			resolveTargets: (...args: unknown[]) => Promise<unknown>;
 		};
-		const lockFileConnection = importer.lockFileConnection.bind(importer);
+		const resolveTargets = importer.resolveTargets.bind(importer);
 		let importReached!: () => void;
 		const importHolds = new Promise<void>((resolve) => (importReached = resolve));
 		let releaseImport!: () => void;
 		const importHeld = new Promise<void>((resolve) => (releaseImport = resolve));
-		const importSpy = jest.spyOn(importer, 'lockFileConnection').mockImplementationOnce(async (...args) => {
-			const locked = await lockFileConnection(...args);
+		const importSpy = jest.spyOn(importer, 'resolveTargets').mockImplementationOnce(async (...args) => {
 			importReached();
 			await importHeld;
-			return locked;
+			return resolveTargets(...args);
 		});
 		const leases = jest.spyOn(app.get(BankingConnectionLockService), 'acquire');
 		try {

@@ -200,7 +200,12 @@ describe('BankAuthorizationService authorization state lifecycle', () => {
 		};
 		const events: string[] = [];
 		const transactionConnectionRepository = {
-			findOne: jest.fn().mockResolvedValueOnce(connection).mockResolvedValueOnce(null),
+			// No imported-files connection, the pending connection, no reusable connection.
+			findOne: jest
+				.fn()
+				.mockResolvedValueOnce(null)
+				.mockResolvedValueOnce(connection)
+				.mockResolvedValueOnce(null),
 			update: jest.fn().mockResolvedValue(undefined),
 			delete: jest.fn().mockResolvedValue(undefined),
 		};

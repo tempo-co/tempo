@@ -1,10 +1,12 @@
 import Redis from 'ioredis';
+import {DataSource} from 'typeorm';
 
 import {BANKING_SERVICE_UNAVAILABLE} from '../api/constants/banking-messages.constants';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {BankSyncRun} from '../bank-sync-run.entity';
 import {EnableBankingTransactionsResult} from '../enable-banking.types';
+import {AccountHistoryWriterService} from './account-history-writer.service';
 import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
 import {BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingSyncService} from './banking-sync.service';
@@ -37,6 +39,7 @@ const BANKING_SYNC_SERVICE_DEPENDENCIES = [
 	'bankTransactionPersistenceService',
 	'aspspCatalogService',
 	'derivedDataRefresh',
+	'accountHistoryWriter',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
@@ -44,10 +47,20 @@ const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
 	derivedDataRefresh: {refresh: jest.fn().mockResolvedValue(undefined)},
 };
 
-/** Builds the service with named test doubles; unspecified dependencies are empty objects. */
+/**
+ * Builds the service with named test doubles; unspecified dependencies are empty objects, except the history writer,
+ * which opens its writes on the given data source.
+ */
 function createBankingSyncService(
 	dependencies: Partial<Record<(typeof BANKING_SYNC_SERVICE_DEPENDENCIES)[number], unknown>> = {},
 ): BankingSyncService {
+	dependencies = {
+		accountHistoryWriter: new AccountHistoryWriterService(
+			(dependencies.dataSource ?? {}) as DataSource,
+			(dependencies.connectionLockService ?? {}) as BankingConnectionLockService,
+		),
+		...dependencies,
+	};
 	return new BankingSyncService(
 		...(BANKING_SYNC_SERVICE_DEPENDENCIES.map(
 			(name) => dependencies[name] ?? DEFAULT_DEPENDENCIES[name] ?? {},
