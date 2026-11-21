@@ -59,7 +59,7 @@ function toCategoryFilterValue(key: string): BankTransactionCategoryFilterValue 
 
 /**
  * The spending rows behind one or more breakdown keys between two dates. A stored category the list no longer has
- * opens the uncategorized rows, as its label reads Uncategorized.
+ * opens the uncategorized rows, as its label reads Not categorized.
  */
 export function categoryDrill(
   keys: string | string[],

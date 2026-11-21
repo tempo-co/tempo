@@ -675,7 +675,7 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions');
 
     const filters = await openTransactionFilter(page, 'Categories');
-    await expect(filters.getByRole('option')).toHaveCount(25);
+    await expect(filters.getByRole('option')).toHaveCount(24);
     await page.getByRole('option', {name: 'Eating out', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
@@ -1327,7 +1327,7 @@ test.describe('bank transaction inspector on a fresh account', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(24);
+    await expect(page.getByRole('option')).toHaveCount(23);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
       'Home improvement',
@@ -1352,10 +1352,9 @@ test.describe('bank transaction inspector on a fresh account', () => {
       'Transfer in',
       'Transfer out',
       'Needs review',
-      'Other',
     ]);
     // Every option has a category icon; the selected one also shows a check mark.
-    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(24);
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(23);
     const targetOption = page.getByRole('option', {name: target.name, exact: true});
     await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
     await targetOption.click();

@@ -13,6 +13,7 @@ import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-
 
 import {
   BANK_TRANSACTION_CATEGORY_LABELS,
+  BANK_TRANSACTION_UNCATEGORIZED_LABEL,
   BankTransactionFilterParams,
 } from '../types/bank-transaction';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
@@ -32,7 +33,7 @@ export function BankTransactionCategoryFilter({filters}: {filters: BankTransacti
         <CommandEmpty>No categories found.</CommandEmpty>
         <CommandGroup>
           <CommandItem
-            value='Not categorized'
+            value={BANK_TRANSACTION_UNCATEGORIZED_LABEL}
             onSelect={() => handleSelect(BANK_TRANSACTION_UNCATEGORIZED)}
           >
             <FilterCheckIndicator
@@ -40,7 +41,7 @@ export function BankTransactionCategoryFilter({filters}: {filters: BankTransacti
               className='mr-1'
             />
             <Tags className='h-5 w-5 text-muted-foreground' />
-            <span className='truncate'>Not categorized</span>
+            <span className='truncate'>{BANK_TRANSACTION_UNCATEGORIZED_LABEL}</span>
           </CommandItem>
           {BANK_TRANSACTION_CATEGORIES.map((category) => {
             const isSelected = selectedValues.includes(category);

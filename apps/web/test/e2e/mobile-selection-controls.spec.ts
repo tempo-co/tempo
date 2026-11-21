@@ -47,7 +47,7 @@ test.beforeEach(async ({page}) => {
             bookingDate: '2026-10-05',
             amount: '-10.00',
             currency: 'EUR',
-            category: 'OTHER',
+            category: 'SHOPPING',
             categoryStatus: 'COMPLETED',
             categorySource: 'MANUAL',
             financialEventType: null,

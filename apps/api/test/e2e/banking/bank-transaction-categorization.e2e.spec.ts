@@ -195,7 +195,7 @@ describe('Bank transaction categorization integration', () => {
 			remittanceInformation: 'Fiction and non-fiction',
 		});
 		expect(categorizeSpy.mock.calls[0][1]).toEqual(BANK_TRANSACTION_CATEGORY_DEFINITIONS);
-		// The model chooses from the 24 categories, each described with what it includes and what belongs elsewhere.
+		// The model chooses from the 23 categories, each described with what it includes and what belongs elsewhere.
 		expect(categorizeSpy.mock.calls[0][1].map(({value, label}) => `${value}: ${label}`)).toEqual([
 			'HOUSING_AND_UTILITIES: Housing and utilities',
 			'HOME_IMPROVEMENT: Home improvement',
@@ -220,7 +220,6 @@ describe('Bank transaction categorization integration', () => {
 			'TRANSFER_IN: Transfer in',
 			'TRANSFER_OUT: Transfer out',
 			'NEEDS_REVIEW: Needs review',
-			'OTHER: Other',
 		]);
 		expect(categorizeSpy.mock.calls[0][1]).toEqual(
 			expect.arrayContaining([

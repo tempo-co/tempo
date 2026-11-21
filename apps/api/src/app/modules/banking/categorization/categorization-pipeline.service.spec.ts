@@ -284,7 +284,7 @@ describe('CategorizationPipeline', () => {
 		});
 		const {pipeline, provider} = createCategorizationServices({
 			rows: [transaction],
-			providerResult: [{correlationId: transaction.id, category: 'OTHER', confidence: 0.5}],
+			providerResult: [{correlationId: transaction.id, category: 'NEEDS_REVIEW', confidence: 0.5}],
 		});
 
 		await pipeline.processTransactionJob([transaction.id]);

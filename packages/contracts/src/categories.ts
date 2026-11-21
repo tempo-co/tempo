@@ -22,7 +22,6 @@ export const BANK_TRANSACTION_CATEGORIES = [
 	'TRANSFER_IN',
 	'TRANSFER_OUT',
 	'NEEDS_REVIEW',
-	'OTHER',
 ] as const;
 
 export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
@@ -182,11 +181,13 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'NEEDS_REVIEW',
 		label: 'Needs review',
 		description:
-			'Use when the transaction is real but the available evidence is insufficient or conflicting and its purpose cannot be determined reliably.',
-	},
-	{
-		value: 'OTHER',
-		label: 'Other',
-		description: 'Use when evidence supports that the transaction falls outside the other categories.',
+			'Use when the transaction is real but the available evidence is insufficient or conflicting and its purpose cannot be determined reliably, or when the evidence names a kind of spending that none of the other categories cover.',
 	},
 ];
+
+/** The filter-only `UNCATEGORIZED` value, as category lists the API serves describe it. */
+export const BANK_TRANSACTION_UNCATEGORIZED_DEFINITION = {
+	value: BANK_TRANSACTION_UNCATEGORIZED,
+	label: 'Not categorized',
+	description: 'Filter transactions without a category.',
+} as const;

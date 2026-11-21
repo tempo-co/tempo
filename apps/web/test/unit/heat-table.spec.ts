@@ -129,10 +129,10 @@ test('the heat table model names each income source and opens its rows by source
   });
 });
 
-test('the heat table model shows an unlisted stored category as Uncategorized and opens uncategorized rows', () => {
+test('the heat table model shows an unlisted stored category as Not categorized and opens uncategorized rows', () => {
   const table = model(homeHistory({spending: () => ({RETIRED_CATEGORY: 400})}))!;
   expect(table.top.map((row) => [row.category, row.name])).toEqual([
-    ['RETIRED_CATEGORY', 'Uncategorized'],
+    ['RETIRED_CATEGORY', 'Not categorized'],
   ]);
   expect(table.top[0].cells[0].search?.categories).toEqual(['UNCATEGORIZED']);
 });

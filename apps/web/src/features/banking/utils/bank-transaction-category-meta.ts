@@ -5,7 +5,6 @@ import {
   Banknote,
   BusFront,
   CircleAlert,
-  CircleHelp,
   Clapperboard,
   Gift,
   GraduationCap,
@@ -165,10 +164,5 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'NEEDS_REVIEW',
     CircleAlert,
     'border-muted-foreground/30 bg-muted text-muted-foreground',
-  ),
-  OTHER: createCategoryMeta(
-    'OTHER',
-    CircleHelp,
-    'border-category-other/30 bg-category-other/10 text-category-other',
   ),
 };

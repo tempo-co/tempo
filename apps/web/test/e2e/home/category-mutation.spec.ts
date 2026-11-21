@@ -86,7 +86,7 @@ for (const filters of [
 }
 
 test('category save refreshes a drill that did not previously contain the transaction', async () => {
-  const updated = {id: 'example-transaction', category: 'OTHER', categoryStatus: 'COMPLETED'};
+  const updated = {id: 'example-transaction', category: 'SHOPPING', categoryStatus: 'COMPLETED'};
   const {client, hook} = mutationHarness(updated);
   const key = bankQueryKeys.transactions({cashFlows: ['INCOME']}, undefined);
   client.setQueryData(key, pagesOf({transactions: [], total: 0}));
@@ -107,7 +107,7 @@ test('category save refreshes a drill that did not previously contain the transa
 // A correction can also change the owner's other rows from the same merchant on the server, so every list is
 // refetched after the immediate update.
 test('category-only and source-only lists update immediately and are refetched', async () => {
-  const updated = {id: 'example-transaction', category: 'OTHER', categorySource: 'MANUAL'};
+  const updated = {id: 'example-transaction', category: 'SHOPPING', categorySource: 'MANUAL'};
   const {client, hook} = mutationHarness(updated);
   const removedKey = bankQueryKeys.transactions({categories: ['GROCERIES']}, undefined);
   const retainedKey = bankQueryKeys.transactions({categorySources: ['MANUAL']}, undefined);
@@ -123,7 +123,7 @@ test('category-only and source-only lists update immediately and are refetched',
     const mutation = hook<{
       updateBankTransactionCategory: (input: {id: string; category: string}) => Promise<unknown>;
     }>('use-update-bank-transaction-category.ts', 'useUpdateBankTransactionCategory');
-    await mutation.updateBankTransactionCategory({id: updated.id, category: 'OTHER'});
+    await mutation.updateBankTransactionCategory({id: updated.id, category: updated.category});
     expect(client.getQueryData(removedKey)).toEqual(
       pagesOf({transactions: [other], total: 1}, {transactions: [], total: 1}),
     );
@@ -142,7 +142,7 @@ for (const [filename, exportName, method, input] of [
     'use-update-bank-transaction-category.ts',
     'useUpdateBankTransactionCategory',
     'updateBankTransactionCategory',
-    {id: 'example-transaction', category: 'OTHER'},
+    {id: 'example-transaction', category: 'SHOPPING'},
   ],
   [
     'use-update-bank-transaction-own-transfer.ts',
@@ -158,7 +158,7 @@ for (const [filename, exportName, method, input] of [
   ],
 ] as const) {
   test(`${method} invalidates every cached Home history and review counts`, async () => {
-    const {client, hook} = mutationHarness({id: 'example-transaction', category: 'OTHER'});
+    const {client, hook} = mutationHarness({id: 'example-transaction', category: 'SHOPPING'});
     const keys = [
       dashboardQueryKeys.breakdown('year', 'category', '2007-01-01', '2026-10-04', '2026-10-04'),
       dashboardQueryKeys.breakdown('month', 'source', '2007-01-01', '2026-10-04', '2026-10-04'),

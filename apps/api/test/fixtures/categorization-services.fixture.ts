@@ -88,7 +88,7 @@ export function createCategorizationServices({
 		upsertJobScheduler: jest.fn().mockResolvedValue({}),
 		removeJobScheduler: jest.fn().mockResolvedValue(true),
 	};
-	// Answers each call with the given results for its rows, or OTHER for rows without one.
+	// Answers each call with the given results for its rows, or SHOPPING for rows without one.
 	const provider = {
 		categorize: jest.fn().mockImplementation(async (inputs: readonly BankTransactionCategorizationInput[]) => {
 			if (providerError) throw providerError;
@@ -97,7 +97,7 @@ export function createCategorizationServices({
 					({correlationId}) =>
 						providerResult.find((result) => result.correlationId === correlationId) ?? {
 							correlationId,
-							category: 'OTHER' as const,
+							category: 'SHOPPING' as const,
 							confidence: 0.5,
 						},
 				)

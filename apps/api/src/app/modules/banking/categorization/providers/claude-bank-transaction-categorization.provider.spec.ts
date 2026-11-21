@@ -215,7 +215,12 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(JSON.parse(request.messages[0].content)).toEqual({
 			transactions: [{...transaction, correlationId: '0'}],
 		});
-		expect(request.system[0].text).toContain('Use OTHER only when the evidence names a kind of spending');
+		expect(request.system[0].text).toContain(
+			'or the evidence names a kind of spending that none of the supplied categories cover',
+		);
+		expect(request.system[0].text).toContain(
+			'is NEEDS_REVIEW only when it names a purpose that none of the supplied categories cover',
+		);
 		expect(request.system[0].text).toContain(
 			'previousManualCategories holds a single category other than TRANSFER_OUT',
 		);
@@ -397,8 +402,8 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			.digest('hex')
 			.slice(0, 16);
 		expect({version: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION, promptHash}).toEqual({
-			version: 'bank-transaction-categorization-v21',
-			promptHash: '5522886a28f41b4f',
+			version: 'bank-transaction-categorization-v22',
+			promptHash: '0493e5ad1d3de1f0',
 		});
 	});
 
