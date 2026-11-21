@@ -98,7 +98,10 @@ describe('Bank transaction category impact', () => {
 				categorizedRow('2026-09-05', '-15.00', {category: 'TRAVEL', categorySource: 'HISTORY'}),
 			),
 			// The AI already chose the correction's category, so applying it would change nothing visible.
-			aiSameCategory: await create(ownerAccount, categorizedRow('2026-09-05', '-23.00', {category: 'TRAVEL'})),
+			aiSameCategory: await create(
+				ownerAccount,
+				categorizedRow('2026-09-05', '-23.00', {category: 'TRAVEL', categorySource: 'AI'}),
+			),
 			processing: await create(
 				ownerAccount,
 				categorizedRow('2026-09-04', '-16.00', {categoryStatus: 'PROCESSING'}),
