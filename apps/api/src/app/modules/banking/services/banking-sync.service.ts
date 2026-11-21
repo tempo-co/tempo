@@ -331,7 +331,8 @@ export class BankingSyncService {
 
 				// The run is committed: a lease blip or a disconnect from here on must not report it as failed.
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});
-				if (!completedRun) throw new InternalServerErrorException(BANKING_PERSISTENCE_SYNC_ERROR);
+				// Gone with its connection, which a deletion removed after the write.
+				if (!completedRun) throw new BankingSyncOwnershipLostError();
 
 				return this.toSyncRunResponse(completedRun, persistenceResult.transactionsAdded, fetchResult.rateLimit);
 			} catch (error) {
@@ -725,10 +726,15 @@ export class BankingSyncService {
 			const bankAccountRepository = manager.getRepository(BankAccount);
 			const ownershipCriteria = {
 				id: connection.id,
+				accountId: connection.accountId,
 				syncStatus: BANK_SYNC_STATUSES.RUNNING,
 				syncStartedAt,
 			};
-			const ownedConnection = await connectionRepository.findOne({where: ownershipCriteria});
+			// The connection before its accounts and rows, as account deletion locks them.
+			const ownedConnection = await connectionRepository.findOne({
+				where: ownershipCriteria,
+				lock: {mode: 'pessimistic_write'},
+			});
 			if (!ownedConnection) throw new BankingSyncOwnershipLostError();
 			const observedAt = new Date();
 
