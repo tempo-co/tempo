@@ -215,7 +215,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		});
 		expect(request.system[0].text).toContain('Use OTHER only when the evidence names a kind of spending');
 		expect(request.system[0].text).toContain(
-			'when previousManualCategories holds a single category other than TRANSFER_OUT',
+			'previousManualCategories holds a single category other than TRANSFER_OUT',
 		);
 		expect(request.system[0].text).toContain(
 			'identifies only a payment processor, payment terminal provider or acquirer',
