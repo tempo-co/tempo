@@ -1,21 +1,20 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {DataSource, EntityManager, Repository} from 'typeorm';
+import {DataSource, Repository} from 'typeorm';
 
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
-import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {addDays} from '@modules/banking/banking.utils';
 import {EnableBankingTransaction} from '@modules/banking/enable-banking.types';
 import {lockReportingCurrencyForChange} from '@modules/banking/reporting-currency';
-import {AccountHistoryWriterService} from '@modules/banking/services/account-history-writer.service';
-import {BankConnectionRemovalService} from '@modules/banking/services/bank-connection-removal.service';
 import {
-	BankTransactionInput,
-	BankTransactionPersistenceService,
-} from '@modules/banking/services/bank-transaction-persistence.service';
+	AccountHistoryWrite,
+	AccountHistoryWriterService,
+} from '@modules/banking/services/account-history-writer.service';
+import {BankConnectionRemovalService} from '@modules/banking/services/bank-connection-removal.service';
+import {BankTransactionInput} from '@modules/banking/services/bank-transaction-persistence.service';
 import {BankingConsentRevocationService} from '@modules/banking/services/banking-consent-revocation.service';
 import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
 import {BankImport} from '@modules/file-import/bank-import.entity';
@@ -41,14 +40,12 @@ describe('AccountHistoryWriterService', () => {
 	let dataSource: DataSource;
 	let fixtures: BankingFixtures;
 	let writer: AccountHistoryWriterService;
-	let persistence: BankTransactionPersistenceService;
 
 	beforeAll(() => {
 		app = getApp();
 		dataSource = app.get(DataSource);
 		fixtures = new BankingFixtures(app);
 		writer = app.get(AccountHistoryWriterService);
-		persistence = app.get(BankTransactionPersistenceService);
 	});
 
 	afterEach(() => jest.restoreAllMocks());
@@ -62,25 +59,28 @@ describe('AccountHistoryWriterService', () => {
 		return waiting;
 	}
 
-	/** Writes one row to the account inside the write the writer opened. */
+	/** Records a fetch of one row of the account inside the write the writer opened. */
 	const writeRow = (
-		manager: EntityManager,
+		write: AccountHistoryWrite,
 		account: BankAccount,
 		connection: BankConnection,
 		ref: string,
 		amount = '55.00',
 	) =>
-		persistence.persistTransactions(
-			manager.getRepository(BankTransaction),
-			account,
-			[row(ref, amount)],
-			connection.aspspName,
-		);
+		writer.recordBankFetch(write, {
+			bankAccount: account,
+			connection,
+			transactions: [row(ref, amount)],
+			fetchOptions: {strategy: 'default', dateFrom: '2026-04-01'},
+			succeeded: false,
+			complete: false,
+			fetchedThrough: '2026-04-15',
+		});
 
 	it('waits for a reporting-currency change under way, then stores no amount in the old currency', async () => {
 		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
-		await writer.write(owner.id, {syncedConnectionIds: [connection.id]}, ({manager}) =>
-			writeRow(manager, bankAccount, connection, 'BEFORE'),
+		await writer.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
+			writeRow(write, bankAccount, connection, 'BEFORE'),
 		);
 		expect(await fixtures.transactions.findOneByOrFail({entryReference: 'BEFORE'})).toMatchObject({
 			amountInBaseCurrency: '-55.00',
@@ -97,8 +97,8 @@ describe('AccountHistoryWriterService', () => {
 			await changeHolds;
 		});
 		await changeLocked;
-		const write = writer.write(owner.id, {syncedConnectionIds: [connection.id]}, ({manager}) =>
-			writeRow(manager, bankAccount, connection, 'DURING', '12.50'),
+		const write = writer.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
+			writeRow(write, bankAccount, connection, 'DURING', '12.50'),
 		);
 		try {
 			await waitFor(lockWaits, (waiting) => waiting === 1);
@@ -125,15 +125,11 @@ describe('AccountHistoryWriterService', () => {
 		const secondAccount = await fixtures.createBankAccount(second);
 
 		await Promise.all([
-			writer.write(
-				owner.id,
-				{syncedConnectionIds: [first.id, second.id], fileConnection: 'create'},
-				({manager}) => writeRow(manager, firstAccount, first, 'FIRST'),
+			writer.write(owner.id, {syncedConnectionIds: [first.id, second.id], fileConnection: 'create'}, (write) =>
+				writeRow(write, firstAccount, first, 'FIRST'),
 			),
-			writer.write(
-				owner.id,
-				{syncedConnectionIds: [second.id, first.id], fileConnection: 'create'},
-				({manager}) => writeRow(manager, secondAccount, second, 'SECOND'),
+			writer.write(owner.id, {syncedConnectionIds: [second.id, first.id], fileConnection: 'create'}, (write) =>
+				writeRow(write, secondAccount, second, 'SECOND'),
 			),
 		]);
 
@@ -409,6 +405,70 @@ describe('AccountHistoryWriterService', () => {
 				});
 			},
 		);
+
+		it('gives a fetched row in the reporting currency its own amount, leaves another currency to the conversion, and clears a converted amount whose inputs changed', async () => {
+			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			const onDay = (fields: Partial<EnableBankingTransaction>) =>
+				booked({bookingDate: day(3), valueDate: day(3), ...fields});
+			await recordFetch(owner, connection, bankAccount.id, {
+				dateFrom: day(12),
+				transactions: [
+					onDay({entryReference: 'EUR-1', amount: '12.34'}),
+					{...pending('USD-1', '20.00', day(3)), currency: 'USD'},
+					onDay({entryReference: 'USD-2', currency: 'USD', amount: '30.00'}),
+				],
+			});
+			const amountsOf = async () =>
+				Object.fromEntries(
+					(await rowsOf(bankAccount.id)).map(
+						({entryReference, amountInBaseCurrency, baseAmountMethod, baseAmountRateDate}) => [
+							entryReference,
+							{amountInBaseCurrency, baseAmountMethod, baseAmountRateDate},
+						],
+					),
+				);
+			const unconverted = {amountInBaseCurrency: null, baseAmountMethod: null, baseAmountRateDate: null};
+			const converted = (amountInBaseCurrency: string) => ({
+				amountInBaseCurrency,
+				baseAmountMethod: 'ECB' as const,
+				baseAmountRateDate: day(4),
+			});
+			expect(await amountsOf()).toEqual({
+				'EUR-1': {amountInBaseCurrency: '-12.34', baseAmountMethod: 'SAME', baseAmountRateDate: null},
+				'USD-1': unconverted,
+				'USD-2': unconverted,
+			});
+
+			// As the conversion job leaves them.
+			for (const [entryReference, amount] of [
+				['USD-1', '-18.00'],
+				['USD-2', '-27.00'],
+			]) {
+				await fixtures.transactions.update({bankAccountId: bankAccount.id, entryReference}, converted(amount));
+			}
+			await recordFetch(owner, connection, bankAccount.id, {
+				dateFrom: day(12),
+				transactions: [
+					onDay({entryReference: 'EUR-1', amount: '12.34'}),
+					// Booking moved its dates, so the converted amount is stale.
+					{
+						...pending('USD-1', '20.00', day(3)),
+						currency: 'USD',
+						status: 'BOOK',
+						bookingDate: day(1),
+						bookingDateFilled: false,
+					},
+					// A new description converts the same.
+					onDay({entryReference: 'USD-2', currency: 'USD', amount: '30.00', description: 'Example Shop'}),
+				],
+			});
+
+			expect(await amountsOf()).toEqual({
+				'EUR-1': {amountInBaseCurrency: '-12.34', baseAmountMethod: 'SAME', baseAmountRateDate: null},
+				'USD-1': unconverted,
+				'USD-2': converted('-27.00'),
+			});
+		});
 	});
 
 	describe('adding file rows to an account', () => {
@@ -434,7 +494,7 @@ describe('AccountHistoryWriterService', () => {
 				createdBankAccountIds: [],
 			});
 
-		it("gives a synced account's final days, which end before its oldest pending row, stores the rows as the import's and returns them as a file write", async () => {
+		it("gives a synced account's final days, which end before its oldest pending row, stores the rows as the import's, a row in the reporting currency with its own amount, and returns them as a file write", async () => {
 			const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
 			await fixtures.bankAccounts.update(
 				{id: bankAccount.id},
@@ -454,9 +514,10 @@ describe('AccountHistoryWriterService', () => {
 			const added = await writer.write(owner.id, {syncedConnectionIds: [connection.id]}, (write) =>
 				writer.addFileRows(write, {account, connection, importId: record.id}, async ({finalDays, insert}) => ({
 					finalDays,
-					ids: await insert([fileRow('FILE-1', '5.00', day(30)), fileRow('FILE-2', '6.00', day(30))], {
-						statementNumbering: 'camt053',
-					}),
+					ids: await insert(
+						[fileRow('FILE-1', '5.00', day(30)), {...fileRow('FILE-2', '6.00', day(30)), currency: 'USD'}],
+						{statementNumbering: 'camt053'},
+					),
 				})),
 			);
 
@@ -471,11 +532,16 @@ describe('AccountHistoryWriterService', () => {
 					id: added.result.ids[0],
 					entryReference: 'FILE-1',
 					statementNumbering: 'camt053',
+					amountInBaseCurrency: '-5.00',
+					baseAmountMethod: 'SAME',
 				}),
+				// Another currency waits for the conversion.
 				expect.objectContaining({
 					id: added.result.ids[1],
 					entryReference: 'FILE-2',
 					statementNumbering: 'camt053',
+					amountInBaseCurrency: null,
+					baseAmountMethod: null,
 				}),
 			]);
 			expect(await fixtures.bankAccounts.findOneByOrFail({id: bankAccount.id})).toMatchObject({
@@ -520,6 +586,10 @@ describe('AccountHistoryWriterService', () => {
 				importId: record.id,
 			});
 			expect(Number(added.balance?.currentBalanceAmount)).toBe(95);
+			expect(await fixtures.transactions.findOneByOrFail({id: added.result.ids[0]})).toMatchObject({
+				amountInBaseCurrency: '-5.00',
+				baseAmountMethod: 'SAME',
+			});
 			const stored = await fixtures.bankAccounts.findOneByOrFail({id: kept.id});
 			expect(Number(stored.currentBalanceAmount)).toBe(95);
 			expect(stored.balanceUpdatedAt).toEqual(new Date(`${day(3)}T00:00:00.000Z`));

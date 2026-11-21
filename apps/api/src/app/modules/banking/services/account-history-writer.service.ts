@@ -7,6 +7,7 @@ import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
+import {clearStaleConvertedAmounts, copySameCurrencyAmounts} from '../converted-amounts';
 import type {EnableBankingTransaction, EnableBankingTransactionFetchOptions} from '../enable-banking.types';
 import {AccountHistoryWriteBusyError} from '../errors/account-history-write-busy.error';
 import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
@@ -136,7 +137,8 @@ export class AccountHistoryWriterService {
 
 	/**
 	 * Records one account's bank fetch inside the write, in order: stores the rows by identity (taking over the
-	 * imported rows they land on); after a complete fetch, removes the pending rows of its window it did not return;
+	 * imported rows they land on), clearing converted amounts whose inputs changed and giving rows in the reporting
+	 * currency their own amount; after a complete fetch, removes the pending rows of its window it did not return;
 	 * extends the account's coverage when the provider records any; removes the imported rows the bank never sent from
 	 * the days sync is now final for; and moves the watermark when every page came.
 	 */
@@ -170,6 +172,8 @@ export class AccountHistoryWriterService {
 				connection.aspspName,
 				recordsCoverage ? coverage : null,
 			);
+			await clearStaleConvertedAmounts(manager, bankAccount.id, persisted.previousRows);
+			await copySameCurrencyAmounts(manager, bankAccount.id);
 			transactionsAdded = persisted.transactionsAdded;
 			writtenIds = persisted.persistedTransactionIds;
 			takenOverImportedIds = persisted.takenOverImportedIds;
@@ -221,7 +225,7 @@ export class AccountHistoryWriterService {
 
 	/**
 	 * Adds file rows to one account inside the write: the work gets the account's final sync days, to decide which rows
-	 * are new, and inserts them as rows of the import. Then an account on the imported-files connection (one kept when
+	 * are new, and inserts them as rows of the import, a row in the reporting currency with its own amount. Then an account on the imported-files connection (one kept when
 	 * its bank was removed too) has its balance recomputed from its rows; a synced account keeps the one sync reports.
 	 */
 	async addFileRows<T>(
@@ -242,6 +246,7 @@ export class AccountHistoryWriterService {
 					connection.aspspName,
 					{importId, statementNumbering},
 				);
+				await copySameCurrencyAmounts(manager, account.id, insertedTransactionIds);
 				writtenIds.push(...insertedTransactionIds);
 				return insertedTransactionIds;
 			},
