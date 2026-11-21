@@ -46,7 +46,7 @@ const impact: BankTransactionCategoryImpact = {
     bookingDate: null,
     amount: '-12.00',
     currency: 'EUR',
-    category: index === 1 ? 'FOOD_AND_DRINK' : 'SHOPPING',
+    category: index === 1 ? 'EATING_OUT' : 'SHOPPING',
     categorySource: 'AI',
     categoryStatus: 'COMPLETED',
   })),
@@ -163,7 +163,7 @@ for (const viewport of [
       await expect(dialog).toContainText('This payment moves');
       await expect(dialog).toContainText('3 other Example Shop payments can follow:');
       const shopping = dialog.getByRole('checkbox', {name: 'Shopping to Travel', exact: true});
-      const food = dialog.getByRole('checkbox', {name: 'Food and drink to Travel', exact: true});
+      const food = dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
       await expect(shopping).toBeChecked();
       await expect(food).toBeChecked();
       // Each group's payments stay folded until its count is opened.
@@ -251,7 +251,7 @@ for (const viewport of [
         // A cancelled selection is not held locally: a fresh correction starts with all ticked again.
         await chooseTravel(page);
         await expect(
-          dialog.getByRole('checkbox', {name: 'Food and drink to Travel', exact: true}),
+          dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true}),
         ).toBeChecked();
       });
     }
@@ -537,7 +537,7 @@ for (const viewport of [
         state.saveStatus = status;
         await chooseTravel(page);
         const dialog = impactDialog(page);
-        const food = dialog.getByRole('checkbox', {name: 'Food and drink to Travel', exact: true});
+        const food = dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
         await food.uncheck();
         const move = dialog.getByRole('button', {name: 'Move 2 to Travel', exact: true});
         await move.click();
