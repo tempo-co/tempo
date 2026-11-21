@@ -1760,6 +1760,13 @@ describe('Bank imports', () => {
 		expect(await transactions.countBy({bankAccountId: account.id})).toBe(1);
 		expect(await imports.countBy({accountId: owner.id})).toBe(1);
 
+		// The file named is the one disagreeing with the account's bank, even when it comes before one agreeing with it.
+		const older = await drop(agent, [
+			localAccountStatement('EXMPNL2A', [debit('3.00', '2026-10-01', 'Example Shop')]),
+			localAccountStatement('EXMPDEFF', [debit('4.00', '2026-10-25', 'Example Shop')]),
+		]).expect(422);
+		expect(older.body).toMatchObject({code: 'account_bank_conflict', file: 1});
+
 		const unnamed = await drop(agent, [
 			localAccountStatement(null, [debit('7.00', '2026-11-20', 'Example Shop')]),
 		]).expect(201);
@@ -1767,7 +1774,7 @@ describe('Bank imports', () => {
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
 	});
 
-	it('forgets the bank an account recorded from files when an import of it is undone, until another import gives one', async () => {
+	it('records on an account made from files the strongest bank its imports that are not undone give', async () => {
 		const {agent} = await createOwner();
 		const first = await drop(agent, [
 			localAccountStatement(null, [debit('1.00', '2026-09-01', 'Example Shop')]),
@@ -1789,15 +1796,29 @@ describe('Bank imports', () => {
 		]).expect(201);
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
 
-		// Undoing either import that gave the bank forgets it, so any later statement of the account is taken.
+		// Undoing one import that gave the bank, or one that gave none, leaves the bank the others give.
 		await undo(agent, again.body.id);
-
-		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: null});
-		const later = await drop(agent, [
-			localAccountStatement('EXMPNL2A', [debit('6.00', '2026-10-10', 'Example Shop')]),
+		const unnamed = await drop(agent, [
+			localAccountStatement(null, [debit('5.00', '2026-10-05', 'Example Shop')]),
 		]).expect(201);
-		expect(later.body).toMatchObject({accounts: [{id: account.id, created: false}]});
-		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPNL2A'});
+		await undo(agent, unnamed.body.id);
+
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+		const other = await drop(agent, [
+			localAccountStatement('EXMPNL2A', [debit('6.00', '2026-10-10', 'Example Shop')]),
+		]).expect(422);
+		expect(other.body).toMatchObject({code: 'account_bank_conflict', file: 1});
+		expect(await transactions.countBy({bankAccountId: account.id})).toBe(2);
+
+		// A bank's name, from an import the owner routes to the account, is stronger than a BIC until it is undone.
+		const named = await drop(agent, [revolutStatement([['2026-10-27', '-7.00', 'EUR']])])
+			.field('accountChoices', JSON.stringify({'Revolut:EUR': account.id}))
+			.expect(201);
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'name:revolut'});
+
+		await undo(agent, named.body.id);
+
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
 	});
 
 	it('refuses a drop whose statements give one local account number two banks, even as copies of one statement', async () => {

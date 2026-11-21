@@ -84,8 +84,14 @@ function splitStatements(text: string): RawStatement[] {
 	// The header above the statements since the last one ended: a statement after a `-` or `-}` has only its own.
 	let messageHeader: string[] = [];
 	let current: RawStatement | null = null;
-	for (const line of text.split(/\r?\n/)) {
+	const lines = text.split(/\r?\n/);
+	lines.forEach((line, index) => {
 		const tag = TAG.exec(line);
+		if (!tag && startsHeader(lines, index)) {
+			// A header starts the next message, so the statement before ends here even without its `-`.
+			messageHeader = [];
+			current = null;
+		}
 		if (tag?.[1] === '20') {
 			// A statement with no header lines of its own shares the header of the statement before it in one message.
 			if (header.length > 0) messageHeader = header;
@@ -106,8 +112,16 @@ function splitStatements(text: string): RawStatement[] {
 		} else if (line.trim()) {
 			header.push(line.trim());
 		}
-	}
+	});
 	return statements;
+}
+
+/** A SWIFT basic header (`{1:`), a message type line (`940`), or a BIC on the line above one. */
+function startsHeader(lines: readonly string[], index: number): boolean {
+	const line = lines[index].trim();
+	if (line.startsWith('{1:') || line === '940') return true;
+	const next = lines.slice(index + 1).find((later) => later.trim());
+	return institutionBic(line) !== null && next?.trim() === '940';
 }
 
 /** The `:61:` line, its supplementary details line if any, and the lines of each `:86:` field after it. */

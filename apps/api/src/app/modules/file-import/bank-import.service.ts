@@ -53,7 +53,7 @@ import {fileAccountProviderId} from '@modules/banking/services/file-connection';
 import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
-import {BankImport} from './bank-import.entity';
+import {BankImport, BankImportBankIdentity} from './bank-import.entity';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
 import {CSV_LAYOUTS} from './parsers/csv-layouts';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
@@ -74,6 +74,8 @@ const BANK_IMPORT_NOT_SAVED = 'The import could not be saved. Please try again.'
 const BANK_IMPORT_DOUBTFUL_ROW_RESOLVED = 'This row has already been decided.';
 const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may be.';
 const BANK_IMPORT_ROW_ADDED = 'One of these rows has already been added.';
+/** How the identification hash of an account made from files starts. */
+const FILE_IDENTIFICATION_PREFIX = 'file:';
 /**
  * A statement that names no account, routed by its bank to a synced account, is only checked against that account
  * when at least this many of its rows fall within the dates the account already holds; with fewer there is too little
@@ -116,8 +118,8 @@ type AccountRows = {
 	bankIdentity: BankIdentity | null;
 	/**
 	 * Each piece of bank evidence its statements give, with the 1-based file of the first statement giving it. For an
-	 * account named by an id that is no IBAN, at most one name and one BIC (`groupByAccount`), checked against the
-	 * bank the stored account records (`recordBankIdentities`).
+	 * account named by an id that is no IBAN, checked against the bank the stored account records, then against each
+	 * other (`refuseBankConflicts`).
 	 */
 	bankEvidence: Array<{identity: BankIdentity; file: number}>;
 	currency: string;
@@ -266,6 +268,7 @@ export class BankImportService {
 						rowsNotInBank: 0,
 						dateFrom: bookingDates[0] ?? null,
 						dateTo: bookingDates.at(-1) ?? null,
+						bankIdentities: fileBankEvidence(accountStatements),
 						...recordedAccounts(
 							accounts.map(({account, connection, created}, index) => ({
 								bankAccountId: account.id,
@@ -292,7 +295,11 @@ export class BankImportService {
 					}),
 				);
 
-				await recordBankIdentities(manager, ownerId, accountStatements);
+				await refreshFileBankIdentities(
+					manager,
+					ownerId,
+					accounts.map(({account}) => account),
+				);
 
 				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
@@ -485,20 +492,14 @@ export class BankImportService {
 					[record.id, ownerId],
 				);
 				await manager.getRepository(BankImportDoubtfulRow).delete({importId: record.id, resolution: IsNull()});
-				// The bank its accounts record from files may have come from this import, so it goes; the next import
-				// gives it again. An account kept from a bank connection carries the bank's hash and keeps that bank.
-				await manager.query(
-					`UPDATE "bank_accounts" SET "bankIdentity" = NULL
-					WHERE "id" = ANY($1) AND "bankIdentity" IS NOT NULL AND "identificationHash" LIKE 'file:%'
-						AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $3)`,
-					[record.bankAccountIds, ownerId, BANK_CONNECTION_PROVIDERS.FILE],
-				);
 				await manager
 					.getRepository(BankImport)
 					.update(
 						{id: record.id, accountId: ownerId},
 						{undoneAt: new Date(), rowsDoubtful: 0, rowsNotInBank: 0, rowsRemovedBySync: 0},
 					);
+				// The bank its accounts made from files record goes back to what their other imports give.
+				await refreshFileBankIdentities(manager, ownerId, ownedAccounts);
 				if (fileConnection) {
 					await manager.query(
 						`DELETE FROM "bank_accounts" bank_account
@@ -1217,7 +1218,7 @@ export class BankImportService {
 			bankAccounts.create({
 				bankConnection: {id: connection.id},
 				providerAccountId: identity.providerAccountId,
-				identificationHash: `file:${createHash('sha256').update(identity.hashSeed).digest('hex')}`,
+				identificationHash: `${FILE_IDENTIFICATION_PREFIX}${createHash('sha256').update(identity.hashSeed).digest('hex')}`,
 				iban: rows.iban,
 				name: identity.name,
 				currency: rows.currency,
@@ -1483,14 +1484,8 @@ function groupByAccount(
 			parts: [],
 		};
 		const identity = statementBankIdentity(statement, learnedBanks);
-		const file = evidenceFiles.get(statement)!;
-		// An id that is no IBAN is unique only at its bank: statements giving it two banks are two banks' accounts,
-		// which Tempo cannot tell apart, so the drop is refused.
-		if (kind === 'other' && group.bankEvidence.some((known) => differentBanks(known.identity, identity))) {
-			throw new BankImportRefusalException('account_bank_conflict', file);
-		}
 		if (identity && !group.bankEvidence.some((known) => known.identity === identity)) {
-			group.bankEvidence.push({identity, file});
+			group.bankEvidence.push({identity, file: evidenceFiles.get(statement)!});
 		}
 		group.bankIdentity = strongerBankIdentity(group.bankIdentity, identity);
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
@@ -1650,38 +1645,72 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 type AccountStatements = ImportedAccount & {rows: AccountRows};
 
 /**
- * Refuses the drop with `account_bank_conflict` when a statement naming an imported-files account by an id that is no
- * IBAN gives evidence of another bank than the account records, of the same kind (`differentBanks`): the same id at
- * another bank. Names the file that gave the evidence.
+ * Refuses the drop with `account_bank_conflict` when statements naming an account by an id that is no IBAN give
+ * evidence of two banks of the same kind (`differentBanks`): the same id at another bank, which Tempo cannot tell
+ * apart. A statement disagreeing with the bank the imported-files account records is named first, then a later
+ * statement disagreeing with an earlier one of the drop.
  */
 function refuseBankConflicts(statementsByAccount: readonly AccountStatements[]): void {
-	for (const {account, connection, rows} of statementsByAccount) {
-		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || rows.iban || rows.bank) continue;
+	const local = statementsByAccount.filter(({rows}) => !rows.iban && !rows.bank);
+	for (const {account, connection, rows} of local) {
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
 		const conflict = rows.bankEvidence.find(({identity}) => differentBanks(account.bankIdentity, identity));
+		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
+	}
+	for (const {rows} of local) {
+		const conflict = rows.bankEvidence.find(({identity}, index) =>
+			rows.bankEvidence.slice(0, index).some((known) => differentBanks(known.identity, identity)),
+		);
 		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
 	}
 }
 
 /**
- * Records on each imported-files account without a bank the strongest evidence of the drop's statements routed to it
- * (`strongerBankIdentity` over all of them, so their order does not matter), inside the import's transaction. An
- * account of a bank connection records its connection's bank, and one with a bank keeps it.
+ * An account made from files, by its hash: one kept from a bank connection carries that bank's hash and bank, and a
+ * synced account its IBAN's.
  */
-async function recordBankIdentities(
+function madeFromFiles(account: BankAccount): boolean {
+	return account.identificationHash.startsWith(FILE_IDENTIFICATION_PREFIX);
+}
+
+/** Per account made from files, the strongest bank the drop's statements routed to it give (`strongerBankIdentity`). */
+function fileBankEvidence(statementsByAccount: readonly AccountStatements[]): BankImportBankIdentity[] {
+	const evidence = new Map<BankAccount['id'], BankIdentity>();
+	for (const {account, rows} of statementsByAccount) {
+		if (!madeFromFiles(account)) continue;
+		const identity = strongerBankIdentity(evidence.get(account.id) ?? null, rows.bankIdentity);
+		if (identity) evidence.set(account.id, identity);
+	}
+	return [...evidence].map(([bankAccountId, bankIdentity]) => ({bankAccountId, bankIdentity}));
+}
+
+/**
+ * Records on each of `accounts` made from files the strongest bank its imports that are not undone give, or none,
+ * inside the write's transaction. An account kept from a bank connection keeps its connection's bank.
+ */
+async function refreshFileBankIdentities(
 	manager: EntityManager,
 	ownerId: Account['id'],
-	statementsByAccount: readonly AccountStatements[],
+	accounts: readonly BankAccount[],
 ): Promise<void> {
-	const evidence = new Map<BankAccount['id'], {account: BankAccount; identity: BankIdentity}>();
-	for (const {account, connection, rows} of statementsByAccount) {
-		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || account.bankIdentity) continue;
-		const identity = strongerBankIdentity(evidence.get(account.id)?.identity ?? null, rows.bankIdentity);
-		if (identity) evidence.set(account.id, {account, identity});
-	}
-	for (const {account, identity} of evidence.values()) {
+	const fromFiles = [...new Map(accounts.filter(madeFromFiles).map((account) => [account.id, account])).values()];
+	if (fromFiles.length === 0) return;
+	const evidence = await manager.query<BankImportBankIdentity[]>(
+		`SELECT evidence->>'bankAccountId' AS "bankAccountId", evidence->>'bankIdentity' AS "bankIdentity"
+		FROM "bank_imports" record, jsonb_array_elements(record."bankIdentities") evidence
+		WHERE record."accountId" = $1 AND record."undoneAt" IS NULL AND evidence->>'bankAccountId' = ANY($2::text[])`,
+		[ownerId, fromFiles.map(({id}) => id)],
+	);
+	for (const account of fromFiles) {
+		const identity = evidence
+			.filter(({bankAccountId}) => bankAccountId === account.id)
+			.reduce<BankIdentity | null>(
+				(strongest, {bankIdentity}) => strongerBankIdentity(strongest, bankIdentity),
+				null,
+			);
 		await manager.query(
 			`UPDATE "bank_accounts" SET "bankIdentity" = $3
-			WHERE "id" = $1 AND "bankIdentity" IS NULL
+			WHERE "id" = $1 AND "bankIdentity" IS DISTINCT FROM $3
 				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
 			[account.id, ownerId, identity, BANK_CONNECTION_PROVIDERS.FILE],
 		);

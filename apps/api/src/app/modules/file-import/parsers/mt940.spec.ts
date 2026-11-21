@@ -475,6 +475,7 @@ describe('parseMt940', () => {
 			'statements of one SWIFT message with nothing between them share its header',
 			SWIFT_HEADER,
 			null,
+			[],
 			'-}',
 			'EXMPDEFF',
 		],
@@ -482,31 +483,56 @@ describe('parseMt940', () => {
 			'a bare statement after a headed one ended by - has no header',
 			['EXMPDEFF', '940', 'EXMPDEFF'],
 			'-',
+			[],
 			'-',
 			null,
 		],
-		['a bare statement after a SWIFT message closed by -} has no header', SWIFT_HEADER, '-}', '-', null],
-	])('reads the BIC of a header above the statements: %s', (_caseName, header, firstEnd, secondEnd, secondBic) => {
-		const block = (iban: string, end: string | null) =>
-			[
-				':20:EXAMPLE',
-				`:25:${iban}`,
-				':28C:00001/001',
-				':60F:C261005EUR100,00',
-				':61:261005D10,00NTRFNONREF',
-				':86:Example Shop',
-				':62F:C261005EUR90,00',
-				...(end === null ? [] : [end]),
+		['a bare statement after a SWIFT message closed by -} has no header', SWIFT_HEADER, '-}', [], '-', null],
+		[
+			'a statement under its own BIC header right after one with no - has its own',
+			['EXMPDEFF', '940', 'EXMPDEFF'],
+			null,
+			['EXMPBEBB', '940', 'EXMPBEBB'],
+			'-',
+			'EXMPBEBB',
+		],
+		[
+			'a SWIFT message right after a statement with no -} has its own header',
+			SWIFT_HEADER,
+			null,
+			['{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:'],
+			'-}',
+			'EXMPBEBB',
+		],
+	])(
+		'reads the BIC of a header above the statements: %s',
+		(_caseName, header, firstEnd, secondHeader, secondEnd, secondBic) => {
+			const block = (iban: string, end: string | null) =>
+				[
+					':20:EXAMPLE',
+					`:25:${iban}`,
+					':28C:00001/001',
+					':60F:C261005EUR100,00',
+					':61:261005D10,00NTRFNONREF',
+					':86:Example Shop',
+					':62F:C261005EUR90,00',
+					...(end === null ? [] : [end]),
+				].join('\r\n');
+			const file = [
+				...header,
+				block(OTHER_EXAMPLE_IBAN, firstEnd),
+				...secondHeader,
+				block(POLISH_IBAN, secondEnd),
 			].join('\r\n');
-		const file = [...header, block(OTHER_EXAMPLE_IBAN, firstEnd), block(POLISH_IBAN, secondEnd)].join('\r\n');
 
-		expect(
-			parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic}) => [accountIban, servicerBic]),
-		).toEqual([
-			[OTHER_EXAMPLE_IBAN, 'EXMPDEFF'],
-			[POLISH_IBAN, secondBic],
-		]);
-	});
+			expect(
+				parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic}) => [accountIban, servicerBic]),
+			).toEqual([
+				[OTHER_EXAMPLE_IBAN, 'EXMPDEFF'],
+				[POLISH_IBAN, secondBic],
+			]);
+		},
+	);
 
 	it('finds the statement after blank lines and a header', () => {
 		const file = statement([':61:261005D10,00NTRFNONREF', ':86:Example Shop'], '90,00', [
