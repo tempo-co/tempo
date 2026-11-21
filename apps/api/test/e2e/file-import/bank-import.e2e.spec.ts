@@ -2302,7 +2302,15 @@ describe('Bank imports', () => {
 			transactionId: doubtfulCandidates[3].id,
 		}).expect(200);
 		expect(afterDuplicate.body).toMatchObject({rowsAdded: 3, rowsAlreadyPresent: 5, rowsDoubtful: 1});
+		// The answer adds its row even once bank sync is final for the row's day.
+		const setCoverage = (from: string | null, through: string | null) =>
+			bankAccounts.query(
+				`UPDATE "bank_accounts" SET "syncCoveredFrom" = $2, "syncCoveredThrough" = $3 WHERE "id" = $1`,
+				[account.id, from, through],
+			);
+		await setCoverage('2026-03-01', '2026-03-31');
 		const afterNewDespiteNearby = await resolve(asNewDespiteNearby.id, {decision: 'new'}).expect(200);
+		await setCoverage(accountBefore.syncCoveredFrom, accountBefore.syncCoveredThrough);
 		expect(afterNewDespiteNearby.body).toMatchObject({rowsAdded: 4, rowsAlreadyPresent: 5, rowsDoubtful: 0});
 		await resolve(asNew.id, {decision: 'new'}).expect(409);
 		await agent.get(`/bank-imports/${imported.body.id}/doubtful-rows`).expect(200, []);
