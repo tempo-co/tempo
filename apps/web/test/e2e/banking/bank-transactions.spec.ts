@@ -748,7 +748,7 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions');
 
     const filters = await openTransactionFilter(page, 'Categories');
-    await expect(filters.getByRole('option')).toHaveCount(25);
+    await expect(filters.getByRole('option')).toHaveCount(24);
     await page.getByRole('option', {name: 'Eating out', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
