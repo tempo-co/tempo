@@ -73,6 +73,12 @@ No copy calls import a fallback or assumes a bank is connected.
   new" over the day, the accounts and any rows still to check (attention tone), with an
   always-visible outline Undo named with its date. An undone import stays listed, muted, without
   the button. Undo confirms with the destructive variant and says what goes and what stays.
+- **Column preview.** The bank a layout is saved under is a `Select` labelled Bank: the banks the owner
+  already has (`GET /bank-imports/banks`: connected banks, Tempo's built-in format banks, saved layouts'
+  banks), then a separator and **Other**, which reveals a "Bank name" input (60 characters at most).
+  Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
+  the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API
+  refuses says why under the control.
 - **Imported files.** The imported-files connection uses the bank card with the `Files` Clay tile
   and "From statement files". It never shows consent, sync or re-authorization states, and its
   Details hold the accounts and Remove only.

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
 import type {
+	BankImportBanks,
 	BankImportDoubtfulRow,
 	BankImportLayout,
 	BankImportLayoutProposal,
@@ -123,6 +124,11 @@ export class BankImportController {
 	@Get('layouts')
 	async findLayouts(@CurrentAccount() account: Account): Promise<BankImportLayout[]> {
 		return this.layoutService.findLayouts(account.id);
+	}
+
+	@Get('banks')
+	async findBanks(@CurrentAccount() account: Account): Promise<BankImportBanks> {
+		return this.layoutService.knownBanks(account.id);
 	}
 
 	@Delete('layouts/:layoutId')

@@ -249,10 +249,27 @@ describe('Bank import column mapper', () => {
 			accounts: [{name: 'DE89 3704 0044 0532 0130 00', currency: 'EUR', created: true}],
 		});
 		expect((await agent.get('/bank-imports/layouts').expect(200)).body).toEqual([saved.body]);
+		// The account the layout created records the bank the owner named.
+		expect(await bankAccounts.findOneByOrFail({id: imported.body.accounts[0].id})).toMatchObject({
+			bankIdentity: 'name:example bank',
+		});
+		// The banks the owner can pick for the next layout: those of their connections, Tempo's own formats but Revolut,
+		// whose files already go to Revolut accounts, and their saved layouts', each once.
+		await fixtures.createConnection(owner, {aspspName: 'Example  Savings Bank', aspspCountry: 'DE'});
+		await fixtures.createConnection(owner, {aspspName: 'ing', aspspCountry: 'NL'});
+		const builtIn = ['ABN AMRO', 'ASN Bank', 'bunq', 'Knab', 'Rabobank', 'Triodos Bank'];
+		expect((await agent.get('/bank-imports/banks').expect(200)).body).toEqual({
+			banks: [...builtIn, 'Example Bank', 'Example Savings Bank', 'ing'].sort((left, right) =>
+				left.localeCompare(right, 'en', {sensitivity: 'base'}),
+			),
+		});
 
 		const other = await createOwner();
 		expect((await drop(other.agent, DEBIT_CREDIT_CSV).expect(422)).body).toMatchObject({code: 'layout_unknown'});
 		await other.agent.get('/bank-imports/layouts').expect(200, []);
+		expect((await other.agent.get('/bank-imports/banks').expect(200)).body).toEqual({
+			banks: ['ABN AMRO', 'ASN Bank', 'bunq', 'ING', 'Knab', 'Rabobank', 'Triodos Bank'],
+		});
 		await confirm(other.agent, proposed.body.id, {bankName: 'Example Bank'}).expect(404);
 		await other.agent.delete(`/bank-imports/layouts/${saved.body.id}`).set('Origin', ORIGIN).expect(404);
 		expect(mapLayout).toHaveBeenCalledTimes(1);

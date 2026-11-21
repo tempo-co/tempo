@@ -1,5 +1,6 @@
 import {queryOptions, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {
+  BankImportBanks,
   BankImportLayout,
   BankImportLayoutProposal,
   ConfirmBankImportLayoutProposalRequest,
@@ -33,9 +34,22 @@ export function useConfirmLayout() {
       ...request
     }: ConfirmBankImportLayoutProposalRequest & {proposalId: string}) =>
       api.post<BankImportLayout>(`/bank-imports/layout-proposals/${proposalId}/confirm`, request),
-    onSuccess: () => queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.banks}),
+      ]),
   });
   return {confirmLayout: mutateAsync};
+}
+
+/** The banks the owner can name a layout after without typing one: connected, built in and saved, sorted. */
+export function useBankImportBanks() {
+  return useQuery({
+    queryKey: bankImportQueryKeys.banks,
+    queryFn: () => api.get<BankImportBanks>('/bank-imports/banks'),
+    select: ({banks}) => banks,
+  });
 }
 
 /** Discards a proposal the owner said is not right. */
@@ -66,7 +80,11 @@ export function useRemoveLayout() {
       queryClient.setQueryData<BankImportLayout[]>(bankImportQueryKeys.layouts, (layouts) =>
         layouts?.filter(({id}) => id !== layoutId),
       ),
-    onSettled: () => queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.banks}),
+      ]),
   });
   return {removeLayout: mutateAsync};
 }

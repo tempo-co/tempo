@@ -22,7 +22,9 @@ import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
+import {useBankImportBanks} from '../api/use-layout-proposals';
 import {plural, summaryTitle} from '../utils/import-format';
+import {OTHER_BANK, guessedBankChoice} from '../utils/layout-mapping';
 import {type ImportFailure, accountQuestionKey} from '../utils/refusal-copy';
 import {AccountQuestions} from './account-questions';
 import {DoubtfulRowsReview} from './doubtful-rows-review';
@@ -248,6 +250,8 @@ function ChooseStep({
 }
 
 /** Refusals that offer to work out a file's columns, rather than report a try at it that failed. */
+const NO_BANKS: readonly string[] = [];
+
 const offersColumns = (failure: Extract<ImportFailure, {kind: 'refused'}>) =>
   failure.mapFile !== null && failure.code !== 'mapper_unavailable';
 
@@ -316,7 +320,12 @@ function PreviewStep({
   onReject: () => void;
 }) {
   const {proposal} = step;
-  const [bankName, setBankName] = useState(proposal.bankName ?? '');
+  const banks = useBankImportBanks().data ?? NO_BANKS;
+  // Until the owner picks, the choice follows Tempo's guess as the list of banks arrives.
+  const [pickedBank, setPickedBank] = useState<string | null>(null);
+  const bankChoice = pickedBank ?? guessedBankChoice(proposal.bankName, banks);
+  const [otherBankName, setOtherBankName] = useState(proposal.bankName ?? '');
+  const bankName = bankChoice === OTHER_BANK ? otherBankName : bankChoice;
   const [currency, setCurrency] = useState(proposal.defaultCurrency);
   const [pending, setPending] = useState(false);
   // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
@@ -348,12 +357,18 @@ function PreviewStep({
       body={
         <LayoutPreview
           proposal={proposal}
-          bankName={bankName}
-          bankError={bankError}
-          onBankName={(value) => {
-            setBankName(value);
+          banks={banks}
+          bankChoice={bankChoice}
+          onBankChoice={(value) => {
+            setPickedBank(value);
             setBankError(null);
           }}
+          otherBankName={otherBankName}
+          onOtherBankName={(value) => {
+            setOtherBankName(value);
+            setBankError(null);
+          }}
+          bankError={bankError}
           currency={currency}
           onCurrency={setCurrency}
           disabled={pending}

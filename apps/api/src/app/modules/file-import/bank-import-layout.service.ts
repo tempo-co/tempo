@@ -1,5 +1,6 @@
 import {BadRequestException, ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import type {
+	BankImportBanks,
 	BankImportLayoutColumn,
 	BankImportLayoutMapping,
 	BankImportLayoutPreview,
@@ -14,6 +15,9 @@ import {DataSource, EntityManager, MoreThan} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
+import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {nameBankIdentity} from '@modules/banking/bank-identity';
+import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.constants';
 
 import {BankImportLayoutProposal, LayoutProposalStatus} from './bank-import-layout-proposal.entity';
 import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
@@ -21,10 +25,10 @@ import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
 import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
 import {CsvByDirection, CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
-import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
+import {CSV_LAYOUTS, NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
-import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
+import {FORMAT_BANKS, NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
 import {MaskedTable} from './parsers/table-mask';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
@@ -70,6 +74,42 @@ export class BankImportLayoutService {
 		private readonly mapper: LayoutMapper,
 		private readonly configurationService: ConfigurationService,
 	) {}
+
+	/**
+	 * The banks the owner can pick for a layout (`BankImportBanks`): connected banks, built-in format banks other than
+	 * those whose own files already name a bank account by bank (`STATEMENT_BANKS`), and saved layouts' banks. Each
+	 * bank once, under its first spelling in that order.
+	 */
+	async knownBanks(ownerId: Account['id']): Promise<BankImportBanks> {
+		const [connections, layouts] = await Promise.all([
+			this.dataSource.getRepository(BankConnection).find({
+				select: {aspspName: true, provider: true},
+				where: {accountId: ownerId},
+			}),
+			this.dataSource
+				.getRepository(BankImportLayout)
+				.find({select: {bankName: true}, where: {accountId: ownerId}}),
+		]);
+		const reserved = new Set<string>(STATEMENT_BANKS.map(nameBankIdentity));
+		const byIdentity = new Map<string, string>();
+		for (const bank of [
+			...connections.flatMap(({aspspName, provider}) =>
+				provider === BANK_CONNECTION_PROVIDERS.FILE ? [] : [aspspName],
+			),
+			...Object.values(FORMAT_BANKS),
+			...CSV_LAYOUTS.map(({bank: layoutBank}) => layoutBank),
+			...layouts.map(({bankName}) => bankName),
+		]) {
+			const name = bank.trim().replace(/\s+/g, ' ');
+			const identity = nameBankIdentity(name);
+			if (name && !reserved.has(identity) && !byIdentity.has(identity)) byIdentity.set(identity, name);
+		}
+		return {
+			banks: [...byIdentity.values()].sort((left, right) =>
+				left.localeCompare(right, 'en', {sensitivity: 'base'}),
+			),
+		};
+	}
 
 	/** Whether this deployment works out unknown files' columns. */
 	mapperEnabled(): boolean {

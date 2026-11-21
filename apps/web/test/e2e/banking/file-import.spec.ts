@@ -3,6 +3,7 @@ import {
   type AddBankImportNeverSentRowsRequest,
   BANK_IMPORT_MAX_ROWS_PER_ADD,
   type BankConnection,
+  type BankImportBanks,
   type BankImportDoubtfulRow,
   type BankImportError,
   type BankImportLayout,
@@ -27,6 +28,8 @@ const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
 const SYNCED_LINE =
   'These are almost always in Tempo already from your bank, so leaving them without an answer loses nothing.';
 const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
+/** The banks the owner can pick a layout's bank from, as the API sorts them. */
+const KNOWN_BANKS = ['ABN AMRO', 'Example Bank', 'ING', 'Rabobank'];
 const RESERVED_BANK_NAME =
   "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
 
@@ -175,6 +178,7 @@ async function mockFileImport(
     mapper = false,
     proposals = [],
     layouts = [],
+    banks = KNOWN_BANKS,
   }: {
     imports?: BankImportSummary[];
     uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
@@ -189,6 +193,8 @@ async function mockFileImport(
     /** The answer to each proposal in turn. */
     proposals?: ((route: Route) => Promise<void>)[];
     layouts?: BankImportLayout[];
+    /** The banks `GET /bank-imports/banks` lists. */
+    banks?: string[];
   } = {},
 ) {
   const api: ImportApi = {
@@ -282,6 +288,9 @@ async function mockFileImport(
     return route.fulfill({status: 204});
   });
   await page.route(`${API_URL}/bank-imports/layouts`, (route) => fulfillJson(route, api.layouts));
+  await page.route(`${API_URL}/bank-imports/banks`, (route) =>
+    fulfillJson(route, {banks} satisfies BankImportBanks),
+  );
   await page.route(`${API_URL}/bank-imports/layouts/*`, (route) => {
     const id = new URL(route.request().url()).pathname.split('/').pop()!;
     api.removed.push(id);
@@ -1221,7 +1230,9 @@ test.describe('statement file import on Connections', () => {
     // The spinner sits on the text's line. It rotates, which grows its box around a fixed centre, so compare centres.
     const [line, spinner] = [await boxOf(working), await boxOf(working.locator('svg'))];
     expect(line.height).toBeLessThan(28);
-    expect(Math.abs(spinner.y + spinner.height / 2 - (line.y + line.height / 2))).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(spinner.y + spinner.height / 2 - (line.y + line.height / 2)),
+    ).toBeLessThanOrEqual(2);
     await expect(dialog.getByRole('button', {name: 'Cancel'})).toBeEnabled();
     answer();
 
@@ -1246,13 +1257,20 @@ test.describe('statement file import on Connections', () => {
     );
     await expect(preview.getByText('Account DE89370400440532013000')).toBeVisible();
     await expect(preview.getByTestId('bank-import-date-check')).toHaveCount(0);
-    await expect(preview.getByLabel('Bank')).toHaveValue('Example Bank');
+    // The bank Tempo guessed is picked among the owner's banks; any other can be picked instead.
+    const bank = preview.getByLabel('Bank', {exact: true});
+    await expect(bank).toHaveText('Example Bank');
+    await expect(preview.getByLabel('Bank name')).toHaveCount(0);
     await expect(preview.getByLabel('Currency')).toHaveCount(0);
+    await bank.click();
+    await expect(page.getByRole('option')).toHaveText([...KNOWN_BANKS, 'Other']);
+    await page.getByRole('option', {name: 'ING'}).click();
+    await expect(bank).toHaveText('ING');
 
     await dialog.getByRole('button', {name: 'Looks right'}).click();
 
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
-    expect(api.confirms).toEqual([{bankName: 'Example Bank'}]);
+    expect(api.confirms).toEqual([{bankName: 'ING'}]);
     // The same drop went again, unchanged.
     expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
       ['statement-april.xml', 'export-example.csv'],
@@ -1342,15 +1360,23 @@ test.describe('statement file import on Connections', () => {
       'Tempo read 03/04/2026 as 3 April 2026',
     );
     const confirm = dialog.getByRole('button', {name: 'Looks right'});
-    await expect(preview.getByLabel('Bank')).toHaveValue('');
+    const bank = preview.getByLabel('Bank', {exact: true});
+    await expect(bank).toHaveText('Choose a bank');
+    await expect(confirm).toBeDisabled();
+    // A bank the owner does not have yet is typed after Other.
+    await bank.click();
+    await page.getByRole('option', {name: 'Other'}).click();
+    const bankName = preview.getByLabel('Bank name');
+    await expect(bankName).toHaveValue('');
+    await expect(bankName).toHaveAttribute('maxlength', '60');
     await expect(confirm).toBeDisabled();
     // A name the API refuses says why under the field, and the preview stays.
-    await preview.getByLabel('Bank').fill('Revolut');
+    await bankName.fill('Revolut');
     await confirm.click();
     await expect(preview.getByText(RESERVED_BANK_NAME)).toBeVisible();
-    await expect(preview.getByLabel('Bank')).toHaveAttribute('aria-invalid', 'true');
+    await expect(bankName).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText("Couldn't save this layout")).toHaveCount(0);
-    await preview.getByLabel('Bank').fill('  Example Savings Bank ');
+    await bankName.fill('  Example Savings Bank ');
     await expect(preview.getByText(RESERVED_BANK_NAME)).toHaveCount(0);
     await expect(preview.getByLabel('Currency')).toHaveText('EUR');
     await preview.getByLabel('Currency').click();
@@ -1370,6 +1396,34 @@ test.describe('statement file import on Connections', () => {
       {bankName: 'Revolut', currency: 'EUR'},
       {bankName: 'Example Savings Bank', currency: 'GBP'},
     ]);
+  });
+
+  test('a guessed bank the owner does not have starts as Other with the guess typed in, on a phone too', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 844});
+    const api = await mockFileImport(page, {
+      mapper: true,
+      uploads: [
+        refused({code: 'layout_unknown', file: 1}),
+        created(importSummary({filesCount: 1, format: 'csv'})),
+      ],
+      proposals: [proposed(layoutProposal({bankName: 'example  bank'}))],
+      banks: ['ABN AMRO', 'ING'],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    const preview = dialog.getByTestId('bank-import-layout-preview');
+    await expect(preview.getByLabel('Bank', {exact: true})).toHaveText('Other');
+    await expect(preview.getByLabel('Bank name')).toHaveValue('example  bank');
+    await expectNoHorizontalOverflow(page);
+    await dialog.getByRole('button', {name: 'Looks right'}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(api.confirms).toEqual([{bankName: 'example  bank'}]);
   });
 
   test('Not right discards the proposal and imports nothing; Cancel or closing stops waiting and keeps the files', async ({

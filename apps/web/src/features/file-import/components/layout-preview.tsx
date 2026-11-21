@@ -14,6 +14,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -21,7 +22,7 @@ import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatt
 import {getCurrencyFormatter} from '@/utils/format-currency';
 
 import {formatCount, formatDateRange, plural} from '../utils/import-format';
-import {dateCheckCopy, mappingInWords, previewRowTitle} from '../utils/layout-mapping';
+import {OTHER_BANK, dateCheckCopy, mappingInWords, previewRowTitle} from '../utils/layout-mapping';
 import {IMPORT_TILE} from './file-choice';
 
 /** The shared 60px row shape, as a plain row: preview rows open nothing. */
@@ -29,28 +30,38 @@ const ROW = 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3';
 
 /**
  * A proposed layout read through the owner's own file: how it reads the columns, the first and last rows as they
- * would be stored, the totals, and the bank name and currency the owner confirms it with.
+ * would be stored, the totals, and the bank and currency the owner confirms it with. The bank is picked from the
+ * owner's banks, or typed after Other.
  */
 export function LayoutPreview({
   proposal,
-  bankName,
+  banks,
+  bankChoice,
+  onBankChoice,
+  otherBankName,
+  onOtherBankName,
   bankError,
-  onBankName,
   currency,
   onCurrency,
   disabled,
 }: {
   proposal: BankImportLayoutProposal;
-  bankName: string;
-  /** Why the API refused the name, shown under the field. */
+  /** The banks to pick from, sorted (`useBankImportBanks`). */
+  banks: readonly string[];
+  /** One of `banks`, `OTHER_BANK`, or empty while none is picked. */
+  bankChoice: string;
+  onBankChoice: (value: string) => void;
+  otherBankName: string;
+  onOtherBankName: (value: string) => void;
+  /** Why the API refused the name, shown under the bank. */
   bankError: string | null;
-  onBankName: (value: string) => void;
   currency: string;
   onCurrency: (value: string) => void;
   disabled: boolean;
 }) {
   const {preview, mapping, dateCheck, currencyNeeded} = proposal;
   const bankField = useId();
+  const otherBankField = useId();
   const currencyField = useId();
   const bankHint = useId();
   const range = formatDateRange(preview.dateFrom, preview.dateTo);
@@ -126,16 +137,42 @@ export function LayoutPreview({
       <div className='grid grid-cols-1 gap-4'>
         <div className='grid gap-1.5'>
           <Label htmlFor={bankField}>Bank</Label>
-          <Input
-            id={bankField}
-            value={bankName}
-            maxLength={60}
-            autoComplete='off'
-            disabled={disabled}
-            aria-invalid={bankError ? true : undefined}
-            aria-describedby={bankHint}
-            onChange={(event) => onBankName(event.target.value)}
-          />
+          <Select value={bankChoice} onValueChange={onBankChoice} disabled={disabled}>
+            <SelectTrigger
+              id={bankField}
+              className='max-sm:h-11'
+              aria-invalid={bankError && bankChoice !== OTHER_BANK ? true : undefined}
+              aria-describedby={bankChoice === OTHER_BANK ? undefined : bankHint}
+            >
+              <SelectValue placeholder='Choose a bank' />
+            </SelectTrigger>
+            <SelectContent>
+              {banks.map((bank) => (
+                <SelectItem key={bank} value={bank}>
+                  {bank}
+                </SelectItem>
+              ))}
+              {banks.length > 0 && <SelectSeparator />}
+              <SelectItem value={OTHER_BANK}>Other</SelectItem>
+            </SelectContent>
+          </Select>
+          {bankChoice === OTHER_BANK && (
+            <>
+              <Label htmlFor={otherBankField} className='mt-2.5'>
+                Bank name
+              </Label>
+              <Input
+                id={otherBankField}
+                value={otherBankName}
+                maxLength={60}
+                autoComplete='off'
+                disabled={disabled}
+                aria-invalid={bankError ? true : undefined}
+                aria-describedby={bankHint}
+                onChange={(event) => onOtherBankName(event.target.value)}
+              />
+            </>
+          )}
           {bankError ? (
             <p id={bankHint} role='alert' className='text-xs text-destructive'>
               {bankError}
