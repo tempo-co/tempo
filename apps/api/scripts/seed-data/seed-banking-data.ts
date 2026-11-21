@@ -78,7 +78,10 @@ export async function seedBankingData(
 		await lockReportingCurrencyForAmountWrites(manager, account.id);
 		await copySameCurrencyAmounts(manager, account.id, bankAccount.id);
 	});
-	const transactions = await fixtures.transactions.find({where: {bankAccountId: bankAccount.id}, order: {id: 'ASC'}});
+	const transactions = await fixtures.transactions.find({
+		where: {bankAccountId: bankAccount.id, bankAccount: {bankConnection: {accountId: account.id}}},
+		order: {id: 'ASC'},
+	});
 
 	return {bankConnection, bankAccount, bankSyncRun, balances, transactions};
 }
