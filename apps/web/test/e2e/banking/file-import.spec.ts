@@ -18,7 +18,7 @@ import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 import {openDetails, routeMockedBankApp} from '../../utils/bank-connections';
-import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+import {animationsSettled, boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 import {countAfterToasts} from '../../utils/toasts';
 
 const TODAY = new Date('2026-11-12T10:00:00+01:00');
@@ -377,18 +377,6 @@ async function expectCurrencyInside(field: Locator, currency: string) {
   ]);
   expect(suffixBox.x + suffixBox.width).toBeLessThanOrEqual(box.x + box.width);
   expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
-}
-
-/** Waits out a dialog's or sheet's opening animation, so boxes read in one go come from one frame. */
-async function settled(scope: Locator) {
-  await scope.evaluate((element) =>
-    Promise.all(
-      element
-        .getAnimations({subtree: true})
-        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
-        .map((animation) => animation.finished),
-    ),
-  );
 }
 
 async function openImport(page: Page) {
@@ -2341,7 +2329,7 @@ test.describe('statement file import on Connections', () => {
       dialog.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
     const field = dialog.getByLabel('Balance of Example Wallet today');
-    await settled(dialog);
+    await animationsSettled(dialog);
     await expectCurrencyInside(field, 'EUR');
     // Cancel and Save under the field, Save last.
     const [fieldBox, cancelBox, saveBox] = await Promise.all([
@@ -2370,7 +2358,7 @@ test.describe('statement file import on Connections', () => {
     dialog = page.getByRole('dialog');
     const phoneField = dialog.getByLabel('Balance of Example Savings today');
     await expectInsideViewport(page, dialog.getByRole('button', {name: 'Cancel'}));
-    await settled(dialog);
+    await animationsSettled(dialog);
     await expectCurrencyInside(phoneField, 'EUR');
     const [phoneFieldBox, phoneSave, phoneCancel] = await Promise.all([
       boxOf(phoneField),
