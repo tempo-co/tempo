@@ -26,6 +26,7 @@ import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {FileAccountBalanceService} from './file-account-balance.service';
 import {fileAccountProviderId, lockFileConnection} from './file-connection';
 import {findOwnedConnection} from './find-owned-connection';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 const REMOVABLE_CONNECTION_STATUSES = [
 	BANK_CONNECTION_STATUSES.PENDING_AUTHORIZATION,
@@ -58,6 +59,7 @@ export class BankConnectionRemovalService {
 		private readonly consentRevocationService: BankingConsentRevocationService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
 		private readonly derivedDataRefresh: DerivedDataRefreshService,
+		private readonly importedRowRecords: ImportedRowRecordsRegistry,
 	) {}
 
 	async removeConnection(
@@ -210,10 +212,7 @@ export class BankConnectionRemovalService {
 			);
 		}
 		const ids = accounts.map(({id}) => id);
-		await manager.query(
-			`UPDATE "bank_imports" SET "bankConnectionId" = $1 WHERE "bankConnectionId" = $2 AND "accountId" = $3`,
-			[fileConnection.id, connection.id, ownerId],
-		);
+		await this.importedRowRecords.records.moveToConnection(manager, ownerId, connection.id, fileConnection.id);
 		return ids;
 	}
 

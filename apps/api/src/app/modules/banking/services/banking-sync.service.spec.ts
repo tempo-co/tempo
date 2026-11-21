@@ -12,6 +12,7 @@ import {BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingSyncService} from './banking-sync.service';
 import {EnableBankingClientError} from './enable-banking.client';
 import {FileAccountBalanceService} from './file-account-balance.service';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 const NO_TRANSACTIONS: EnableBankingTransactionsResult = {transactions: [], unparseableCount: 0};
 
@@ -44,7 +45,7 @@ const BANKING_SYNC_SERVICE_DEPENDENCIES = [
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
-	bankTransactionPersistenceService: new BankTransactionPersistenceService(),
+	bankTransactionPersistenceService: new BankTransactionPersistenceService(new ImportedRowRecordsRegistry()),
 	derivedDataRefresh: {refresh: jest.fn().mockResolvedValue(undefined)},
 };
 
@@ -59,7 +60,7 @@ function createBankingSyncService(
 		accountHistoryWriter: new AccountHistoryWriterService(
 			(dependencies.dataSource ?? {}) as DataSource,
 			(dependencies.connectionLockService ?? {}) as BankingConnectionLockService,
-			new BankTransactionPersistenceService(),
+			new BankTransactionPersistenceService(new ImportedRowRecordsRegistry()),
 			{} as FileAccountBalanceService,
 		),
 		...dependencies,

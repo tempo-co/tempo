@@ -1,9 +1,10 @@
 import {type BankTransactionIdentityInput, assignBankTransactionStableIdentityKeys} from '../bank-transaction-identity';
 import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 describe('BankTransactionPersistenceService transaction event persistence', () => {
 	function createServiceForTransactionValues(): BankTransactionPersistenceService {
-		return new BankTransactionPersistenceService();
+		return new BankTransactionPersistenceService(new ImportedRowRecordsRegistry());
 	}
 
 	function toBankTransactionValues(

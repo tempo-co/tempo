@@ -1,8 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from 'typeorm';
 
-import type {NormalizedRow} from '@modules/file-import/parsers/parse-result';
-
 import {BankAccount} from '../bank-account.entity';
 import type {CreditDebitIndicator} from '../bank-transaction-direction';
 import {
@@ -40,9 +38,11 @@ import {
 } from '../categorization/bank-transaction-categorization.types';
 import {notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
+import {replaceHiddenSeriesPayments} from '../recurring/recurring-series-hides';
 import type {FinalSyncDays, SyncCoverage} from '../sync-coverage';
 import {type CarryRow, pickCarryTargets} from '../sync-sweep';
 import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 const BANK_TRANSACTION_IDENTITY_SELECT = {
 	id: true,
@@ -164,6 +164,8 @@ function listedOrderCreatedAt(repository: Repository<BankTransaction>, count: nu
 @Injectable()
 export class BankTransactionPersistenceService {
 	private readonly logger = new Logger(BankTransactionPersistenceService.name);
+
+	constructor(private readonly importedRowRecords: ImportedRowRecordsRegistry) {}
 
 	/**
 	 * The stored keys among the occurrences new rows of these groups could take. Each group is checked from its first
@@ -621,23 +623,8 @@ export class BankTransactionPersistenceService {
 		questions: ReadonlyMap<string, ImportQuestion>,
 		adoptedIds: readonly string[],
 	): Promise<void> {
-		const settle = async (importIds: ReadonlyArray<{importId: string}>, change: 1 | -1) => {
-			for (const {importId} of importIds) {
-				await repository.query(
-					`UPDATE "bank_imports" SET "rowsDoubtful" = "rowsDoubtful" + $2 WHERE "id" = $1`,
-					[importId, change],
-				);
-			}
-		};
-		if (adoptedIds.length > 0) {
-			const [removed]: [Array<{importId: string}>, number] = await repository.query(
-				`DELETE FROM "bank_import_doubtful_rows"
-				WHERE "importedTransactionId" = ANY($1::uuid[]) AND "bankAccountId" = $2 AND "resolution" IS NULL
-				RETURNING "importId"`,
-				[adoptedIds, bankAccountId],
-			);
-			await settle(removed, -1);
-		}
+		const records = this.importedRowRecords.records;
+		await records.recordTakenOver(repository.manager, bankAccountId, adoptedIds);
 		const keys = [...new Set([...questions.values()].flatMap(({candidateKeys}) => candidateKeys))];
 		const idByKey = new Map(
 			keys.length === 0
@@ -649,29 +636,13 @@ export class BankTransactionPersistenceService {
 						})
 					).map(({id, stableIdentityKey}) => [stableIdentityKey, id] as const),
 		);
-		let asked = 0;
-		for (const {imported, candidateKeys, candidateIds} of questions.values()) {
+		const asking = [...questions.values()].flatMap(({imported, candidateKeys, candidateIds}) => {
 			const ids = [
 				...new Set([...candidateIds, ...candidateKeys.flatMap((key) => idByKey.get(key) ?? [])]),
 			].filter((id) => id !== imported.id);
-			if (ids.length === 0) continue;
-			const [updated]: [unknown[], number] = await repository.query(
-				`UPDATE "bank_import_doubtful_rows"
-				SET "candidateTransactionIds" = ARRAY(SELECT DISTINCT unnest("candidateTransactionIds" || $2::uuid[])), "updatedAt" = now()
-				WHERE "importedTransactionId" = $1 AND "resolution" IS NULL
-				RETURNING "id"`,
-				[imported.id, ids],
-			);
-			if (updated.length > 0) continue;
-			await repository.query(
-				`INSERT INTO "bank_import_doubtful_rows"
-					("importId", "bankAccountId", "row", "candidateTransactionIds", "importedTransactionId")
-				VALUES ($1, $2, $3::jsonb, $4::uuid[], $5)`,
-				[imported.importId, bankAccountId, JSON.stringify(toImportedRowSnapshot(imported)), ids, imported.id],
-			);
-			await settle([{importId: imported.importId!}], 1);
-			asked += 1;
-		}
+			return ids.length === 0 ? [] : [{imported, candidateIds: ids}];
+		});
+		const asked = await records.askAbout(repository.manager, bankAccountId, asking);
 		if (asked > 0) this.logger.log(`Sync asked about ${asked} imported transaction(s) it could not match alone.`);
 	}
 
@@ -691,17 +662,19 @@ export class BankTransactionPersistenceService {
 		aspspName: string,
 		takenOverIds: readonly string[],
 	): Promise<SweepImportedRowsResult> {
-		const removedIds: Array<{id: string}> = await repository.query(
+		const records = this.importedRowRecords.records;
+		const onFinalDays: Array<{id: string}> = await repository.query(
 			`SELECT t."id" FROM "bank_transactions" t
 			WHERE t."bankAccountId" = $1 AND t."importId" IS NOT NULL AND NOT (${PENDING_ROW_SQL})
 				AND COALESCE(t."bookingDate", t."valueDate") BETWEEN $2::date AND $3::date
-				AND NOT (t."id" = ANY($4::uuid[]))
-				AND NOT EXISTS (
-					SELECT 1 FROM "bank_import_doubtful_rows" answered
-					WHERE answered."resolvedTransactionId" = t."id" AND answered."resolution" = 'new'
-				)`,
+				AND NOT (t."id" = ANY($4::uuid[]))`,
 			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds],
 		);
+		const kept = await records.findKeptByOwner(
+			repository.manager,
+			onFinalDays.map(({id}) => id),
+		);
+		const removedIds = onFinalDays.filter(({id}) => !kept.has(id));
 		if (removedIds.length === 0) return {removedCount: 0, recomputeIds: []};
 		// Locked, so an edit saved meanwhile either lands before the snapshot or finds the row gone.
 		const removed = await repository.find({
@@ -769,76 +742,17 @@ export class BankTransactionPersistenceService {
 			if (applied.ownTransferOverride) recomputeIds.push(target);
 		}
 
-		for (const chunk of chunkArray(removed, BATCH_WRITE_CHUNK_SIZE)) {
-			await repository.query(
-				`INSERT INTO "bank_import_doubtful_rows"
-					("importId", "bankAccountId", "kind", "row", "candidateTransactionIds", "ownerEdits")
-				SELECT snapshot."importId", $1, 'removed_by_sync', snapshot."row", '{}', snapshot."ownerEdits"
-				FROM jsonb_to_recordset($2::jsonb) AS snapshot("importId" uuid, "row" jsonb, "ownerEdits" jsonb)`,
-				[
-					bankAccount.id,
-					JSON.stringify(
-						chunk.map((row) => ({
-							importId: row.importId,
-							row: toImportedRowSnapshot(row),
-							ownerEdits: editsOf(row),
-						})),
-					),
-				],
-			);
-		}
-
 		// A hidden series keeps following the payment: the look-alike stands in for the removed row, or it drops out.
-		const hides: Array<{id: string; transactionIds: string[]}> = await repository.query(
-			`SELECT hide."id", hide."transactionIds" FROM "recurring_series_hides" hide
-			INNER JOIN "bank_connections" connection ON connection."accountId" = hide."accountId"
-			INNER JOIN "bank_accounts" bank_account ON bank_account."bankConnectionId" = connection."id"
-			WHERE bank_account."id" = $1 AND hide."transactionIds" && $2::uuid[]
-			FOR UPDATE OF hide`,
-			[bankAccount.id, ids],
+		await replaceHiddenSeriesPayments(
+			repository.manager,
+			bankAccount.id,
+			new Map(removed.map((row) => [row.id, targets.get(row.id) ?? null])),
 		);
-		const replacement = new Map(removed.map((row) => [row.id, targets.get(row.id) ?? null]));
-		for (const hide of hides) {
-			const transactionIds = [
-				...new Set(
-					hide.transactionIds.flatMap((id) => (replacement.has(id) ? (replacement.get(id) ?? []) : [id])),
-				),
-			];
-			await repository.query(
-				`UPDATE "recurring_series_hides" SET "transactionIds" = $2::uuid[], "updatedAt" = now() WHERE "id" = $1`,
-				[hide.id, transactionIds],
-			);
-		}
-
-		// Open questions go with their rows; answered ones stop pointing at a row that is gone.
-		const [closed]: [Array<{importId: string}>, number] = await repository.query(
-			`DELETE FROM "bank_import_doubtful_rows"
-			WHERE "importedTransactionId" = ANY($1::uuid[]) AND "resolution" IS NULL
-			RETURNING "importId"`,
-			[ids],
+		await records.recordRemovedBySync(
+			repository.manager,
+			bankAccount.id,
+			removed.map((row) => ({row, ownerEdits: editsOf(row)})),
 		);
-		await repository.query(
-			`UPDATE "bank_import_doubtful_rows" SET "importedTransactionId" = NULL, "updatedAt" = now()
-			WHERE "importedTransactionId" = ANY($1::uuid[])`,
-			[ids],
-		);
-		const perImport = new Map<string, {removed: number; closed: number}>();
-		const tally = (importId: string, field: 'removed' | 'closed') => {
-			const counts = perImport.get(importId) ?? {removed: 0, closed: 0};
-			counts[field] += 1;
-			perImport.set(importId, counts);
-		};
-		for (const row of removed) tally(row.importId!, 'removed');
-		for (const {importId} of closed) tally(importId, 'closed');
-		for (const [importId, counts] of perImport) {
-			await repository.query(
-				`UPDATE "bank_imports"
-				SET "rowsRemovedBySync" = "rowsRemovedBySync" + $2, "rowsAdded" = "rowsAdded" - $2,
-					"rowsDoubtful" = "rowsDoubtful" - $3
-				WHERE "id" = $1`,
-				[importId, counts.removed, counts.closed],
-			);
-		}
 
 		const formerCounterpartIds: string[] = [];
 		for (const chunk of chunkArray(ids, BATCH_WRITE_CHUNK_SIZE)) {
@@ -853,7 +767,7 @@ export class BankTransactionPersistenceService {
 			formerCounterpartIds.push(...rows.flatMap(({ownTransferCounterpartId}) => ownTransferCounterpartId ?? []));
 		}
 		this.logger.log(
-			`Sync removed ${removed.length} imported row(s) it never sent on days it is final for, from ${perImport.size} import(s); edits moved for ${moved}.`,
+			`Sync removed ${removed.length} imported row(s) it never sent on days it is final for, from ${new Set(removed.map(({importId}) => importId)).size} import(s); edits moved for ${moved}.`,
 		);
 		return {removedCount: removed.length, recomputeIds: [...new Set([...formerCounterpartIds, ...recomputeIds])]};
 	}
@@ -1187,26 +1101,4 @@ type ImportQuestion = {imported: BankTransaction; candidateKeys: string[]; candi
 
 function isPendingStatus(status: string | null | undefined): boolean {
 	return status?.trim().toUpperCase() === 'PDNG';
-}
-
-/** The imported row as a statement row, the shape a question shows; amounts keep at least two decimals. */
-function toImportedRowSnapshot(transaction: BankTransaction): NormalizedRow {
-	const decimal = (value: string | null) => value?.replace(/^(-?\d+\.\d{2}\d*?)0+$/, '$1') ?? null;
-	return {
-		bookingDate: transaction.bookingDate,
-		valueDate: transaction.valueDate,
-		transactionDate: transaction.transactionDate,
-		amount: decimal(transaction.amount)!,
-		creditDebitIndicator: transaction.creditDebitIndicator === 'CRDT' ? 'CRDT' : 'DBIT',
-		currency: transaction.currency,
-		balanceAfter: decimal(transaction.balanceAfterAmount),
-		bankReference: transaction.entryReference,
-		counterpartyName: transaction.counterpartyName,
-		counterpartyIban: transaction.counterpartyIban,
-		remittanceInformation: transaction.remittanceInformation,
-		description: transaction.description,
-		bankTransactionCode: transaction.bankTransactionCode,
-		bankTransactionSubCode: transaction.bankTransactionSubCode,
-		referenceNumber: transaction.referenceNumber,
-	};
 }

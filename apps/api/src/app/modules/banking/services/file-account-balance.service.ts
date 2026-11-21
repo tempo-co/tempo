@@ -11,6 +11,7 @@ import {BankConnection} from '../bank-connection.entity';
 import {BalanceFromBankException} from '../errors/balance-from-bank.exception';
 import {FILE_ANCHOR_MAX_DAYS, FileAnchor, StatedBalanceRow, findFileAnchor} from '../file-account-balance';
 import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 /** The balance type of an imported-files account's balance: a closing balance, from the file or the owner. */
 export const FILE_ACCOUNT_BALANCE_TYPE = 'CLBD';
@@ -27,7 +28,10 @@ export type FileAccountBalance = Pick<BankAccount, 'currentBalanceAmount' | 'cur
  */
 @Injectable()
 export class FileAccountBalanceService {
-	constructor(private readonly dataSource: DataSource) {}
+	constructor(
+		private readonly dataSource: DataSource,
+		private readonly importedRowRecords: ImportedRowRecordsRegistry,
+	) {}
 
 	/**
 	 * Stores the balance the owner entered for an imported-files account, dated their today in their time zone, and
@@ -104,14 +108,7 @@ export class FileAccountBalanceService {
 		ownerId: Account['id'],
 		connectionId: BankConnection['id'],
 	): Promise<BankAccount['id'][]> {
-		const rows: Array<{bankAccountId: string}> = await manager.query(
-			`SELECT DISTINCT closing->>'bankAccountId' AS "bankAccountId"
-			FROM "bank_imports" bank_import
-			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
-			WHERE bank_import."bankConnectionId" = $1 AND bank_import."accountId" = $2`,
-			[connectionId, ownerId],
-		);
-		return rows.map(({bankAccountId}) => bankAccountId);
+		return this.importedRowRecords.records.findAccountsWithClosingBalances(manager, ownerId, connectionId);
 	}
 
 	/** Recomputes the given imported-files accounts under the owner's locked imported-files connection. */
@@ -158,19 +155,7 @@ export class FileAccountBalanceService {
 	 */
 	private async findFileAnchor(manager: EntityManager, bankAccountId: BankAccount['id']): Promise<FileAnchor | null> {
 		const rowAnchor = await this.findRowAnchor(manager, bankAccountId);
-		// Joined through the account's own connection, so only its owner's imports count.
-		const [statement]: FileAnchor[] = await manager.query(
-			`SELECT closing->>'date' AS "date", closing->>'amount' AS "amount"
-			FROM "bank_accounts" bank_account
-			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-			JOIN "bank_imports" bank_import ON bank_import."accountId" = connection."accountId"
-				AND bank_import."undoneAt" IS NULL
-			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
-			WHERE bank_account."id" = $1 AND closing->>'bankAccountId' = $1::text
-			ORDER BY closing->>'date' DESC, bank_import."createdAt" DESC
-			LIMIT 1`,
-			[bankAccountId],
-		);
+		const statement = await this.importedRowRecords.records.findNewestClosingBalance(manager, bankAccountId);
 		if (!statement) return rowAnchor;
 		return rowAnchor && rowAnchor.date >= statement.date ? rowAnchor : statement;
 	}

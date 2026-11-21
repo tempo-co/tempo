@@ -10,6 +10,7 @@ const BANK_CONNECTION_REMOVAL_SERVICE_DEPENDENCIES = [
 	'consentRevocationService',
 	'fileAccountBalanceService',
 	'derivedDataRefresh',
+	'importedRowRecords',
 ] as const;
 
 const DEFAULT_DEPENDENCIES: Partial<Record<string, unknown>> = {
