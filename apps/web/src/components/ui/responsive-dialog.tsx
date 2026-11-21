@@ -40,9 +40,13 @@ interface ResponsiveDialogProps extends BaseProps {
   'data-testid'?: string;
 }
 
-const ResponsiveDialogContext = React.createContext<{isDesktop: boolean}>({
+const ResponsiveDialogContext = React.createContext<{isDesktop: boolean; close: () => void}>({
   isDesktop: false,
+  close: () => {},
 });
+
+/** How each open dialog closes, by its content element, so Escape can reach the dialog on top. */
+const closeByContent = new WeakMap<Element, () => void>();
 
 const useResponsiveDialogContext = () => {
   const context = React.useContext(ResponsiveDialogContext);
@@ -54,13 +58,22 @@ const useResponsiveDialogContext = () => {
   return context;
 };
 
-const ResponsiveDialog = ({children, ...props}: RootResponsiveDialogProps) => {
+const ResponsiveDialog = ({children, open: openProp, onOpenChange}: RootResponsiveDialogProps) => {
   const isDesktop = !useIsMobile();
   const ResponsiveDialog = isDesktop ? Dialog : Drawer;
+  // Without an `open` from the caller, an open dialog closes when it swaps between dialog and drawer.
+  const form = isDesktop ? 'desktop' : 'mobile';
+  const [openOn, setOpenOn] = React.useState<'desktop' | 'mobile' | null>(null);
+  if (openOn !== null && openOn !== form) setOpenOn(null);
+  const open = openProp ?? openOn === form;
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setOpenOn(next ? form : null);
+    onOpenChange?.(next);
+  };
 
   return (
-    <ResponsiveDialogContext.Provider value={{isDesktop}}>
-      <ResponsiveDialog {...props} {...(!isDesktop && {autoFocus: true})}>
+    <ResponsiveDialogContext.Provider value={{isDesktop, close: () => setOpen(false)}}>
+      <ResponsiveDialog open={open} onOpenChange={setOpen} {...(!isDesktop && {autoFocus: true})}>
         {children}
       </ResponsiveDialog>
     </ResponsiveDialogContext.Provider>
@@ -117,11 +130,37 @@ const ResponsiveDialogContent = ({
   /** Replaces focusing the first control on open; call `preventDefault` and focus something else. */
   onOpenAutoFocus?: (event: Event) => void;
 }) => {
-  const {isDesktop} = useResponsiveDialogContext();
+  const {isDesktop, close} = useResponsiveDialogContext();
   const ResponsiveDialogContent = isDesktop ? DialogContent : DrawerContent;
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  const closeRef = React.useRef(close);
+  React.useEffect(() => {
+    closeRef.current = close;
+  });
+  const registerContent = React.useCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node;
+    if (node) closeByContent.set(node, () => closeRef.current());
+  }, []);
+  /**
+   * Escape closes the dialog on top. Radix hands its Escape listener to a dialog opened over another one a render
+   * later, so until then the dialog beneath gets the key; it closes the top one instead of itself and everything on it.
+   */
+  const escapeToTopmost = (event: KeyboardEvent) => {
+    const open = document.querySelectorAll('[role="dialog"][data-state="open"]');
+    const topmost = open[open.length - 1];
+    if (!topmost || topmost === contentRef.current) return;
+    event.preventDefault();
+    closeByContent.get(topmost)?.();
+  };
 
   return (
-    <ResponsiveDialogContent className={className} onInteractOutside={keepOpenForToasts} {...props}>
+    <ResponsiveDialogContent
+      ref={registerContent}
+      className={className}
+      onInteractOutside={keepOpenForToasts}
+      onEscapeKeyDown={escapeToTopmost}
+      {...props}
+    >
       {children}
     </ResponsiveDialogContent>
   );

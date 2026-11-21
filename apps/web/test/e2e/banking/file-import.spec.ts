@@ -1158,9 +1158,27 @@ test.describe('statement file import on Connections', () => {
     await page.goto('/bank-connections');
     const dialog = await openImport(page);
 
-    await dialog.getByRole('button', {name: 'Supported files'}).click();
-
+    // An Escape pressed as the list opens, before the dialogs settle, closes only the list.
+    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    await page.evaluate(() => {
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('[data-testid="supported-files"]')) return;
+        observer.disconnect();
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}),
+        );
+        document.body.dataset.earlyEscape = 'sent';
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
+    });
+    await supportedFiles.click();
+    await expect(page.locator('body')).toHaveAttribute('data-early-escape', 'sent');
     const supported = page.getByRole('dialog', {name: 'Supported files'});
+    await expect(supported).toBeHidden();
+    await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+    await expect(supportedFiles).toBeFocused();
+
+    await supportedFiles.click();
     await expect(supported.getByText('CAMT.053, MT940, OFX and QFX')).toBeVisible();
     await expect(
       supported.getByRole('list', {name: 'Bank exports'}).getByRole('listitem'),

@@ -40,6 +40,7 @@ Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 - Phones cannot hover: no information only in a `title` tooltip.
 - Shared Button, Select and Command choices have 44px minimum touch targets on phones and coarse-pointer devices. Calendar days fill their seven-column cells on narrow phones; do not force seven 44px columns into a 320px viewport. Search and verification-code inputs use 16px text for touch entry.
 - Ordinary dialogs and drawers own bounded vertical scrolling; fixed-header inspector layouts can override it with their own scrolling body. Drawer content hides vaul's below-sheet `::after` filler, which otherwise creates empty scroll space. Drawer footers include the bottom safe area.
+- Escape closes only the top dialog. Radix moves its Escape listener to a dialog opened over another one a render late, so `src/components/ui/responsive-dialog.tsx` makes the dialog beneath pass an early Escape to the top one instead of closing both. A `ResponsiveDialog` without an `open` prop keeps its open state there for that, and closes when it swaps between dialog and drawer.
 
 ## Scrolling and secondary disclosures
 
