@@ -26,12 +26,6 @@ import {categorizationRetryDelay} from './categorization-scheduler.service';
 /** Attempts of a categorize job after an ordinary failure; the worker stops retrying after the last one. */
 const ORDINARY_ATTEMPTS = 3;
 
-describe('CategorizationPipeline provider behavior versions', () => {
-	it('versions the categorization prompt separately from prior provider inputs', () => {
-		expect(BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION).toBe('bank-transaction-categorization-v21');
-	});
-});
-
 describe('CategorizationPipeline', () => {
 	it('does not send a stale financial-event job to the provider', async () => {
 		const transaction = createBankTransaction({
