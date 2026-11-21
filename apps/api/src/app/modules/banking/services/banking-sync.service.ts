@@ -259,6 +259,7 @@ export class BankingSyncService {
 				const retryCalls = psu ? null : connection.syncRetryCalls;
 				const pendingStarts = await this.bankTransactionPersistenceService.findPendingTransactionStarts(
 					this.dataSource.getRepository(BankTransaction),
+					accountId,
 					bankAccounts.map(({id}) => id),
 				);
 				const requestedFrom = this.getRequestedFrom(bankAccounts, retryCalls, requestedTo, pendingStarts);
@@ -313,6 +314,7 @@ export class BankingSyncService {
 				try {
 					persistenceResult = await this.persistSync(
 						connection,
+						lease,
 						run,
 						fetchResult,
 						status,
@@ -692,6 +694,7 @@ export class BankingSyncService {
 
 	private async persistSync(
 		connection: BankConnection,
+		lease: BankingConnectionLock,
 		run: BankSyncRun,
 		fetchResult: SyncFetchResult,
 		status: string,
@@ -714,7 +717,7 @@ export class BankingSyncService {
 
 		const schedulingUpdate = this.getSchedulingUpdate(connection, fetchResult, status, finishedAt);
 		// The run already holds the connection's sync lease.
-		await this.accountHistoryWriter.write(connection.accountId, {}, async (write) => {
+		await this.accountHistoryWriter.write(connection.accountId, {heldLeases: [lease]}, async (write) => {
 			const {manager} = write;
 			const connectionRepository = manager.getRepository(BankConnection);
 			const runRepository = manager.getRepository(BankSyncRun);

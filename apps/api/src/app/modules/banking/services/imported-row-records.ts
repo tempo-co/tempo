@@ -62,6 +62,7 @@ export interface ImportedRowRecords {
 	 */
 	findNewestClosingBalance(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 	): Promise<StatementClosingBalance | null>;
 	/** The accounts with a closing balance recorded by an import under the owner's connection. */

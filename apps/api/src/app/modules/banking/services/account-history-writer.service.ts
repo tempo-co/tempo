@@ -28,6 +28,8 @@ const SYNC_LEASE_WAIT_MS = 10_000;
 export type AccountHistoryWriteLocks = {
 	/** Synced connections the write changes, whose sync lease it takes. A sync run passes none: it holds its own. */
 	syncedConnectionIds?: readonly BankConnection['id'][];
+	/** Sync leases the caller already holds, as a sync run its own: checked before commit, neither taken nor released. */
+	heldLeases?: readonly BankingConnectionLock[];
 	/** The owner's imported-files connection, locked for the write: `create` makes it when missing. */
 	fileConnection?: 'create' | 'existing';
 };
@@ -121,7 +123,7 @@ export class AccountHistoryWriterService {
 	/** Runs the work in one transaction under the write's locks; a lease not had in time refuses it as busy. */
 	async write<T>(
 		ownerId: Account['id'],
-		{syncedConnectionIds = [], fileConnection}: AccountHistoryWriteLocks,
+		{syncedConnectionIds = [], heldLeases = [], fileConnection}: AccountHistoryWriteLocks,
 		work: (write: AccountHistoryWrite) => Promise<T>,
 	): Promise<T> {
 		const leases = await this.takeLeases(syncedConnectionIds);
@@ -135,7 +137,7 @@ export class AccountHistoryWriterService {
 							? await lockExistingFileConnection(manager, ownerId)
 							: null;
 				const result = await work({ownerId, manager, fileConnection: locked});
-				for (const lease of leases) lease.assertHealthy();
+				for (const lease of [...heldLeases, ...leases]) lease.assertHealthy();
 				return result;
 			});
 		} finally {
@@ -191,6 +193,7 @@ export class AccountHistoryWriterService {
 			formerCounterpartIds.push(
 				...(await this.persistence.removeUnreturnedPendingTransactions(
 					transactions,
+					ownerId,
 					bankAccount.id,
 					writtenIds,
 					fetch.fetchOptions.dateFrom ?? null,
@@ -202,7 +205,7 @@ export class AccountHistoryWriterService {
 					syncCoveredThrough: coverage.through,
 				});
 				// Sync is final for these days now: imported rows there it never sent go.
-				const finalDays = await this.findFinalSyncDays(manager, {
+				const finalDays = await this.findFinalSyncDays(manager, ownerId, {
 					id: bankAccount.id,
 					syncCoveredFrom: coverage.from,
 					syncCoveredThrough: coverage.through,
@@ -249,7 +252,7 @@ export class AccountHistoryWriterService {
 	): Promise<AddedFileRows<T>> {
 		const transactions = manager.getRepository(BankTransaction);
 		const writtenIds: string[] = [];
-		const finalDays = await this.findFinalSyncDays(manager, {...account, bankConnection: connection});
+		const finalDays = await this.findFinalSyncDays(manager, ownerId, {...account, bankConnection: connection});
 		const result = await work({
 			finalDays,
 			insert: async (given, {statementNumbering}) => {
@@ -280,6 +283,7 @@ export class AccountHistoryWriterService {
 	 */
 	private async findFinalSyncDays(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		account: Pick<BankAccount, 'id' | 'syncCoveredFrom' | 'syncCoveredThrough'> & {
 			bankConnection: Pick<BankConnection, 'provider'>;
 		},
@@ -287,6 +291,7 @@ export class AccountHistoryWriterService {
 		if (!account.syncCoveredFrom || !account.syncCoveredThrough) return null;
 		const pendingStarts = await this.persistence.findPendingTransactionStarts(
 			manager.getRepository(BankTransaction),
+			ownerId,
 			[account.id],
 		);
 		return finalSyncDays({

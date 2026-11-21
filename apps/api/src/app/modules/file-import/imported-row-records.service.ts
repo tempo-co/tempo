@@ -169,6 +169,7 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 
 	async findNewestClosingBalance(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 	): Promise<StatementClosingBalance | null> {
 		// Joined through the account's own connection, so only its owner's imports count.
@@ -179,10 +180,10 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 			JOIN "bank_imports" bank_import ON bank_import."accountId" = connection."accountId"
 				AND bank_import."undoneAt" IS NULL
 			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
-			WHERE bank_account."id" = $1 AND closing->>'bankAccountId' = $1::text
+			WHERE bank_account."id" = $1 AND connection."accountId" = $2 AND closing->>'bankAccountId' = $1::text
 			ORDER BY closing->>'date' DESC, bank_import."createdAt" DESC
 			LIMIT 1`,
-			[bankAccountId],
+			[bankAccountId, ownerId],
 		);
 		return statement ?? null;
 	}

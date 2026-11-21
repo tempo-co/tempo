@@ -487,6 +487,36 @@ describe('BankingSyncService synchronization lock', () => {
 		);
 	});
 
+	it('commits nothing when renewal loses lock ownership while the run writes', async () => {
+		transactionGate.resolve(NO_TRANSACTIONS);
+		let committed = false;
+		service = createBankingSyncService({
+			bankConnectionRepository,
+			bankAccountRepository,
+			bankSyncRunRepository,
+			dataSource: {
+				transaction: jest.fn(async (callback: (manager: unknown) => Promise<void>) => {
+					// The lease is lost once the write has begun, before it commits.
+					renewalShouldFail = true;
+					await jest.advanceTimersByTimeAsync((15 * 60 * 1000) / 3 + 1);
+					await callback({
+						getRepository: jest.fn().mockReturnValue(transactionRepository),
+						query: jest.fn().mockResolvedValue([]),
+					});
+					committed = true;
+				}),
+				getRepository: jest.fn().mockReturnValue(transactionRepository),
+			},
+			enableBankingClient,
+			encryptionService: {decrypt: jest.fn().mockReturnValue('provider-session')},
+			connectionLockService: new BankingConnectionLockService(redis as unknown as Redis),
+			configurationService,
+		});
+
+		await expect(service.synchronizeAutomatically('connection-id')).rejects.toThrow(BANKING_SERVICE_UNAVAILABLE);
+		expect(committed).toBe(false);
+	});
+
 	it('cancels the synchronization when renewal loses lock ownership', async () => {
 		const firstSync = service.synchronizeAutomatically('connection-id');
 		const firstSyncResult = expect(firstSync).rejects.toThrow(BANKING_SERVICE_UNAVAILABLE);

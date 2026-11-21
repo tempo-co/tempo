@@ -2090,48 +2090,39 @@ describe('BankConnectionController', () => {
 		expect(rows.find(({entryReference}) => entryReference === unchanged.entryReference)).toMatchObject(converted);
 	});
 
-	it('writes only rows of the synced account, even when its stored-row snapshot names another account’s row', async () => {
+	it('writes converted amounts only to rows of the synced account, leaving another account’s to the conversion', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('scoped-write-session');
 		const {bankAccount: otherBankAccount} = await createAuthorizedConnection('scoped-write-other-session');
 		const [incoming] = makeTransactions('scoped-write');
-		expect(await synchronizeQueued(connection.id, [incoming])).toMatchObject({transactionsAdded: 1});
-		const synced = await bankTransactionRepository.findOneByOrFail({bankAccountId: bankAccount.id});
+		// Stored before methods were recorded, in the reporting currency: the conversion corrects its amount.
 		const otherRow = await fixtures.createTransaction(otherBankAccount, {
-			amount: '-5.00',
+			amount: '-6.00',
 			amountInBaseCurrency: '-5.00',
-			baseAmountMethod: 'SAME',
-			categoryInputHash: 'other-account-input-hash',
-			categoryStatus: 'FAILED',
+			baseAmountMethod: null,
 		});
 		const otherRowBefore = await bankTransactionRepository.findOneByOrFail({id: otherRow.id});
-
-		// The snapshot claims the other account's row holds the synced key, with stale category and amount inputs.
-		const find = Repository.prototype.find;
-		jest.spyOn(Repository.prototype, 'find').mockImplementationOnce(async function (
-			this: Repository<BankTransaction>,
-			options,
-		) {
-			return [
-				...(await find.call(this, options)),
-				{...otherRowBefore, stableIdentityKey: synced.stableIdentityKey, amount: '-6.00'},
-			];
-		});
+		const accounts = app.get(DataSource).getRepository(Account);
+		await accounts.update({id: account.id}, {baseCurrency: 'EUR'});
 		const writer = app.get(AccountHistoryWriterService);
-		await writer.write(account.id, {syncedConnectionIds: [connection.id]}, (write) =>
-			writer.recordBankFetch(write, {
-				bankAccount,
-				connection,
-				transactions: [incoming],
-				fetchOptions: {strategy: 'default', dateFrom: incoming.bookingDate},
-				succeeded: false,
-				complete: false,
-				fetchedThrough: dateInAppTimeZone(new Date()),
-			}),
-		);
+		try {
+			await writer.write(account.id, {syncedConnectionIds: [connection.id]}, (write) =>
+				writer.recordBankFetch(write, {
+					bankAccount,
+					connection,
+					transactions: [incoming],
+					fetchOptions: {strategy: 'default', dateFrom: incoming.bookingDate},
+					succeeded: false,
+					complete: false,
+					fetchedThrough: dateInAppTimeZone(new Date()),
+				}),
+			);
+		} finally {
+			await accounts.update({id: account.id}, {baseCurrency: null});
+		}
 
 		expect(await bankTransactionRepository.findOneByOrFail({id: otherRow.id})).toEqual(otherRowBefore);
 		expect(await bankTransactionRepository.findBy({bankAccountId: bankAccount.id})).toEqual([
-			expect.objectContaining({id: synced.id, stableIdentityKey: synced.stableIdentityKey}),
+			expect.objectContaining({amount: '-12.50000000', amountInBaseCurrency: '-12.50', baseAmountMethod: 'SAME'}),
 		]);
 	});
 

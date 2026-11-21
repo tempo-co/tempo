@@ -437,6 +437,7 @@ export class BankImportService {
 			async ({manager, fileConnection: lockedFileConnection}) => {
 				const fileConnection = lockedFileConnection?.id === fileConnectionId ? lockedFileConnection : null;
 				const {record} = await this.lockImport(manager, ownerId, owned);
+				await refuseMovedAccounts(manager, ownerId, ownedAccounts);
 				await manager.query(
 					`DELETE FROM "bank_transactions" bank_transaction
 					USING "bank_accounts" bank_account, "bank_connections" connection
@@ -575,6 +576,7 @@ export class BankImportService {
 				if (toFiles && fileConnection?.id !== connection.id) {
 					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 				}
+				await refuseMovedAccounts(manager, ownerId, [account]);
 				const rows = manager.getRepository(BankImportDoubtfulRow);
 				const current = await rows.findOne({where: {id: doubtful.id}, lock: {mode: 'pessimistic_write'}});
 				if (!current) throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
@@ -711,15 +713,7 @@ export class BankImportService {
 				if (fileConnectionId && fileConnection?.id !== fileConnectionId) {
 					throw new NotFoundException(BANK_IMPORT_DOUBTFUL_ROW_NOT_FOUND);
 				}
-				// A removal or an authorization that moved an account after it was read committed before its sync lock
-				// was free: the locks taken are not that account's, so the add is refused as busy.
-				const moved = await manager.getRepository(BankAccount).count({
-					where: accounts.map(({id, bankConnection}) => ({
-						id,
-						bankConnection: {id: Not(bankConnection.id), accountId: ownerId},
-					})),
-				});
-				if (moved > 0) throw new BankImportRefusalException('account_busy');
+				await refuseMovedAccounts(manager, ownerId, accounts);
 				const rows = manager.getRepository(BankImportDoubtfulRow);
 				const current = await rows.find({
 					where: {id: In(ids), importId: record.id, kind: In([...BANK_IMPORT_NEVER_SENT_ROW_KINDS])},
@@ -749,9 +743,13 @@ export class BankImportService {
 										account.bankConnection.aspspName,
 									);
 								}
-								await rows.update(
-									{id: row.id},
-									{resolution: 'new', resolvedTransactionId: transactionId},
+								await manager.query(
+									`UPDATE "bank_import_doubtful_rows" doubtful
+									SET "resolution" = 'new', "resolvedTransactionId" = $2, "updatedAt" = now()
+									FROM "bank_imports" bank_import
+									WHERE doubtful."id" = $1
+										AND bank_import."id" = doubtful."importId" AND bank_import."accountId" = $3`,
+									[row.id, transactionId, ownerId],
 								);
 							}
 						},
@@ -1349,6 +1347,26 @@ export class BankImportService {
 			relations: {bankConnection: true},
 		});
 	}
+}
+
+/**
+ * Refuses a write as busy when a removal or an authorization moved any of its accounts to another connection after
+ * the write read them: that change committed before the locks were free, so the locks the write took, chosen by the
+ * accounts' old connections, are not theirs. The client retries, and the retry asks for the right locks.
+ */
+async function refuseMovedAccounts(
+	manager: EntityManager,
+	ownerId: Account['id'],
+	accounts: readonly BankAccount[],
+): Promise<void> {
+	if (accounts.length === 0) return;
+	const moved = await manager.getRepository(BankAccount).count({
+		where: accounts.map(({id, bankConnection}) => ({
+			id,
+			bankConnection: {id: Not(bankConnection.id), accountId: ownerId},
+		})),
+	});
+	if (moved > 0) throw new BankImportRefusalException('account_busy');
 }
 
 /**

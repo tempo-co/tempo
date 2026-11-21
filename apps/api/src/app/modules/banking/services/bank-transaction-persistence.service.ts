@@ -664,10 +664,13 @@ export class BankTransactionPersistenceService {
 		const records = this.importedRowRecords.records;
 		const onFinalDays: Array<{id: string}> = await repository.query(
 			`SELECT t."id" FROM "bank_transactions" t
-			WHERE t."bankAccountId" = $1 AND t."importId" IS NOT NULL AND NOT (${PENDING_ROW_SQL})
+			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
+			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+			WHERE t."bankAccountId" = $1 AND connection."accountId" = $5
+				AND t."importId" IS NOT NULL AND NOT (${PENDING_ROW_SQL})
 				AND COALESCE(t."bookingDate", t."valueDate") BETWEEN $2::date AND $3::date
 				AND NOT (t."id" = ANY($4::uuid[]))`,
-			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds],
+			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds, ownerId],
 		);
 		const kept = await records.findKeptByOwner(
 			repository.manager,
@@ -825,15 +828,18 @@ export class BankTransactionPersistenceService {
 	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */
 	async findPendingTransactionStarts(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountIds: readonly string[],
 	): Promise<Map<string, string>> {
 		if (bankAccountIds.length === 0) return new Map();
 		const rows: Array<{bankAccountId: string; start: string | null}> = await repository.query(
-			`SELECT "bankAccountId", to_char(MIN(${PENDING_ROW_START_SQL}), 'YYYY-MM-DD') AS "start"
-			FROM "bank_transactions"
-			WHERE "bankAccountId" = ANY($1::uuid[]) AND ${PENDING_ROW_SQL}
-			GROUP BY "bankAccountId"`,
-			[bankAccountIds],
+			`SELECT t."bankAccountId", to_char(MIN(${PENDING_ROW_START_SQL}), 'YYYY-MM-DD') AS "start"
+			FROM "bank_transactions" t
+			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
+			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+			WHERE t."bankAccountId" = ANY($1::uuid[]) AND connection."accountId" = $2 AND ${PENDING_ROW_SQL}
+			GROUP BY t."bankAccountId"`,
+			[bankAccountIds, ownerId],
 		);
 		return new Map(rows.flatMap(({bankAccountId, start}) => (start ? [[bankAccountId, start] as const] : [])));
 	}
@@ -846,17 +852,21 @@ export class BankTransactionPersistenceService {
 	 */
 	async removeUnreturnedPendingTransactions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		returnedTransactionIds: readonly string[],
 		coveredFrom: string | null,
 	): Promise<string[]> {
 		const result: unknown = await repository.query(
-			`DELETE FROM "bank_transactions"
-			WHERE "bankAccountId" = $1 AND ${PENDING_ROW_SQL}
-				AND NOT ("id" = ANY($2::uuid[]))
+			`DELETE FROM "bank_transactions" t
+			USING "bank_accounts" bank_account, "bank_connections" connection
+			WHERE t."bankAccountId" = $1 AND bank_account."id" = t."bankAccountId"
+				AND connection."id" = bank_account."bankConnectionId" AND connection."accountId" = $4
+				AND ${PENDING_ROW_SQL}
+				AND NOT (t."id" = ANY($2::uuid[]))
 				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)
-			RETURNING "ownTransferCounterpartId"`,
-			[bankAccountId, returnedTransactionIds, coveredFrom],
+			RETURNING t."ownTransferCounterpartId"`,
+			[bankAccountId, returnedTransactionIds, coveredFrom, ownerId],
 		);
 		// TypeORM returns [rows, affected] for a DELETE on PostgreSQL.
 		const rows = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : (result ?? [])) as Array<{

@@ -85,7 +85,7 @@ export class FileAccountBalanceService {
 			where: {id: bankAccountId, bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE}},
 		});
 		if (!account) return null;
-		const fileAnchor = await this.findFileAnchor(manager, account.id);
+		const fileAnchor = await this.findFileAnchor(manager, ownerId, account.id);
 		const anchor: FileAnchor | null =
 			fileAnchor ??
 			(account.statedBalanceAmount !== null && account.statedBalanceDate !== null
@@ -130,6 +130,7 @@ export class FileAccountBalanceService {
 	/** Where each account's balance comes from, for accounts the caller already scoped to their owner. */
 	async findBalanceSources(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		accounts: readonly (Pick<
 			BankAccount,
 			'id' | 'currentBalanceAmount' | 'statedBalanceAmount' | 'statedBalanceDate'
@@ -143,7 +144,7 @@ export class FileAccountBalanceService {
 				sources.set(account.id, 'file');
 			} else {
 				// A file anchor wins over a stated balance, so only an account with both needs its rows read.
-				sources.set(account.id, (await this.findFileAnchor(manager, account.id)) ? 'file' : 'stated');
+				sources.set(account.id, (await this.findFileAnchor(manager, ownerId, account.id)) ? 'file' : 'stated');
 			}
 		}
 		return sources;
@@ -153,9 +154,17 @@ export class FileAccountBalanceService {
 	 * The account's file anchor: the newer of its rows' (`findRowAnchor`) and the newest closing balance its imports
 	 * that are not undone recorded, the rows' on the same day.
 	 */
-	private async findFileAnchor(manager: EntityManager, bankAccountId: BankAccount['id']): Promise<FileAnchor | null> {
+	private async findFileAnchor(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		bankAccountId: BankAccount['id'],
+	): Promise<FileAnchor | null> {
 		const rowAnchor = await this.findRowAnchor(manager, bankAccountId);
-		const statement = await this.importedRowRecords.records.findNewestClosingBalance(manager, bankAccountId);
+		const statement = await this.importedRowRecords.records.findNewestClosingBalance(
+			manager,
+			ownerId,
+			bankAccountId,
+		);
 		if (!statement) return rowAnchor;
 		return rowAnchor && rowAnchor.date >= statement.date ? rowAnchor : statement;
 	}

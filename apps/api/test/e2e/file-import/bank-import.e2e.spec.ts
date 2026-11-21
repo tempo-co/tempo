@@ -1124,6 +1124,8 @@ describe('Bank imports', () => {
 			synced,
 			fileAccountId,
 			fileConnectionId: (await fileConnection(owner))!.id,
+			importId: mixed.body.id as string,
+			doubtfulId: row.id as string,
 			removedId,
 			addBack: () =>
 				agent
@@ -1171,14 +1173,22 @@ describe('Bank imports', () => {
 		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
 	});
 
-	it('refuses to add back a row whose account an authorization takes back to its bank while the add waits for its locks, and adds nothing', async () => {
-		const {synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
+	/**
+	 * Moves the account to the connection, as an authorization taking it back to its bank does, when the next write
+	 * asks for a sync lease: after the write read the account, before it holds its locks.
+	 */
+	function takeBackOnNextLease(bankAccountId: string, connectionId: string) {
 		const leaseService = app.get(BankingConnectionLockService);
 		const acquire = leaseService.acquire.bind(leaseService);
-		const takenBack = jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
-			await bankAccounts.update(fileAccountId, {bankConnection: {id: synced.id}});
+		return jest.spyOn(leaseService, 'acquire').mockImplementationOnce(async (...args) => {
+			await bankAccounts.update(bankAccountId, {bankConnection: {id: connectionId}});
 			return acquire(...args);
 		});
+	}
+
+	it('refuses to add back a row whose account an authorization takes back to its bank while the add waits for its locks, and adds nothing', async () => {
+		const {synced, fileAccountId, removedId, addBack} = await keptAccountWithRemovedRow();
+		const takenBack = takeBackOnNextLease(fileAccountId, synced.id);
 		try {
 			const busy = await addBack();
 			expect(busy.status).toBe(409);
@@ -1188,6 +1198,38 @@ describe('Bank imports', () => {
 		}
 		expect(await doubtfulRows.findOneByOrFail({id: removedId})).toMatchObject({resolution: null});
 		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
+	});
+
+	it('refuses to answer a doubtful row whose account an authorization takes back to its bank while the answer waits for its locks, and adds nothing', async () => {
+		const {agent, synced, fileAccountId, importId, doubtfulId} = await keptAccountWithRemovedRow();
+		const takenBack = takeBackOnNextLease(fileAccountId, synced.id);
+		try {
+			const busy = await agent
+				.post(`/bank-imports/${importId}/doubtful-rows/${doubtfulId}/resolve`)
+				.set('Origin', ORIGIN)
+				.send({decision: 'new'});
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			takenBack.mockRestore();
+		}
+		expect(await doubtfulRows.findOneByOrFail({id: doubtfulId})).toMatchObject({resolution: null});
+		expect(await transactions.countBy({bankAccountId: fileAccountId})).toBe(2);
+	});
+
+	it('refuses to undo an import whose account an authorization takes back to its bank while the undo waits for its locks, and removes nothing', async () => {
+		const {agent, synced, fileAccountId, importId, doubtfulId} = await keptAccountWithRemovedRow();
+		const takenBack = takeBackOnNextLease(fileAccountId, synced.id);
+		try {
+			const busy = await agent.delete(`/bank-imports/${importId}`).set('Origin', ORIGIN);
+			expect(busy.status).toBe(409);
+			expect(busy.body).toMatchObject({code: 'account_busy'});
+		} finally {
+			takenBack.mockRestore();
+		}
+		expect(await imports.findOneByOrFail({id: importId})).toMatchObject({undoneAt: null});
+		expect(await transactions.countBy({importId})).toBe(1);
+		expect(await doubtfulRows.findOneByOrFail({id: doubtfulId})).toMatchObject({resolution: null});
 	});
 
 	it('keeps an import to its owner', async () => {
