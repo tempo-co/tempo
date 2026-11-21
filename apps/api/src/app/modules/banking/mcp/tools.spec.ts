@@ -176,7 +176,7 @@ describe('MCP tool registration', () => {
 			date: {from: '2040-01-01', to: '2040-02-01'},
 			bankAccountIds: [ID],
 			search: 'Example € & Store',
-			categories: ['FOOD_AND_DRINK', 'UNCATEGORIZED'],
+			categories: ['GROCERIES', 'UNCATEGORIZED'],
 			categorySources: ['MANUAL'],
 			financialEventTypes: ['OWN_TRANSFER'],
 			cashFlows: ['SPENDING'],

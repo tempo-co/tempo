@@ -36,17 +36,19 @@ export const BANK_TRANSACTION_ACTIVITY_LABELS: Record<BankTransactionActivityFil
 
 export const BANK_TRANSACTION_CATEGORY_LABELS: Record<BankTransactionCategory, string> = {
   HOUSING_AND_UTILITIES: 'Housing and utilities',
-  FOOD_AND_DRINK: 'Food and drink',
+  HOME_IMPROVEMENT: 'Home improvement',
+  GROCERIES: 'Groceries',
+  EATING_OUT: 'Eating out',
   TRANSPORTATION: 'Transportation',
   SHOPPING: 'Shopping',
-  SUBSCRIPTIONS: 'Subscriptions',
-  HEALTH: 'Health',
-  TRAVEL: 'Travel',
-  ENTERTAINMENT: 'Entertainment',
+  HEALTH: 'Health and fitness',
   PERSONAL_CARE: 'Personal care',
+  ENTERTAINMENT: 'Entertainment',
+  TRAVEL: 'Travel',
   SERVICES: 'Services',
   EDUCATION: 'Education',
   INSURANCE: 'Insurance',
+  LOANS_AND_DEBT: 'Loans and debt',
   FEES: 'Fees',
   TAXES_AND_GOVERNMENT: 'Taxes and government',
   GIFTS_AND_DONATIONS: 'Gifts and donations',
@@ -77,7 +79,13 @@ export const bankTransactionSearchParamsSchema = z.object({
     })
     .optional(),
   bankAccountIds: z.array(z.string().uuid()).optional(),
-  categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
+  // A saved link may name a category the list no longer has; that filter is dropped, not the whole link.
+  categories: z
+    .array(z.string())
+    .transform((values) =>
+      BANK_TRANSACTION_CATEGORY_FILTER_VALUES.filter((value) => values.includes(value)),
+    )
+    .optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
   cashFlows: z
     .array(z.enum(BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES))

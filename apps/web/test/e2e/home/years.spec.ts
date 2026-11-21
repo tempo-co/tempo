@@ -255,7 +255,7 @@ test('spending by category shows a month on average per year, with small categor
     'In the year€1,200',
     'Transportation€60 a month',
     'Entertainment€30 a month',
-    'Health€10 a month',
+    'Health and fitness€10 a month',
   ]);
   // So does a figure without a link, such as a year's total.
   await page.keyboard.press('Escape');
@@ -297,7 +297,7 @@ test('on a phone, each category shows its latest year and change, and opens into
   const rows = table.getByRole('button');
   await expect(rows).toHaveText([
     'Housing and utilities+8%€1,298',
-    'Food and drink−2%€492',
+    'Groceries−2%€492',
     'Shopping−2%€197',
     'Travelnew€148',
     '3 more categories',
@@ -403,7 +403,7 @@ test('income by source names each source with its logo or icon and lines up with
 
 test('a single month of history is one part year with no comparison', async ({page}) => {
   const history = homeHistory({
-    spending: (month): Record<string, number> => (month === '2026-11' ? {FOOD_AND_DRINK: 40} : {}),
+    spending: (month): Record<string, number> => (month === '2026-11' ? {GROCERIES: 40} : {}),
     income: () => ({}),
   });
   const keep = (period: {start: string}) => period.start >= '2026-11';

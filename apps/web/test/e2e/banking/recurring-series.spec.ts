@@ -50,7 +50,7 @@ function series(overrides: Partial<RecurringSeries> & Pick<RecurringSeries, 'key
     continuation: null,
     amountRange: null,
     recentPayments: [],
-    category: 'SUBSCRIPTIONS',
+    category: 'ENTERTAINMENT',
     merchantLogoUrl: null,
     ...overrides,
   } satisfies RecurringSeries;
@@ -204,7 +204,7 @@ function payment(
     bankName: 'Example Bank',
     bankCountry: 'NL',
     bankAccountName: 'Example Account',
-    category: 'SUBSCRIPTIONS',
+    category: 'ENTERTAINMENT',
     categoryStatus: 'COMPLETED',
     categorySource: 'MANUAL',
     categoryConfidence: null,
@@ -888,7 +888,7 @@ test('says so when nothing recurring is found and when loading fails', async ({p
   await page.goto('/?recurring=open');
   await expect(page.getByText('No recurring payments found yet')).toBeVisible();
   await expect(
-    page.getByText('Annual subscriptions count after two payments', {exact: false}),
+    page.getByText('A yearly payment of the same amount counts after two payments', {exact: false}),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 

@@ -174,7 +174,7 @@ test('the running month reads as so far, against the usual by this day of the mo
   const history = homeHistory({
     spending: (month) =>
       month === '2026-11'
-        ? {HOUSING_AND_UTILITIES: 1200, FOOD_AND_DRINK: 100}
+        ? {HOUSING_AND_UTILITIES: 1200, GROCERIES: 100}
         : month === FLIGHT.month
           ? {...USUAL_SPENDING, TRAVEL: FLIGHT.amount}
           : {...USUAL_SPENDING},
@@ -190,7 +190,7 @@ test('the running month reads as so far, against the usual by this day of the mo
   await expect(went).toContainText('usual by this day, last 3 months');
   await expect(went.getByRole('link')).toHaveText([
     'Housing and utilities€1,2000% on usual',
-    'Food and drink€100none usually',
+    'Groceries€100none usually',
   ]);
   await expect(dialog.getByRole('region', {name: 'Where it came from'})).toContainText(
     'No income.',

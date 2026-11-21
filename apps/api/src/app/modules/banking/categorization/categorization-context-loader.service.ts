@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankTransactionCategory} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategory} from '@tempo/contracts';
 import {Repository, SelectQueryBuilder} from 'typeorm';
 
 import {CreditDebitIndicator, toBankTransactionDirection} from '../bank-transaction-direction';
@@ -226,9 +226,10 @@ export class CategorizationContextLoader {
 
 	/**
 	 * The owner's categorized rows that can be counterparty history for a batch row: the same counterparty IBAN or the
-	 * same merchant name in either direction, dated within the history window of the batch's rows, newest first. Own
-	 * transfers and financial events are not payments to a counterparty. A payment processor's collection account
-	 * names no counterparty, so rows on one match by merchant name only; it is returned with the rows.
+	 * same merchant name in either direction, dated within the history window of the batch's rows, newest first. A row
+	 * whose stored category is no longer in the category list is left out. Own transfers and financial events are not
+	 * payments to a counterparty. A payment processor's collection account names no counterparty, so rows on one match
+	 * by merchant name only; it is returned with the rows.
 	 */
 	private async loadCounterpartyRows(
 		accountId: string,
@@ -267,6 +268,9 @@ export class CategorizationContextLoader {
 			.addSelect('transaction.category', 'category')
 			.addSelect(`${date}::text`, 'date')
 			.andWhere('transaction."categoryStatus" = :completed', {completed: 'COMPLETED'})
+			.andWhere('transaction.category IN (:...historyCategories)', {
+				historyCategories: BANK_TRANSACTION_CATEGORIES,
+			})
 			.andWhere(`${date} BETWEEN :historyFrom AND :historyTo`, {
 				historyFrom: monthsBefore(ownDates[0], COUNTERPARTY_HISTORY_MONTHS),
 				historyTo: ownDates[ownDates.length - 1],

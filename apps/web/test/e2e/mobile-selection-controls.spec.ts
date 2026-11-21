@@ -185,11 +185,11 @@ test('touch category filtering uses readable search text and finger-sized choice
   await expect(search).toBeVisible();
   await expect(search).toHaveCSS('font-size', '16px');
   await search.tap();
-  await search.fill('Food');
-  const option = drawer.getByRole('option', {name: 'Food and drink', exact: true});
+  await search.fill('Groc');
+  const option = drawer.getByRole('option', {name: 'Groceries', exact: true});
   expect((await boxOf(option)).height).toBeGreaterThanOrEqual(44);
   await option.tap();
-  await expect(page).toHaveURL(/FOOD_AND_DRINK/);
+  await expect(page).toHaveURL(/GROCERIES/);
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual([
     8,
   ]);
@@ -254,9 +254,9 @@ test('reduced-motion touch selections commit quietly', async ({page}) => {
   await page.goto('/bank-transactions');
   const drawer = await openTransactionFilter(page, 'Categories');
   await swipeFilterUp(page);
-  await drawer.getByPlaceholder('Search categories...').fill('Food');
-  await drawer.getByRole('option', {name: 'Food and drink', exact: true}).tap();
-  await expect(page).toHaveURL(/FOOD_AND_DRINK/);
+  await drawer.getByPlaceholder('Search categories...').fill('Groc');
+  await drawer.getByRole('option', {name: 'Groceries', exact: true}).tap();
+  await expect(page).toHaveURL(/GROCERIES/);
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual(
     [],
   );
@@ -283,9 +283,9 @@ for (const support of ['unavailable', 'restricted']) {
     await page.getByRole('link', {name: 'Transactions'}).tap();
     const drawer = await openTransactionFilter(page, 'Categories');
     await swipeFilterUp(page);
-    await drawer.getByPlaceholder('Search categories...').fill('Food');
-    await drawer.getByRole('option', {name: 'Food and drink', exact: true}).tap();
-    await expect(page).toHaveURL(/FOOD_AND_DRINK/);
+    await drawer.getByPlaceholder('Search categories...').fill('Groc');
+    await drawer.getByRole('option', {name: 'Groceries', exact: true}).tap();
+    await expect(page).toHaveURL(/GROCERIES/);
   });
 }
 
@@ -338,9 +338,9 @@ test.describe('precise-pointer controls', () => {
     await openTransactionFilter(page, 'Categories');
     const search = page.getByPlaceholder('Search categories...');
     await expect(search).toHaveCSS('font-size', '14px');
-    await search.fill('Food');
-    await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
-    await expect(page).toHaveURL(/FOOD_AND_DRINK/);
+    await search.fill('Groc');
+    await page.getByRole('option', {name: 'Groceries', exact: true}).click();
+    await expect(page).toHaveURL(/GROCERIES/);
     await search.fill('Shopping');
     await search.press('ArrowDown');
     await search.press('Enter');

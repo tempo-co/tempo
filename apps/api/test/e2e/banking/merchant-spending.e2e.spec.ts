@@ -82,11 +82,11 @@ describe('Merchant spending', () => {
 		const burgerNl = {merchantKey: 'EXPENSE:example burger nl', description: 'Example Burger NL'};
 		await fixtures.createTransactions(ownerBankAccount, [
 			bookedRow('2026-08-20', '-4.00', {merchantKey: 'EXPENSE:corner shop', description: 'Corner Shop'}),
-			bookedRow('2026-09-10', '-10.00', {...burgerNl, category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-09-10', '-10.00', {...burgerNl, category: 'EATING_OUT'}),
 			bookedRow('2026-10-03', '-13.50', {
 				merchantKey: 'EXPENSE:example burger online',
 				description: 'Example Burger Online',
-				category: 'FOOD_AND_DRINK',
+				category: 'EATING_OUT',
 			}),
 			bookedRow('2026-10-05', '-50.00', {
 				merchantKey: 'EXPENSE:alex example',
@@ -111,7 +111,7 @@ describe('Merchant spending', () => {
 				categoryStatus: 'NOT_APPLICABLE',
 				...CURRENCY_EXCHANGE_EVENT,
 			}),
-			bookedRow('2026-10-12', '-7.50', {...burgerNl, category: 'FOOD_AND_DRINK'}),
+			bookedRow('2026-10-12', '-7.50', {...burgerNl, category: 'EATING_OUT'}),
 			bookedRow('2026-10-14', '5.00', {...burgerNl, merchantKey: 'INCOME:example burger nl', category: 'REFUND'}),
 			bookedRow('2026-10-15', '-6.00', {merchantKey: 'EXPENSE:corner shop', description: 'Corner Shop'}),
 			bookedRow('2026-10-16', '-9.99', {

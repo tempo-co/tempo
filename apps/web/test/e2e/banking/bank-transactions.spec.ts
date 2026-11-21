@@ -238,20 +238,22 @@ test.describe('bank transactions', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(22);
+    await expect(page.getByRole('option')).toHaveCount(24);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
-      'Food and drink',
+      'Home improvement',
+      'Groceries',
+      'Eating out',
       'Transportation',
       'Shopping',
-      'Subscriptions',
-      'Health',
-      'Travel',
-      'Entertainment',
+      'Health and fitness',
       'Personal care',
+      'Entertainment',
+      'Travel',
       'Services',
       'Education',
       'Insurance',
+      'Loans and debt',
       'Fees',
       'Taxes and government',
       'Gifts and donations',
@@ -264,7 +266,7 @@ test.describe('bank transactions', () => {
       'Other',
     ]);
     // Every option has a category icon; the selected one also shows a check mark.
-    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(22);
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(24);
     const targetOption = page.getByRole('option', {name: target.name, exact: true});
     await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
     await targetOption.click();
@@ -706,7 +708,7 @@ test.describe('bank transactions', () => {
       const categorizedTransactions = [
         ...payload.transactions.map((transaction, index) => ({
           ...transaction,
-          category: index === 0 ? 'FOOD_AND_DRINK' : index === 1 ? 'SHOPPING' : 'NEEDS_REVIEW',
+          category: index === 0 ? 'EATING_OUT' : index === 1 ? 'SHOPPING' : 'NEEDS_REVIEW',
           categoryStatus: 'COMPLETED',
           categorySource: index === 0 ? 'MANUAL' : index === 1 ? 'HISTORY' : 'AI',
         })),
@@ -747,12 +749,12 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions');
 
     const filters = await openTransactionFilter(page, 'Categories');
-    await expect(filters.getByRole('option')).toHaveCount(23);
-    await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
+    await expect(filters.getByRole('option')).toHaveCount(25);
+    await page.getByRole('option', {name: 'Eating out', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
     expect(singleCategoryParam).not.toBeNull();
-    expect(JSON.parse(singleCategoryParam!)).toEqual(['FOOD_AND_DRINK']);
+    expect(JSON.parse(singleCategoryParam!)).toEqual(['EATING_OUT']);
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
     await expect(page.getByText('Salary', {exact: true})).not.toBeVisible();
 
@@ -762,7 +764,7 @@ test.describe('bank transactions', () => {
 
     const multipleCategoryParam = new URL(page.url()).searchParams.get('categories');
     expect(multipleCategoryParam).not.toBeNull();
-    expect(JSON.parse(multipleCategoryParam!)).toEqual(['FOOD_AND_DRINK', 'SHOPPING']);
+    expect(JSON.parse(multipleCategoryParam!)).toEqual(['EATING_OUT', 'SHOPPING']);
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Salary'}),
@@ -772,7 +774,7 @@ test.describe('bank transactions', () => {
     const categoryWithNeedsReviewParam = new URL(page.url()).searchParams.get('categories');
     expect(categoryWithNeedsReviewParam).not.toBeNull();
     expect(JSON.parse(categoryWithNeedsReviewParam!)).toEqual([
-      'FOOD_AND_DRINK',
+      'EATING_OUT',
       'SHOPPING',
       'NEEDS_REVIEW',
     ]);
@@ -785,7 +787,7 @@ test.describe('bank transactions', () => {
     const categoryWithUncategorizedParam = new URL(page.url()).searchParams.get('categories');
     expect(categoryWithUncategorizedParam).not.toBeNull();
     expect(JSON.parse(categoryWithUncategorizedParam!)).toEqual([
-      'FOOD_AND_DRINK',
+      'EATING_OUT',
       'SHOPPING',
       'NEEDS_REVIEW',
       'UNCATEGORIZED',
