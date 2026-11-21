@@ -78,7 +78,7 @@ describe('whereManualCategoryFollowUpCandidates', () => {
 		});
 	});
 
-	it('skips rows that already have the applied history category', () => {
+	it('skips rows that already have the applied category', () => {
 		const {query, conditions, parameters} = recordingQuery();
 
 		whereManualCategoryFollowUpCandidates(query as never, {
@@ -86,9 +86,7 @@ describe('whereManualCategoryFollowUpCandidates', () => {
 			followUp: {action: 'APPLY', category: 'SHOPPING'},
 		});
 
-		expect(conditions.at(-1)).toBe(
-			`("category" IS DISTINCT FROM :followUpCategory OR "categorySource" IS DISTINCT FROM 'HISTORY')`,
-		);
+		expect(conditions.at(-1)).toBe('"category" IS DISTINCT FROM :followUpCategory');
 		expect(parameters.followUpCategory).toBe('SHOPPING');
 	});
 
