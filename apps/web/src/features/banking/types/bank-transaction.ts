@@ -8,6 +8,7 @@ import {
   BANK_TRANSACTION_SEARCH_MAX_LENGTH,
   type BankTransaction,
   type BankTransactionCategory,
+  type BankTransactionCategoryFilterValue,
   type BankTransactionFinancialEventFilterValue,
   type BankTransactionFinancialEventType,
   type BankTransactionSortField,
@@ -71,6 +72,12 @@ const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) 
 /** A recurring series' key: 32 lowercase hex characters. */
 export const recurringSeriesKeySchema = z.string().regex(/^[0-9a-f]{32}$/);
 
+function isBankTransactionCategoryFilterValue(
+  value: string,
+): value is BankTransactionCategoryFilterValue {
+  return (BANK_TRANSACTION_CATEGORY_FILTER_VALUES as readonly string[]).includes(value);
+}
+
 export const bankTransactionSearchParamsSchema = z.object({
   date: z
     .object({
@@ -82,9 +89,7 @@ export const bankTransactionSearchParamsSchema = z.object({
   // A saved link may name a category the list no longer has; that filter is dropped, not the whole link.
   categories: z
     .array(z.string())
-    .transform((values) =>
-      BANK_TRANSACTION_CATEGORY_FILTER_VALUES.filter((value) => values.includes(value)),
-    )
+    .transform((values) => values.filter(isBankTransactionCategoryFilterValue))
     .optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
   cashFlows: z

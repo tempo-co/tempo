@@ -3,10 +3,10 @@ import {expect, test} from '@playwright/test';
 
 import {bankTransactionSearchParamsSchema} from '../../src/features/banking/types/bank-transaction';
 
-test('transaction list links keep the category filters the list knows and drop the rest', () => {
+test('transaction list links keep the category filters the list knows, in their order, and drop the rest', () => {
   expect(
     bankTransactionSearchParamsSchema.parse({
-      categories: ['SHOPPING', 'RETIRED_CATEGORY', 'UNCATEGORIZED'],
+      categories: ['UNCATEGORIZED', 'RETIRED_CATEGORY', 'SHOPPING'],
     }),
-  ).toMatchObject({categories: ['SHOPPING', 'UNCATEGORIZED']});
+  ).toMatchObject({categories: ['UNCATEGORIZED', 'SHOPPING']});
 });
