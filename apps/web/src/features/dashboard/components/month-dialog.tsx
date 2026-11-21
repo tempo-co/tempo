@@ -1,8 +1,5 @@
 import {Link, useNavigate} from '@tanstack/react-router';
-import type {
-  BankTransactionBreakdownPeriod,
-  BankTransactionCategoryFilterValue,
-} from '@tempo/contracts';
+import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {ChevronLeft, ChevronRight, CircleAlert} from 'lucide-react';
 import {type KeyboardEvent, type ReactNode} from 'react';
 
@@ -470,12 +467,7 @@ function WhereItWent({
             <li key={part.key}>
               <Link
                 to='/bank-transactions'
-                search={categoryDrill(
-                  part.key as BankTransactionCategoryFilterValue,
-                  from,
-                  to,
-                  missingBaseAmounts,
-                )}
+                search={categoryDrill(part.key, from, to, missingBaseAmounts)}
                 className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 px-2 text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
               >
                 <CategoryName category={part.key} />

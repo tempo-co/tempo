@@ -1,8 +1,4 @@
-import type {
-  BankTransactionBreakdownPart,
-  BankTransactionBreakdownPeriod,
-  BankTransactionCategoryFilterValue,
-} from '@tempo/contracts';
+import type {BankTransactionBreakdownPart, BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {format} from 'date-fns';
 
 import {
@@ -242,12 +238,7 @@ export function buildHeatTable({
             value === 0 || row.role
               ? undefined
               : kind === 'category'
-                ? categoryDrill(
-                    row.key as BankTransactionCategoryFilterValue,
-                    from,
-                    period.end,
-                    missingBaseAmounts,
-                  )
+                ? categoryDrill(row.key, from, period.end, missingBaseAmounts)
                 : sourceDrill(row.key, from, period.end, missingBaseAmounts),
         };
       }),

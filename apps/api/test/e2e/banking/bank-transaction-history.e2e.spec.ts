@@ -52,9 +52,9 @@ describe('Bank transaction history', () => {
 			const employer = {merchantKey: 'INCOME:example employer'};
 			await fixtures.createTransactions(owner.bankAccount, [
 				// History starts on 15 November.
-				named('2025-11-15', '-50.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
+				named('2025-11-15', '-50.00', 'Corner Shop', {category: 'GROCERIES'}),
 				named('2025-11-20', '1000.00', 'Example Employer', {category: 'INCOME', ...employer}),
-				named('2025-12-05', '-30.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
+				named('2025-12-05', '-30.00', 'Corner Shop', {category: 'GROCERIES'}),
 				named('2025-12-10', '-200.00', 'Example Store', {category: 'SHOPPING'}),
 				named('2025-12-12', '40.00', 'Example Store', {category: 'REFUND'}),
 				// The same source under another name.
@@ -73,13 +73,13 @@ describe('Bank transaction history', () => {
 				}),
 				named('2026-01-11', '-999.00', 'Foreign Shop', {category: 'SHOPPING', amountInBaseCurrency: null}),
 				named('2026-02-03', '60.00', 'Example Store', {category: 'REFUND'}),
-				named('2026-02-04', '-10.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
+				named('2026-02-04', '-10.00', 'Corner Shop', {category: 'GROCERIES'}),
 				// A person paying the owner back.
 				named('2026-02-10', '150.00', 'Jane Example', {category: 'TRANSFER_IN'}),
-				named('2026-03-02', '-20.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
+				named('2026-03-02', '-20.00', 'Corner Shop', {category: 'GROCERIES'}),
 			]);
 			await fixtures.createTransactions(other.bankAccount, [
-				named('2026-01-05', '-7777.00', 'Corner Shop', {category: 'FOOD_AND_DRINK'}),
+				named('2026-01-05', '-7777.00', 'Corner Shop', {category: 'GROCERIES'}),
 				named('2026-01-06', '5555.00', 'Example Employer', {category: 'INCOME', ...employer}),
 			]);
 		});
@@ -106,14 +106,14 @@ describe('Bank transaction history', () => {
 						end: '2025-11-30',
 						complete: false,
 						total: '50.00',
-						parts: [part('FOOD_AND_DRINK', '50.00')],
+						parts: [part('GROCERIES', '50.00')],
 					},
 					{
 						start: '2025-12-01',
 						end: '2025-12-31',
 						complete: true,
 						total: '190.00',
-						parts: [part('SHOPPING', '200.00'), part('FOOD_AND_DRINK', '30.00'), part('REFUND', '-40.00')],
+						parts: [part('SHOPPING', '200.00'), part('GROCERIES', '30.00'), part('REFUND', '-40.00')],
 					},
 					{
 						start: '2026-01-01',
@@ -127,14 +127,14 @@ describe('Bank transaction history', () => {
 						end: '2026-02-28',
 						complete: true,
 						total: '-50.00',
-						parts: [part('FOOD_AND_DRINK', '10.00'), part('REFUND', '-60.00')],
+						parts: [part('GROCERIES', '10.00'), part('REFUND', '-60.00')],
 					},
 					{
 						start: '2026-03-01',
 						end: ASOF,
 						complete: false,
 						total: '20.00',
-						parts: [part('FOOD_AND_DRINK', '20.00')],
+						parts: [part('GROCERIES', '20.00')],
 					},
 				],
 			});
@@ -263,7 +263,7 @@ describe('Bank transaction history', () => {
 					end: ASOF,
 					complete: false,
 					total: '7777.00',
-					parts: [{key: 'FOOD_AND_DRINK', label: 'FOOD_AND_DRINK', amount: '7777.00'}],
+					parts: [{key: 'GROCERIES', label: 'GROCERIES', amount: '7777.00'}],
 				},
 			]);
 		});

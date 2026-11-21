@@ -27,7 +27,7 @@ const transaction: BankTransaction = createBankTransaction({
   bankName: 'Example Bank',
   bankCountry: 'NL',
   bankAccountName: 'Everyday',
-  category: 'SUBSCRIPTIONS',
+  category: 'ENTERTAINMENT',
   categoryStatus: 'COMPLETED',
   categorySource: 'AI',
   categoryConfidence: null,

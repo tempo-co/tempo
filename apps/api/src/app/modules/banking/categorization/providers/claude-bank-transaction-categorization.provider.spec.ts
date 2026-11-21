@@ -96,7 +96,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 function classification(overrides: Record<string, unknown> = {}) {
-	return {correlationId: '0', category: 'FOOD_AND_DRINK', confidence: 0.9, evidenceType: 'MCC', ...overrides};
+	return {correlationId: '0', category: 'EATING_OUT', confidence: 0.9, evidenceType: 'MCC', ...overrides};
 }
 
 /** The categorizing call's reply: the answer as the input of its one StructuredOutput tool call. */
@@ -171,7 +171,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					amount: '-10.00',
 					currency: 'EUR',
 					direction: 'EXPENSE' as const,
-					category: 'FOOD_AND_DRINK' as const,
+					category: 'EATING_OUT' as const,
 				},
 				{
 					date: '2026-07-15',
@@ -185,7 +185,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
 			{
 				correlationId: 'transaction-1',
-				category: 'FOOD_AND_DRINK',
+				category: 'EATING_OUT',
 				confidence: 0.9,
 				provider: 'claude-api',
 				model,
@@ -325,7 +325,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			remittanceInformation: 'synthetic-private-note',
 			previousManualCategories: [
 				{
-					category: 'FOOD_AND_DRINK' as const,
+					category: 'EATING_OUT' as const,
 					count: 2,
 					recentExamples: [
 						{amount: '-9.99', currency: 'EUR', date: '2026-08-01', text: 'synthetic-history-note'},
@@ -338,7 +338,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		).resolves.toEqual([
 			{
 				correlationId: 'transaction-1',
-				category: 'FOOD_AND_DRINK',
+				category: 'EATING_OUT',
 				confidence: 0.9,
 				provider: 'claude-api',
 				model: 'claude-sonnet-5-5',
@@ -376,7 +376,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 	});
 
 	it.each([
-		['the first answer asks for no lookup', {lookUpMerchant: false, kind: 'search', category: 'FOOD_AND_DRINK'}],
+		['the first answer asks for no lookup', {lookUpMerchant: false, kind: 'search', category: 'EATING_OUT'}],
 		[
 			'a payment that is not by card is left in review without asking for a lookup',
 			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', transactionType: 'TRANSFER'},
@@ -385,7 +385,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			'an incoming card payment is left in review without asking for a lookup',
 			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', direction: 'INCOME'},
 		],
-		['the group has no merchant query', {lookUpMerchant: true, kind: 'plain', category: 'FOOD_AND_DRINK'}],
+		['the group has no merchant query', {lookUpMerchant: true, kind: 'plain', category: 'EATING_OUT'}],
 		[
 			'the first answer files it as a transfer to a person',
 			{lookUpMerchant: true, kind: 'search', category: 'TRANSFER_OUT'},
