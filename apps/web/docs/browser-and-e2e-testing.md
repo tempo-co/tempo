@@ -31,7 +31,10 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 
 ## Flaky tests
 
-CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project and the first attempt's error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error; the trace (`on-first-retry`) records the retry, not the failure. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
+CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project, the line the first attempt failed on and its first error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error; the trace (`on-first-retry`) records the retry, not the failure. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
+
+- A shard's blob report keeps the first attempt's page snapshot for one day: `gh run download <run> -n playwright-blob-<shard>`, then read the Markdown file in the unzipped report's resources folder.
+- CPU throttling rarely reproduces a race between a user action and React's next render. To hit the gap, send the action from a `MutationObserver` in the same task the element appears in, then once with `setTimeout(…, 0)`. A race goes red on the first and green on the second. `test/e2e/banking/file-import.spec.ts` ("lists the supported files") presses Escape this way.
 
 ## Contracts to assert exactly
 
