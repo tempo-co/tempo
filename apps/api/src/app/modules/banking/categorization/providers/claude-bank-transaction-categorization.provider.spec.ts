@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {Logger} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
+import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 
 import {ConfigurationService} from '@core/config/config.service';
 
 import {toBankTransactionCategorizationInput} from '../bank-transaction-categorization-input';
 import {toInputContract} from '../bank-transaction-categorization-input.schema';
+import {BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION} from '../bank-transaction-categorization.constants';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -321,6 +323,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		const transaction = {
 			...input(),
 			ownerBank: {name: 'Example Bank', country: 'NL'},
+			merchantLocation: {city: 'Example City', region: null, country: 'NL'},
 			amount: '-42.17',
 			remittanceInformation: 'synthetic-private-note',
 			previousManualCategories: [
@@ -330,6 +333,24 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					recentExamples: [
 						{amount: '-9.99', currency: 'EUR', date: '2026-08-01', text: 'synthetic-history-note'},
 					],
+				},
+			],
+			sameAmountPayments: [
+				{
+					date: '2026-08-01',
+					category: 'EATING_OUT' as const,
+					source: 'MANUAL' as const,
+					text: 'synthetic-note',
+				},
+				{date: '2026-07-01', category: 'EATING_OUT' as const, source: 'AI' as const, text: null},
+			],
+			counterpartyHistory: [
+				{
+					date: '2026-06-01',
+					amount: '-8.50',
+					currency: 'EUR',
+					direction: 'EXPENSE' as const,
+					category: 'EATING_OUT' as const,
 				},
 			],
 		};
@@ -358,6 +379,21 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(JSON.parse(second.messages[0].content)).toEqual({
 			transactions: [{...transaction, correlationId: '0'}],
 			merchantSearch: {query: SEARCH_QUERY, results: SEARCH_RESULTS},
+		});
+		// Any change to what these requests send, or to the input schema, changes the hash: bump the prompt version with it.
+		const requests = create.mock.calls.map(([{system, tools, tool_choice, messages}]) => ({
+			system,
+			tools,
+			tool_choice,
+			messages,
+		}));
+		const promptHash = createHash('sha256')
+			.update(JSON.stringify({requests, input: toInputContract().input}))
+			.digest('hex')
+			.slice(0, 16);
+		expect({version: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION, promptHash}).toEqual({
+			version: 'bank-transaction-categorization-v21',
+			promptHash: '86f887d6b00e6ac2',
 		});
 	});
 
