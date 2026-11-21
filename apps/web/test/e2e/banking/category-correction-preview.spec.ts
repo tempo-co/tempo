@@ -10,6 +10,7 @@ import {expectNoHorizontalOverflow} from '../../utils/layout';
 const ID = '00000000-0000-4000-8000-000000000201';
 const FIRST_ID = '00000000-0000-4000-8000-000000000202';
 const SECOND_ID = '00000000-0000-4000-8000-000000000203';
+const SAME_CATEGORY_ID = '00000000-0000-4000-8000-000000000204';
 const transaction: BankTransaction = createBankTransaction({
   id: ID,
   displayDescription: 'Example Shop',
@@ -142,26 +143,45 @@ for (const viewport of [
     test('previews before saving, defaults to all selected, and applies only ticked rows', async ({
       page,
     }, testInfo) => {
-      const state = await mockCorrection(page);
+      const state = await mockCorrection(page, {
+        ...impact,
+        total: 3,
+        transactions: [
+          ...impact.transactions,
+          {
+            ...impact.transactions[1],
+            id: SAME_CATEGORY_ID,
+            displayDescription: 'Example Shop 3',
+            category: 'TRAVEL',
+            categorySource: 'AI',
+          },
+        ],
+      });
       await chooseTravel(page);
       const dialog = impactDialog(page);
       await expect(dialog).toBeVisible();
       expect(state.writes).toEqual([]);
-      await expect(dialog.getByRole('checkbox')).toHaveCount(2);
-      await expect(dialog.getByRole('checkbox').nth(0)).toBeChecked();
-      await expect(dialog.getByRole('checkbox').nth(1)).toBeChecked();
+      await expect(dialog.getByRole('checkbox')).toHaveCount(3);
+      for (const checkbox of await dialog.getByRole('checkbox').all())
+        await expect(checkbox).toBeChecked();
       await expect(dialog).toContainText('Sep 9, 2026');
       await expect(dialog).toContainText('€12.00');
-      await expect(dialog).toContainText('Shopping → Travel');
+      await expect(dialog.getByText('Shopping → Travel', {exact: true})).toHaveCount(2);
+      // A row that already has the category shows the source change ticking it makes.
+      await expect(
+        dialog.getByText('Travel · Suggested by AI → From your history', {exact: true}),
+      ).toBeVisible();
       await expectNoHorizontalOverflow(page);
       await testInfo.attach('category-impact', {
         body: await page.screenshot(),
         contentType: 'image/png',
       });
       await dialog.getByRole('checkbox').nth(1).uncheck();
-      await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
+      await dialog.getByRole('button', {name: 'Update selected (2)', exact: true}).click();
       await expect(dialog).toBeHidden();
-      expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]}]);
+      expect(state.writes).toEqual([
+        {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, SAME_CATEGORY_ID]},
+      ]);
       await expect(categorySelect(page)).toHaveText('Travel');
     });
 

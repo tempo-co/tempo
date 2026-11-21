@@ -1,5 +1,5 @@
 import {BankTransactionCategory, BankTransactionCategoryImpact} from '@tempo/contracts';
-import {useState} from 'react';
+import {type ReactNode, useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {PendingLabel} from '@/components/shared/pending-label';
@@ -14,7 +14,11 @@ import {
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
 
-import {formatBankTransactionCategory, formatBankTransactionDate} from '../utils/formatters';
+import {
+  formatBankTransactionCategory,
+  formatBankTransactionCategorySource,
+  formatBankTransactionDate,
+} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 
 type BankTransactionCategoryImpactDialogProps = {
@@ -31,6 +35,33 @@ function CategoryLabel({category}: {category: BankTransactionCategory | null}) {
       <BankTransactionCategoryIcon category={category} className='h-5 w-5' />
       <span>{formatBankTransactionCategory(category)}</span>
     </span>
+  );
+}
+
+/** What ticking the row changes: its category, or only its source when the category already matches. */
+function CategoryChange({
+  impact,
+  transaction,
+}: {
+  impact: BankTransactionCategoryImpact;
+  transaction: BankTransactionCategoryImpact['transactions'][number];
+}) {
+  const arrowTo = (target: ReactNode) => (
+    // The arrow wraps together with what it points to.
+    <span className='inline-flex items-center gap-1.5'>
+      <span className='text-muted-foreground'>{' → '}</span>
+      {target}
+    </span>
+  );
+  if (impact.action === 'RECHECK') return arrowTo(<span>Will be re-checked by AI</span>);
+  if (transaction.category !== impact.category)
+    return arrowTo(<CategoryLabel category={impact.category} />);
+  const source = formatBankTransactionCategorySource(transaction.categorySource);
+  return (
+    <>
+      {source && <span className='text-muted-foreground'>{` · ${source}`}</span>}
+      {arrowTo(<span>{formatBankTransactionCategorySource('HISTORY')}</span>)}
+    </>
   );
 }
 
@@ -100,12 +131,7 @@ export function BankTransactionCategoryImpactDialog({
                       </span>
                       <span className='flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-sm'>
                         <CategoryLabel category={transaction.category} />
-                        <span className='text-muted-foreground'>{' → '}</span>
-                        {impact.action === 'RECHECK' ? (
-                          <span>Will be re-checked by AI</span>
-                        ) : (
-                          <CategoryLabel category={impact.category} />
-                        )}
+                        <CategoryChange impact={impact} transaction={transaction} />
                       </span>
                     </span>
                   </label>
