@@ -661,6 +661,8 @@ describe('Bank import column mapper', () => {
 		});
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(400);
 		await confirm(agent, proposed.body.id, {bankName: '', currency: 'HRK'}).expect(400);
+		// 61 characters as written, though single spacing would make them 60.
+		await confirm(agent, proposed.body.id, {bankName: `Example  ${'B'.repeat(52)}`, currency: 'HRK'}).expect(400);
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank', currency: 'HRK'}).expect(201);
 
 		const connection = await fixtures.createConnection(owner, {aspspName: 'Example Bank'});

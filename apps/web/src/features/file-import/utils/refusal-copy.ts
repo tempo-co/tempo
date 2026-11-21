@@ -94,7 +94,7 @@ const REFUSAL_COPY: Record<
   account_bank_conflict: {
     title: "This account number belongs to another bank's statements",
     description:
-      "Another bank's statements already use it, so Tempo can't tell the two accounts apart.",
+      "Another bank's statements already use this account number, so the two accounts can't be told apart.",
   },
   multiple_bank_connections: {
     title: 'These files belong to more than one bank',

@@ -1724,8 +1724,9 @@ describe('Bank imports', () => {
 		const first = await drop(agent, [statementOf('EXMPDEFF', '2026-10-20')]).expect(201);
 		const [account] = (first.body as BankImportSummary).accounts;
 
+		// Two copies of one statement, of which only the second file states the other bank's BIC.
 		const refused = await drop(agent, [
-			statementOf(null, '2026-10-21'),
+			statementOf(null, '2026-10-22'),
 			statementOf('EXMPNL2A', '2026-10-22'),
 		]).expect(422);
 
@@ -1736,6 +1737,35 @@ describe('Bank imports', () => {
 
 		const unnamed = await drop(agent, [statementOf(null, '2026-11-20', '7.00')]).expect(201);
 		expect(unnamed.body).toMatchObject({rowsAdded: 1, accounts: [{id: account.id, created: false}]});
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
+	});
+
+	it('forgets the bank only an undone import gave an account, and keeps one another import gave too', async () => {
+		const {agent} = await createOwner();
+		const statementOf = (servicerBic: string | null, bookingDate: string, amount: string) =>
+			Buffer.from(
+				camt053([
+					{
+						otherId: '001234',
+						servicerBic,
+						entries: [{amount, indicator: 'DBIT', bookingDate, info: 'Example Shop'}],
+					},
+				]),
+			);
+		const first = await drop(agent, [statementOf(null, '2026-09-01', '1.00')]).expect(201);
+		const [account] = (first.body as BankImportSummary).accounts;
+		const mistaken = await drop(agent, [statementOf('EXMPNL2A', '2026-09-10', '2.00')]).expect(201);
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPNL2A'});
+
+		await undo(agent, mistaken.body.id);
+
+		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: null});
+		const right = await drop(agent, [statementOf('EXMPDEFF', '2026-09-20', '3.00')]).expect(201);
+		expect(right.body).toMatchObject({accounts: [{id: account.id, created: false}]});
+		const again = await drop(agent, [statementOf('EXMPDEFF', '2026-09-30', '4.00')]).expect(201);
+
+		await undo(agent, again.body.id);
+
 		expect(await bankAccounts.findOneByOrFail({id: account.id})).toMatchObject({bankIdentity: 'bic:EXMPDEFF'});
 	});
 

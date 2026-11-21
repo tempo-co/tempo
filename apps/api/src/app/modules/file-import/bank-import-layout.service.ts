@@ -374,12 +374,12 @@ function toLayoutResponse(row: BankImportLayout): BankImportLayoutResponse {
 }
 
 /**
- * The bank name a layout is saved under: plain text (`bankNameSpelling`) of 1 to 60 characters; null when the name
- * cannot be saved.
+ * The bank name a layout is saved under: plain text of 1 to 60 characters as written, with its spacing then made
+ * single (`bankNameSpelling`); null when the name cannot be saved.
  */
 function layoutBankName(name: string): string | null {
-	const spelling = bankNameSpelling(name.replace(CONTROL_CHARACTERS, ' '));
-	return spelling && spelling.length <= MAX_BANK_NAME_LENGTH ? spelling : null;
+	const written = name.replace(CONTROL_CHARACTERS, ' ').trim();
+	return written && written.length <= MAX_BANK_NAME_LENGTH ? bankNameSpelling(written) : null;
 }
 
 /** The bank of `STATEMENT_BANKS` the name names, ignoring case and spacing. */

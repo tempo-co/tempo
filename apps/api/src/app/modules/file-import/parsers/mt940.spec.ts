@@ -469,8 +469,11 @@ describe('parseMt940', () => {
 		]);
 	});
 
-	it("gives every statement under one shared header that header's BIC", () => {
-		const block = (iban: string) =>
+	it.each([
+		['shares its header with each statement inside it', ['-', '-}'], 'EXMPDEFF'],
+		['keeps its header from a statement after it closes', ['-}', '-'], null],
+	])('reads a SWIFT message that %s', (_caseName, [firstEnd, secondEnd], secondBic) => {
+		const block = (iban: string, end: string) =>
 			[
 				':20:EXAMPLE',
 				`:25:${iban}`,
@@ -479,19 +482,19 @@ describe('parseMt940', () => {
 				':61:261005D10,00NTRFNONREF',
 				':86:Example Shop',
 				':62F:C261005EUR90,00',
-				'-',
+				end,
 			].join('\r\n');
 		const file = [
 			'{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:',
-			block(OTHER_EXAMPLE_IBAN),
-			block(POLISH_IBAN),
+			block(OTHER_EXAMPLE_IBAN, firstEnd),
+			block(POLISH_IBAN, secondEnd),
 		].join('\r\n');
 
 		expect(
 			parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic}) => [accountIban, servicerBic]),
 		).toEqual([
 			[OTHER_EXAMPLE_IBAN, 'EXMPDEFF'],
-			[POLISH_IBAN, 'EXMPDEFF'],
+			[POLISH_IBAN, secondBic],
 		]);
 	});
 

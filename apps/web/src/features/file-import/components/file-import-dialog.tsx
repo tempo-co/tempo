@@ -320,7 +320,9 @@ function PreviewStep({
   onReject: () => void;
 }) {
   const {proposal} = step;
-  const bankList = useBankImportBanks(proposal.id);
+  const [pending, setPending] = useState(false);
+  // Read while the owner chooses; once confirming, the proposal is saved and its list is not read again.
+  const bankList = useBankImportBanks(proposal.id, {enabled: !pending});
   const banks = bankList.data ?? NO_BANKS;
   // Until the owner picks, the choice follows Tempo's guess as the list of banks arrives.
   const [pickedBank, setPickedBank] = useState<string | null>(null);
@@ -333,7 +335,6 @@ function PreviewStep({
       ? otherBankName
       : bankChoice;
   const [currency, setCurrency] = useState(proposal.defaultCurrency);
-  const [pending, setPending] = useState(false);
   // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
   const [bankError, setBankError] = useState<string | null>(null);
   const name = bankName.trim();

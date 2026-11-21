@@ -37,7 +37,8 @@ export function useConfirmLayout() {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({queryKey: bankImportQueryKeys.layouts}),
-        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.banks}),
+        // Later proposals read their banks afresh; the saved one's list is never read again.
+        queryClient.invalidateQueries({queryKey: bankImportQueryKeys.banks, refetchType: 'none'}),
       ]),
   });
   return {confirmLayout: mutateAsync};
@@ -47,8 +48,9 @@ export function useConfirmLayout() {
  * The owner's own banks to name the proposal's layout after without typing one: connected, imported and saved, sorted,
  * and only those its confirmation accepts.
  */
-export function useBankImportBanks(proposalId: string) {
+export function useBankImportBanks(proposalId: string, {enabled}: {enabled: boolean}) {
   return useQuery({
+    enabled,
     queryKey: [...bankImportQueryKeys.banks, proposalId],
     // The preview step shows its own failed-load state, so the wrapper's toast would report the failure twice.
     queryFn: () =>

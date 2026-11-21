@@ -157,6 +157,8 @@ type ImportApi = {
   undos: string[];
   proposals: Request[];
   confirms: ConfirmBankImportLayoutProposalRequest[];
+  /** How often a proposal's list of banks was read. */
+  banksReads: number;
   rejects: string[];
   layouts: BankImportLayout[];
   removed: string[];
@@ -210,6 +212,7 @@ async function mockFileImport(
     undos: [],
     proposals: [],
     confirms: [],
+    banksReads: 0,
     rejects: [],
     layouts: [...layouts],
     removed: [],
@@ -272,6 +275,10 @@ async function mockFileImport(
     if (!answer) throw new Error('Unexpected proposal');
     await answer(route);
   });
+  // The API answers a confirmed proposal's list of banks with a conflict.
+  const confirmed = new Set<string>();
+  const proposalOf = (route: Route) =>
+    new URL(route.request().url()).pathname.split('/').slice(-2)[0];
   await page.route(`${API_URL}/bank-imports/layout-proposals/*/confirm`, (route) => {
     const request = route.request().postDataJSON() as ConfirmBankImportLayoutProposalRequest;
     api.confirms.push(request);
@@ -283,6 +290,7 @@ async function mockFileImport(
       );
     const layout = {id: LAYOUT_ID, bankName: request.bankName, createdAt: TODAY.toISOString()};
     api.layouts = [layout, ...api.layouts];
+    confirmed.add(proposalOf(route));
     return fulfillJson(route, layout, 201);
   });
   await page.route(`${API_URL}/bank-imports/layout-proposals/*/reject`, (route) => {
@@ -294,6 +302,9 @@ async function mockFileImport(
   let banksFailed = 0;
   await page.route(`${API_URL}/bank-imports/layout-proposals/*/banks`, (route) => {
     if (route.request().resourceType() === 'document') return route.continue();
+    api.banksReads += 1;
+    if (confirmed.has(proposalOf(route)))
+      return fulfillJson(route, {statusCode: 409, message: 'Conflict'}, 409);
     if (banksFailed < banksFailures) {
       banksFailed += 1;
       return fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429);
@@ -1280,6 +1291,8 @@ test.describe('statement file import on Connections', () => {
 
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
     expect(api.confirms).toEqual([{bankName: 'ING'}]);
+    // The saved proposal's banks are not read again.
+    expect(api.banksReads).toBe(1);
     // The same drop went again, unchanged.
     expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
       ['statement-april.xml', 'export-example.csv'],
@@ -1425,9 +1438,8 @@ test.describe('statement file import on Connections', () => {
     const failed = preview.getByRole('alert').filter({hasText: "Couldn't load your banks"});
     await expect(failed).toHaveCount(1);
     await expect(failed).toContainText('429');
-    // The failure is said once: in the picker's place, with no toast besides. Counted now, since a waiting
-    // assertion would pass once a toast timed out.
-    expect(await page.locator('[data-sonner-toast]').count()).toBe(0);
+    // The failure is said once: in the picker's place, with no toast besides.
+    expect(await countAfterToasts(page, page.locator('[data-sonner-toast]'))).toBe(0);
     await expect(preview.getByLabel('Bank', {exact: true})).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeDisabled();
 

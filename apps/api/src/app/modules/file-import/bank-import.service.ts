@@ -213,8 +213,8 @@ export class BankImportService {
 		files: readonly Buffer[],
 		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, statementFiles, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
-		const accountRows = groupByAccount(statements, learnedBanks, statementFiles);
+		const {statements, evidenceFiles, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
+		const accountRows = groupByAccount(statements, learnedBanks, evidenceFiles);
 		const allRows = statements.flatMap(({rows}) => rows);
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
 		const rowsParsed = allRows.length;
@@ -239,7 +239,8 @@ export class BankImportService {
 				const {manager, fileConnection} = write;
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
-				await recordBankIdentities(manager, ownerId, accounts, accountRows);
+				const accountStatements = accounts.map((imported, index) => ({...imported, rows: accountRows[index]}));
+				refuseBankConflicts(accountStatements);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
 				);
@@ -290,6 +291,8 @@ export class BankImportService {
 						}),
 					}),
 				);
+
+				await recordBankIdentities(manager, ownerId, record.id, accountStatements);
 
 				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
@@ -482,6 +485,13 @@ export class BankImportService {
 					[record.id, ownerId],
 				);
 				await manager.getRepository(BankImportDoubtfulRow).delete({importId: record.id, resolution: IsNull()});
+				// A bank only this import's statements gave goes with it.
+				await manager.query(
+					`UPDATE "bank_accounts" SET "bankIdentity" = NULL, "bankIdentityImportId" = NULL
+					WHERE "bankIdentityImportId" = $1
+						AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $3)`,
+					[record.id, ownerId, BANK_CONNECTION_PROVIDERS.FILE],
+				);
 				await manager
 					.getRepository(BankImport)
 					.update(
@@ -817,8 +827,8 @@ export class BankImportService {
 		files: readonly Buffer[],
 	): Promise<{
 		statements: NormalizedStatement[];
-		/** The 1-based file each statement came from. */
-		statementFiles: ReadonlyMap<NormalizedStatement, number>;
+		/** The 1-based file each statement's bank evidence came from: its own, or the copy that stated its BIC. */
+		evidenceFiles: ReadonlyMap<NormalizedStatement, number>;
 		kinds: Map<string, FileKind>;
 		learnedBanks: ReadonlyMap<string, string>;
 	}> {
@@ -827,7 +837,7 @@ export class BankImportService {
 		const statements: NormalizedStatement[] = [];
 		const kinds = new Map<string, FileKind>();
 		const seen = new Map<string, NormalizedStatement[]>();
-		const statementFiles = new Map<NormalizedStatement, number>();
+		const evidenceFiles = new Map<NormalizedStatement, number>();
 		let rows = 0;
 		for (const [index, file] of files.entries()) {
 			const outcome = await this.parseRunner.parse(file, owned);
@@ -854,17 +864,20 @@ export class BankImportService {
 						servicerBic === statement.servicerBic,
 				);
 				if (copy) {
-					copy.servicerBic ??= statement.servicerBic;
+					if (copy.servicerBic === null && statement.servicerBic !== null) {
+						copy.servicerBic = statement.servicerBic;
+						evidenceFiles.set(copy, index + 1);
+					}
 					continue;
 				}
 				seen.set(key, [...copies, statement]);
-				statementFiles.set(statement, index + 1);
+				evidenceFiles.set(statement, index + 1);
 				rows += statement.rows.length;
 				if (rows > MAX_ROWS_PER_DROP) throw new BankImportRefusalException('too_many_rows', index + 1);
 				statements.push(statement);
 			}
 		}
-		return {statements, statementFiles, kinds, learnedBanks};
+		return {statements, evidenceFiles, kinds, learnedBanks};
 	}
 
 	/**
@@ -1207,7 +1220,6 @@ export class BankImportService {
 				iban: rows.iban,
 				name: identity.name,
 				currency: rows.currency,
-				bankIdentity: rows.bankIdentity,
 				isActive: true,
 			}),
 		);
@@ -1438,7 +1450,7 @@ async function refuseMovedAccounts(
 function groupByAccount(
 	statements: readonly NormalizedStatement[],
 	learnedBanks: ReadonlyMap<string, string>,
-	statementFiles: ReadonlyMap<NormalizedStatement, number>,
+	evidenceFiles: ReadonlyMap<NormalizedStatement, number>,
 ): AccountRows[] {
 	const ordered = [...statements].sort(compareStatements);
 	const groups = new Map<
@@ -1470,7 +1482,7 @@ function groupByAccount(
 			parts: [],
 		};
 		const identity = statementBankIdentity(statement, learnedBanks);
-		const file = statementFiles.get(statement)!;
+		const file = evidenceFiles.get(statement)!;
 		// An id that is no IBAN is unique only at its bank: statements giving it two banks are two banks' accounts,
 		// which Tempo cannot tell apart, so the drop is refused.
 		if (kind === 'other' && group.bankEvidence.some((known) => differentBanks(known.identity, identity))) {
@@ -1633,45 +1645,48 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 	};
 }
 
+/** An account an import writes to, with the statements' rows it takes. */
+type AccountStatements = ImportedAccount & {rows: AccountRows};
+
 /**
- * Records on each imported-files account without a bank the one its statements give, inside the import's transaction.
- * An account of a bank connection records its connection's bank, and one with a bank keeps it. Refuses the drop with
- * `account_bank_conflict` when a statement naming an id that is no IBAN gives evidence of another bank than the
- * account records, of the same kind (`differentBanks`): the same id at another bank.
+ * Refuses the drop with `account_bank_conflict` when a statement naming an imported-files account by an id that is no
+ * IBAN gives evidence of another bank than the account records, of the same kind (`differentBanks`): the same id at
+ * another bank. Names the file that gave the evidence.
+ */
+function refuseBankConflicts(statementsByAccount: readonly AccountStatements[]): void {
+	for (const {account, connection, rows} of statementsByAccount) {
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || rows.iban || rows.bank) continue;
+		const conflict = rows.bankEvidence.find(({identity}) => differentBanks(account.bankIdentity, identity));
+		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
+	}
+}
+
+/**
+ * Records on each imported-files account without a bank the one its statements give, inside the import's transaction,
+ * with the import that gave it (`bankIdentityImportId`), so undoing the import clears it. An account given the bank
+ * it records by another import too keeps it whichever is undone. An account of a bank connection records its
+ * connection's bank, and one with a bank keeps it.
  */
 async function recordBankIdentities(
 	manager: EntityManager,
 	ownerId: Account['id'],
-	accounts: readonly ImportedAccount[],
-	accountRows: readonly AccountRows[],
+	importId: BankImport['id'],
+	statementsByAccount: readonly AccountStatements[],
 ): Promise<void> {
-	for (const [index, {account, connection}] of accounts.entries()) {
-		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
-		const rows = accountRows[index];
-		const conflict =
-			!rows.iban && !rows.bank
-				? rows.bankEvidence.find(({identity}) => differentBanks(account.bankIdentity, identity))
-				: undefined;
-		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
-		await recordBankIdentity(manager, ownerId, account, rows.bankIdentity);
+	for (const {account, connection, rows} of statementsByAccount) {
+		const {bankIdentity} = rows;
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || !bankIdentity) continue;
+		const recorded = account.bankIdentity;
+		if (recorded && (recorded !== bankIdentity || !account.bankIdentityImportId)) continue;
+		const recordedImport = recorded ? null : importId;
+		await manager.query(
+			`UPDATE "bank_accounts" SET "bankIdentity" = $3, "bankIdentityImportId" = $5
+			WHERE "id" = $1
+				AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
+			[account.id, ownerId, bankIdentity, BANK_CONNECTION_PROVIDERS.FILE, recordedImport],
+		);
+		Object.assign(account, {bankIdentity, bankIdentityImportId: recordedImport});
 	}
-}
-
-/** Records `bankIdentity` on the owner's imported-files account when it records no bank yet. */
-async function recordBankIdentity(
-	manager: EntityManager,
-	ownerId: Account['id'],
-	account: BankAccount,
-	bankIdentity: BankIdentity | null,
-): Promise<void> {
-	if (!bankIdentity || account.bankIdentity) return;
-	await manager.query(
-		`UPDATE "bank_accounts" SET "bankIdentity" = $3
-		WHERE "id" = $1 AND "bankIdentity" IS NULL
-			AND "bankConnectionId" IN (SELECT "id" FROM "bank_connections" WHERE "accountId" = $2 AND "provider" = $4)`,
-		[account.id, ownerId, bankIdentity, BANK_CONNECTION_PROVIDERS.FILE],
-	);
-	account.bankIdentity = bankIdentity;
 }
 
 /**

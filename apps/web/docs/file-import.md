@@ -79,7 +79,7 @@ No copy calls import a fallback or assumes a bank is connected.
   proposal's confirmation accepts, so never Revolut, a name over 60 characters, or, for a file naming no
   account, a bank whose built-in export names none),
   then a separator and **Other**, which reveals a "Bank name" input (60 characters at most). While the
-  list loads the picker is disabled and reads "Loading your banks…"; a failed load takes its place as a section `LoadErrorState`
+  list loads the picker is disabled and reads "Loading your banks…"; once Looks right is pressed it is not read again; a failed load takes its place as a section `LoadErrorState`
   ("Couldn't load your banks", Try again) and no toast (`quiet`), and Looks right stays disabled until it loads.
   Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
   the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API
