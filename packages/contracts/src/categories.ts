@@ -80,7 +80,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'SHOPPING',
 		label: 'Shopping',
 		description:
-			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, pet supplies, online orders, and items bought as a gift; software and apps belong in Services, furniture and hardware in Home improvement, food in Groceries, and repairs, cleaning, postage, bills, and other services elsewhere.',
+			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, pet supplies, online orders, and items bought as a gift; software and apps belong in Services, furniture and hardware in Home improvement, food and drink in Groceries or Eating out, and repairs, cleaning, postage, bills, and other services elsewhere.',
 	},
 	{
 		value: 'HEALTH',
