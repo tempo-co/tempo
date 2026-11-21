@@ -68,7 +68,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'EATING_OUT',
 		label: 'Eating out',
 		description:
-			'Food and beverages bought ready to consume: restaurants, cafes, bars, takeaways, fast food, food delivery orders, workplace coffee and tea, and vending purchases; food bought to prepare at home belongs in Groceries, and a separate parcel or courier delivery fee in Services.',
+			'Food and beverages bought ready to consume: restaurants, cafes, bars, takeaways, fast food, food delivery orders, workplace coffee and tea, and vending purchases; food bought to prepare at home and food from supermarkets and convenience stores belong in Groceries, and a separate parcel or courier delivery fee in Services.',
 	},
 	{
 		value: 'TRANSPORTATION',
