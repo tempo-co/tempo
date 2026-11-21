@@ -20,8 +20,6 @@ Descriptions, counterparty names, remittance text, merchant and account names co
 
 `src/app/modules/banking/mcp/tools.spec.ts` covers the tool registration through an in-memory SDK client: strict input validation, Amsterdam-dated defaults, the reader call each tool makes and safe errors. `test/e2e/mcp/mcp.e2e.spec.ts` binds a disposable API on loopback and uses the real `StreamableHTTPClientTransport` to initialize, list and call all sixteen tools against synthetic PostgreSQL fixtures. It verifies ownership, REST output parity, the bank-data wrapper around planted instructions, decimal strings, safe errors, auth, Origin, body cap, throttling and Redis session isolation, including observed Redis commands. Use the disposable E2E stack or an isolated override as described in `e2e-and-seeding.md`. The auth-guard and personal-token E2E suites cover the related REST contracts.
 
-`npm run mcp:injection-check -- --model <model> [--effort <level>]` prints a plan for a live check of a Claude model against synthetic poisoned replies. Add `--run` to send each case through `claude -p` on the local Claude login, both wrapped and as bare JSON, with no tools, MCP servers or settings, and no environment beyond what the CLI needs to find its login. It fails when a wrapped case calls a planted tool, follows the planted reply or reports a wrong total in its structured answer, and prints each prose answer for the operator to read. It makes real model calls, so it never runs in CI.
-
 ## Tokens
 
 Use a verified Tempo browser session to manage tokens:

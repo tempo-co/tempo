@@ -27,7 +27,6 @@
 		"db:seed": "ts-node -r tsconfig-paths/register ./scripts/seed.ts",
 		"db:schema": "ts-node -r tsconfig-paths/register ./scripts/schema.ts",
 		"contract:input": "ts-node -r tsconfig-paths/register ./scripts/contract-input.ts",
-		"mcp:injection-check": "ts-node ./scripts/mcp-injection-check.ts",
 		"contracts:build": "tsc -p ../../packages/contracts",
 		"prebuild": "npm run contracts:build",
 		"prestart": "npm run contracts:build",
