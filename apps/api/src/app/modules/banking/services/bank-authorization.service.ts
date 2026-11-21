@@ -263,6 +263,15 @@ export class BankAuthorizationService {
 			await this.dataSource.transaction(async (manager) => {
 				assertLocksHealthy();
 				const connectionRepository = manager.getRepository(BankConnection);
+				// The lock order of banking-invariants.md: the owner's account row, which the pending connection's lock
+				// below also takes, as account deletion and removal take it; then the imported-files connection before
+				// the bank's connections, as removal and history writes take them, so taking a kept account back cannot
+				// deadlock with them.
+				await manager.query('SELECT "id" FROM "accounts" WHERE "id" = $1 FOR UPDATE', [accountId]);
+				const fileConnection = await connectionRepository.findOne({
+					where: {accountId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+					lock: {mode: 'pessimistic_write'},
+				});
 
 				const pendingConnection = await connectionRepository.findOne({
 					where: {
@@ -313,7 +322,7 @@ export class BankAuthorizationService {
 					},
 				);
 
-				await this.upsertSessionAccounts(manager, accountId, targetConnection.id, session.accounts);
+				await this.upsertSessionAccounts(manager, targetConnection.id, fileConnection, session.accounts);
 
 				if (targetConnection.id !== pendingConnection.id) {
 					await connectionRepository.delete({id: pendingConnection.id});
@@ -344,12 +353,12 @@ export class BankAuthorizationService {
 	 */
 	private async upsertSessionAccounts(
 		manager: EntityManager,
-		ownerId: Account['id'],
 		connectionId: BankConnection['id'],
+		/** The owner's imported-files connection, locked by the caller's transaction; null when it has none. */
+		fileConnection: BankConnection | null,
 		accounts: EnableBankingAccount[],
 	): Promise<void> {
 		const bankAccountRepository = manager.getRepository(BankAccount);
-		let fileConnection: BankConnection | null | undefined;
 
 		for (const account of accounts) {
 			if (!account.uid) continue;
@@ -369,11 +378,6 @@ export class BankAuthorizationService {
 			}
 
 			if (!bankAccount) {
-				// Locked after the connections, the order removal takes them in, so imports leave the account alone.
-				fileConnection ??= await manager.getRepository(BankConnection).findOne({
-					where: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
-					lock: {mode: 'pessimistic_write'},
-				});
 				// A kept account carries its bank's hash; accounts made from files have a `file:` one.
 				const kept =
 					fileConnection &&

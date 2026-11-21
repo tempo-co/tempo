@@ -16,6 +16,24 @@ export async function expectLoaded(scope: Page | Locator) {
   await expect(scope.locator('[aria-busy="true"]')).toHaveCount(0);
 }
 
+/**
+ * Waits until `scope` has no finite animation left running (open, fold or slide), so boxes read
+ * afterwards come from one settled frame. Polls rather than awaiting `finished`, which WebKit
+ * rejects when an animation is cancelled; endless ones such as spinners are ignored.
+ */
+export async function animationsSettled(scope: Locator) {
+  await expect
+    .poll(() =>
+      scope.evaluate(
+        (element) =>
+          element
+            .getAnimations({subtree: true})
+            .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).length,
+      ),
+    )
+    .toBe(0);
+}
+
 /** Checks the visible action's equal insets while the row's main control is hovered. */
 export async function expectEvenRowActionSpacing(row: Locator) {
   const buttons = row.getByRole('button');

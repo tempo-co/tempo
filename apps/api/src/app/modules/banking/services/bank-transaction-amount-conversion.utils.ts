@@ -9,24 +9,6 @@ export const MAX_ECB_PUBLICATION_GAP_DAYS = 5;
  */
 export const FX_RATE_MAX_AGE_DAYS = 7;
 
-/**
- * Transaction columns a stored base amount is derived from, with their Postgres types. When any of them changes,
- * the stored amount is stale: sync clears it and the conversion re-checks them before writing.
- */
-export const BASE_AMOUNT_INPUT_COLUMNS = [
-	['amount', 'numeric'],
-	['currency', 'varchar'],
-	['transactionDate', 'date'],
-	['bookingDate', 'date'],
-	['instructedAmount', 'numeric'],
-	['instructedCurrency', 'varchar'],
-] as const;
-
-/** `ROW(...)` of the base amount inputs of the given table alias, for comparing them as one value. */
-export function baseAmountInputsSql(alias: string): string {
-	return `ROW(${BASE_AMOUNT_INPUT_COLUMNS.map(([column]) => `${alias}."${column}"`).join(', ')})`;
-}
-
 /** SQL expressions supplied by our queries, never user input. ECB rates use EUR as their unit. */
 export function ecbRateSql(currency: string, rate: string): string {
 	return `CASE WHEN ${currency} = 'EUR' THEN 1 ELSE ${rate} END`;

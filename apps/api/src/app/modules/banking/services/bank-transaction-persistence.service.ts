@@ -1,7 +1,7 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from 'typeorm';
 
-import type {NormalizedRow} from '@modules/file-import/parsers/parse-result';
+import type {Account} from '@modules/account/account.entity';
 
 import {BankAccount} from '../bank-account.entity';
 import type {CreditDebitIndicator} from '../bank-transaction-direction';
@@ -21,14 +21,7 @@ import {MATCH_WINDOW_DAYS, MatchIncomingRow, matchDay, matchWithReferenceFallbac
 import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
-import {
-	BATCH_WRITE_CHUNK_SIZE,
-	buildPostgresValuesList,
-	chunkArray,
-	normalizeBankCode,
-	toDateOnly,
-	truncate,
-} from '../banking.utils';
+import {BATCH_WRITE_CHUNK_SIZE, chunkArray, normalizeBankCode, toDateOnly, truncate} from '../banking.utils';
 import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
@@ -38,11 +31,13 @@ import {
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from '../categorization/bank-transaction-categorization.types';
+import type {ConversionInputs} from '../converted-amounts';
 import {notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
+import {replaceHiddenSeriesPayments} from '../recurring/recurring-series-hides';
 import type {FinalSyncDays, SyncCoverage} from '../sync-coverage';
 import {type CarryRow, pickCarryTargets} from '../sync-sweep';
-import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 const BANK_TRANSACTION_IDENTITY_SELECT = {
 	id: true,
@@ -76,19 +71,11 @@ const BANK_TRANSACTION_IDENTITY_SELECT = {
 	transactionStatus: true,
 } satisfies FindOptionsSelect<BankTransaction>;
 
-export type PersistTransactionsOptions = {
-	/**
-	 * Writes the rows as new rows of this file import: each gets the next free occurrence of its identity group and
-	 * is inserted, never matched to or updating a stored row. The caller has already left out the duplicates.
-	 */
-	importId?: string;
-	/** With `importId`: the scheme the statement numbered the rows in (`BankTransaction.statementNumbering`). */
-	statementNumbering?: string | null;
-	/**
-	 * Bank sync: the account's coverage once this fetch is recorded. Sync never asks about an imported row on a day
-	 * inside it: the day becomes final, and the row is then taken over or removed.
-	 */
-	syncCoverage?: SyncCoverage | null;
+export type ImportedTransactionsTarget = {
+	/** The file import the rows are new rows of. */
+	importId: string;
+	/** The scheme the statement numbered the rows in (`BankTransaction.statementNumbering`). */
+	statementNumbering: string | null;
 };
 
 /** An owner's choices on a row that move with it: a manual category and an own-transfer choice. */
@@ -104,6 +91,13 @@ const PENDING_ROW_SQL = `UPPER(BTRIM("transactionStatus")) = 'PDNG'`;
 /** A pending row's earliest date: a fetch window starting on or before it covers the row whichever date the bank filters on. */
 const PENDING_ROW_START_SQL = 'LEAST("transactionDate", "bookingDate", "valueDate")';
 
+/** Limits a `bank_transactions` statement to rows of the owner's bank accounts (parameter `ownerId`). */
+const OWNED_BANK_ACCOUNT_SQL = `"bankAccountId" IN (
+	SELECT bank_account."id" FROM "bank_accounts" bank_account
+	INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+	WHERE connection."accountId" = :ownerId
+)`;
+
 export type PersistTransactionsResult = {
 	transactionsAdded: number;
 	/** The rows this call inserted; the others already existed and were updated. */
@@ -111,6 +105,8 @@ export type PersistTransactionsResult = {
 	persistedTransactionIds: string[];
 	/** Imported rows this write took over, including any the upsert skipped. */
 	takenOverImportedIds: string[];
+	/** The stored rows the write matched, as they were before it. */
+	previousRows: readonly ConversionInputs[];
 };
 
 /** One transaction to write, from bank sync or a parsed statement file; `EnableBankingTransaction` satisfies it. */
@@ -173,6 +169,8 @@ function listedOrderCreatedAt(repository: Repository<BankTransaction>, count: nu
 export class BankTransactionPersistenceService {
 	private readonly logger = new Logger(BankTransactionPersistenceService.name);
 
+	constructor(private readonly importedRowRecords: ImportedRowRecordsRegistry) {}
+
 	/**
 	 * The stored keys among the occurrences new rows of these groups could take. Each group is checked from its first
 	 * occurrence until it has as many free occurrences as it has new rows, so allocating from the result never
@@ -181,6 +179,7 @@ export class BankTransactionPersistenceService {
 	 */
 	private async findOccupiedTransactionIdentityKeys(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		groups: ReadonlyArray<{groupKey: string; newRows: number; storedRows: number}>,
 	): Promise<Set<string>> {
@@ -201,9 +200,12 @@ export class BankTransactionPersistenceService {
 				BATCH_WRITE_CHUNK_SIZE,
 			)) {
 				const rows: Array<{stableIdentityKey: string}> = await repository.query(
-					`SELECT "stableIdentityKey" FROM "bank_transactions"
-					WHERE "bankAccountId" = $1 AND "stableIdentityKey" = ANY($2::varchar[])`,
-					[bankAccountId, keys],
+					`SELECT t."stableIdentityKey" FROM "bank_transactions" t
+					INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
+					INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+					WHERE t."bankAccountId" = $1 AND connection."accountId" = $3
+						AND t."stableIdentityKey" = ANY($2::varchar[])`,
+					[bankAccountId, keys, ownerId],
 				);
 				for (const {stableIdentityKey} of rows) occupied.add(stableIdentityKey);
 			}
@@ -215,27 +217,23 @@ export class BankTransactionPersistenceService {
 		return occupied;
 	}
 
+	/**
+	 * Writes a bank fetch's rows to the account by identity: a row matching a stored one updates it, and imported rows
+	 * it lands on are taken over. `syncCoverage` is the account's coverage once this fetch is recorded: sync never
+	 * asks about an imported row on a day inside it, since the day becomes final and the row is then taken over or
+	 * removed.
+	 */
 	async persistTransactions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccount: BankAccount,
 		transactions: readonly BankTransactionInput[],
 		aspspName: string,
-		// Nothing stored depends on the provider; the parameter keeps the callers' shared signature.
-		_provider: string,
-		options: PersistTransactionsOptions = {},
+		syncCoverage: SyncCoverage | null = null,
 	): Promise<PersistTransactionsResult> {
 		const unassignedTransactionValues = transactions.map((transaction) =>
 			this.toBankTransactionValues(bankAccount, transaction, aspspName),
 		);
-		if (options.importId) {
-			return this.insertImportedTransactions(
-				repository,
-				bankAccount,
-				unassignedTransactionValues,
-				options.importId,
-				options.statementNumbering ?? null,
-			);
-		}
 		const stableIdentityGroupKeys = [
 			...new Set(unassignedTransactionValues.map(({stableIdentityGroupKey}) => stableIdentityGroupKey)),
 		];
@@ -276,6 +274,7 @@ export class BankTransactionPersistenceService {
 		const storedRowsByGroup = countByGroup(existingTransactions);
 		const occupiedIdentityKeys = await this.findOccupiedTransactionIdentityKeys(
 			repository,
+			ownerId,
 			bankAccount.id,
 			stableIdentityGroupKeys.map((groupKey) => ({
 				groupKey,
@@ -321,7 +320,7 @@ export class BankTransactionPersistenceService {
 					bankAccount,
 					transactionValues,
 					existingTransactions,
-					options.syncCoverage ?? null,
+					syncCoverage,
 				)
 			: {takenOverIds: [], questions: new Map<string, ImportQuestion>()};
 		// The exchange recompute after the sync decides which marked rows are exchanges.
@@ -374,10 +373,8 @@ export class BankTransactionPersistenceService {
 			// The row now belongs to the bank's history, so undoing its import leaves it.
 			await repository.update({id: In(ids)}, {importId: null});
 		}
-		if (hasImportedRows) await this.recordImportQuestions(repository, bankAccount.id, questions, adoptedIds);
-
-		await this.clearStaleBaseAmounts(repository, bankAccount.id, existingTransactions);
-		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
+		if (hasImportedRows)
+			await this.recordImportQuestions(repository, ownerId, bankAccount.id, questions, adoptedIds);
 
 		const transactionByStableIdentityKey = new Map(
 			transactionValues.map((value) => [value.stableIdentityKey, value]),
@@ -430,26 +427,33 @@ export class BankTransactionPersistenceService {
 			insertedTransactionIds,
 			persistedTransactionIds: persistedRows.map(({id}) => id),
 			takenOverImportedIds: takenOverIds,
+			previousRows: existingTransactions,
 		};
 	}
 
 	/**
 	 * Inserts a file import's new rows, each at the next free occurrence of its identity group, tagged with the
-	 * import. Plain inserts: a key collision fails the import instead of overwriting a stored row.
+	 * import, never matched to or updating a stored row: the caller has already left out the duplicates. Plain
+	 * inserts: a key collision fails the import instead of overwriting a stored row.
 	 */
-	private async insertImportedTransactions(
+	async insertImportedTransactions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccount: BankAccount,
-		unassignedTransactionValues: BankTransactionValues[],
-		importId: string,
-		statementNumbering: string | null,
-	): Promise<PersistTransactionsResult> {
+		transactions: readonly BankTransactionInput[],
+		aspspName: string,
+		{importId, statementNumbering}: ImportedTransactionsTarget,
+	): Promise<{insertedTransactionIds: string[]}> {
+		const unassignedTransactionValues = transactions.map((transaction) =>
+			this.toBankTransactionValues(bankAccount, transaction, aspspName),
+		);
 		const newRowsByGroup = new Map<string, number>();
 		for (const {stableIdentityGroupKey} of unassignedTransactionValues) {
 			newRowsByGroup.set(stableIdentityGroupKey, (newRowsByGroup.get(stableIdentityGroupKey) ?? 0) + 1);
 		}
 		const usedKeys = await this.findOccupiedTransactionIdentityKeys(
 			repository,
+			ownerId,
 			bankAccount.id,
 			[...newRowsByGroup].map(([groupKey, newRows]) => ({groupKey, newRows, storedRows: 0})),
 		);
@@ -475,13 +479,7 @@ export class BankTransactionPersistenceService {
 				.execute();
 			insertedTransactionIds.push(...(result.raw as Array<{id: string}>).map(({id}) => id));
 		}
-		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id, insertedTransactionIds);
-		return {
-			transactionsAdded: insertedTransactionIds.length,
-			insertedTransactionIds,
-			persistedTransactionIds: insertedTransactionIds,
-			takenOverImportedIds: [],
-		};
+		return {insertedTransactionIds};
 	}
 
 	/**
@@ -626,27 +624,13 @@ export class BankTransactionPersistenceService {
 	 */
 	private async recordImportQuestions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountId: string,
 		questions: ReadonlyMap<string, ImportQuestion>,
 		adoptedIds: readonly string[],
 	): Promise<void> {
-		const settle = async (importIds: ReadonlyArray<{importId: string}>, change: 1 | -1) => {
-			for (const {importId} of importIds) {
-				await repository.query(
-					`UPDATE "bank_imports" SET "rowsDoubtful" = "rowsDoubtful" + $2 WHERE "id" = $1`,
-					[importId, change],
-				);
-			}
-		};
-		if (adoptedIds.length > 0) {
-			const [removed]: [Array<{importId: string}>, number] = await repository.query(
-				`DELETE FROM "bank_import_doubtful_rows"
-				WHERE "importedTransactionId" = ANY($1::uuid[]) AND "bankAccountId" = $2 AND "resolution" IS NULL
-				RETURNING "importId"`,
-				[adoptedIds, bankAccountId],
-			);
-			await settle(removed, -1);
-		}
+		const records = this.importedRowRecords.records;
+		await records.recordTakenOver(repository.manager, ownerId, bankAccountId, adoptedIds);
 		const keys = [...new Set([...questions.values()].flatMap(({candidateKeys}) => candidateKeys))];
 		const idByKey = new Map(
 			keys.length === 0
@@ -658,29 +642,13 @@ export class BankTransactionPersistenceService {
 						})
 					).map(({id, stableIdentityKey}) => [stableIdentityKey, id] as const),
 		);
-		let asked = 0;
-		for (const {imported, candidateKeys, candidateIds} of questions.values()) {
+		const asking = [...questions.values()].flatMap(({imported, candidateKeys, candidateIds}) => {
 			const ids = [
 				...new Set([...candidateIds, ...candidateKeys.flatMap((key) => idByKey.get(key) ?? [])]),
 			].filter((id) => id !== imported.id);
-			if (ids.length === 0) continue;
-			const [updated]: [unknown[], number] = await repository.query(
-				`UPDATE "bank_import_doubtful_rows"
-				SET "candidateTransactionIds" = ARRAY(SELECT DISTINCT unnest("candidateTransactionIds" || $2::uuid[])), "updatedAt" = now()
-				WHERE "importedTransactionId" = $1 AND "resolution" IS NULL
-				RETURNING "id"`,
-				[imported.id, ids],
-			);
-			if (updated.length > 0) continue;
-			await repository.query(
-				`INSERT INTO "bank_import_doubtful_rows"
-					("importId", "bankAccountId", "row", "candidateTransactionIds", "importedTransactionId")
-				VALUES ($1, $2, $3::jsonb, $4::uuid[], $5)`,
-				[imported.importId, bankAccountId, JSON.stringify(toImportedRowSnapshot(imported)), ids, imported.id],
-			);
-			await settle([{importId: imported.importId!}], 1);
-			asked += 1;
-		}
+			return ids.length === 0 ? [] : [{imported, candidateIds: ids}];
+		});
+		const asked = await records.askAbout(repository.manager, ownerId, bankAccountId, asking);
 		if (asked > 0) this.logger.log(`Sync asked about ${asked} imported transaction(s) it could not match alone.`);
 	}
 
@@ -695,26 +663,40 @@ export class BankTransactionPersistenceService {
 	 */
 	async sweepImportedRows(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccount: BankAccount,
 		finalDays: FinalSyncDays,
 		aspspName: string,
 		takenOverIds: readonly string[],
 	): Promise<SweepImportedRowsResult> {
-		const removedIds: Array<{id: string}> = await repository.query(
+		const records = this.importedRowRecords.records;
+		const onFinalDays: Array<{id: string}> = await repository.query(
 			`SELECT t."id" FROM "bank_transactions" t
-			WHERE t."bankAccountId" = $1 AND t."importId" IS NOT NULL AND NOT (${PENDING_ROW_SQL})
+			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
+			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+			WHERE t."bankAccountId" = $1 AND connection."accountId" = $5
+				AND t."importId" IS NOT NULL AND NOT (${PENDING_ROW_SQL})
 				AND COALESCE(t."bookingDate", t."valueDate") BETWEEN $2::date AND $3::date
-				AND NOT (t."id" = ANY($4::uuid[]))
-				AND NOT EXISTS (
-					SELECT 1 FROM "bank_import_doubtful_rows" answered
-					WHERE answered."resolvedTransactionId" = t."id" AND answered."resolution" = 'new'
-				)`,
-			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds],
+				AND NOT (t."id" = ANY($4::uuid[]))`,
+			[bankAccount.id, finalDays.from, finalDays.through, takenOverIds, ownerId],
 		);
+		const kept = await records.findKeptByOwner(
+			repository.manager,
+			ownerId,
+			onFinalDays.map(({id}) => id),
+		);
+		const removedIds = onFinalDays.filter(({id}) => !kept.has(id));
 		if (removedIds.length === 0) return {removedCount: 0, recomputeIds: []};
 		// Locked, so an edit saved meanwhile either lands before the snapshot or finds the row gone.
 		const removed = await repository.find({
-			where: {id: In(removedIds.map(({id}) => id)), bankAccountId: bankAccount.id},
+			// The owner's accounts by subquery: a relation filter's outer join cannot be locked.
+			where: {
+				id: In(removedIds.map(({id}) => id)),
+				bankAccountId: Raw((column) => `${column} = :bankAccountId AND ${OWNED_BANK_ACCOUNT_SQL}`, {
+					bankAccountId: bankAccount.id,
+					ownerId,
+				}),
+			},
 			order: {bookingDate: 'ASC', id: 'ASC'},
 			lock: {mode: 'pessimistic_write'},
 		});
@@ -773,81 +755,24 @@ export class BankTransactionPersistenceService {
 		for (const row of withEdits) {
 			const target = targets.get(row.id);
 			if (!target) continue;
-			const applied = await this.applyOwnerEdits(repository, target, editsOf(row)!, aspspName);
+			const applied = await this.applyOwnerEdits(repository, ownerId, target, editsOf(row)!, aspspName);
 			if (applied.category || applied.ownTransferOverride) moved += 1;
 			if (applied.ownTransferOverride) recomputeIds.push(target);
 		}
 
-		for (const chunk of chunkArray(removed, BATCH_WRITE_CHUNK_SIZE)) {
-			await repository.query(
-				`INSERT INTO "bank_import_doubtful_rows"
-					("importId", "bankAccountId", "kind", "row", "candidateTransactionIds", "ownerEdits")
-				SELECT snapshot."importId", $1, 'removed_by_sync', snapshot."row", '{}', snapshot."ownerEdits"
-				FROM jsonb_to_recordset($2::jsonb) AS snapshot("importId" uuid, "row" jsonb, "ownerEdits" jsonb)`,
-				[
-					bankAccount.id,
-					JSON.stringify(
-						chunk.map((row) => ({
-							importId: row.importId,
-							row: toImportedRowSnapshot(row),
-							ownerEdits: editsOf(row),
-						})),
-					),
-				],
-			);
-		}
-
 		// A hidden series keeps following the payment: the look-alike stands in for the removed row, or it drops out.
-		const hides: Array<{id: string; transactionIds: string[]}> = await repository.query(
-			`SELECT hide."id", hide."transactionIds" FROM "recurring_series_hides" hide
-			INNER JOIN "bank_connections" connection ON connection."accountId" = hide."accountId"
-			INNER JOIN "bank_accounts" bank_account ON bank_account."bankConnectionId" = connection."id"
-			WHERE bank_account."id" = $1 AND hide."transactionIds" && $2::uuid[]
-			FOR UPDATE OF hide`,
-			[bankAccount.id, ids],
+		await replaceHiddenSeriesPayments(
+			repository.manager,
+			ownerId,
+			bankAccount.id,
+			new Map(removed.map((row) => [row.id, targets.get(row.id) ?? null])),
 		);
-		const replacement = new Map(removed.map((row) => [row.id, targets.get(row.id) ?? null]));
-		for (const hide of hides) {
-			const transactionIds = [
-				...new Set(
-					hide.transactionIds.flatMap((id) => (replacement.has(id) ? (replacement.get(id) ?? []) : [id])),
-				),
-			];
-			await repository.query(
-				`UPDATE "recurring_series_hides" SET "transactionIds" = $2::uuid[], "updatedAt" = now() WHERE "id" = $1`,
-				[hide.id, transactionIds],
-			);
-		}
-
-		// Open questions go with their rows; answered ones stop pointing at a row that is gone.
-		const [closed]: [Array<{importId: string}>, number] = await repository.query(
-			`DELETE FROM "bank_import_doubtful_rows"
-			WHERE "importedTransactionId" = ANY($1::uuid[]) AND "resolution" IS NULL
-			RETURNING "importId"`,
-			[ids],
+		await records.recordRemovedBySync(
+			repository.manager,
+			ownerId,
+			bankAccount.id,
+			removed.map((row) => ({row, ownerEdits: editsOf(row)})),
 		);
-		await repository.query(
-			`UPDATE "bank_import_doubtful_rows" SET "importedTransactionId" = NULL, "updatedAt" = now()
-			WHERE "importedTransactionId" = ANY($1::uuid[])`,
-			[ids],
-		);
-		const perImport = new Map<string, {removed: number; closed: number}>();
-		const tally = (importId: string, field: 'removed' | 'closed') => {
-			const counts = perImport.get(importId) ?? {removed: 0, closed: 0};
-			counts[field] += 1;
-			perImport.set(importId, counts);
-		};
-		for (const row of removed) tally(row.importId!, 'removed');
-		for (const {importId} of closed) tally(importId, 'closed');
-		for (const [importId, counts] of perImport) {
-			await repository.query(
-				`UPDATE "bank_imports"
-				SET "rowsRemovedBySync" = "rowsRemovedBySync" + $2, "rowsAdded" = "rowsAdded" - $2,
-					"rowsDoubtful" = "rowsDoubtful" - $3
-				WHERE "id" = $1`,
-				[importId, counts.removed, counts.closed],
-			);
-		}
 
 		const formerCounterpartIds: string[] = [];
 		for (const chunk of chunkArray(ids, BATCH_WRITE_CHUNK_SIZE)) {
@@ -862,7 +787,7 @@ export class BankTransactionPersistenceService {
 			formerCounterpartIds.push(...rows.flatMap(({ownTransferCounterpartId}) => ownTransferCounterpartId ?? []));
 		}
 		this.logger.log(
-			`Sync removed ${removed.length} imported row(s) it never sent on days it is final for, from ${perImport.size} import(s); edits moved for ${moved}.`,
+			`Sync removed ${removed.length} imported row(s) it never sent on days it is final for, from ${new Set(removed.map(({importId}) => importId)).size} import(s); edits moved for ${moved}.`,
 		);
 		return {removedCount: removed.length, recomputeIds: [...new Set([...formerCounterpartIds, ...recomputeIds])]};
 	}
@@ -873,13 +798,17 @@ export class BankTransactionPersistenceService {
 	 */
 	async applyOwnerEdits(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		transactionId: string,
 		edits: OwnerEdits,
 		aspspName: string | undefined,
 	): Promise<{category: boolean; ownTransferOverride: boolean}> {
 		const applied = {category: false, ownTransferOverride: false};
 		if (edits.category) {
-			const target = await repository.findOneBy({id: transactionId});
+			const target = await repository.findOneBy({
+				id: transactionId,
+				bankAccount: {bankConnection: {accountId: ownerId}},
+			});
 			if (target && !isManualCategorySource(target.categorySource)) {
 				const inputHash = createBankTransactionCategorizationInputHash(
 					toBankTransactionCategorizationInput({...target, aspspName}),
@@ -897,6 +826,7 @@ export class BankTransactionPersistenceService {
 						categoryUpdatedAt: new Date(),
 					})
 					.where('id = :id', {id: transactionId})
+					.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
 					.andWhere(`"categorySource" IS DISTINCT FROM 'MANUAL'`)
 					.execute();
 				applied.category = (result.affected ?? 0) > 0;
@@ -908,6 +838,7 @@ export class BankTransactionPersistenceService {
 				.update()
 				.set({ownTransferOverride: edits.ownTransferOverride})
 				.where('id = :id', {id: transactionId})
+				.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
 				.andWhere(`"ownTransferOverride" IS NULL`)
 				.execute();
 			applied.ownTransferOverride = (result.affected ?? 0) > 0;
@@ -918,15 +849,18 @@ export class BankTransactionPersistenceService {
 	/** The earliest date of each account's pending rows, so the account's next fetch still covers all of them. */
 	async findPendingTransactionStarts(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountIds: readonly string[],
 	): Promise<Map<string, string>> {
 		if (bankAccountIds.length === 0) return new Map();
 		const rows: Array<{bankAccountId: string; start: string | null}> = await repository.query(
-			`SELECT "bankAccountId", to_char(MIN(${PENDING_ROW_START_SQL}), 'YYYY-MM-DD') AS "start"
-			FROM "bank_transactions"
-			WHERE "bankAccountId" = ANY($1::uuid[]) AND ${PENDING_ROW_SQL}
-			GROUP BY "bankAccountId"`,
-			[bankAccountIds],
+			`SELECT t."bankAccountId", to_char(MIN(${PENDING_ROW_START_SQL}), 'YYYY-MM-DD') AS "start"
+			FROM "bank_transactions" t
+			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
+			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+			WHERE t."bankAccountId" = ANY($1::uuid[]) AND connection."accountId" = $2 AND ${PENDING_ROW_SQL}
+			GROUP BY t."bankAccountId"`,
+			[bankAccountIds, ownerId],
 		);
 		return new Map(rows.flatMap(({bankAccountId, start}) => (start ? [[bankAccountId, start] as const] : [])));
 	}
@@ -939,17 +873,21 @@ export class BankTransactionPersistenceService {
 	 */
 	async removeUnreturnedPendingTransactions(
 		repository: Repository<BankTransaction>,
+		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 		returnedTransactionIds: readonly string[],
 		coveredFrom: string | null,
 	): Promise<string[]> {
 		const result: unknown = await repository.query(
-			`DELETE FROM "bank_transactions"
-			WHERE "bankAccountId" = $1 AND ${PENDING_ROW_SQL}
-				AND NOT ("id" = ANY($2::uuid[]))
+			`DELETE FROM "bank_transactions" t
+			USING "bank_accounts" bank_account, "bank_connections" connection
+			WHERE t."bankAccountId" = $1 AND bank_account."id" = t."bankAccountId"
+				AND connection."id" = bank_account."bankConnectionId" AND connection."accountId" = $4
+				AND ${PENDING_ROW_SQL}
+				AND NOT (t."id" = ANY($2::uuid[]))
 				AND ($3::date IS NULL OR COALESCE(${PENDING_ROW_START_SQL}, $3::date) >= $3::date)
-			RETURNING "ownTransferCounterpartId"`,
-			[bankAccountId, returnedTransactionIds, coveredFrom],
+			RETURNING t."ownTransferCounterpartId"`,
+			[bankAccountId, returnedTransactionIds, coveredFrom, ownerId],
 		);
 		// TypeORM returns [rows, affected] for a DELETE on PostgreSQL.
 		const rows = (Array.isArray(result) && Array.isArray(result[0]) ? result[0] : (result ?? [])) as Array<{
@@ -958,64 +896,6 @@ export class BankTransactionPersistenceService {
 		return rows.flatMap(({ownTransferCounterpartId}) =>
 			ownTransferCounterpartId ? [ownTransferCounterpartId] : [],
 		);
-	}
-
-	/**
-	 * Stores amounts already in the owner's reporting currency right away, so they never wait for the conversion job
-	 * and count in totals as soon as they are synced. Matches the job's `SAME` method; other currencies still wait
-	 * for rates, and owners without a reporting currency for one. The calling transaction holds
-	 * `lockReportingCurrencyForAmountWrites`, so the currency read here cannot change before it commits.
-	 */
-	private async copySameCurrencyBaseAmounts(
-		repository: Repository<BankTransaction>,
-		bankAccountId: BankAccount['id'],
-		/** Limits the update to these rows; every row of the account when omitted. */
-		transactionIds?: readonly string[],
-	): Promise<void> {
-		if (transactionIds?.length === 0) return;
-		await repository.query(
-			`UPDATE "bank_transactions" AS t
-			SET "amountInBaseCurrency" = ROUND(t."amount", 2), "baseAmountMethod" = 'SAME',
-				"baseAmountRateDate" = NULL, "updatedAt" = CURRENT_TIMESTAMP
-			FROM "bank_accounts" bank_account
-			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-			INNER JOIN "accounts" account ON account."id" = connection."accountId"
-			WHERE bank_account."id" = $1
-				AND t."bankAccountId" = bank_account."id"
-				AND t."baseAmountMethod" IS NULL
-				AND t."currency" = account."baseCurrency"${transactionIds ? ' AND t."id" = ANY($2::uuid[])' : ''}`,
-			transactionIds ? [bankAccountId, transactionIds] : [bankAccountId],
-		);
-	}
-
-	/**
-	 * Clears base-currency amounts whose conversion inputs the upsert just changed, so the conversion job
-	 * recomputes them. Compares the pre-sync snapshot with the stored row, so rows the upsert skipped keep theirs.
-	 */
-	private async clearStaleBaseAmounts(
-		repository: Repository<BankTransaction>,
-		bankAccountId: BankAccount['id'],
-		previousTransactions: readonly BankTransaction[],
-	): Promise<void> {
-		const rows = previousTransactions.map((transaction) => [
-			transaction.id,
-			...BASE_AMOUNT_INPUT_COLUMNS.map(([column]) => transaction[column]),
-		]);
-		const casts = ['uuid', ...BASE_AMOUNT_INPUT_COLUMNS.map(([, cast]) => cast)];
-		const columns = ['id', ...BASE_AMOUNT_INPUT_COLUMNS.map(([column]) => column)].map((column) => `"${column}"`);
-		for (const chunk of chunkArray(rows, BATCH_WRITE_CHUNK_SIZE)) {
-			const values = buildPostgresValuesList(chunk, casts);
-			await repository.query(
-				`UPDATE "bank_transactions" AS t
-				SET "amountInBaseCurrency" = NULL, "baseAmountMethod" = NULL, "baseAmountRateDate" = NULL
-				FROM (VALUES ${values.sql}) AS previous(${columns.join(', ')})
-				WHERE t."bankAccountId" = $${values.parameters.length + 1}
-					AND t."id" = previous."id"
-					AND t."amountInBaseCurrency" IS NOT NULL
-					AND ${baseAmountInputsSql('t')} IS DISTINCT FROM ${baseAmountInputsSql('previous')}`,
-				[...values.parameters, bankAccountId],
-			);
-		}
 	}
 
 	private toBankTransactionValues(bankAccount: BankAccount, transaction: BankTransactionInput, aspspName: string) {
@@ -1196,26 +1076,4 @@ type ImportQuestion = {imported: BankTransaction; candidateKeys: string[]; candi
 
 function isPendingStatus(status: string | null | undefined): boolean {
 	return status?.trim().toUpperCase() === 'PDNG';
-}
-
-/** The imported row as a statement row, the shape a question shows; amounts keep at least two decimals. */
-function toImportedRowSnapshot(transaction: BankTransaction): NormalizedRow {
-	const decimal = (value: string | null) => value?.replace(/^(-?\d+\.\d{2}\d*?)0+$/, '$1') ?? null;
-	return {
-		bookingDate: transaction.bookingDate,
-		valueDate: transaction.valueDate,
-		transactionDate: transaction.transactionDate,
-		amount: decimal(transaction.amount)!,
-		creditDebitIndicator: transaction.creditDebitIndicator === 'CRDT' ? 'CRDT' : 'DBIT',
-		currency: transaction.currency,
-		balanceAfter: decimal(transaction.balanceAfterAmount),
-		bankReference: transaction.entryReference,
-		counterpartyName: transaction.counterpartyName,
-		counterpartyIban: transaction.counterpartyIban,
-		remittanceInformation: transaction.remittanceInformation,
-		description: transaction.description,
-		bankTransactionCode: transaction.bankTransactionCode,
-		bankTransactionSubCode: transaction.bankTransactionSubCode,
-		referenceNumber: transaction.referenceNumber,
-	};
 }

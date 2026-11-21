@@ -60,7 +60,7 @@ export type SyncCoverage = {from: string; through: string};
 
 export type CompleteTransactionFetch = {
 	options: EnableBankingTransactionFetchOptions;
-	transactions: EnableBankingTransaction[];
+	transactions: readonly EnableBankingTransaction[];
 	/** The fetch's date in the app's time zone. */
 	fetchedOn: string;
 };

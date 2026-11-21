@@ -7,14 +7,9 @@ import type {Account} from '@modules/account/account.entity';
 import {BankAccount} from '../bank-account.entity';
 import {BankTransaction} from '../bank-transaction.entity';
 import {addDays} from '../banking.utils';
+import {CONVERSION_RATE_DATE_SQL, convertOwnerAmounts, needsConversionRatesSql} from '../converted-amounts';
 import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
-import {
-	FX_RATE_MAX_AGE_DAYS,
-	baseAmountInputsSql,
-	convertEcbAmountSql,
-	ecbRateSql,
-	latestExpectedEcbRateDate,
-} from './bank-transaction-amount-conversion.utils';
+import {FX_RATE_MAX_AGE_DAYS, latestExpectedEcbRateDate} from './bank-transaction-amount-conversion.utils';
 import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {FxRateService} from './fx-rate.service';
 
@@ -30,147 +25,7 @@ type OwnerToConvert = Pick<Account, 'baseCurrency' | 'baseCurrencyRevision' | 'b
 	currencies: PendingCurrency[];
 };
 
-/** Rate date of a transaction, as used by the conversion. */
-const RATE_DATE_SQL = `COALESCE(t."transactionDate", t."bookingDate")`;
 const CURRENCY_SQL = 't."currency"';
-/** Rows without a conversion method are (re)converted, including amounts stored before methods were recorded. */
-const PENDING_SQL = `t."baseAmountMethod" IS NULL`;
-
-/**
- * The reference rate for the transaction's rate date: the newest final one (the publication of that date's business
- * day itself, or, once a later publication is stored, the previous one, for an ECB holiday). While none is final,
- * the newest stored one stands in, so the row counts in totals at once; {@link correctableSql} converts it again once
- * the day's own publication is stored. Both at most `$3` days before the rate date.
- * Holidays are inferred, not looked up: a weekday ECB skipped for any other reason is treated the same way.
- */
-const rateLateral = (alias: string, currency: string) => `
-	LEFT JOIN LATERAL (
-		SELECT rate."rateToEur", rate."rateDate"
-		FROM "bank_transaction_fx_rates" rate
-		WHERE rate."currency" = ${currency}
-			AND rate."rateDate" BETWEEN candidate."rateDate" - $3::integer AND candidate."rateDate"
-		ORDER BY
-			(
-				rate."rateDate" = candidate."businessDate"
-				OR EXISTS (
-					SELECT 1 FROM "bank_transaction_fx_rates" later
-					WHERE later."currency" = rate."currency" AND later."rateDate" > candidate."rateDate"
-				)
-			) DESC,
-			rate."rateDate" DESC
-		LIMIT 1
-	) ${alias} ON TRUE`;
-
-/**
- * An ECB amount converted with a stand-in rate whose own publication is now stored: a rate of the row's currency or
- * the reporting currency (`base`) newer than the older of the two rates used (the stored rate date), on or before the
- * rate date. A holiday row already uses the final rate, since no publication falls between it and the rate date; a
- * row that is converted again to the same amount is not written.
- */
-const correctableSql = (base: string) => `(
-	t."baseAmountMethod" = 'ECB' AND EXISTS (
-		SELECT 1 FROM "bank_transaction_fx_rates" newer
-		WHERE newer."currency" IN (t."currency", ${base})
-			AND newer."rateDate" > t."baseAmountRateDate"
-			AND newer."rateDate" <= ${RATE_DATE_SQL}
-	)
-)`;
-/** Rows a pass converts: unconverted ones, and stand-in ECB amounts whose own rate is now published. */
-const TO_CONVERT_SQL = (base: string) => `(${PENDING_SQL} OR ${correctableSql(base)})`;
-/**
- * An ECB amount that may still use a stand-in: its rate is older than its day's business day, and for its currency or
- * the reporting currency (`base`) no publication after its day is stored, so neither the day's own rate nor a holiday
- * is known yet. A pass fetches rates for it like for an unconverted row, whatever its age or account.
- */
-const unresolvedSql = (base: string) => `(
-	t."baseAmountMethod" = 'ECB'
-	AND t."baseAmountRateDate" < ${RATE_DATE_SQL} - CASE EXTRACT(ISODOW FROM ${RATE_DATE_SQL}) WHEN 6 THEN 1 WHEN 7 THEN 2 ELSE 0 END
-	AND EXISTS (
-		SELECT 1 FROM (VALUES (t."currency"), (${base})) needed("currency")
-		WHERE needed."currency" <> 'EUR' AND NOT EXISTS (
-			SELECT 1 FROM "bank_transaction_fx_rates" later
-			WHERE later."currency" = needed."currency" AND later."rateDate" > ${RATE_DATE_SQL}
-		)
-	)
-)`;
-
-/**
- * Converts every unconverted transaction of one owner into their reporting currency (`$2`), in exact cents:
- * same currency → copied; bank-reported amount in the base currency → `INSTRUCTED`; otherwise via the
- * ECB reference rates (pivoting through EUR) of the newest final publication at most {@link FX_RATE_MAX_AGE_DAYS}
- * days before the transaction, or until that is published the newest stored one, converted again once it is.
- * Rows without a usable rate stay pending and are retried on the next run.
- * The update re-checks the inputs, so a row a concurrent sync changed is left for the next run.
- */
-const CONVERT_OWNER_SQL = `
-	WITH candidate AS (
-		SELECT
-			t."id",
-			t."amount",
-			${CURRENCY_SQL} AS "currency",
-			t."instructedCurrency",
-			t."instructedAmount",
-			${RATE_DATE_SQL} AS "rateDate",
-			-- Weekends use Friday's publication; toWeekday in the utils applies the same rule to fetch ranges.
-			${RATE_DATE_SQL} - CASE EXTRACT(ISODOW FROM ${RATE_DATE_SQL}) WHEN 6 THEN 1 WHEN 7 THEN 2 ELSE 0 END
-				AS "businessDate",
-			${baseAmountInputsSql('t')} AS "inputs"
-		FROM "bank_transactions" t
-		INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
-		INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-		WHERE connection."accountId" = $1 AND ${TO_CONVERT_SQL('$2')}
-	),
-	priced AS (
-		SELECT
-			candidate.*,
-			${ecbRateSql('candidate."currency"', 'source."rateToEur"')} AS "sourceRate",
-			${ecbRateSql('$2', 'base."rateToEur"')} AS "baseRate",
-			LEAST(source."rateDate", base."rateDate") AS "usedRateDate"
-		FROM candidate
-		${rateLateral('source', 'candidate."currency"')}
-		${rateLateral('base', '$2')}
-	),
-	method AS (
-		SELECT
-			priced.*,
-			CASE
-				WHEN priced."currency" = $2 THEN 'SAME'
-				WHEN priced."instructedCurrency" = $2 AND priced."instructedAmount" IS NOT NULL THEN 'INSTRUCTED'
-				WHEN priced."sourceRate" > 0 AND priced."baseRate" > 0 THEN 'ECB'
-			END AS "baseAmountMethod"
-		FROM priced
-	),
-	converted AS (
-		SELECT
-			method."id",
-			method."inputs",
-			method."baseAmountMethod",
-			CASE method."baseAmountMethod"
-				WHEN 'SAME' THEN ROUND(method."amount", 2)
-				WHEN 'INSTRUCTED' THEN ROUND(SIGN(method."amount") * ABS(method."instructedAmount"), 2)
-				WHEN 'ECB' THEN ${convertEcbAmountSql('method."amount"', 'method."sourceRate"', 'method."baseRate"')}
-			END AS "amountInBaseCurrency",
-			CASE WHEN method."baseAmountMethod" = 'ECB' THEN method."usedRateDate" END AS "baseAmountRateDate"
-		FROM method
-	),
-	updated AS (
-		UPDATE "bank_transactions" t
-		SET
-			"amountInBaseCurrency" = converted."amountInBaseCurrency",
-			"baseAmountMethod" = converted."baseAmountMethod",
-			"baseAmountRateDate" = converted."baseAmountRateDate",
-			"updatedAt" = CURRENT_TIMESTAMP
-		FROM converted
-		WHERE t."id" = converted."id"
-			AND ${TO_CONVERT_SQL('$2')}
-			AND ${baseAmountInputsSql('t')} IS NOT DISTINCT FROM converted."inputs"
-			AND converted."baseAmountMethod" IS NOT NULL
-			-- A stand-in whose newer rate does not change it yet is left as it is, so it counts as no conversion.
-			AND (t."amountInBaseCurrency", t."baseAmountMethod", t."baseAmountRateDate")
-				IS DISTINCT FROM (converted."amountInBaseCurrency", converted."baseAmountMethod", converted."baseAmountRateDate")
-		RETURNING 1
-	)
-	SELECT COUNT(*)::integer AS "count" FROM updated`;
 
 @Injectable()
 export class BankTransactionAmountConversionService {
@@ -197,8 +52,9 @@ export class BankTransactionAmountConversionService {
 		let scanned = 0;
 		let converted = 0;
 		for (const [accountId, owner] of await this.findOwnersToConvert()) {
-			if (!owner.baseCurrency) continue;
-			await this.ensureHistoricalRates(owner.currencies, owner.baseCurrency, latestExpectedDate);
+			const {baseCurrency} = owner;
+			if (!baseCurrency) continue;
+			await this.ensureHistoricalRates(owner.currencies, baseCurrency, latestExpectedDate);
 
 			const count = await this.dataSource.transaction(async (manager) => {
 				await lockReportingCurrencyForAmountWrites(manager, accountId);
@@ -208,16 +64,11 @@ export class BankTransactionAmountConversionService {
 				);
 				// Changed since the rates were fetched: the change queued a pass of its own.
 				if (
-					current?.baseCurrency !== owner.baseCurrency ||
+					current?.baseCurrency !== baseCurrency ||
 					current.baseCurrencyRevision !== owner.baseCurrencyRevision
 				)
 					return null;
-				const [result] = await manager.query<Array<{count: number}>>(CONVERT_OWNER_SQL, [
-					accountId,
-					owner.baseCurrency,
-					FX_RATE_MAX_AGE_DAYS,
-				]);
-				return result.count;
+				return convertOwnerAmounts(manager, accountId, baseCurrency);
 			});
 			if (count === null) continue;
 			scanned += owner.currencies.reduce((total, row) => total + row.count, 0);
@@ -268,14 +119,14 @@ export class BankTransactionAmountConversionService {
 			`SELECT
 				connection."accountId",
 				${CURRENCY_SQL} AS "currency",
-				to_char(MIN(${RATE_DATE_SQL}), 'YYYY-MM-DD') AS "fromDate",
-				to_char(MAX(${RATE_DATE_SQL}), 'YYYY-MM-DD') AS "toDate",
+				to_char(MIN(${CONVERSION_RATE_DATE_SQL}), 'YYYY-MM-DD') AS "fromDate",
+				to_char(MAX(${CONVERSION_RATE_DATE_SQL}), 'YYYY-MM-DD') AS "toDate",
 				COUNT(*)::integer AS "count"
 			FROM "bank_transactions" t
 			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
 			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
 			INNER JOIN "accounts" owner ON owner."id" = connection."accountId"
-			WHERE ${TO_CONVERT_SQL('owner."baseCurrency"')} OR ${unresolvedSql('owner."baseCurrency"')}
+			WHERE ${needsConversionRatesSql('owner."baseCurrency"')}
 			GROUP BY connection."accountId", ${CURRENCY_SQL}
 			ORDER BY connection."accountId", ${CURRENCY_SQL}`,
 		);

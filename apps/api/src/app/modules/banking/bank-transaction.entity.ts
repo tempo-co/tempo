@@ -11,8 +11,6 @@ import {
 	UpdateDateColumn,
 } from 'typeorm';
 
-import type {BankImport} from '@modules/file-import/bank-import.entity';
-
 import {BankAccount} from './bank-account.entity';
 import type {CreditDebitIndicator} from './bank-transaction-direction';
 import type {
@@ -258,10 +256,11 @@ export class BankTransaction {
 	@Column({type: 'varchar', length: 96, nullable: true})
 	statementNumbering: string | null;
 
-	// Named by string: the import record belongs to the file-import module, which depends on banking.
+	// Named by string and typed by its id alone: the import record belongs to the file-import module, which depends on
+	// banking.
 	@ManyToOne('BankImport', {onDelete: 'SET NULL', nullable: true})
 	@JoinColumn({name: 'importId', foreignKeyConstraintName: 'fk_bank_transactions_import'})
-	bankImport?: BankImport | null;
+	bankImport?: {id: string} | null;
 
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;

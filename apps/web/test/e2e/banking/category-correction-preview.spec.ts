@@ -1,11 +1,11 @@
-import type {Locator, Page} from '@playwright/test';
+import type {Page} from '@playwright/test';
 import {BankTransaction, BankTransactionCategoryImpact} from '@tempo/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {createBankTransaction} from '../../data/bank-transaction.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {animationsSettled, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const ID = '00000000-0000-4000-8000-000000000201';
 const FIRST_ID = '00000000-0000-4000-8000-000000000202';
@@ -112,13 +112,6 @@ async function chooseTravel(page: Page) {
   await page.getByRole('option', {name: 'Travel', exact: true}).click();
 }
 
-/** Waits out a dialog's open and fold animations before anything is measured. */
-// Polls rather than awaiting `finished`, which WebKit rejects when an animation is cancelled.
-const settled = (dialog: Locator) =>
-  expect
-    .poll(() => dialog.evaluate((element) => element.getAnimations({subtree: true}).length))
-    .toBe(0);
-
 /** Holds the preview until the returned function is called, then answers with `body`. */
 async function holdPreview(page: Page, body: unknown) {
   let release!: () => void;
@@ -174,7 +167,7 @@ for (const viewport of [
       const shoppingRows = dialog.getByRole('button', {name: '2 Shopping payments', exact: true});
       await expect(shoppingRows).toHaveAttribute('aria-expanded', 'false');
       await shoppingRows.click();
-      await settled(dialog);
+      await animationsSettled(dialog);
       await expect(shoppingRows).toHaveAttribute('aria-expanded', 'true');
       const first = dialog.getByRole('checkbox', {
         name: 'Example Shop, Sep 9, 2026, -€12.00',
@@ -361,7 +354,7 @@ for (const viewport of [
         exact: true,
       });
       await dialog.getByRole('button', {name: '100 Shopping payments', exact: true}).click();
-      await settled(dialog);
+      await animationsSettled(dialog);
       const isCut = (element: HTMLElement) =>
         element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
       expect(await move.evaluate(isCut)).toBe(false);

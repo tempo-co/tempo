@@ -175,14 +175,17 @@ field.
 
 ### Tables and transaction rows
 
-Quiet headers, dividers only for row scanning, right-aligned `numeric` amounts, long
-descriptions truncated but inspectable. Rows that navigate show a keyboard-visible focus
-state. Status text stays understandable without color.
+Quiet headers, dividers only for row scanning, right-aligned `numeric` amounts. Long
+descriptions truncate or clamp where the row opens a view that shows them in full. A row
+the owner picks from without opening it (a selection list in a dialog) wraps its description
+instead, so similar names can be told apart on touch. Rows that navigate show a
+keyboard-visible focus state. Status text stays understandable without color.
 
 Every transaction and recurring row starts with a round `36px` Clay tile: the merchant's
 monochrome alpha logo when available, otherwise the category glyph (the activity glyph for own
-transfers and currency exchanges). Rows stay `60px` tall, plus any `1px` divider; the transaction
-inspector keeps its `40px` tile. All leading tiles share these theme tokens:
+transfers and currency exchanges). Rows stay `60px` tall, plus any `1px` divider; a wrapping
+selection row grows only for its description. The transaction inspector keeps its `40px` tile.
+All leading tiles share these theme tokens:
 
 | Token | Light | Dark |
 |---|---|---|

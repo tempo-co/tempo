@@ -24,8 +24,9 @@ import {
 } from './banking-sync.constants';
 import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {FileAccountBalanceService} from './file-account-balance.service';
-import {fileAccountProviderId, lockFileConnection} from './file-connection';
+import {fileAccountProviderId, lockExistingFileConnection, lockFileConnection} from './file-connection';
 import {findOwnedConnection} from './find-owned-connection';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 const REMOVABLE_CONNECTION_STATUSES = [
 	BANK_CONNECTION_STATUSES.PENDING_AUTHORIZATION,
@@ -58,6 +59,7 @@ export class BankConnectionRemovalService {
 		private readonly consentRevocationService: BankingConsentRevocationService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
 		private readonly derivedDataRefresh: DerivedDataRefreshService,
+		private readonly importedRowRecords: ImportedRowRecordsRegistry,
 	) {}
 
 	async removeConnection(
@@ -90,8 +92,19 @@ export class BankConnectionRemovalService {
 				const bankAccountRepository = manager.getRepository(BankAccount);
 				const candidateConnection = await findOwnedConnection(connectionRepository, accountId, connectionId);
 
-				// Lock pending reauthorizations before the existing connection. Callback persistence uses
-				// the same order, so deletion and callback cannot deadlock or recreate the connection.
+				// The lock order of banking-invariants.md: the owner's account row, as account deletion takes it; the
+				// imported-files connection, created here when the removal moves accounts to it, as history writes and
+				// authorization take it; pending reauthorizations; then the connection. Callback persistence uses the
+				// same order, so deletion and callback cannot deadlock or recreate the connection.
+				await manager.query('SELECT "id" FROM "accounts" WHERE "id" = $1 FOR UPDATE', [accountId]);
+				const movesAccounts =
+					keepsAccounts(candidateConnection, removal) &&
+					(await bankAccountRepository.count({
+						where: {bankConnection: {id: candidateConnection.id, accountId}},
+					})) > 0;
+				const fileConnection = movesAccounts
+					? await lockFileConnection(manager, accountId)
+					: await lockExistingFileConnection(manager, accountId);
 				const pendingConnections = await connectionRepository.find({
 					where: {
 						account: {id: accountId},
@@ -130,7 +143,7 @@ export class BankConnectionRemovalService {
 				);
 				const kept =
 					isDestructive && keepsAccounts(connection, removal)
-						? await this.moveAccountsToFileConnection(manager, accountId, connection)
+						? await this.moveAccountsToFileConnection(manager, accountId, connection, fileConnection)
 						: [];
 				await connectionRepository.remove(connection);
 				await this.fileAccountBalanceService.recomputeAll(manager, accountId, [
@@ -166,6 +179,8 @@ export class BankConnectionRemovalService {
 		manager: EntityManager,
 		ownerId: Account['id'],
 		connection: BankConnection,
+		/** The owner's imported-files connection, created and locked by the removal before the connection. */
+		fileConnection: BankConnection | null,
 	): Promise<BankAccount['id'][]> {
 		const bankAccountRepository = manager.getRepository(BankAccount);
 		const accounts = await bankAccountRepository.find({
@@ -173,8 +188,7 @@ export class BankConnectionRemovalService {
 			order: {id: 'ASC'},
 		});
 		if (accounts.length === 0) return [];
-		const fileConnection = await lockFileConnection(manager, ownerId);
-		// Only a deletion of the whole Tempo account committing in between gets here.
+		// Only a deletion of the whole Tempo account committing before the removal locked it gets here.
 		if (!fileConnection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
 		const owner = await manager.getRepository(Account).findOneOrFail({
 			select: {id: true, timeZone: true},
@@ -202,10 +216,7 @@ export class BankConnectionRemovalService {
 			);
 		}
 		const ids = accounts.map(({id}) => id);
-		await manager.query(
-			`UPDATE "bank_imports" SET "bankConnectionId" = $1 WHERE "bankConnectionId" = $2 AND "accountId" = $3`,
-			[fileConnection.id, connection.id, ownerId],
-		);
+		await this.importedRowRecords.records.moveToConnection(manager, ownerId, connection.id, fileConnection.id);
 		return ids;
 	}
 
