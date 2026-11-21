@@ -79,7 +79,13 @@ export const bankTransactionSearchParamsSchema = z.object({
     })
     .optional(),
   bankAccountIds: z.array(z.string().uuid()).optional(),
-  categories: z.array(z.enum(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)).optional(),
+  // A saved link may name a category the list no longer has; that filter is dropped, not the whole link.
+  categories: z
+    .array(z.string())
+    .transform((values) =>
+      BANK_TRANSACTION_CATEGORY_FILTER_VALUES.filter((value) => values.includes(value)),
+    )
+    .optional(),
   categorySources: z.array(z.enum(BANK_TRANSACTION_CATEGORIZATION_SOURCES)).optional(),
   cashFlows: z
     .array(z.enum(BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES))

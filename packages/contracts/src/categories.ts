@@ -128,7 +128,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'LOANS_AND_DEBT',
 		label: 'Loans and debt',
 		description:
-			'Repayments of debt: personal, car, and student loans, buy-now-pay-later instalments, and credit-card bills paid to a card whose account is not connected; a mortgage belongs in Housing and utilities, a payment to a person is a loan repayment only when its text says so, and money moved to savings or investments is Transfer out.',
+			'Repayments of debt: personal, car, and student loans, buy-now-pay-later instalments, and credit-card bills paid to a card whose account is not connected; a mortgage belongs in Housing and utilities, a payment to a person is a loan repayment only when its text or earlier picks the owner made for that person say so, and money moved to savings or investments is Transfer out.',
 	},
 	{
 		value: 'FEES',

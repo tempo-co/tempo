@@ -80,6 +80,9 @@ describe('bank transaction categorization contract', () => {
 		expect(description('SHOPPING')).toContain('software and apps belong in Services');
 		expect(description('LOANS_AND_DEBT')).toContain('buy-now-pay-later');
 		expect(description('LOANS_AND_DEBT')).toContain('a mortgage belongs in Housing and utilities');
+		expect(description('LOANS_AND_DEBT')).toContain(
+			'a payment to a person is a loan repayment only when its text or earlier picks the owner made for that person say so',
+		);
 		expect(description('TRANSFER_OUT')).toContain('credit-card repayments belong in Loans and debt');
 		expect(description('SHOPPING')).toContain('repairs, cleaning, postage');
 		expect(description('TAXES_AND_GOVERNMENT')).toContain('fines, passport, ID, permit, and registration fees');
