@@ -79,7 +79,24 @@ describe('bank transaction categorization contract', () => {
 		expect(description('SERVICES')).toContain('postage, parcel and delivery fees');
 		expect(description('SERVICES')).toContain('software, apps, cloud storage, and online tools');
 		expect(description('SERVICES')).toContain('streaming and media services belong in Entertainment');
-		expect(description('SHOPPING')).toContain('software and apps belong in Services');
+		expect(description('SHOPPING')).toContain('toiletries and cosmetics belong in Personal care');
+		expect(description('SHOPPING')).toContain('books, musical instruments, sports and hobby equipment');
+		expect(description('SHOPPING')).toContain('tobacco and vaping products');
+		expect(description('PERSONAL_CARE')).toContain('including those bought at a drugstore');
+		expect(description('TRANSPORTATION')).toContain(
+			'vehicle and bike servicing, repairs, inspections, and car washes',
+		);
+		expect(description('SERVICES')).toContain('vehicle and bike servicing in Transportation');
+		expect(description('SERVICES')).toContain('legal, accounting, and advice services');
+		expect(description('ENTERTAINMENT')).toContain('gambling and lotteries');
+		expect(description('ENTERTAINMENT')).toContain(
+			'books, instruments, and other hobby or sports equipment belong in Shopping',
+		);
+		expect(description('TRAVEL')).toContain(
+			'meals, shopping, and other purchases while away keep their own category',
+		);
+		expect(description('HOUSING_AND_UTILITIES')).toContain('mobile and home phone plans');
+		expect(description('INCOME')).toContain('money from selling goods or services');
 		expect(description('SHOPPING')).toContain('shopping memberships such as delivery or marketplace subscriptions');
 		expect(description('LOANS_AND_DEBT')).toContain('buy-now-pay-later');
 		expect(description('LOANS_AND_DEBT')).toContain('a mortgage belongs in Housing and utilities');

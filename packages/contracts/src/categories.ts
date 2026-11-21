@@ -50,7 +50,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'HOUSING_AND_UTILITIES',
 		label: 'Housing and utilities',
 		description:
-			'Rent, mortgage payments, energy, water, internet, and phone bills for the home, including recurring bills; furniture, repairs, and maintenance belong in Home improvement, home insurance in Insurance, and municipal taxes in Taxes and government.',
+			'Rent, mortgage payments, energy, water, internet, and mobile and home phone plans; furniture, repairs, and maintenance belong in Home improvement, home insurance in Insurance, and municipal taxes in Taxes and government.',
 	},
 	{
 		value: 'HOME_IMPROVEMENT',
@@ -74,49 +74,49 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'TRANSPORTATION',
 		label: 'Transportation',
 		description:
-			'Getting around: fuel and vehicle charging, public transport fares and transit passes, parking, tolls, taxis, cycling and scooter hire, vehicle and bike leases, and vehicle purchases. Require evidence of an actual transportation purchase; incidental logistics, delivery, servicing, or transport activities of a merchant do not qualify. Flights and trips away belong in Travel, vehicle insurance in Insurance, and car-loan repayments in Loans and debt.',
+			"Getting around: fuel and vehicle charging, public transport fares and transit passes, parking, tolls, taxis, cycling and scooter hire, vehicle and bike leases, vehicle purchases, and vehicle and bike servicing, repairs, inspections, and car washes. A merchant's own deliveries or logistics are not transportation. Flights, car rental, and trains or coaches booked for a trip away belong in Travel, vehicle insurance in Insurance, vehicle tax in Taxes and government, and car-loan repayments in Loans and debt.",
 	},
 	{
 		value: 'SHOPPING',
 		label: 'Shopping',
 		description:
-			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, pet supplies, online orders, items bought as a gift, and shopping memberships such as delivery or marketplace subscriptions; software and apps belong in Services, furniture and hardware in Home improvement, food and drink in Groceries or Eating out, and repairs, cleaning, postage, bills, and other services elsewhere.',
+			'Goods bought from general retailers, including clothing, electronics, household items, books, musical instruments, sports and hobby equipment, pet supplies, tobacco and vaping products, online orders, items bought as a gift, and shopping memberships such as delivery or marketplace subscriptions; toiletries and cosmetics belong in Personal care, medicines in Health and fitness, software and apps in Services, furniture and hardware in Home improvement, food and drink in Groceries or Eating out, and repairs, cleaning, postage, bills, and other services elsewhere.',
 	},
 	{
 		value: 'HEALTH',
 		label: 'Health and fitness',
 		description:
-			'Medical, dental, vision, pharmacy, therapy, and other healthcare services or treatment, vet bills, and fitness memberships and sessions: gyms, sports clubs, and fitness classes; ordinary personal care belongs in Personal care, sports equipment and general retail purchases in Shopping, tickets to watch sporting events in Entertainment, and insurance premiums in Insurance.',
+			'Medical, dental, vision, pharmacy and medicines, therapy, and other healthcare services or treatment, vet bills, and fitness memberships and sessions: gyms, sports clubs, and fitness classes; toiletries, cosmetics, and ordinary personal care belong in Personal care, sports equipment and general retail purchases in Shopping, tickets to watch sporting events in Entertainment, and insurance premiums in Insurance.',
 	},
 	{
 		value: 'PERSONAL_CARE',
 		label: 'Personal care',
 		description:
-			'Hair, beauty, grooming, cosmetics, toiletries, and similar personal-care services or products, including drugstore purchases of them; medical treatment belongs in Health and fitness.',
+			'Hair, beauty, grooming, cosmetics, toiletries, and similar personal-care services or products, including those bought at a drugstore; medicines and medical treatment belong in Health and fitness.',
 	},
 	{
 		value: 'ENTERTAINMENT',
 		label: 'Entertainment',
 		description:
-			'Leisure and recreation such as cinema, concerts, games, hobbies, books, and sporting events, and streaming and media services for video, music, audiobooks, news, or games; gyms and sports clubs belong in Health and fitness, courses in Education, and software and online tools in Services.',
+			'Leisure experiences and media: cinema, concerts, events, sporting events, attractions, games and in-game purchases, gambling and lotteries, and streaming and media services for video, music, audiobooks, news, or games; books, instruments, and other hobby or sports equipment belong in Shopping, gyms and sports clubs in Health and fitness, courses in Education, and software and online tools in Services.',
 	},
 	{
 		value: 'TRAVEL',
 		label: 'Travel',
 		description:
-			'Flights, accommodation, travel agencies, and holiday or trip expenses; everyday local transport belongs in Transportation.',
+			'Getting to and staying on a trip away: flights, accommodation, travel agencies, package holidays, car rental, and trains or coaches booked for the trip; everyday local transport belongs in Transportation, and meals, shopping, and other purchases while away keep their own category.',
 	},
 	{
 		value: 'SERVICES',
 		label: 'Services',
 		description:
-			'Paid practical and digital services and small service charges: repairs of shoes, phones, bikes, or clothing, alterations, cleaning, laundry and dry cleaning, postage, parcel and delivery fees, childcare, and software, apps, cloud storage, and online tools; streaming and media services belong in Entertainment, home repairs and tradespeople in Home improvement, food delivery orders in Eating out, bank fees in Fees, personal grooming in Personal care, and utilities in Housing and utilities.',
+			'Paid practical, professional, and digital services: repairs of shoes, phones, or clothing, alterations, cleaning, laundry and dry cleaning, postage, parcel and delivery fees, childcare, legal, accounting, and advice services, and software, apps, cloud storage, and online tools; streaming and media services belong in Entertainment, vehicle and bike servicing in Transportation, home repairs and tradespeople in Home improvement, food delivery orders in Eating out, bank fees in Fees, personal grooming in Personal care, and utilities in Housing and utilities.',
 	},
 	{
 		value: 'EDUCATION',
 		label: 'Education',
 		description:
-			'Schools, tuition, courses, training, and educational materials; general books and recreational activities need evidence of an educational purpose, and childcare belongs in Services.',
+			'Schools, tuition, courses, training, and educational materials such as study books; general books and recreational activities need evidence of an educational purpose, and childcare belongs in Services.',
 	},
 	{
 		value: 'INSURANCE',
@@ -158,7 +158,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'INCOME',
 		label: 'Income',
 		description:
-			'Money received as salary, wages, interest, benefits, or other earned income, and money received from a government, such as income tax refunds, allowances, and benefits, unless it pays back a payment the owner made from their account (Refund); refunds of purchases, reimbursements, and transfers have separate categories.',
+			'Money received as salary, wages, interest, or other earned income, money from selling goods or services, and money received from a government, such as income tax refunds, allowances, and benefits, unless it pays back a payment the owner made from their account (Refund); refunds of purchases, reimbursements, and transfers have separate categories.',
 	},
 	{
 		value: 'REFUND',
