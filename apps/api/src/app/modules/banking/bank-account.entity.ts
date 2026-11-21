@@ -71,6 +71,14 @@ export class BankAccount {
 	@Column({type: 'date', nullable: true})
 	statedBalanceDate: string | null;
 
+	/**
+	 * The bank that holds the account (`bank-identity.ts`): its connection's institution, or for an imported-files
+	 * account the best evidence its statements gave; null when nothing says. Exchange legs on the imported-files
+	 * connection pair only within one.
+	 */
+	@Column({type: 'varchar', nullable: true})
+	bankIdentity: string | null;
+
 	@Column({type: 'boolean', default: true})
 	isActive: boolean;
 

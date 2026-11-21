@@ -301,12 +301,9 @@ describe('DerivedDataRefreshService', () => {
 		expect(await ownerMerchants(other.owner)).toEqual([]);
 	});
 
-	it.each([
-		['an authorization, labels exchanges and', 'authorization', true],
-		['a removal, leaves exchanges as they were and labels', 'removal', false],
-	] as const)(
-		'after %s own transfers over the whole history and leaves a choice among several currencies for the sync',
-		async (_, kind, exchangesRecomputed) => {
+	it.each(['authorization', 'removal'] as const)(
+		'after %s, labels exchanges and own transfers over the whole history and leaves a choice among several currencies for the sync',
+		async (kind) => {
 			const {owner, current, savings, usd} = await createOwner();
 			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
 			const [transferDebit, transferCredit] = await createSavingsTransfer(
@@ -319,13 +316,11 @@ describe('DerivedDataRefreshService', () => {
 
 			await service.refresh(owner.id, {kind});
 
-			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it. Left
-			// unpaired, the exchange debit reads as an own transfer by the holder's name.
+			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it. The
+			// exchange debit names the holder, so only the exchange recompute keeps it from reading as an own transfer.
 			expect(await labels(exchangeDebit, exchangeCredit, transferDebit, transferCredit)).toEqual([
-				exchangesRecomputed
-					? exchangeLeg
-					: {financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
-				exchangesRecomputed ? exchangeLeg : unlabelled,
+				exchangeLeg,
+				exchangeLeg,
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);
@@ -423,8 +418,13 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('daily, labels every owner’s own transfers over the whole history', async () => {
+	it('daily, per owner labels exchanges, then own transfers over the whole history, and queues former exchange legs', async () => {
 		const [first, second] = [await createOwner(), await createOwner()];
+		const [exchangeDebit, exchangeCredit] = await createExchange(first.current, first.usd);
+		const [formerDebit, formerCredit] = await createExchange(second.current, second.usd);
+		await service.refresh(second.owner.id, {kind: 'failed-sync-write'});
+		// The provider corrected a description after the second owner's exchange was paired.
+		await fixtures.transactions.update(formerCredit.id, {description: 'Corrected provider description'});
 		const [firstDebit, firstCredit] = await createSavingsTransfer(
 			first.current,
 			first.savings,
@@ -438,13 +438,23 @@ describe('DerivedDataRefreshService', () => {
 			'2026-01-16',
 		);
 
-		await service.recomputeAllOwnTransfers();
+		await service.recomputeAllLabels();
 
-		expect(await labels(firstDebit, firstCredit, secondDebit, secondCredit)).toEqual([
-			ownTransferLeg(firstCredit),
-			ownTransferLeg(firstDebit),
-			ownTransferLeg(secondCredit),
-			ownTransferLeg(secondDebit),
+		// The exchange debit names the holder, so it is labelled an exchange before own transfers would claim it.
+		expect(await labels(exchangeDebit, exchangeCredit, firstDebit, firstCredit, secondDebit, secondCredit)).toEqual(
+			[
+				exchangeLeg,
+				exchangeLeg,
+				ownTransferLeg(firstCredit),
+				ownTransferLeg(firstDebit),
+				ownTransferLeg(secondCredit),
+				ownTransferLeg(secondDebit),
+			],
+		);
+		expect(await labels(formerDebit, formerCredit)).toEqual([
+			{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+			unlabelled,
 		]);
+		expect(await queuedForCategorization()).toEqual(sortedIds(formerDebit, formerCredit));
 	});
 });

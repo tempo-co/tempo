@@ -52,6 +52,7 @@ describe('parseMt940', () => {
 				accountIban: OTHER_EXAMPLE_IBAN,
 				accountOtherId: null,
 				bank: null,
+				servicerBic: null,
 				accountCurrency: 'EUR',
 				sequenceNumber: '12',
 				entriesSkipped: 0,
@@ -420,6 +421,24 @@ describe('parseMt940', () => {
 		const row = only(statement([entry, ':86:Example Shop'], '90,00'));
 
 		expect(row).toMatchObject({amount: '-10.00', balanceAfter: '90.00', ...expected});
+	});
+
+	it.each([
+		['a SWIFT basic header', ['{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:'], 'EXMPDEFF'],
+		[
+			'the sender in the application header of an output message',
+			['{1:F01RCVRNL2AAXXX0000000000}{2:O9401200261005EXMPDEFFAXXX00000000002610051200N}{4:'],
+			'EXMPDEFF',
+		],
+		["a header of the sender's BIC over the message type", ['EXMPDEFF', '940', 'EXMPDEFF'], 'EXMPDEFF'],
+		['a header naming no BIC', ['EXAMPLEBANK'], null],
+		['no header', [], null],
+	])("reads the bank's BIC from %s", (_caseName, header, servicerBic) => {
+		const [parsed] = parseMt940(
+			Buffer.from(statement([':61:261005D10,00NTRFNONREF', ':86:Example Shop'], '90,00', header), 'latin1'),
+		);
+
+		expect(parsed.servicerBic).toBe(servicerBic);
 	});
 
 	it('finds the statement after blank lines and a header', () => {

@@ -25,6 +25,7 @@ import {BankConnectionCallbackDto} from '../api/dtos/bank-connection-callback.dt
 import {BankAccount} from '../bank-account.entity';
 import {BankConnectionCallbackResult} from '../bank-connection-callback-result';
 import {BankConnection} from '../bank-connection.entity';
+import {nameBankIdentity} from '../bank-identity';
 import {normalizeBankCode, truncate} from '../banking.utils';
 import {EnableBankingAccount, EnableBankingSession} from '../enable-banking.types';
 import {BankingAuthorizationStateError} from '../errors/banking-authorization-state.error';
@@ -322,7 +323,13 @@ export class BankAuthorizationService {
 					},
 				);
 
-				await this.upsertSessionAccounts(manager, targetConnection.id, fileConnection, session.accounts);
+				await this.upsertSessionAccounts(
+					manager,
+					targetConnection.id,
+					fileConnection,
+					nameBankIdentity(session.aspsp.name),
+					session.accounts,
+				);
 
 				if (targetConnection.id !== pendingConnection.id) {
 					await connectionRepository.delete({id: pendingConnection.id});
@@ -350,12 +357,14 @@ export class BankAuthorizationService {
 	 * Writes the session's accounts onto the connection: an account it already has (by `providerAccountId`, then
 	 * `identificationHash`) is updated, an imported-files account kept from a removed connection of this bank account
 	 * (same `identificationHash`, else same IBAN and currency) moves onto it with its history, and any other is created.
+	 * Each records the connection's bank.
 	 */
 	private async upsertSessionAccounts(
 		manager: EntityManager,
 		connectionId: BankConnection['id'],
 		/** The owner's imported-files connection, locked by the caller's transaction; null when it has none. */
 		fileConnection: BankConnection | null,
+		bankIdentity: string,
 		accounts: EnableBankingAccount[],
 	): Promise<void> {
 		const bankAccountRepository = manager.getRepository(BankAccount);
@@ -363,7 +372,7 @@ export class BankAuthorizationService {
 		for (const account of accounts) {
 			if (!account.uid) continue;
 
-			const values = this.toBankAccountValues(account);
+			const values = {...this.toBankAccountValues(account), bankIdentity};
 			let bankAccount = await bankAccountRepository.findOne({
 				where: {bankConnection: {id: connectionId}, providerAccountId: account.uid},
 			});

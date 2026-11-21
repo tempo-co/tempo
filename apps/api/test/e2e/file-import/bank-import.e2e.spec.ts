@@ -23,6 +23,7 @@ import {Account} from '@modules/account/account.entity';
 import {BankConnectionAlertService} from '@modules/banking/alerts/bank-connection-alert.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {BANK_TRANSACTION_FINANCIAL_EVENT_TYPES} from '@modules/banking/bank-transaction-financial-event';
 import {
 	createBankTransactionStableIdentityGroupKey,
 	createBankTransactionStableIdentityKey,
@@ -1675,6 +1676,21 @@ describe('Bank imports', () => {
 				{name: 'Revolut RON', currency: 'RON', created: true},
 			],
 		});
+		// Both accounts record Revolut as their bank, so the import's exchange recompute pairs the EUR to RON exchange.
+		const accountIds = (csv.body as BankImportSummary).accounts.map(({id}) => id);
+		expect((await bankAccounts.findBy({id: In(accountIds)})).map(({bankIdentity}) => bankIdentity)).toEqual([
+			'name:revolut',
+			'name:revolut',
+		]);
+		const exchange = await transactions.find({
+			where: {bankAccountId: In(accountIds), description: 'Exchanged to RON'},
+			order: {currency: 'ASC'},
+		});
+		expect(exchange.map(({currency, financialEventType}) => [currency, financialEventType])).toEqual([
+			['EUR', BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE],
+			['RON', BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE],
+		]);
+		expect(exchange[0].currencyExchangeCounterpartId).toBe(exchange[1].id);
 		const xlsx = await drop(other.agent, [REVOLUT_XLSX]).expect(201);
 		expect(xlsx.body).toMatchObject({
 			format: 'revolutXlsx',
@@ -1683,6 +1699,42 @@ describe('Bank imports', () => {
 			rowsAlreadyPresent: 9,
 			rowsDoubtful: 0,
 			accounts: csv.body.accounts.map(({id}: BankImportSummary['accounts'][number]) => ({id, created: false})),
+		});
+	});
+
+	it("pairs an exchange between an account kept from a removed Revolut connection and a Revolut statement's account", async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {aspspName: 'Revolut', aspspCountry: 'LT'});
+		const usd = await fixtures.createBankAccount(connection, {currency: 'USD'});
+		const credit = await fixtures.createTransaction(usd, {
+			amount: '8.00',
+			currency: 'USD',
+			creditDebitIndicator: 'CRDT',
+			bookingDate: '2026-10-27',
+			description: 'Exchanged to USD',
+		});
+		await agent.delete(`/bank-connections/${connection.id}`).send({keepAccounts: true}).expect(204);
+		expect(await bankAccounts.findOneByOrFail({id: usd.id})).toMatchObject({bankIdentity: 'name:revolut'});
+
+		const statement = Buffer.from(
+			[
+				REVOLUT_HEADER,
+				'Exchange,Current,2026-10-27 10:00:00,2026-10-27 10:00:00,Exchanged to USD,-7.00,0,EUR,COMPLETED,993.00',
+				'',
+			].join('\r\n'),
+		);
+		const response = await drop(agent, [statement]).expect(201);
+
+		const [eur] = (response.body as BankImportSummary).accounts;
+		expect(await bankAccounts.findOneByOrFail({id: eur.id})).toMatchObject({bankIdentity: 'name:revolut'});
+		const debit = await transactions.findOneByOrFail({bankAccountId: eur.id});
+		expect(await transactions.findOneByOrFail({id: debit.id})).toMatchObject({
+			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			currencyExchangeCounterpartId: credit.id,
+		});
+		expect(await transactions.findOneByOrFail({id: credit.id})).toMatchObject({
+			financialEventType: BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE,
+			currencyExchangeCounterpartId: debit.id,
 		});
 	});
 

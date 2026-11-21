@@ -206,6 +206,7 @@ describe('parseCamt053', () => {
 					accountIban: EXAMPLE_IBAN,
 					accountOtherId: null,
 					bank: null,
+					servicerBic: 'ABNANL2A',
 					accountCurrency: 'EUR',
 					sequenceNumber: '61',
 					entriesSkipped: 1,

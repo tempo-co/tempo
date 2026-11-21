@@ -5,6 +5,7 @@ import {CSV_LAYOUTS, namesNoAccount} from '../parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from '../parsers/currency-codes';
 import {MAX_ARCHIVE_ENTRIES, MAX_ROWS_PER_DROP} from '../parsers/parse-limits';
 import {
+	BIC,
 	NormalizedRow,
 	NormalizedStatement,
 	PARSE_REFUSAL_CODES,
@@ -139,6 +140,7 @@ function validateStatement(value: unknown, owned: readonly CsvLayout[]): Normali
 		accountIban,
 		accountOtherId,
 		bank: bank as string | null,
+		servicerBic: validBic(statement.servicerBic),
 		accountCurrency: validCurrency(statement.accountCurrency),
 		sequenceNumber: cleanText(statement.sequenceNumber, MAX_SEQUENCE_NUMBER_LENGTH, true),
 		entriesSkipped,
@@ -182,6 +184,12 @@ function validBalance(value: unknown): StatementBalance | null {
 	const date = validDate(balance.date);
 	if (date === null) throw new ParseRefusal('parse_failed');
 	return {date, amount: validAmount(balance.amount)};
+}
+
+function validBic(value: unknown): string | null {
+	if (value === null) return null;
+	if (typeof value !== 'string' || !BIC.test(value)) throw new ParseRefusal('parse_failed');
+	return value;
 }
 
 function validFormat(value: unknown): StatementFormat {

@@ -2,7 +2,7 @@ import {type Element} from '@xmldom/xmldom';
 
 import {checkedDate} from './dates';
 import {amountScale, formatUnits, parseDecimal} from './decimal';
-import {NormalizedRow, NormalizedStatement, ParseRefusal, StatementBalance} from './parse-result';
+import {BIC, NormalizedRow, NormalizedStatement, ParseRefusal, StatementBalance} from './parse-result';
 import {child, children, parseXml} from './xml';
 
 /** Statements (camt.053) and account reports (camt.052), any version. */
@@ -91,17 +91,15 @@ function parseStatement(statement: Element): NormalizedStatement {
 		rows.push(parseEntry(entry));
 	}
 
-	const {openingBalance, closingBalance, balanceAfter} = reconcileBalances(
-		balances,
-		rows,
-		entryOrder(servicerBic(account)),
-	);
+	const bic = servicerBic(account);
+	const {openingBalance, closingBalance, balanceAfter} = reconcileBalances(balances, rows, entryOrder(bic));
 	return {
 		format: 'camt053',
 		layout: null,
 		accountIban: iban,
 		accountOtherId: otherId,
 		bank: null,
+		servicerBic: bic && BIC.test(bic) ? bic : null,
 		accountCurrency,
 		sequenceNumber: text(child(statement, 'ElctrncSeqNb')),
 		entriesSkipped,

@@ -3,7 +3,7 @@ import {ABN_AMRO_BIC, abnAmroDescriptionFields, abnAmroIban} from './abn-amro';
 import {isCalendarDate} from './dates';
 import {Decimal, amountScale, formatUnits, parseDecimal} from './decimal';
 import {InformationFields, informationFields} from './mt940-information';
-import {NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
+import {BIC, NormalizedRow, NormalizedStatement, ParseRefusal} from './parse-result';
 
 const TAG = /^:(\d{2}[A-Z]?):(.*)$/;
 const BALANCE = /^([CD])(\d{6})([A-Z]{3})(\d{1,15},\d*)$/;
@@ -20,6 +20,10 @@ const MAX_ENTRY_DATE_DISTANCE_DAYS = 180;
 const DAY_MS = 86_400_000;
 /** The first account's IBAN country, which tells the encoding of a file that is not UTF-8. */
 const ACCOUNT_COUNTRY = /^:25:\/?([A-Z]{2})\d{2}/m;
+/** The SWIFT basic header's logical terminal address: the BIC's first eight characters, a terminal and the branch. */
+const BASIC_HEADER = /\{1:F\d{2}([A-Z]{6}[A-Z0-9]{2})[A-Z0-9][A-Z0-9]{3}/;
+/** An output message's application header: type, input time and date, then the sender's terminal address. */
+const OUTPUT_HEADER = /\{2:O\d{3}\d{4}\d{6}([A-Z]{6}[A-Z0-9]{2})/;
 /** Countries whose banks write Windows-1250 or ISO-8859-2 (Ł, Ś, Ž, Ő): Central Europe and Romania. */
 const CENTRAL_EUROPEAN_COUNTRIES = new Set(['PL', 'CZ', 'SK', 'HU', 'SI', 'HR', 'RO']);
 
@@ -143,6 +147,7 @@ function parseStatement(statement: RawStatement): NormalizedStatement {
 		accountIban: iban,
 		accountOtherId: otherId,
 		bank: null,
+		servicerBic: headerBic(statement.header),
 		accountCurrency: opening.currency,
 		sequenceNumber: sequence === null ? null : BigInt(sequence).toString(),
 		entriesSkipped: 0,
@@ -150,6 +155,19 @@ function parseStatement(statement: RawStatement): NormalizedStatement {
 		closingBalance: {date: closing.date, amount: formatUnits(closing.amount.units, scale)},
 		rows: rows.map(({row}, index) => ({...row, balanceAfter: balances[index]})),
 	};
+}
+
+/**
+ * The sending bank's BIC from the lines above the statement: the sender of a SWIFT output message, else the basic
+ * header's address, else a header of the BIC over the message type (`940`), as ABN AMRO writes it. Null for any other
+ * header: a bank's name can look like a BIC.
+ */
+function headerBic(header: readonly string[]): string | null {
+	const text = header.join('');
+	const swift = OUTPUT_HEADER.exec(text)?.[1] ?? BASIC_HEADER.exec(text)?.[1];
+	if (swift) return swift;
+	const typeLine = header.indexOf('940');
+	return typeLine > 0 && BIC.test(header[typeLine - 1]) ? header[typeLine - 1] : null;
 }
 
 /**

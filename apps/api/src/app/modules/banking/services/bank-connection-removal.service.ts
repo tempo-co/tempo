@@ -13,6 +13,7 @@ import {
 } from '../api/constants/banking-messages.constants';
 import {BankAccount} from '../bank-account.entity';
 import {BankConnection} from '../bank-connection.entity';
+import {nameBankIdentity} from '../bank-identity';
 import {releaseLockSafely, safeErrorCode} from './bank-connection.utils';
 import {BankingAuthorizationStateService} from './banking-authorization-state.service';
 import {BankingConnectionLockService} from './banking-connection-lock.service';
@@ -171,7 +172,8 @@ export class BankConnectionRemovalService {
 	 * Moves the connection's accounts, their history and its import records onto the owner's imported-files
 	 * connection, in the removal's transaction; returns the moved account ids. Each account keeps its bank
 	 * identification hash, so authorizing the same bank again picks it up, and takes the imported-files identity of
-	 * its IBAN unless another imported-files account holds it, so a statement with that IBAN goes to it. The bank's
+	 * its IBAN unless another imported-files account holds it, so a statement with that IBAN goes to it, and records the
+	 * connection's bank, so its exchanges pair only with legs of the same bank there. The bank's
 	 * last reported balance becomes its stated balance, dated the day the bank reported it. Its bank balance reports
 	 * go with the connection's sync runs.
 	 */
@@ -210,6 +212,7 @@ export class BankConnectionRemovalService {
 				{
 					bankConnection: {id: fileConnection.id},
 					providerAccountId,
+					bankIdentity: nameBankIdentity(connection.aspspName),
 					statedBalanceAmount: reported ? account.currentBalanceAmount : null,
 					statedBalanceDate: reported ? dateInTimeZone(account.balanceUpdatedAt!, owner.timeZone) : null,
 				},

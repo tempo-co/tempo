@@ -80,9 +80,8 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// Accounts that all hold one currency set it right away; a choice among several waits for a sync.
 				reconcile: {historySettled: false},
-				// Moved accounts change which legs share a connection, so exchanges can pair or part. A removal leaves them
-				// as they were, since legs moved onto the imported-files connection do not pair reliably yet.
-				recomputeExchanges: change.kind === 'authorization',
+				// Moved accounts change which legs share a connection or a bank, so exchanges can pair or part.
+				recomputeExchanges: true,
 				ownTransferIds: null,
 				writtenIds: [],
 				logoTransactionIds: [],
@@ -119,8 +118,8 @@ function ownTransferScope(
 
 /**
  * Brings the values derived from an owner's transaction history up to date after a write has committed. Each step
- * tolerates the failure of an earlier one; the daily whole-history recompute corrects the own transfers a failure left
- * behind, and the owner's next refresh the exchanges.
+ * tolerates the failure of an earlier one; the daily recompute corrects the exchanges and own transfers a failure left
+ * behind.
  */
 @Injectable()
 export class DerivedDataRefreshService {
@@ -143,15 +142,17 @@ export class DerivedDataRefreshService {
 	}
 
 	/**
-	 * Daily safety net: recomputes every owner's own transfers over the whole history, so a change no scoped recompute
-	 * saw (a crash between a sync's commit and its refresh, a write whose commit was not acknowledged) is corrected
-	 * within a day.
+	 * Daily safety net: per owner, recomputes exchanges, then own transfers over the whole history, then queues the former
+	 * exchange legs for categorization, so a change no refresh saw (a crash between a write's commit and its refresh, a
+	 * write whose commit was not acknowledged, a recompute that failed) is corrected within a day.
 	 */
-	async recomputeAllOwnTransfers(): Promise<void> {
+	async recomputeAllLabels(): Promise<void> {
 		const owners: Array<{accountId: string}> = await this.dataSource.query(
 			'SELECT DISTINCT "accountId" FROM "bank_connections" ORDER BY "accountId"',
 		);
-		for (const {accountId} of owners) await this.recomputeOwnTransfers(accountId);
+		for (const {accountId} of owners) {
+			await this.recomputeLabels(accountId, {recomputeExchanges: true, ownTransferIds: null, writtenIds: []});
+		}
 	}
 
 	/**
@@ -161,7 +162,11 @@ export class DerivedDataRefreshService {
 	 */
 	private async recomputeLabels(
 		ownerId: Account['id'],
-		{recomputeExchanges, ownTransferIds, writtenIds}: RefreshPlan,
+		{
+			recomputeExchanges,
+			ownTransferIds,
+			writtenIds,
+		}: Pick<RefreshPlan, 'recomputeExchanges' | 'ownTransferIds' | 'writtenIds'>,
 	): Promise<void> {
 		const exchanges = recomputeExchanges
 			? await this.recomputeExchanges(ownerId)

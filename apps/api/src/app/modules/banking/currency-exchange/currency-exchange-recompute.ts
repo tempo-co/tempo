@@ -7,8 +7,10 @@ import {
 import {BATCH_WRITE_CHUNK_SIZE, buildPostgresValuesList, chunkArray} from '../banking.utils';
 import {compareIds} from '../own-transfer/own-transfer-detection';
 import type {OwnTransferSqlExecutor} from '../own-transfer/own-transfer-recompute';
+import {BANK_CONNECTION_PROVIDERS} from '../services/banking-sync.constants';
 import {
 	CurrencyExchangeCandidate,
+	CurrencyExchangeGroup,
 	CurrencyExchangeLeg,
 	confirmCurrencyExchanges,
 	pairCurrencyExchanges,
@@ -17,6 +19,8 @@ import {
 type LegRow = {
 	id: string;
 	connectionId: string;
+	provider: string;
+	bankIdentity: string | null;
 	bankAccountId: string;
 	date: string | null;
 	indicator: string | null;
@@ -54,6 +58,15 @@ const CATEGORIZATION_RESET_SQL = `"category" = NULL, "categorySource" = NULL, "c
 	"categoryUpdatedAt" = NULL`;
 
 /**
+ * A bank connection's legs form one group. The imported-files connection holds the files of every bank, so there legs
+ * group by the bank their account records, and a leg whose account records none joins no group.
+ */
+function exchangeGroup({connectionId, provider, bankIdentity}: LegRow): CurrencyExchangeGroup {
+	if (provider !== BANK_CONNECTION_PROVIDERS.FILE) return connectionId;
+	return bankIdentity === null ? null : `${connectionId}:${bankIdentity}`;
+}
+
+/**
  * Recomputes which of one owner's rows are currency exchanges, and their pairs. Must run inside a transaction: the
  * advisory lock serializes concurrent recomputes for the same owner and is released on commit or rollback. Only rows
  * whose classification or counterpart changed are written. A row that becomes an exchange leaves categorization
@@ -67,7 +80,8 @@ export async function recomputeCurrencyExchanges(
 
 	// The text and code conditions only narrow the read; detectCurrencyExchangeMarker decides exactly.
 	const rows = (await executor.query(
-		`SELECT transaction."id", account."bankConnectionId" AS "connectionId", transaction."bankAccountId",
+		`SELECT transaction."id", account."bankConnectionId" AS "connectionId", connection."provider",
+			account."bankIdentity", transaction."bankAccountId",
 			to_char(COALESCE(transaction."bookingDate", transaction."transactionDate"), 'YYYY-MM-DD') AS "date",
 			transaction."creditDebitIndicator" AS "indicator", transaction."amount"::text AS "amount",
 			transaction."currency", account."currency" AS "accountCurrency", transaction."description",
@@ -98,7 +112,7 @@ export async function recomputeCurrencyExchanges(
 			bankTransactionSubCode: row.bankTransactionSubCode,
 			bankTransactionDescription: row.bankTransactionDescription,
 		});
-		return marker ? [{...row, ...marker}] : [];
+		return marker ? [{...row, exchangeGroup: exchangeGroup(row), ...marker}] : [];
 	});
 	const confirmed = confirmCurrencyExchanges(candidates);
 	const pairs = pairCurrencyExchanges(

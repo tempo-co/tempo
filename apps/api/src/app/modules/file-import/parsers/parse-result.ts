@@ -61,8 +61,18 @@ export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
  */
 export const STATEMENT_BANKS = ['Revolut'] as const;
 
+/** The bank each bank-specific standard format belongs to; CSV layouts name theirs. */
+export const FORMAT_BANKS: Partial<Record<StatementFormat, string>> = {
+	abnAmroTxt: 'ABN AMRO',
+	revolutCsv: 'Revolut',
+	revolutXlsx: 'Revolut',
+};
+
 /** A balance a statement states: the decimal string as of the end of `date` (`YYYY-MM-DD`), signed. */
 export type StatementBalance = {date: string; amount: string};
+
+/** A BIC: institution, country, location and an optional branch. */
+export const BIC = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
 
 export type NormalizedStatement = {
 	format: StatementFormat;
@@ -77,6 +87,11 @@ export type NormalizedStatement = {
 	 * built in or the owner's, it was read with); null whenever the file has an IBAN or other id.
 	 */
 	bank: string | null;
+	/**
+	 * The BIC of the bank holding the account, as the file states it (CAMT `Acct/Svcr/FinInstnId/BIC` or `BICFI`, the
+	 * MT940 header); null when it states none.
+	 */
+	servicerBic: string | null;
 	accountCurrency: string;
 	/** The statement's electronic sequence number, as written. */
 	sequenceNumber: string | null;

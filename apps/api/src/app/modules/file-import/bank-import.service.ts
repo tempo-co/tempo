@@ -15,6 +15,7 @@ import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {bicBankIdentity, nameBankIdentity} from '@modules/banking/bank-identity';
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
@@ -47,8 +48,15 @@ import {BankImportLayoutService} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
+import {CSV_LAYOUTS} from './parsers/csv-layouts';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
-import {NormalizedRow, NormalizedStatement, StatementBalance, StatementFormat} from './parsers/parse-result';
+import {
+	FORMAT_BANKS,
+	NormalizedRow,
+	NormalizedStatement,
+	StatementBalance,
+	StatementFormat,
+} from './parsers/parse-result';
 import {recordedAccounts} from './recorded-accounts';
 import {ParseRunnerService} from './runner/parse-runner.service';
 import {RepeatedRows, StatementGap, gapsOutsideCoverage, joinStatements} from './statement-chain';
@@ -94,6 +102,8 @@ type AccountRows = {
 	 * layout did. Its IBAN then came from a column or line the model chose, so it must be confirmed like a bank.
 	 */
 	learnedBank: string | null;
+	/** The best evidence of the account's bank its statements give (`statementBankIdentity`); null when none does. */
+	bankIdentity: string | null;
 	currency: string;
 	/** `learned`: read by one of the owner's saved layouts. */
 	byFormat: {
@@ -213,6 +223,7 @@ export class BankImportService {
 				const {manager, fileConnection} = write;
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
+				await recordBankIdentities(manager, accounts, accountRows);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
 				);
@@ -1427,9 +1438,11 @@ function groupByAccount(
 			iban: statement.accountIban,
 			bank: statement.accountIban || statement.accountOtherId ? null : statement.bank,
 			learnedBank: null,
+			bankIdentity: null,
 			currency: statement.accountCurrency,
 			parts: [],
 		};
+		group.bankIdentity ??= statementBankIdentity(statement, learnedBanks);
 		const learnedBank = (statement.layout && learnedBanks.get(statement.layout)) ?? null;
 		if (statement.accountIban) group.learnedBank ??= learnedBank;
 		// Exports of one bank in two CSV layouts (such as two languages) are two formats to each other.
@@ -1581,6 +1594,39 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 		undoneAt: record.undoneAt?.toISOString() ?? null,
 		createdAt: record.createdAt.toISOString(),
 	};
+}
+
+/**
+ * Records on each imported-files account without a bank the one its statements give, inside the import's transaction.
+ * An account of a bank connection records its connection's bank, and one with a bank keeps it.
+ */
+async function recordBankIdentities(
+	manager: EntityManager,
+	accounts: readonly ImportedAccount[],
+	accountRows: readonly AccountRows[],
+): Promise<void> {
+	for (const [index, {account, connection}] of accounts.entries()) {
+		const {bankIdentity} = accountRows[index];
+		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE || !bankIdentity || account.bankIdentity) continue;
+		await manager.getRepository(BankAccount).update({id: account.id, bankIdentity: IsNull()}, {bankIdentity});
+		account.bankIdentity = bankIdentity;
+	}
+}
+
+/**
+ * The bank a statement's account is held at, by the best evidence the file gives: the bank its format or CSV layout
+ * belongs to (an owner's saved layout under the bank the owner named), else the servicer's BIC it states; null for any
+ * other file.
+ */
+function statementBankIdentity(
+	{format, layout, servicerBic}: NormalizedStatement,
+	learnedBanks: ReadonlyMap<string, string>,
+): string | null {
+	const bank =
+		FORMAT_BANKS[format] ??
+		(layout ? (CSV_LAYOUTS.find(({id}) => id === layout)?.bank ?? learnedBanks.get(layout)) : undefined);
+	if (bank) return nameBankIdentity(bank);
+	return servicerBic ? bicBankIdentity(servicerBic) : null;
 }
 
 /** The scheme a statement numbers its rows in: its format, and the layout of a CSV-style file. */

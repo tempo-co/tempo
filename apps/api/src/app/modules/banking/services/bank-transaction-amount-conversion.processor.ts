@@ -32,7 +32,7 @@ export class BankTransactionAmountConversionProcessor extends WorkerHost {
 	async process(job: Job<BankTransactionAmountConversionJobData>): Promise<void> {
 		if (!isAmountConversionEnabled(this.configurationService)) return;
 		if (job.name === RECOMPUTE_OWN_TRANSFERS_JOB) {
-			await this.derivedDataRefreshService.recomputeAllOwnTransfers();
+			await this.derivedDataRefreshService.recomputeAllLabels();
 			// After the recompute, so its own change notes are folded too.
 			await this.recurringSeriesService.foldAllChangeNotes();
 			return;
