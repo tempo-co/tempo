@@ -98,15 +98,20 @@ function splitStatements(text: string): RawStatement[] {
 			if (!current) throw new ParseRefusal('parse_failed');
 			current.fields.push({tag: tag[1], lines: [tag[2]]});
 			if (/^62[FM]$/.test(tag[1])) current.closed = true;
-		} else if (current?.closed && MESSAGE_END.test(line.trim())) {
+		} else if (
+			line.trim().startsWith('{1:') ||
+			(current ? current.closed && MESSAGE_END.test(line.trim()) : line.trim().startsWith('-}'))
+		) {
+			// A SWIFT message's start, a `-` or `-}` after a closing balance, or a `-}` ending a message outside any statement
+			// ends the statement and the header above it. A file can leave the terminator out; a statement ended before its
+			// closing balance is refused.
 			messageHeader = [];
 			current = null;
 			// Messages written back to back can start the next one on the line that ends this one.
 			const next = line.indexOf('{1:');
-			if (next >= 0) header.push(line.slice(next).trim());
+			header = next >= 0 ? [line.slice(next).trim()] : [];
 		} else if (current) {
-			// A field continues on the lines up to the next tag; one starting a SWIFT message ends the message's header.
-			if (line.trim().startsWith('{1:')) messageHeader = [];
+			// A field continues on the lines up to the next tag.
 			current.fields.at(-1)!.lines.push(line);
 		} else if (line.trim()) {
 			header.push(line.trim());
