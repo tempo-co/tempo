@@ -21,14 +21,7 @@ import {MATCH_WINDOW_DAYS, MatchIncomingRow, matchDay, matchWithReferenceFallbac
 import {deriveBankTransactionTextColumns} from '../bank-transaction-text-columns';
 import {normalizeBankTransactionType} from '../bank-transaction-type';
 import {BankTransaction} from '../bank-transaction.entity';
-import {
-	BATCH_WRITE_CHUNK_SIZE,
-	buildPostgresValuesList,
-	chunkArray,
-	normalizeBankCode,
-	toDateOnly,
-	truncate,
-} from '../banking.utils';
+import {BATCH_WRITE_CHUNK_SIZE, chunkArray, normalizeBankCode, toDateOnly, truncate} from '../banking.utils';
 import {
 	createBankTransactionCategorizationInputHash,
 	toBankTransactionCategorizationInput,
@@ -38,11 +31,11 @@ import {
 	isManualCategorySource,
 	notManualCategorySourceSql,
 } from '../categorization/bank-transaction-categorization.types';
+import type {ConversionInputs} from '../converted-amounts';
 import {notOwnTransferCategorizedSql} from '../own-transfer/own-transfer-category';
 import type {OwnTransferOverride} from '../own-transfer/own-transfer-detection';
 import type {FinalSyncDays, SyncCoverage} from '../sync-coverage';
 import {type CarryRow, pickCarryTargets} from '../sync-sweep';
-import {BASE_AMOUNT_INPUT_COLUMNS, baseAmountInputsSql} from './bank-transaction-amount-conversion.utils';
 
 const BANK_TRANSACTION_IDENTITY_SELECT = {
 	id: true,
@@ -103,6 +96,8 @@ export type PersistTransactionsResult = {
 	persistedTransactionIds: string[];
 	/** Imported rows this write took over, including any the upsert skipped. */
 	takenOverImportedIds: string[];
+	/** The stored rows the write matched, as they were before it. */
+	previousRows: readonly ConversionInputs[];
 };
 
 /** One transaction to write, from bank sync or a parsed statement file; `EnableBankingTransaction` satisfies it. */
@@ -363,9 +358,6 @@ export class BankTransactionPersistenceService {
 		}
 		if (hasImportedRows) await this.recordImportQuestions(repository, bankAccount.id, questions, adoptedIds);
 
-		await this.clearStaleBaseAmounts(repository, bankAccount.id, existingTransactions);
-		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id);
-
 		const transactionByStableIdentityKey = new Map(
 			transactionValues.map((value) => [value.stableIdentityKey, value]),
 		);
@@ -417,6 +409,7 @@ export class BankTransactionPersistenceService {
 			insertedTransactionIds,
 			persistedTransactionIds: persistedRows.map(({id}) => id),
 			takenOverImportedIds: takenOverIds,
+			previousRows: existingTransactions,
 		};
 	}
 
@@ -466,12 +459,12 @@ export class BankTransactionPersistenceService {
 				.execute();
 			insertedTransactionIds.push(...(result.raw as Array<{id: string}>).map(({id}) => id));
 		}
-		await this.copySameCurrencyBaseAmounts(repository, bankAccount.id, insertedTransactionIds);
 		return {
 			transactionsAdded: insertedTransactionIds.length,
 			insertedTransactionIds,
 			persistedTransactionIds: insertedTransactionIds,
 			takenOverImportedIds: [],
+			previousRows: [],
 		};
 	}
 
@@ -949,64 +942,6 @@ export class BankTransactionPersistenceService {
 		return rows.flatMap(({ownTransferCounterpartId}) =>
 			ownTransferCounterpartId ? [ownTransferCounterpartId] : [],
 		);
-	}
-
-	/**
-	 * Stores amounts already in the owner's reporting currency right away, so they never wait for the conversion job
-	 * and count in totals as soon as they are synced. Matches the job's `SAME` method; other currencies still wait
-	 * for rates, and owners without a reporting currency for one. The calling transaction holds
-	 * `lockReportingCurrencyForAmountWrites`, so the currency read here cannot change before it commits.
-	 */
-	private async copySameCurrencyBaseAmounts(
-		repository: Repository<BankTransaction>,
-		bankAccountId: BankAccount['id'],
-		/** Limits the update to these rows; every row of the account when omitted. */
-		transactionIds?: readonly string[],
-	): Promise<void> {
-		if (transactionIds?.length === 0) return;
-		await repository.query(
-			`UPDATE "bank_transactions" AS t
-			SET "amountInBaseCurrency" = ROUND(t."amount", 2), "baseAmountMethod" = 'SAME',
-				"baseAmountRateDate" = NULL, "updatedAt" = CURRENT_TIMESTAMP
-			FROM "bank_accounts" bank_account
-			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-			INNER JOIN "accounts" account ON account."id" = connection."accountId"
-			WHERE bank_account."id" = $1
-				AND t."bankAccountId" = bank_account."id"
-				AND t."baseAmountMethod" IS NULL
-				AND t."currency" = account."baseCurrency"${transactionIds ? ' AND t."id" = ANY($2::uuid[])' : ''}`,
-			transactionIds ? [bankAccountId, transactionIds] : [bankAccountId],
-		);
-	}
-
-	/**
-	 * Clears base-currency amounts whose conversion inputs the upsert just changed, so the conversion job
-	 * recomputes them. Compares the pre-sync snapshot with the stored row, so rows the upsert skipped keep theirs.
-	 */
-	private async clearStaleBaseAmounts(
-		repository: Repository<BankTransaction>,
-		bankAccountId: BankAccount['id'],
-		previousTransactions: readonly BankTransaction[],
-	): Promise<void> {
-		const rows = previousTransactions.map((transaction) => [
-			transaction.id,
-			...BASE_AMOUNT_INPUT_COLUMNS.map(([column]) => transaction[column]),
-		]);
-		const casts = ['uuid', ...BASE_AMOUNT_INPUT_COLUMNS.map(([, cast]) => cast)];
-		const columns = ['id', ...BASE_AMOUNT_INPUT_COLUMNS.map(([column]) => column)].map((column) => `"${column}"`);
-		for (const chunk of chunkArray(rows, BATCH_WRITE_CHUNK_SIZE)) {
-			const values = buildPostgresValuesList(chunk, casts);
-			await repository.query(
-				`UPDATE "bank_transactions" AS t
-				SET "amountInBaseCurrency" = NULL, "baseAmountMethod" = NULL, "baseAmountRateDate" = NULL
-				FROM (VALUES ${values.sql}) AS previous(${columns.join(', ')})
-				WHERE t."bankAccountId" = $${values.parameters.length + 1}
-					AND t."id" = previous."id"
-					AND t."amountInBaseCurrency" IS NOT NULL
-					AND ${baseAmountInputsSql('t')} IS DISTINCT FROM ${baseAmountInputsSql('previous')}`,
-				[...values.parameters, bankAccountId],
-			);
-		}
 	}
 
 	private toBankTransactionValues(bankAccount: BankAccount, transaction: BankTransactionInput, aspspName: string) {
