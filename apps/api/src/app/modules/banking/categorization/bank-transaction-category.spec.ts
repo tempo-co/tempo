@@ -66,7 +66,7 @@ describe('bank transaction categorization contract', () => {
 		expect(description('GROCERIES')).toContain('food delivery orders belong in Eating out');
 		expect(description('EATING_OUT')).toContain('food bought to prepare at home belongs in Groceries');
 		expect(description('HOUSING_AND_UTILITIES')).toContain(
-			'repairs, maintenance, and other purchases for the home belong in Home improvement',
+			'furniture, repairs, and maintenance belong in Home improvement',
 		);
 		expect(description('HOME_IMPROVEMENT')).toContain(
 			'rent, mortgage, and utility bills belong in Housing and utilities',

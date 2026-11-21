@@ -2476,7 +2476,7 @@ describe('RecurringSeries', () => {
 			expect(detect).toHaveBeenCalled();
 			await fixtures.transactions.delete(extra.map(({id}) => id));
 
-			// Moving text between fields is a change too: a yearly plan of two payments never counts as ordinary retail.
+			// Moving text between fields is a change too.
 			const annual = await fixtures.createTransactions(
 				ownerBankAccount,
 				['2025-09-21', '2026-09-21'].map((date) =>
@@ -2493,7 +2493,7 @@ describe('RecurringSeries', () => {
 				.update()
 				.set({
 					category: 'GROCERIES',
-					description: 'GROCERIES|Example Cache Annual',
+					description: 'SERVICES|Example Cache Annual',
 					updatedAt: () => '"updatedAt"',
 				})
 				.whereInIds(annual.map(({id}) => id))

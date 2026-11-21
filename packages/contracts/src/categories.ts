@@ -50,7 +50,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'HOUSING_AND_UTILITIES',
 		label: 'Housing and utilities',
 		description:
-			'Rent, mortgage payments, energy, water, internet, and phone bills for the home, including recurring bills; furniture, repairs, maintenance, and other purchases for the home belong in Home improvement, home insurance in Insurance, and municipal taxes in Taxes and government.',
+			'Rent, mortgage payments, energy, water, internet, and phone bills for the home, including recurring bills; furniture, repairs, and maintenance belong in Home improvement, home insurance in Insurance, and municipal taxes in Taxes and government.',
 	},
 	{
 		value: 'HOME_IMPROVEMENT',
