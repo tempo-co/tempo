@@ -241,7 +241,9 @@ export class BankTransactionSummaryService {
 	 * first booked transaction (or when it was added, if earlier); before that its balance is null.
 	 * Foreign balances use the newest ECB rate on or before the period's end. The total is null when an
 	 * account that has history by then cannot be converted, so a missing rate never reads as a drop.
-	 * Only bookings up to the day the balance was reported are subtracted; later ones are not in it yet.
+	 * Only rows the reported balance holds are subtracted: those booked by the day it was reported, and booked
+	 * rows made by that day however late the bank books them (a weekend card payment booked on Monday is in
+	 * Sunday's balance). A day from the reported one on is that balance.
 	 */
 	async getBalanceTrend(
 		owner: ReportingOwner,
@@ -278,7 +280,10 @@ export class BankTransactionSummaryService {
 					CASE WHEN ends."end" >= a."first" THEN a."current" - COALESCE((
 						SELECT SUM(t."amount") FROM "bank_transactions" t
 						WHERE t."bankAccountId" = a."id" AND t."bookingDate" > ends."end"
-							AND (a."reported" IS NULL OR t."bookingDate" <= a."reported")
+							AND (a."reported" IS NULL OR t."bookingDate" <= a."reported" OR (
+								ends."end" < a."reported" AND t."transactionStatus" = 'BOOK'
+								AND t."date" <= a."reported"
+							))
 					), 0) END AS "amount"
 				FROM accounts a CROSS JOIN unnest($3::date[]) AS ends("end")
 			)
