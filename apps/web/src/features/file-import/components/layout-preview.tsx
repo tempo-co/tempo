@@ -1,5 +1,6 @@
 import {
   BANK_IMPORT_CURRENCIES,
+  type BankImportLayoutPreview,
   type BankImportLayoutPreviewRow,
   type BankImportLayoutProposal,
 } from '@tempo/contracts';
@@ -70,15 +71,6 @@ export function LayoutPreview({
   const listed = typeof banks === 'string' || failed ? [] : (banks as readonly string[]);
   const currencyField = useId();
   const bankHint = useId();
-  const range = formatDateRange(preview.dateFrom, preview.dateTo);
-  // A file that states no currency previews in the default one; the owner's choice shows at once.
-  const rowCurrency = (row: BankImportLayoutPreviewRow) =>
-    currencyNeeded ? currency : row.currency;
-  const hiddenRows = preview.rowCount - preview.firstRows.length - preview.lastRows.length;
-  const totals = preview.totals.map((total) => ({
-    ...total,
-    currency: currencyNeeded ? currency : total.currency,
-  }));
 
   return (
     <div className='grid grid-cols-1 gap-5' data-testid='bank-import-layout-preview'>
@@ -99,46 +91,7 @@ export function LayoutPreview({
         </Alert>
       )}
 
-      <section aria-labelledby='bank-import-layout-rows' className='grid grid-cols-1 gap-1.5'>
-        <h3 id='bank-import-layout-rows' className='text-label text-muted-foreground'>
-          {plural(preview.rowCount, 'transaction')}
-          {range && ` · ${range}`}
-        </h3>
-        <ol aria-labelledby='bank-import-layout-rows' className='grid grid-cols-1 divide-y'>
-          {preview.firstRows.map((row, index) => (
-            <PreviewRow key={`first-${index}`} row={row} currency={rowCurrency(row)} />
-          ))}
-          {hiddenRows > 0 && (
-            <li className='py-2 text-center text-xs text-muted-foreground'>
-              {formatCount(hiddenRows)} more
-            </li>
-          )}
-          {preview.lastRows.map((row, index) => (
-            <PreviewRow key={`last-${index}`} row={row} currency={rowCurrency(row)} />
-          ))}
-        </ol>
-        <dl className='grid grid-cols-1 gap-1 text-sm' data-testid='bank-import-layout-totals'>
-          {totals.flatMap((total) => {
-            const formatter = getCurrencyFormatter(total.currency);
-            const format = (value: string) => formatter.format(Number(value));
-            return [
-              <div key={`${total.currency}-in`} className='flex justify-between gap-4'>
-                <dt className='text-muted-foreground'>Money in</dt>
-                <dd className='numeric text-success'>{format(total.moneyIn)}</dd>
-              </div>,
-              <div key={`${total.currency}-out`} className='flex justify-between gap-4'>
-                <dt className='text-muted-foreground'>Money out</dt>
-                <dd className='numeric'>{format(`-${total.moneyOut}`)}</dd>
-              </div>,
-            ];
-          })}
-        </dl>
-        {preview.accounts.length > 0 && (
-          <p className='text-sm wrap-anywhere text-muted-foreground'>
-            Account {preview.accounts.join(', ')}
-          </p>
-        )}
-      </section>
+      <PreviewRows preview={preview} currency={currencyNeeded ? currency : null} />
 
       <div className='grid grid-cols-1 gap-4'>
         {failed ? (
@@ -227,6 +180,67 @@ export function LayoutPreview({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A file's rows as a layout reads them: their count and dates, the first and last rows as they would be stored, the
+ * totals and the IBANs they name. `currency` replaces the rows' own for a file that states none (null: as read).
+ */
+export function PreviewRows({
+  preview,
+  currency,
+}: {
+  preview: BankImportLayoutPreview;
+  currency: string | null;
+}) {
+  const heading = useId();
+  const range = formatDateRange(preview.dateFrom, preview.dateTo);
+  // A file that states no currency previews in the default one; the owner's choice shows at once.
+  const rowCurrency = (row: BankImportLayoutPreviewRow) => currency ?? row.currency;
+  const hiddenRows = preview.rowCount - preview.firstRows.length - preview.lastRows.length;
+  const totals = preview.totals.map((total) => ({...total, currency: currency ?? total.currency}));
+  return (
+    <section aria-labelledby={heading} className='grid grid-cols-1 gap-1.5'>
+      <h3 id={heading} className='text-label text-muted-foreground'>
+        {plural(preview.rowCount, 'transaction')}
+        {range && ` · ${range}`}
+      </h3>
+      <ol aria-labelledby={heading} className='grid grid-cols-1 divide-y'>
+        {preview.firstRows.map((row, index) => (
+          <PreviewRow key={`first-${index}`} row={row} currency={rowCurrency(row)} />
+        ))}
+        {hiddenRows > 0 && (
+          <li className='py-2 text-center text-xs text-muted-foreground'>
+            {formatCount(hiddenRows)} more
+          </li>
+        )}
+        {preview.lastRows.map((row, index) => (
+          <PreviewRow key={`last-${index}`} row={row} currency={rowCurrency(row)} />
+        ))}
+      </ol>
+      <dl className='grid grid-cols-1 gap-1 text-sm' data-testid='bank-import-layout-totals'>
+        {totals.flatMap((total) => {
+          const formatter = getCurrencyFormatter(total.currency);
+          const format = (value: string) => formatter.format(Number(value));
+          return [
+            <div key={`${total.currency}-in`} className='flex justify-between gap-4'>
+              <dt className='text-muted-foreground'>Money in</dt>
+              <dd className='numeric text-success'>{format(total.moneyIn)}</dd>
+            </div>,
+            <div key={`${total.currency}-out`} className='flex justify-between gap-4'>
+              <dt className='text-muted-foreground'>Money out</dt>
+              <dd className='numeric'>{format(`-${total.moneyOut}`)}</dd>
+            </div>,
+          ];
+        })}
+      </dl>
+      {preview.accounts.length > 0 && (
+        <p className='text-sm wrap-anywhere text-muted-foreground'>
+          Account {preview.accounts.join(', ')}
+        </p>
+      )}
+    </section>
   );
 }
 

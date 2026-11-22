@@ -1741,6 +1741,7 @@ test.describe('statement file import on Connections', () => {
               ],
               // The imported-files account of this bank and currency exists: it is offered as itself.
               newAccount: false,
+              layoutPreview: null,
             },
           ],
         }),
@@ -1754,9 +1755,7 @@ test.describe('statement file import on Connections', () => {
     await expect(dialog.getByRole('heading', {name: 'Which account is this?'})).toBeVisible();
     const question = dialog.getByRole('group', {name: 'Example Bank · EUR'});
     await expect(
-      question.getByText(
-        'Few of these transactions match what Tempo already has for Example Holder.',
-      ),
+      question.getByText("Few of these transactions match what's already in Example Holder."),
     ).toBeVisible();
     const radios = question.getByRole('radio');
     await expect(radios).toHaveCount(3);
@@ -1801,6 +1800,87 @@ test.describe('statement file import on Connections', () => {
     expect(JSON.parse(retry.fields.accountChoices)).toEqual({'Example Bank:EUR': CHECKING.id});
   });
 
+  test("shows a saved layout's rows for a file without a header or account, then sends the answer", async ({
+    page,
+  }) => {
+    const row = {
+      date: '2026-03-02',
+      amount: '-12.50',
+      currency: 'EUR',
+      counterparty: null,
+      description: 'Example Shop',
+      balanceAfter: null,
+    };
+    const api = await mockFileImport(page, {
+      uploads: [
+        refused({
+          statusCode: 409,
+          code: 'target_account_unconfirmed',
+          accountQuestions: [
+            {
+              bank: 'Example Bank',
+              currency: 'EUR',
+              candidates: [],
+              newAccount: true,
+              layoutPreview: {
+                rowCount: 2,
+                dateFrom: '2026-03-02',
+                dateTo: '2026-03-03',
+                firstRows: [
+                  row,
+                  {...row, date: '2026-03-03', amount: '2500.00', description: 'Example Employer'},
+                ],
+                lastRows: [],
+                totals: [{currency: 'EUR', moneyIn: '2500.00', moneyOut: '12.50'}],
+                accounts: [],
+              },
+            },
+          ],
+        }),
+        created(importSummary({filesCount: 1})),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
+
+    const question = dialog.getByRole('group', {name: 'Example Bank · EUR'});
+    await expect(
+      question.getByText(
+        'This file has no header and names no account, so it may not be from Example Bank. Check the transactions below look right.',
+      ),
+    ).toBeVisible();
+    const rows = question.getByTestId('bank-import-layout-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('Example Shop');
+    await expect(rows.nth(1)).toContainText('Example Employer');
+    await expect(question.getByTestId('bank-import-layout-totals')).toContainText('2,500.00');
+    // A preview row is shaped like a transaction row on every surface.
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({width, height: 844});
+      await animationsSettled(dialog);
+      // The last row, which no divider adds to.
+      // Resizing across the phone width remounts the dialog as a drawer, which then animates in.
+      await expect
+        .poll(async () => {
+          const [box, tile] = await Promise.all([
+            boxOf(rows.last()),
+            boxOf(rows.last().locator('[aria-hidden="true"]').first()),
+          ]);
+          return [box.height, tile.width, tile.height];
+        })
+        .toEqual([60, 36, 36]);
+      await expectNoHorizontalOverflow(page);
+    }
+    await question.getByText('A new account').click();
+    await dialog.getByRole('button', {name: 'Import', exact: true}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(JSON.parse(sentForm(api.uploads[1]).fields.accountChoices)).toEqual({
+      'Example Bank:EUR': 'new',
+    });
+  });
+
   test('a new account answers the question too, and Cancel goes back to choosing files', async ({
     page,
   }) => {
@@ -1825,8 +1905,15 @@ test.describe('statement file import on Connections', () => {
             },
           ],
           newAccount: true,
+          layoutPreview: null,
         },
-        {bank: 'Example Bank', currency: 'USD', candidates: [], newAccount: true},
+        {
+          bank: 'Example Bank',
+          currency: 'USD',
+          candidates: [],
+          newAccount: true,
+          layoutPreview: null,
+        },
       ],
     };
     const api = await mockFileImport(page, {
@@ -2812,6 +2899,23 @@ test.describe('statement file import on Connections', () => {
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
     await expect(dialog.getByTestId('bank-import-date-check')).toBeVisible();
 
+    // A preview row is shaped like a transaction row on every surface.
+    // The last row, which no divider adds to.
+    const previewRow = dialog.getByTestId('bank-import-layout-row').last();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({width, height: 844});
+      await animationsSettled(dialog);
+      // Resizing across the phone width remounts the dialog as a drawer, which then animates in.
+      await expect
+        .poll(async () => {
+          const [box, tile] = await Promise.all([
+            boxOf(previewRow),
+            boxOf(previewRow.locator('[aria-hidden="true"]').first()),
+          ]);
+          return [box.height, tile.width, tile.height];
+        })
+        .toEqual([60, 36, 36]);
+    }
     for (const width of [390, 320]) {
       await page.setViewportSize({width, height: 700});
       await expectNoHorizontalOverflow(page);

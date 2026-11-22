@@ -32,8 +32,15 @@ import {BankImportLayoutProposal, LayoutProposalStatus} from './bank-import-layo
 import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
-import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
-import {CsvByDirection, CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
+import {LayoutAnswer, MAX_MAPPER_INPUT_BYTES, toMapperInput} from './mapper/layout-mapper.contract';
+import {
+	CsvByDirection,
+	CsvLayout,
+	MAX_SKIP_AFTER,
+	MAX_SKIP_BEFORE,
+	fitsLayoutHeader,
+	validateCsvLayout,
+} from './parsers/csv-layout';
 import {CSV_LAYOUTS, NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
@@ -181,7 +188,8 @@ export class BankImportLayoutService {
 	/**
 	 * Finds the file's table in the parse child, asks the model once with its masked sample, checks the answer as a
 	 * layout and reads the whole file with it in the parse child. Every model call counts against the owner's daily
-	 * limit; a refusal before it (off, not a table, a table the limits do not allow) does not.
+	 * limit; a refusal before it (off, not a table, a table the limits do not allow, a header no layout can hold, a
+	 * request over `MAX_MAPPER_INPUT_BYTES`) does not.
 	 */
 	async propose(ownerId: Account['id'], file: Buffer): Promise<BankImportLayoutProposalResponse> {
 		if (!this.mapperEnabled()) throw this.refuse('mapper_unavailable');
@@ -197,12 +205,23 @@ export class BankImportLayoutService {
 		) {
 			throw this.refuse('layout_not_mappable');
 		}
+		// Any answer for a header the layout cannot hold fails validation or saving, and a request this large is no bank
+		// export.
+		const input = toMapperInput(sample);
+		if (
+			(sample.header &&
+				(!fitsLayoutHeader(sample.header) ||
+					Buffer.byteLength(JSON.stringify(sample.header)) > MAX_SAVED_LAYOUT_BYTES)) ||
+			Buffer.byteLength(JSON.stringify(input)) > MAX_MAPPER_INPUT_BYTES
+		) {
+			throw this.refuse('layout_not_mappable');
+		}
 		const owner = await this.dataSource.getRepository(Account).findOneByOrFail({id: ownerId});
 		const proposal = await this.reserve(ownerId, file, sample);
 
 		let answer: LayoutAnswer;
 		try {
-			answer = await this.mapper.mapLayout(toMapperInput(sample));
+			answer = await this.mapper.mapLayout(input);
 		} catch (error) {
 			const code =
 				error instanceof LayoutMapperError && error.reason === 'invalid'
@@ -606,7 +625,14 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 
 /** The rows as Tempo would store them: the first 5 and the last 2, counts, dates and totals per currency. */
 export function previewOf(statements: readonly NormalizedStatement[]): BankImportLayoutPreview {
-	const rows = statements.flatMap((statement) => statement.rows);
+	return previewOfRows(
+		statements.flatMap((statement) => statement.rows),
+		[...new Set(statements.flatMap(({accountIban}) => (accountIban ? [accountIban] : [])))],
+	);
+}
+
+/** Rows as a layout read them (`BankImportLayoutPreview`), with the IBANs they name. */
+export function previewOfRows(rows: readonly NormalizedRow[], accounts: string[]): BankImportLayoutPreview {
 	const dates = rows.flatMap((row) => {
 		const date = dayOf(row);
 		return date ? [date] : [];
@@ -632,7 +658,7 @@ export function previewOf(statements: readonly NormalizedStatement[]): BankImpor
 			moneyIn: formatUnits(moneyIn, scale),
 			moneyOut: formatUnits(moneyOut, scale),
 		})),
-		accounts: [...new Set(statements.flatMap(({accountIban}) => (accountIban ? [accountIban] : [])))],
+		accounts,
 	};
 }
 
@@ -640,7 +666,7 @@ function dayOf(row: NormalizedRow): string | null {
 	return row.bookingDate ?? row.valueDate ?? row.transactionDate;
 }
 
-function previewRow(row: NormalizedRow): BankImportLayoutPreviewRow {
+export function previewRow(row: NormalizedRow): BankImportLayoutPreviewRow {
 	return {
 		date: dayOf(row),
 		amount: row.amount,

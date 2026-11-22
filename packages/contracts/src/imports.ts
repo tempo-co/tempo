@@ -97,6 +97,12 @@ export type BankImportAccountQuestion = {
 	 * then among `candidates`, and `new` goes to it.
 	 */
 	newAccount: boolean;
+	/**
+	 * The rows as the owner's saved layout of a file with no header that names no account read them, when one did: it
+	 * recognises the file by its columns alone, so nothing in it shows it is this bank's, and the owner checks them on
+	 * every drop. Null for any other question.
+	 */
+	layoutPreview: BankImportLayoutPreview | null;
 };
 
 /** The body of a refused `POST /bank-imports`. */
@@ -372,7 +378,10 @@ export type BankImportLayoutPreview = {
 	rowCount: number;
 	dateFrom: string | null;
 	dateTo: string | null;
-	/** The first 5 rows, and the last 2 when there are more than 7. */
+	/**
+	 * The first 5 rows, and the last 2 when there are more than 7. In an account question: the first 2 rows of each
+	 * file, at most 10, and no last rows.
+	 */
 	firstRows: BankImportLayoutPreviewRow[];
 	lastRows: BankImportLayoutPreviewRow[];
 	/** Money in and money out per currency, both as positive decimal strings. */

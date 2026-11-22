@@ -102,6 +102,12 @@ export const LAYOUT_ANSWER_JSON_SCHEMA = strictObject({
 	account: {anyOf: [strictObject({column: integer}), strictObject({line: integer}), {type: 'null'}]},
 });
 
+/**
+ * The largest request the mapper is sent, as JSON: the largest synthetic bank export (26 columns) sends under 3 KB,
+ * and a 26-column table whose every masked cell is as long as masking allows about 15 KB.
+ */
+export const MAX_MAPPER_INPUT_BYTES = 32 * 1024;
+
 /** What the mapper is sent about one file: its table's shape and the masked sample, nothing else. */
 export type LayoutMapperInput = {
 	source: 'text' | 'workbook';

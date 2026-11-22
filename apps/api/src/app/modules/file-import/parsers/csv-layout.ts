@@ -208,6 +208,11 @@ const MAX_TEXT = 200;
 export const MAX_SKIP_BEFORE = 50;
 export const MAX_SKIP_AFTER = 10;
 
+/** Whether cells fit as a layout's header: 1 to `MAX_LAYOUT_COLUMNS` of them, each at most 200 characters. */
+export function fitsLayoutHeader(header: readonly string[]): boolean {
+	return header.length > 0 && header.length <= MAX_LAYOUT_COLUMNS && header.every((cell) => cell.length <= MAX_TEXT);
+}
+
 /** Whether a value has the shape of a layout id. */
 export function isCsvLayoutId(value: unknown): value is string {
 	return typeof value === 'string' && value.length <= MAX_LAYOUT_ID_LENGTH && LAYOUT_ID.test(value);
@@ -409,7 +414,7 @@ function recognitionOf(value: unknown): CsvLayout['recognize'] {
 	if ('header' in recognize) {
 		if ('columnCount' in recognize || 'accountBankCodes' in recognize) throw new LayoutProblem('recognize');
 		const header = cells(recognize.header, 'recognize.header');
-		if (header.length === 0 || header.length > MAX_LAYOUT_COLUMNS) throw new LayoutProblem('recognize.header');
+		if (!fitsLayoutHeader(header)) throw new LayoutProblem('recognize.header');
 		if (recognize.preamble === undefined) return {header};
 		if (!Array.isArray(recognize.preamble) || recognize.preamble.length > MAX_SKIP_BEFORE) {
 			throw new LayoutProblem('recognize.preamble');

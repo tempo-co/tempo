@@ -4,6 +4,7 @@ import type {
 	BankImportAccountQuestion,
 	BankImportDoubtfulRow as BankImportDoubtfulRowResponse,
 	BankImportFileRow,
+	BankImportLayoutPreview,
 	BankImportNeverSentKind,
 	BankImportNeverSentRow,
 	BankImportSummary,
@@ -51,10 +52,11 @@ import {FileAccountBalanceService} from '@modules/banking/services/file-account-
 import {fileAccountProviderId} from '@modules/banking/services/file-connection';
 
 import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
-import {BankImportLayoutService} from './bank-import-layout.service';
+import {BankImportLayoutService, previewOfRows, previewRow} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
+import type {CsvLayout} from './parsers/csv-layout';
 import {CSV_LAYOUTS} from './parsers/csv-layouts';
 import {MAX_ROWS_PER_DROP} from './parsers/parse-limits';
 import {
@@ -76,6 +78,9 @@ const BANK_IMPORT_NOT_A_CANDIDATE = 'Choose one of the transactions this row may
 const BANK_IMPORT_ROW_ADDED = 'One of these rows has already been added.';
 /** How the identification hash of an account made from files starts. */
 const FILE_IDENTIFICATION_PREFIX = 'file:';
+/** An account question's preview of a headerless layout's rows: the first 2 of each file, at most 10 in all. */
+const PREVIEW_ROWS_PER_FILE = 2;
+const MAX_PREVIEW_ROWS = 10;
 /**
  * A statement that names no account, routed by its bank to a synced account, is only checked against that account
  * when at least this many of its rows fall within the dates the account already holds; with fewer there is too little
@@ -127,6 +132,8 @@ type AccountRows = {
 		rows: NormalizedRow[];
 		/** `rows` as listed newest first (`joinStatements`): the order new rows are stored in. */
 		newestFirst: NormalizedRow[];
+		/** The rows of each of the part's statements (each file a layout read, also inside an archive), in order. */
+		byStatement: NormalizedRow[][];
 	}[];
 	/** Rows a later statement of the same format repeats from an earlier one, left out of `byFormat`. */
 	repeated: RepeatedRows;
@@ -211,14 +218,17 @@ export class BankImportService {
 		files: readonly Buffer[],
 		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, evidenceFiles, kinds, learnedBanks} = await this.parseDrop(ownerId, files);
+		const {statements, evidenceFiles, kinds, learnedBanks, headerlessLayouts} = await this.parseDrop(
+			ownerId,
+			files,
+		);
 		const accountRows = groupByAccount(statements, learnedBanks, evidenceFiles);
 		const allRows = statements.flatMap(({rows}) => rows);
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
 		const rowsParsed = allRows.length;
 		const targets = bankAccountId
 			? [await this.findNamedTarget(ownerId, bankAccountId, accountRows)]
-			: await this.findRoutedTargets(ownerId, accountRows, accountChoices);
+			: await this.findRoutedTargets(ownerId, accountRows, accountChoices, headerlessLayouts);
 
 		const syncedConnectionIds = [
 			...new Set(
@@ -237,7 +247,10 @@ export class BankImportService {
 				const {manager, fileConnection} = write;
 				if (toFiles && !fileConnection) throw new ConflictException(BANK_IMPORT_NOT_SAVED);
 				const accounts = await this.resolveTargets(manager, ownerId, accountRows, targets, fileConnection);
-				const accountStatements = accounts.map((imported, index) => ({...imported, rows: accountRows[index]}));
+				const accountStatements = accounts.map((imported, index) => ({
+					...imported,
+					rows: placedEvidence(accountRows[index], imported.account, headerlessLayouts),
+				}));
 				refuseBankConflicts(accountStatements);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
@@ -828,9 +841,12 @@ export class BankImportService {
 		evidenceFiles: ReadonlyMap<NormalizedStatement, number>;
 		kinds: Map<string, FileKind>;
 		learnedBanks: ReadonlyMap<string, string>;
+		/** The owner's saved layouts with no header that name no account (`unnamedHeaderlessLayout`), by id. */
+		headerlessLayouts: ReadonlySet<string>;
 	}> {
 		const owned = await this.layoutService.ownedLayouts(ownerId);
 		const learnedBanks = new Map(owned.map(({id, bank}) => [id, bank]));
+		const headerlessLayouts = new Set(owned.filter(unnamedHeaderlessLayout).map(({id}) => id));
 		const statements: NormalizedStatement[] = [];
 		const kinds = new Map<string, FileKind>();
 		const seen = new Map<string, NormalizedStatement[]>();
@@ -874,7 +890,7 @@ export class BankImportService {
 				statements.push(statement);
 			}
 		}
-		return {statements, evidenceFiles, kinds, learnedBanks};
+		return {statements, evidenceFiles, kinds, learnedBanks, headerlessLayouts};
 	}
 
 	/**
@@ -888,12 +904,14 @@ export class BankImportService {
 	 * a statement, else `target_account_unconfirmed` when a statement routed by its bank alone, by a bank code and
 	 * account number, or by an IBAN an owner's saved layout read, is not confirmed by the account's stored rows
 	 * (`isTargetConfirmed`). Such a statement the owner answered `new` for before goes to that imported-files account
-	 * instead, once its rows confirm it.
+	 * instead, once its rows confirm it. A statement one of the `headerlessLayouts` read is never confirmed by its rows:
+	 * without an `accountChoices` answer it is always asked about.
 	 */
 	private async findRoutedTargets(
 		ownerId: Account['id'],
 		accountRows: readonly AccountRows[],
 		accountChoices: AccountChoices,
+		headerlessLayouts: ReadonlySet<string>,
 	): Promise<Target[]> {
 		const syncedAccounts = accountRows.some((rows) => rows.iban || rows.bank || bankCodeAndAccount(rows))
 			? await this.dataSource.getRepository(BankAccount).find({
@@ -918,6 +936,12 @@ export class BankImportService {
 		}
 		const routed: Array<RoutedTarget | null> = [];
 		const ambiguous: Array<{index: number; matches: BankAccount[]}> = [];
+		/** The accounts of its bank that fit a statement asked about for a headerless layout, inactive ones too. */
+		const fittingByIndex = new Map<number, BankAccount[]>();
+		// Another bank's export of the same columns reads with such a layout, so only the owner places its rows.
+		const askOwner = accountRows.map(
+			(rows, index) => !accountChoices.has(keys[index] ?? '') && readByHeaderlessLayout(rows, headerlessLayouts),
+		);
 		for (const [index, rows] of accountRows.entries()) {
 			const choice = keys[index] === null ? undefined : accountChoices.get(keys[index]);
 			if (choice !== undefined) {
@@ -940,7 +964,11 @@ export class BankImportService {
 			// no active one does, so it cannot make the statement of an active account ambiguous.
 			const active = iban ? [] : fitting.filter(({isActive}) => isActive);
 			const matches = active.length > 0 ? active : fitting;
-			if (matches.length > 1) {
+			if (matches.length > 1 && askOwner[index]) {
+				// Asked about with these and every active account in its currency, as nothing shows it is this bank's.
+				fittingByIndex.set(index, matches);
+				routed.push({target: {kind: 'file'}, check: null});
+			} else if (matches.length > 1) {
 				ambiguous.push({index, matches});
 				routed.push(null);
 			} else if (iban && rows.learnedBank) {
@@ -966,6 +994,10 @@ export class BankImportService {
 		// Read without the sync lock: this only decides whether to ask the owner, and the ladder runs again under it.
 		const unconfirmed: number[] = [];
 		for (const [index, entry] of routed.entries()) {
+			if (entry && askOwner[index]) {
+				unconfirmed.push(index);
+				continue;
+			}
 			if (!entry?.check || !entry.target.account) continue;
 			if (await this.isTargetConfirmed(ownerId, entry.target.account, entry.check)) continue;
 			// The owner already said such a statement is not the account its IBAN or account number found: it goes where
@@ -992,15 +1024,20 @@ export class BankImportService {
 				order: {id: 'ASC'},
 			});
 			for (const index of unconfirmed) {
-				const routedTo = (routed[index]!.target as {account: BankAccount}).account;
+				// Only a statement of a headerless layout may be asked about with no account routed to yet.
+				const routedTo = routed[index]!.target.account;
+				// The account the statement would have gone to first (or those of its bank that fit), then every other
+				// active account in its currency.
+				const first = routedTo ? [routedTo] : (fittingByIndex.get(index) ?? []);
 				questions.push({
 					index,
-					// The account the statement would have gone to first, then every other active account in its currency.
 					candidates: [
-						routedTo,
+						...first,
 						...ownedAccounts.filter(
 							({id, currency, isActive}) =>
-								isActive && id !== routedTo.id && currency === accountRows[index].currency,
+								isActive &&
+								!first.some((account) => account.id === id) &&
+								currency === accountRows[index].currency,
 						),
 					],
 				});
@@ -1013,6 +1050,7 @@ export class BankImportService {
 				rows: accountRows[index],
 				bank: banks[index]!,
 				candidates,
+				layoutPreview: askOwner[index] ? headerlessLayoutPreview(accountRows[index], headerlessLayouts) : null,
 			}));
 		// `new` goes to the imported-files account of the bank and currency once it exists, so it is offered as itself.
 		const fileAccounts = await Promise.all(
@@ -1021,7 +1059,7 @@ export class BankImportService {
 		throw new BankImportRefusalException(
 			ambiguous.length > 0 ? 'ambiguous_target_account' : 'target_account_unconfirmed',
 			null,
-			asked.map(({rows, bank, candidates}, askedIndex) => {
+			asked.map(({rows, bank, candidates, layoutPreview}, askedIndex) => {
 				const fileAccount = fileAccounts[askedIndex];
 				const unlisted = fileAccount && !candidates.some(({id}) => id === fileAccount.id);
 				return {
@@ -1029,6 +1067,7 @@ export class BankImportService {
 					currency: rows.currency,
 					candidates: (unlisted ? [...candidates, fileAccount] : candidates).map(toAccountCandidate),
 					newAccount: !fileAccount,
+					layoutPreview,
 				};
 			}) satisfies BankImportAccountQuestion[],
 		);
@@ -1556,6 +1595,7 @@ function groupByAccount(
 				learned,
 				rows: joined[index].rows,
 				newestFirst: joined[index].newestFirst,
+				byStatement: parts[index].statements.map((statement) => statement.rows),
 			})),
 			repeated: {
 				reference: sum(joined.map(({repeated}) => repeated.reference)),
@@ -1895,6 +1935,57 @@ function ibanHolds(iban: string | null, parts: readonly string[]): boolean {
 	if (!normalized) return false;
 	const pattern = parts.map((part) => `0*${part.replace(/^0+(?=.)/, '')}`).join('[A-Z0-9]*?');
 	return new RegExp(`^[A-Z]*${pattern}`).test(normalized.slice(4));
+}
+
+/**
+ * A saved layout that checks neither a header nor an account: it recognises a file by its columns alone, which another
+ * bank's export of the same shape can share.
+ */
+function unnamedHeaderlessLayout(layout: CsvLayout): boolean {
+	return !('header' in layout.recognize) && layout.accountIban === undefined && layout.accountIbanLine === undefined;
+}
+
+/** Whether a part of the rows was read by one of the owner's saved layouts with no header that name no account. */
+function headerlessPart({layout}: {layout: string | null}, headerlessLayouts: ReadonlySet<string>): boolean {
+	return layout !== null && headerlessLayouts.has(layout);
+}
+
+/** Whether one of the owner's saved layouts with no header that name no account read any part of the rows. */
+function readByHeaderlessLayout(rows: AccountRows, headerlessLayouts: ReadonlySet<string>): boolean {
+	return rows.byFormat.some((part) => headerlessPart(part, headerlessLayouts));
+}
+
+/**
+ * What the owner checks of the files headerless layouts read before saying where their rows go: the first rows of
+ * every file, so a file another bank wrote shows its misread rows too, with the count and totals of the files' rows
+ * (rows two files repeat count in each, as shown).
+ */
+function headerlessLayoutPreview(rows: AccountRows, headerlessLayouts: ReadonlySet<string>): BankImportLayoutPreview {
+	const files = rows.byFormat.flatMap((part) => (headerlessPart(part, headerlessLayouts) ? part.byStatement : []));
+	return {
+		...previewOfRows(files.flat(), []),
+		firstRows: files
+			.flatMap((fileRows) => fileRows.slice(0, PREVIEW_ROWS_PER_FILE))
+			.slice(0, MAX_PREVIEW_ROWS)
+			.map(previewRow),
+		lastRows: [],
+	};
+}
+
+/**
+ * The rows with their bank evidence as the account they go to may record it: none when only headerless layouts read
+ * them and the owner placed them anywhere but that bank's own imported-files account, as nothing in such a file names
+ * its bank. A statement another layout of that bank read is evidence of it.
+ */
+function placedEvidence(rows: AccountRows, account: BankAccount, headerlessLayouts: ReadonlySet<string>): AccountRows {
+	if (
+		!rows.bank ||
+		!rows.byFormat.every((part) => headerlessPart(part, headerlessLayouts)) ||
+		fileBankAccountOf(account.providerAccountId, rows.bank, rows.currency)
+	) {
+		return rows;
+	}
+	return {...rows, bankEvidence: []};
 }
 
 /** The parts of the rows the owner's saved layouts read. */
