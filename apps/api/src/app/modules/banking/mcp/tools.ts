@@ -40,6 +40,7 @@ import {z} from 'zod';
 import {dateInTimeZone} from '@core/time/app-time-zone';
 
 import {safeErrorStack} from '../bank-sync-failure';
+import {BANK_DATA_NOTICE, wrapBankData} from './bank-data';
 import {ToolReadError} from './errors';
 import {filtersSchema, sortSchema} from './inputs';
 
@@ -84,14 +85,13 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	const server = new McpServer(
 		{name: 'tempo', version: '0.1.0'},
 		{
-			instructions:
-				"Combined money figures are in the response's baseCurrency, the owner's reporting currency. When baseCurrency is null, Tempo has no reporting currency yet or is still converting amounts into a new one: do not present those figures as totals. Amounts with their own currency field are always in that currency.",
+			instructions: `Combined money figures are in the response's baseCurrency, the owner's reporting currency. When baseCurrency is null, Tempo has no reporting currency yet or is still converting amounts into a new one: do not present those figures as totals. Amounts with their own currency field are always in that currency. ${BANK_DATA_NOTICE}`,
 		},
 	);
 	const annotations = {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true};
 	const read = async (operation: () => Promise<unknown>): Promise<CallToolResult> => {
 		try {
-			return {content: [{type: 'text', text: JSON.stringify(await operation())}]};
+			return {content: [{type: 'text', text: wrapBankData(JSON.stringify(await operation()))}]};
 		} catch (error) {
 			// Like REST's exception filter, log unexpected failures; name and stack frames only, never the message.
 			if (!(error instanceof ToolReadError))
@@ -112,7 +112,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'list_recurring',
 		{
-			description: `Read recurring bills and income, monthly totals and unconverted counts. ${asOfDefault}`,
+			description: `Read recurring bills and income, monthly totals and unconverted counts. ${asOfDefault} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
 			annotations,
 		},
@@ -121,7 +121,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'recurring_summary',
 		{
-			description: `Read recurring monthly totals, unconverted counts, the next three upcoming payments and late or higher-than-usual bills. ${asOfDefault}`,
+			description: `Read recurring monthly totals, unconverted counts, the next three upcoming payments and late or higher-than-usual bills. ${asOfDefault} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({asOf: z.iso.date().optional()}),
 			annotations,
 		},
@@ -130,7 +130,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'month_summary',
 		{
-			description: `Monthly spending and income with baseline comparisons. ${asOfDefault}`,
+			description: `Monthly spending and income with baseline comparisons. ${asOfDefault} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				month: z.string().regex(/^(19|20)\d{2}-(0[1-9]|1[0-2])$/),
 				asOf: z.iso.date().optional(),
@@ -146,7 +146,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 		server.registerTool(
 			name,
 			{
-				description: `Read period analytics. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)}`,
+				description: `Read period analytics. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)} ${BANK_DATA_NOTICE}`,
 				inputSchema: z.strictObject({
 					interval: z.enum(['week', 'month', 'year']),
 					from: z.iso.date(),
@@ -181,8 +181,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'search_transactions',
 		{
-			description:
-				'Search one page of transactions. page is zero-based. Use transaction_totals with the same filters for sums across all matches; never sum a page as a full total.',
+			description: `Search one page of transactions. page is zero-based. Use transaction_totals with the same filters for sums across all matches; never sum a page as a full total. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				filters: filtersSchema.optional(),
 				sort: sortSchema.optional(),
@@ -207,8 +206,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'transaction_totals',
 		{
-			description:
-				'Exact decimal-string spending, income and net across ALL matching transactions, plus count and the excluded missingBaseAmount count. Uses Tempo base-currency and spending semantics, not a page sum.',
+			description: `Exact decimal-string spending, income and net across ALL matching transactions, plus count and the excluded missingBaseAmount count. Uses Tempo base-currency and spending semantics, not a page sum. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({filters: filtersSchema.optional()}),
 			annotations,
 		},
@@ -217,7 +215,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'get_transaction',
 		{
-			description: 'Get a single owner-scoped transaction by UUIDv4.',
+			description: `Get a single owner-scoped transaction by UUIDv4. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({id: z.uuidv4()}),
 			annotations,
 		},
@@ -226,7 +224,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'review_counts',
 		{
-			description: 'Read counts of transactions needing review or categorization.',
+			description: `Read counts of transactions needing review or categorization. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({}),
 			annotations,
 		},
@@ -235,7 +233,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'spending_breakdown',
 		{
-			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's. ${asOfDefault} ${rangeLimits(BREAKDOWN_INTERVALS)}`,
+			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's. ${asOfDefault} ${rangeLimits(BREAKDOWN_INTERVALS)} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				interval: z.enum(BREAKDOWN_INTERVALS),
 				by: z.enum(BREAKDOWN_DIMENSIONS),
@@ -251,8 +249,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'list_merchants',
 		{
-			description:
-				'List merchant groups (brands, or single merchants such as people) with all-time spent, received and count, most spent first; use it to find merchant ids by name.',
+			description: `List merchant groups (brands, or single merchants such as people) with all-time spent, received and count, most spent first; use it to find merchant ids by name. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				search: z
 					.string()
@@ -271,7 +268,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'merchant_ranking',
 		{
-			description: `Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Tempo's spending semantics. ${asOfDefault}`,
+			description: `Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Tempo's spending semantics. ${asOfDefault} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				interval: z.enum(CASH_FLOW_INTERVALS),
 				period: z.iso.date(),
@@ -287,8 +284,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'get_merchant',
 		{
-			description:
-				"All-time totals of one merchant group (paid, refunded, average payment, first and last date, merchant variants) by an id from list_merchants, merchant_ranking or a transaction's merchantGroupId.",
+			description: `All-time totals of one merchant group (paid, refunded, average payment, first and last date, merchant variants) by an id from list_merchants, merchant_ranking or a transaction's merchantGroupId. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({id: merchantId}),
 			annotations,
 		},
@@ -297,7 +293,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'merchant_periods',
 		{
-			description: `How much was spent at and received from one merchant group per week, month or year, using Tempo's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)}`,
+			description: `How much was spent at and received from one merchant group per week, month or year, using Tempo's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				id: merchantId,
 				interval: z.enum(CASH_FLOW_INTERVALS),
@@ -313,7 +309,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'list_accounts',
 		{
-			description: 'List bank connections, accounts, balances, base currency and sync freshness.',
+			description: `List bank connections, accounts, balances, base currency and sync freshness. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({}),
 			annotations,
 		},
