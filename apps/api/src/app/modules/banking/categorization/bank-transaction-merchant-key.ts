@@ -20,6 +20,9 @@ type MerchantKeyText = {
 type MerchantKeyTransaction = MerchantKeyText & {creditDebitIndicator: CreditDebitIndicator};
 
 const TRAILING_TERMINAL_NUMBER_PATTERN = /\s+\d{1,5}$/;
+// Some terminals glue a store number to the name ("Example Burger00632"); four or five digits right after a letter
+// count as one, while shorter tails stay because they are often part of the name ("Example R10").
+const GLUED_TERMINAL_NUMBER_PATTERN = /(?<=\p{L})\d{4,5}$/u;
 // "Example Shop via Example Pay" or "Example Shop by Example Pay": banks cut the processor tail of a counterparty
 // name at varying lengths, so it is dropped to keep every row of one merchant on one key.
 const PROCESSOR_SUFFIX_PATTERN = /[\s,;]+(?:via|by)(?:\s.*)?$/i;
@@ -140,5 +143,9 @@ function stripLegalEntity(name: string): string {
 // Card terminals append their number ("Example Rail 201"); drop it so every terminal of one merchant matches.
 function getCardMerchantName(description: string | null): string | null {
 	const name = description ? extractCardMerchantName(description) : null;
-	return name ? normalizeBankTransactionText(name.replace(TRAILING_TERMINAL_NUMBER_PATTERN, '')) : null;
+	return name
+		? normalizeBankTransactionText(
+				name.replace(TRAILING_TERMINAL_NUMBER_PATTERN, '').replace(GLUED_TERMINAL_NUMBER_PATTERN, ''),
+			)
+		: null;
 }
