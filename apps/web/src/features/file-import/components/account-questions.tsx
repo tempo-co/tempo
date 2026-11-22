@@ -19,6 +19,7 @@ import {accountName, accountSubline} from '@/features/banking/utils/bank-account
 import {cn} from '@/utils/cn';
 
 import {accountQuestionKey} from '../utils/refusal-copy';
+import {PreviewRows} from './layout-preview';
 
 /** The `accountChoices` value for the imported-files account of the question's bank and currency. */
 export const NEW_ACCOUNT = 'new';
@@ -133,10 +134,15 @@ export function AccountQuestions({
               {question.bank} · {question.currency}
             </legend>
             <p className='text-sm text-muted-foreground'>
-              {code === 'target_account_unconfirmed' && first
-                ? `Few of these transactions match what Tempo already has for ${accountName(first)}.`
-                : 'You have more than one account this could be.'}
+              {question.layoutPreview
+                ? `This file has no header and names no account, so it may not be from ${question.bank}. Check the transactions below look right.`
+                : code === 'target_account_unconfirmed' && first
+                  ? `Few of these transactions match what's already in ${accountName(first)}.`
+                  : 'You have more than one account this could be.'}
             </p>
+            {question.layoutPreview && (
+              <PreviewRows preview={question.layoutPreview} currency={null} />
+            )}
             <div className='divide-y overflow-hidden rounded-md border'>
               {options.map((option) => {
                 const checked = answers[key] === option.value;

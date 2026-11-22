@@ -171,6 +171,7 @@ test('an account question asks, unless it has nothing to ask', () => {
         },
       ],
       newAccount: true,
+      layoutPreview: null,
     },
   ];
   expect(

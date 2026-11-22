@@ -2135,6 +2135,7 @@ describe('Bank imports', () => {
 						},
 					],
 					newAccount: true,
+					layoutPreview: null,
 				},
 			],
 		});

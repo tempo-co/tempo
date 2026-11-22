@@ -50,10 +50,10 @@ const MIN_SAME_VALUE_ROWS = 3;
  *
  * - Every letter becomes `a` or `A` (case kept) and every numeric character `9`; the combining marks after them are
  *   dropped; punctuation, spaces and length are kept, and each cell is cut at 60 characters.
- * - Sent as written: the header's cells without a digit (cut at 80 characters, at most 200 of them), when the header
- *   names a date over a date column (`headerAsWritten`; else it is masked like the rows); a cell that is
- *   an ISO 4217 currency code; and a row cell that is one of the `PLAIN_WORDS` a direction or status column holds
- *   (`Af`/`Bij`, `Debit`/`Credit`, `Gebucht`/`Vorgemerkt`). Nothing else of a row is, however short or often
+ * - Sent as written: the header's cells without a numeral of any kind (cut at 80 characters, at most 200 of them),
+ *   when the header names a date over a date column (`headerAsWritten`; else it is masked like the rows); a cell
+ *   that is an ISO 4217 currency code; and a row cell that is one of the `PLAIN_WORDS` a direction or status column
+ *   holds (`Af`/`Bij`, `Debit`/`Credit`, `Gebucht`/`Vorgemerkt`). Nothing else of a row is, however short or often
  *   repeated: in a short export, a name written twice looks like a direction column.
  * - Only the first, middle and last rows, the 10 lines just above the table and the 3 just below it.
  * - Per column, over the whole table: up to 6 distinct values masked without exceptions, most frequent first (the
@@ -72,9 +72,9 @@ export function maskTable(table: FoundTableParts): MaskedTable {
 			table.header &&
 			table.header
 				.slice(0, MAX_HEADER_CELLS)
-				// A heading never needs a digit; a cell with one (an account number in a title line) is masked.
+				// A heading never needs a numeral; a cell with one (an account number in a title line) is masked.
 				.map((value) =>
-					/\p{Nd}/u.test(value) || !table.headerAsWritten
+					/\p{N}/u.test(value) || !table.headerAsWritten
 						? maskText(value)
 						: [...value].slice(0, MAX_HEADER_CELL_LENGTH).join(''),
 				),
