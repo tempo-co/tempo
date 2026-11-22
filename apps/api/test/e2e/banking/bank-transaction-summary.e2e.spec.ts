@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankTransactionReviewCounts} from '@tempo/contracts';
+import type {BankBalanceTrend, BankTransactionReviewCounts} from '@tempo/contracts';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, Repository} from 'typeorm';
 
@@ -744,6 +744,48 @@ describe('BankTransactionSummary', () => {
 				{start: '2019-02-05', end: '2019-02-05', complete: true, total: '700.00'},
 				{start: '2019-02-06', end: '2019-02-06', complete: true, total: '700.00'},
 			]);
+		});
+
+		it('rebuilds day ends from the bank-reported balance, counting what it already holds however late it is booked', async () => {
+			const connection = await fixtures.createConnection(owner);
+			try {
+				// Reported on Sunday 8 March.
+				const account = await fixtures.createBankAccount(connection, {
+					currentBalanceAmount: '500.00',
+					balanceUpdatedAt: new Date('2020-03-08T18:00:00Z'),
+				});
+				await fixtures.createTransactions(account, [
+					bookedRow('2020-03-02', '-30.00'),
+					// In the balance: Saturday's card payment, booked on Monday.
+					bookedRow('2020-03-09', '-100.00', {transactionDate: '2020-03-07'}),
+					// In the balance: booked by the reported day.
+					bookedRow('2020-03-07', '-20.00', {transactionDate: '2020-03-09'}),
+					// Not in the balance: made after the reported day, or still pending.
+					bookedRow('2020-03-09', '-40.00', {transactionDate: '2020-03-09'}),
+					bookedRow('2020-03-09', '-80.00', {
+						transactionDate: '2020-03-07',
+						transactionStatus: 'PDNG',
+					}),
+				]);
+				const {body} = await ownerAgent
+					.get(TREND)
+					.query({interval: 'day', from: '2020-03-06', to: '2020-03-09', asOf: '2026-10-18'})
+					.expect(200);
+				expect(
+					(body as BankBalanceTrend).periods.map(({end, accounts}) => ({
+						end,
+						balance: accounts.find(({id}) => id === account.id)?.balance,
+					})),
+				).toEqual([
+					{end: '2020-03-06', balance: '620.00'},
+					{end: '2020-03-07', balance: '600.00'},
+					// From the reported day on, the bank's balance.
+					{end: '2020-03-08', balance: '500.00'},
+					{end: '2020-03-09', balance: '500.00'},
+				]);
+			} finally {
+				await fixtures.connections.delete({id: connection.id});
+			}
 		});
 
 		it('accepts exactly 92 days', async () => {
