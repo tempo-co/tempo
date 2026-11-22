@@ -5,15 +5,15 @@ import {
 	pairCurrencyExchanges,
 } from './currency-exchange-pairing';
 
-const CONNECTION = 'cccccccc-0000-4000-8000-000000000001';
-const OTHER_CONNECTION = 'cccccccc-0000-4000-8000-000000000002';
+const GROUP = 'cccccccc-0000-4000-8000-000000000001';
+const OTHER_GROUP = 'cccccccc-0000-4000-8000-000000000002';
 
 let sequence = 0;
 function leg(overrides: Partial<CurrencyExchangeLeg> & Pick<CurrencyExchangeLeg, 'indicator'>): CurrencyExchangeLeg {
 	sequence += 1;
 	return {
 		id: `dddddddd-0000-4000-8000-${String(sequence).padStart(12, '0')}`,
-		connectionId: CONNECTION,
+		exchangeGroup: GROUP,
 		date: '2026-01-10',
 		currency: overrides.indicator === 'DBIT' ? 'EUR' : 'USD',
 		targetCurrency: 'USD',
@@ -56,13 +56,14 @@ describe('pairCurrencyExchanges', () => {
 		});
 	});
 
-	it('keeps exchanges apart by connection, day and target currency', () => {
+	it('keeps exchanges apart by exchange group, day and target currency, and pairs no leg without a group', () => {
 		const [debit, credit] = exchange('10.00', '10.00');
-		const [otherConnectionDebit] = exchange('10.00', '10.00', {connectionId: OTHER_CONNECTION});
+		const [otherConnectionDebit] = exchange('10.00', '10.00', {exchangeGroup: OTHER_GROUP});
+		const ungrouped = exchange('10.00', '10.00', {exchangeGroup: null});
 		const [, otherDayCredit] = exchange('10.00', '10.00', {date: '2026-01-11'});
 		const [otherTargetDebit] = exchange('10.00', '10.00', {targetCurrency: 'GBP'});
 
-		expect(pairs([debit, credit, otherConnectionDebit, otherDayCredit, otherTargetDebit])).toEqual({
+		expect(pairs([debit, credit, otherConnectionDebit, otherDayCredit, otherTargetDebit, ...ungrouped])).toEqual({
 			[debit.id]: credit.id,
 			[credit.id]: debit.id,
 		});
@@ -146,7 +147,7 @@ describe('confirmCurrencyExchanges', () => {
 		const currency = accountCurrency[overrides.bankAccountId as keyof typeof accountCurrency];
 		return {
 			id: `eeeeeeee-0000-4000-8000-${String(candidateSequence).padStart(12, '0')}`,
-			connectionId: CONNECTION,
+			exchangeGroup: GROUP,
 			date: '2026-01-10',
 			currency,
 			targetCurrency: overrides.indicator === 'CRDT' ? currency : null,
@@ -156,7 +157,7 @@ describe('confirmCurrencyExchanges', () => {
 	const confirmed = (candidates: CurrencyExchangeCandidate[]) =>
 		Object.fromEntries(confirmCurrencyExchanges(candidates));
 
-	it('confirms a debit and a credit on two accounts of one connection and day, in two currencies', () => {
+	it('confirms a debit and a credit on two accounts of one exchange group and day, in two currencies', () => {
 		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT});
 		const credit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT});
 
@@ -170,13 +171,20 @@ describe('confirmCurrencyExchanges', () => {
 	});
 
 	it.each([
-		['another connection', {connectionId: OTHER_CONNECTION}],
+		['another exchange group', {exchangeGroup: OTHER_GROUP}],
 		['another day', {date: '2026-01-11'}],
 		['no date', {date: null}],
 		['the same account', {bankAccountId: EUR_ACCOUNT}],
 	])('does not confirm legs on %s', (_caseName, overrides) => {
 		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT});
 		const credit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT, ...overrides});
+
+		expect(confirmed([debit, credit])).toEqual({});
+	});
+
+	it('does not confirm legs that belong to no exchange group', () => {
+		const debit = candidate({indicator: 'DBIT', bankAccountId: EUR_ACCOUNT, exchangeGroup: null});
+		const credit = candidate({indicator: 'CRDT', bankAccountId: USD_ACCOUNT, exchangeGroup: null});
 
 		expect(confirmed([debit, credit])).toEqual({});
 	});

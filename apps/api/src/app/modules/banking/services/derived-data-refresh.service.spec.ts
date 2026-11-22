@@ -138,16 +138,22 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('daily, recomputes every owner’s own transfers over the whole history, one owner’s failure not stopping the rest', async () => {
+	it('daily, per owner recomputes exchanges, then own transfers over the whole history, then queues the former exchange legs, one owner’s failure not stopping the rest', async () => {
 		const {service, steps} = createRecordingRefresh({
 			owners: ['failing-owner', 'other-owner'],
+			exchanges: {reclassifiedIds: ['former-leg'], requeuedIds: ['former-leg']},
 			ownTransfersFail: (ownerId) => ownerId === 'failing-owner',
 		});
 
-		await expect(service.recomputeAllOwnTransfers()).resolves.toBeUndefined();
+		await expect(service.recomputeAllLabels()).resolves.toBeUndefined();
 
 		// A failed whole-history recompute waits for the next day.
-		expect(steps).toEqual(['own transfers whole history', 'own transfers whole history']);
+		const owner = ['exchanges', 'own transfers whole history', 'categorize former-leg'];
+		expect(steps).toEqual([...owner, ...owner]);
+		expect(jest.mocked(recomputeCurrencyExchanges).mock.calls.map(([, ownerId]) => ownerId)).toEqual([
+			'failing-owner',
+			'other-owner',
+		]);
 		expect(jest.mocked(recomputeOwnTransfersAndCategories).mock.calls.map(([, ownerId]) => ownerId)).toEqual([
 			'failing-owner',
 			'other-owner',

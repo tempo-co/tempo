@@ -2,8 +2,10 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 import {OTHER_EXAMPLE_IBAN} from '../../../../../test/fixtures/statement-file.fixture';
+import {PARSE_TIMEOUT_MS} from '../runner/parse-runner';
 import {parseMt940} from './mt940';
 import {parseFile} from './parse-file';
+import {MAX_FILE_BYTES, MAX_ROWS_PER_DROP} from './parse-limits';
 import {NormalizedRow, ParseRefusal} from './parse-result';
 
 /** A synthetic Polish IBAN. */
@@ -52,6 +54,7 @@ describe('parseMt940', () => {
 				accountIban: OTHER_EXAMPLE_IBAN,
 				accountOtherId: null,
 				bank: null,
+				servicerBic: null,
 				accountCurrency: 'EUR',
 				sequenceNumber: '12',
 				entriesSkipped: 0,
@@ -422,6 +425,198 @@ describe('parseMt940', () => {
 		expect(row).toMatchObject({amount: '-10.00', balanceAfter: '90.00', ...expected});
 	});
 
+	it.each([
+		['a SWIFT basic header', ['{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:'], 'EXMPDEFF'],
+		[
+			'the sender in the application header of an output message',
+			['{1:F01RCVRNL2AAXXX0000000000}{2:O9401200261005EXMPDEFFAXXX00000000002610051200N}{4:'],
+			'EXMPDEFF',
+		],
+		["a header of the sender's BIC over the message type", ['EXMPDEFF', '940', 'EXMPDEFF'], 'EXMPDEFF'],
+		[
+			"a header of the sender's BIC over the message type, then a -",
+			['EXMPDEFF', '940', 'EXMPDEFF', '-'],
+			'EXMPDEFF',
+		],
+		['a header of a BIC with its branch', ['EXMPDEFFXXX', '940', 'EXMPDEFFXXX'], 'EXMPDEFF'],
+		['a header naming no BIC', ['EXAMPLEBANK'], null],
+		['no header', [], null],
+	])("reads the bank's BIC from %s", (_caseName, header, servicerBic) => {
+		const [parsed] = parseMt940(
+			Buffer.from(statement([':61:261005D10,00NTRFNONREF', ':86:Example Shop'], '90,00', header), 'latin1'),
+		);
+
+		expect(parsed.servicerBic).toBe(servicerBic);
+	});
+
+	it('reads each SWIFT message of a file, ended by -}, with the BIC of its own header', () => {
+		const message = (bic: string, iban: string) =>
+			[
+				`{1:F01${bic}AXXX0000000000}{2:I940${bic}XXXXN}{4:`,
+				':20:EXAMPLE',
+				`:25:${iban}`,
+				':28C:00001/001',
+				':60F:C261005EUR100,00',
+				':61:261005D10,00NTRFNONREF',
+				':86:Example Shop',
+				':62F:C261005EUR90,00',
+				'-}',
+			].join('\r\n');
+		const file = [message('EXMPDEFF', OTHER_EXAMPLE_IBAN), message('EXMPNL2A', POLISH_IBAN)].join('\r\n');
+
+		expect(
+			parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic, rows}) => [
+				accountIban,
+				servicerBic,
+				rows.length,
+			]),
+		).toEqual([
+			[OTHER_EXAMPLE_IBAN, 'EXMPDEFF', 1],
+			[POLISH_IBAN, 'EXMPNL2A', 1],
+		]);
+	});
+
+	const SWIFT_HEADER = ['{1:F01EXMPDEFFAXXX0000000000}{2:I940EXMPDEFFXXXXN}{4:'];
+	it.each([
+		[
+			'statements of one SWIFT message with nothing between them share its header',
+			SWIFT_HEADER,
+			null,
+			[],
+			'-}',
+			'EXMPDEFF',
+		],
+		[
+			'a bare statement after a headed one ended by - has no header',
+			['EXMPDEFF', '940', 'EXMPDEFF'],
+			'-',
+			[],
+			'-',
+			null,
+		],
+		['a bare statement after a SWIFT message closed by -} has no header', SWIFT_HEADER, '-}', [], '-', null],
+		[
+			'a statement starting while one under a BIC header is open has no header',
+			['EXMPDEFF', '940', 'EXMPDEFF'],
+			null,
+			[],
+			'-',
+			null,
+		],
+		[
+			'a statement under a BIC header right after one with no - has none, its header read as text',
+			['EXMPDEFF', '940', 'EXMPDEFF'],
+			null,
+			['EXMPBEBB', '940', 'EXMPBEBB'],
+			'-',
+			null,
+		],
+		[
+			'a SWIFT message starting on the line that ends the one before has its own header',
+			SWIFT_HEADER,
+			'-}{5:{CHK:0123456789AB}}{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:',
+			[],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a SWIFT message right after a statement with no -} has its own header',
+			SWIFT_HEADER,
+			null,
+			['{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:'],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a SWIFT message whose header starts on its own line, right after a statement with no -}, has its own header',
+			SWIFT_HEADER,
+			null,
+			['{1:', 'F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:'],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a SWIFT message after an empty one that follows a statement with no -} has its own header',
+			SWIFT_HEADER,
+			null,
+			[
+				'{1:F01EXMPNL2AAXXX0000000000}{2:I940EXMPNL2AXXXXN}{4:',
+				'-}',
+				'{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:',
+			],
+			'-}',
+			'EXMPBEBB',
+		],
+		[
+			'a bare statement after an empty SWIFT message that follows a statement with no -} has no header',
+			SWIFT_HEADER,
+			null,
+			['{1:F01EXMPNL2AAXXX0000000000}{2:I940EXMPNL2AXXXXN}{4:', '-}'],
+			'-',
+			null,
+		],
+	])(
+		'reads the BIC of a header above the statements: %s',
+		(_caseName, header, firstEnd, secondHeader, secondEnd, secondBic) => {
+			const block = (iban: string, end: string | null) =>
+				[
+					':20:EXAMPLE',
+					`:25:${iban}`,
+					':28C:00001/001',
+					':60F:C261005EUR100,00',
+					':61:261005D10,00NTRFNONREF',
+					':86:Example Shop',
+					':62F:C261005EUR90,00',
+					...(end === null ? [] : [end]),
+				].join('\r\n');
+			const file = [
+				...header,
+				block(OTHER_EXAMPLE_IBAN, firstEnd),
+				...secondHeader,
+				block(POLISH_IBAN, secondEnd),
+			].join('\r\n');
+
+			expect(
+				parseMt940(Buffer.from(file, 'latin1')).map(({accountIban, servicerBic}) => [accountIban, servicerBic]),
+			).toEqual([
+				[OTHER_EXAMPLE_IBAN, 'EXMPDEFF'],
+				[POLISH_IBAN, secondBic],
+			]);
+		},
+	);
+
+	it('reads a description line of only 940 as description text', () => {
+		const row = only(
+			statement([':61:261005D10,00NTRFNONREF', ':86:Invoice', '940'], '90,00', ['EXMPDEFF', '940', 'EXMPDEFF']),
+		);
+
+		expect(row).toMatchObject({amount: '-10.00'});
+		expect(row.description).toBe('Invoice 940');
+	});
+
+	it(
+		'reads a file as large as an upload takes, of as many entries as a drop takes over many lines, within the parse deadline',
+		() => {
+			const entries = Array.from({length: MAX_ROWS_PER_DROP}, (_entry, index) => [
+				':61:261005C1,00NTRFNONREF',
+				`:86:Example Shop ${index}`,
+				...Array.from({length: 9}, (_line, line) => `Example description line ${line + 1}`),
+			]).flat();
+			const file = Buffer.from(
+				statement(entries, `${100 + MAX_ROWS_PER_DROP},00`, ['EXMPDEFF', '940', 'EXMPDEFF']),
+				'latin1',
+			);
+			expect(file.byteLength).toBeLessThanOrEqual(MAX_FILE_BYTES);
+
+			const started = Date.now();
+			const [{rows}] = parseMt940(file);
+
+			expect(rows).toHaveLength(MAX_ROWS_PER_DROP);
+			expect(Date.now() - started).toBeLessThan(PARSE_TIMEOUT_MS);
+		},
+		2 * PARSE_TIMEOUT_MS,
+	);
+
 	it('finds the statement after blank lines and a header', () => {
 		const file = statement([':61:261005D10,00NTRFNONREF', ':86:Example Shop'], '90,00', [
 			'',
@@ -452,6 +647,17 @@ describe('parseMt940', () => {
 		{
 			name: 'a file that ends inside the available balance after the closing balance',
 			file: fixture('cut-available-balance-mt940-synthetic.sta').toString('latin1'),
+		},
+		{
+			name: 'a statement a SWIFT message starts inside, before its closing balance',
+			file: statement(
+				[
+					':61:261005D10,00NTRFNONREF',
+					':86:Example Shop',
+					'{1:F01EXMPBEBBAXXX0000000000}{2:I940EXMPBEBBXXXXN}{4:',
+				],
+				'90,00',
+			),
 		},
 	])('refuses $name', ({file}) => {
 		expect(() => parseMt940(Buffer.from(file, 'latin1'))).toThrow(new ParseRefusal('parse_failed'));

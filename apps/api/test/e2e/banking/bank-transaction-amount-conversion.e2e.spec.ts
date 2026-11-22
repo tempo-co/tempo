@@ -2,16 +2,15 @@ import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
 import type {BankTransactionTotals, ReportingCurrency} from '@tempo/contracts';
 import TestAgent from 'supertest/lib/agent';
-import {DataSource, DeepPartial, In, Repository} from 'typeorm';
+import {DeepPartial, In, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankTransactionFxRate} from '@modules/banking/bank-transaction-fx-rate.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {lockReportingCurrencyForAmountWrites} from '@modules/banking/reporting-currency';
+import {AccountHistoryWriterService} from '@modules/banking/services/account-history-writer.service';
 import {BankTransactionAmountConversionService} from '@modules/banking/services/bank-transaction-amount-conversion.service';
-import {BankTransactionPersistenceService} from '@modules/banking/services/bank-transaction-persistence.service';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {
@@ -436,13 +435,11 @@ describe('BankTransactionAmountConversionService', () => {
 
 	describe('a change of reporting currency', () => {
 		let agent: TestAgent;
-		let persistence: BankTransactionPersistenceService;
-		let dataSource: DataSource;
+		let writer: AccountHistoryWriterService;
 
 		beforeAll(async () => {
 			agent = await loginAgent(app.getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
-			persistence = app.get(BankTransactionPersistenceService);
-			dataSource = app.get(DataSource);
+			writer = app.get(AccountHistoryWriterService);
 		});
 
 		async function storedAmounts(ids: string[]) {
@@ -562,13 +559,16 @@ describe('BankTransactionAmountConversionService', () => {
 			const syncHolds = new Promise<void>((resolve) => (commitSync = resolve));
 			let written!: () => void;
 			const rowWritten = new Promise<void>((resolve) => (written = resolve));
-			// As a sync's write does: the lock first, then rows, some of them in the reporting currency (EUR).
-			const sync = dataSource.transaction(async (manager) => {
-				await lockReportingCurrencyForAmountWrites(manager, owner.id);
-				await persistence.persistTransactions(
-					manager.getRepository(BankTransaction),
-					gbpAccount,
-					[
+			const {bankConnection: connection} = await fixtures.bankAccounts.findOneOrFail({
+				where: {id: gbpAccount.id},
+				relations: {bankConnection: true},
+			});
+			// A sync's write of rows, some of them in the reporting currency (EUR).
+			const sync = writer.write(owner.id, {}, async (write) => {
+				await writer.recordBankFetch(write, {
+					bankAccount: gbpAccount,
+					connection,
+					transactions: [
 						{
 							amount: '7.00',
 							currency: 'EUR',
@@ -577,9 +577,11 @@ describe('BankTransactionAmountConversionService', () => {
 							status: 'BOOK',
 						},
 					],
-					'Example Bank',
-					'enable_banking',
-				);
+					fetchOptions: {strategy: 'default', dateFrom: '2026-09-01'},
+					succeeded: false,
+					complete: false,
+					fetchedThrough: '2026-09-07',
+				});
 				written();
 				await syncHolds;
 			});

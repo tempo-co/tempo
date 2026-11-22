@@ -1,3 +1,4 @@
+import {categoryResetSql, modelCategorizableSql, ruleCategorySql} from '../categorization/category-fields';
 import {
 	OwnTransferRecomputeResult,
 	OwnTransferRecomputeScope,
@@ -7,26 +8,6 @@ import {
 
 export const OWN_TRANSFER_CATEGORY_PROVIDER = 'own-transfer';
 export const OWN_TRANSFER_CATEGORY_RULE_VERSION = 'own-transfer-category-v1';
-
-/** Whether the own-transfer rule categorizes this row; it mirrors the conditions in the rule's SQL. */
-export function isOwnTransferCategorized(transaction: {
-	ownTransferEvidence?: string | null;
-	creditDebitIndicator?: string | null;
-	financialEventType?: string | null;
-}): boolean {
-	const indicator = transaction.creditDebitIndicator?.toUpperCase();
-	return (
-		Boolean(transaction.ownTransferEvidence) &&
-		!transaction.financialEventType &&
-		(indicator === 'CRDT' || indicator === 'DBIT')
-	);
-}
-
-/** SQL condition for rows the own-transfer rule does not categorize, so the model may claim or complete them. */
-export function notOwnTransferCategorizedSql(): string {
-	return `NOT ("ownTransferEvidence" IS NOT NULL AND "financialEventType" IS NULL
-		AND upper(COALESCE("creditDebitIndicator", '')) IN ('CRDT', 'DBIT'))`;
-}
 
 const TRANSFER_CATEGORY_SQL = `CASE upper("creditDebitIndicator") WHEN 'CRDT' THEN 'TRANSFER_IN' ELSE 'TRANSFER_OUT' END`;
 
@@ -52,10 +33,7 @@ export async function applyOwnTransferCategories(
 	// concurrent write (for example a manual category) commits first.
 	await executor.query(
 		`UPDATE "bank_transactions"
-		SET "category" = ${TRANSFER_CATEGORY_SQL}, "categoryStatus" = 'COMPLETED', "categorySource" = NULL,
-			"categoryConfidence" = '1', "categoryProvider" = $2, "categoryModel" = NULL, "categoryPromptVersion" = $3,
-			"categorySearchTrace" = NULL, "categoryLastError" = NULL,
-			"categoryAppliedInputHash" = "categoryInputHash", "categoryUpdatedAt" = now()
+		SET ${ruleCategorySql({category: TRANSFER_CATEGORY_SQL, provider: '$2', ruleVersion: '$3'})}
 		WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 			AND ($4::uuid[] IS NULL OR "id" = ANY($4::uuid[]))
 			AND "ownTransferEvidence" IS NOT NULL
@@ -73,16 +51,11 @@ export async function applyOwnTransferCategories(
 
 	const requeued = (await executor.query(
 		`UPDATE "bank_transactions"
-		SET "category" = NULL, "categoryStatus" = 'PENDING', "categorySource" = NULL, "categoryConfidence" = NULL,
-			"categoryAppliedInputHash" = NULL, "categoryProvider" = NULL, "categoryModel" = NULL,
-			"categoryPromptVersion" = NULL, "categorySearchTrace" = NULL, "categoryLastError" = NULL,
-			"categoryUpdatedAt" = now()
+		SET ${categoryResetSql('PENDING')}
 		WHERE "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 			AND ($3::uuid[] IS NULL OR "id" = ANY($3::uuid[]))
-			AND "ownTransferEvidence" IS NULL
-			AND "financialEventType" IS NULL
 			AND "categoryProvider" = $2
-			AND "categorySource" IS DISTINCT FROM 'MANUAL'
+			AND ${modelCategorizableSql()}
 		RETURNING "id"`,
 		[ownerId, OWN_TRANSFER_CATEGORY_PROVIDER, ids],
 	)) as [Array<{id: string}>, number] | Array<{id: string}>;

@@ -127,6 +127,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
       </dd>
       {draft && (
         <BankTransactionCategoryImpactDialog
+          transaction={transaction}
           category={draft.category}
           impact={draft.impact}
           isPending={isPending}

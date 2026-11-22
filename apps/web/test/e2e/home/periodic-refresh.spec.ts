@@ -19,7 +19,7 @@ async function mockDerivedData(page: Page) {
         ? {HOUSING_AND_UTILITIES: 1200}
         : {
             HOUSING_AND_UTILITIES: 1200,
-            FOOD_AND_DRINK: month === '2026-10' ? 900 : 500,
+            GROCERIES: month === '2026-10' ? 900 : 500,
             SHOPPING: 200,
             TRANSPORTATION: 60,
             ENTERTAINMENT: 30,

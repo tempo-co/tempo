@@ -63,10 +63,10 @@ import {BankingEncryptionError} from '../errors/banking-encryption.error';
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {BankingSyncOwnershipLostError} from '../errors/banking-sync-ownership-lost.error';
 import {FileConnectionNotSyncableException} from '../errors/file-connection-not-syncable.exception';
-import {lockReportingCurrencyForAmountWrites} from '../reporting-currency';
-import {INCREMENTAL_OVERLAP_DAYS, extendSyncCoverage, finalSyncDays, recordsSyncCoverage} from '../sync-coverage';
+import {INCREMENTAL_OVERLAP_DAYS} from '../sync-coverage';
+import {AccountHistoryWriterService, RecordedBankFetch} from './account-history-writer.service';
 import {AspspCatalogService} from './aspsp-catalog.service';
-import {BankTransactionPersistenceService, PersistTransactionsResult} from './bank-transaction-persistence.service';
+import {BankTransactionPersistenceService} from './bank-transaction-persistence.service';
 import {BankingConnectionLock, BankingConnectionLockService} from './banking-connection-lock.service';
 import {BankingEncryptionService} from './banking-encryption.service';
 import {
@@ -125,9 +125,10 @@ type SyncRateLimit = {
 	retryAfterSeconds: number;
 };
 
-type PersistSyncResult = Pick<PersistTransactionsResult, 'transactionsAdded' | 'persistedTransactionIds'> & {
-	/** Rows whose own-transfer counterpart was a pending row the sync removed. */
-	formerCounterpartIds: string[];
+type PersistSyncResult = {
+	transactionsAdded: number;
+	/** The rows the run wrote, and the rows whose own-transfer state its removals leave to decide again. */
+	change: RecordedBankFetch['change'];
 };
 
 @Injectable()
@@ -150,6 +151,7 @@ export class BankingSyncService {
 		private readonly bankTransactionPersistenceService: BankTransactionPersistenceService,
 		private readonly aspspCatalogService: AspspCatalogService,
 		private readonly derivedDataRefresh: DerivedDataRefreshService,
+		private readonly accountHistoryWriter: AccountHistoryWriterService,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -257,6 +259,7 @@ export class BankingSyncService {
 				const retryCalls = psu ? null : connection.syncRetryCalls;
 				const pendingStarts = await this.bankTransactionPersistenceService.findPendingTransactionStarts(
 					this.dataSource.getRepository(BankTransaction),
+					accountId,
 					bankAccounts.map(({id}) => id),
 				);
 				const requestedFrom = this.getRequestedFrom(bankAccounts, retryCalls, requestedTo, pendingStarts);
@@ -311,6 +314,7 @@ export class BankingSyncService {
 				try {
 					persistenceResult = await this.persistSync(
 						connection,
+						lease,
 						run,
 						fetchResult,
 						status,
@@ -323,15 +327,12 @@ export class BankingSyncService {
 				}
 				committed = true;
 				this.logFailures(run.id, connection.id, status, failures);
-				await this.derivedDataRefresh.refresh(accountId, {
-					kind: 'sync-write',
-					writtenIds: persistenceResult.persistedTransactionIds,
-					formerCounterpartIds: persistenceResult.formerCounterpartIds,
-				});
+				await this.derivedDataRefresh.refresh(accountId, persistenceResult.change);
 
 				// The run is committed: a lease blip or a disconnect from here on must not report it as failed.
 				const completedRun = await this.bankSyncRunRepository.findOneBy({id: run.id});
-				if (!completedRun) throw new InternalServerErrorException(BANKING_PERSISTENCE_SYNC_ERROR);
+				// Gone with its connection, which a deletion removed after the write.
+				if (!completedRun) throw new BankingSyncOwnershipLostError();
 
 				return this.toSyncRunResponse(completedRun, persistenceResult.transactionsAdded, fetchResult.rateLimit);
 			} catch (error) {
@@ -694,6 +695,7 @@ export class BankingSyncService {
 
 	private async persistSync(
 		connection: BankConnection,
+		lease: BankingConnectionLock,
 		run: BankSyncRun,
 		fetchResult: SyncFetchResult,
 		status: string,
@@ -715,19 +717,24 @@ export class BankingSyncService {
 		}
 
 		const schedulingUpdate = this.getSchedulingUpdate(connection, fetchResult, status, finishedAt);
-		await this.dataSource.transaction(async (manager) => {
-			await lockReportingCurrencyForAmountWrites(manager, connection.accountId);
+		// The run already holds the connection's sync lease.
+		await this.accountHistoryWriter.write(connection.accountId, {heldLeases: [lease]}, async (write) => {
+			const {manager} = write;
 			const connectionRepository = manager.getRepository(BankConnection);
 			const runRepository = manager.getRepository(BankSyncRun);
 			const balanceRepository = manager.getRepository(BankAccountBalance);
-			const bankTransactionRepository = manager.getRepository(BankTransaction);
 			const bankAccountRepository = manager.getRepository(BankAccount);
 			const ownershipCriteria = {
 				id: connection.id,
+				accountId: connection.accountId,
 				syncStatus: BANK_SYNC_STATUSES.RUNNING,
 				syncStartedAt,
 			};
-			const ownedConnection = await connectionRepository.findOne({where: ownershipCriteria});
+			// The connection before its accounts and rows, as account deletion locks them.
+			const ownedConnection = await connectionRepository.findOne({
+				where: ownershipCriteria,
+				lock: {mode: 'pessimistic_write'},
+			});
 			if (!ownedConnection) throw new BankingSyncOwnershipLostError();
 			const observedAt = new Date();
 
@@ -749,81 +756,18 @@ export class BankingSyncService {
 					);
 				}
 
-				// The account's coverage once this fetch is recorded: only a complete fetch extends it.
-				const {syncCoveredFrom, syncCoveredThrough} = accountResult.bankAccount;
-				const storedCoverage =
-					syncCoveredFrom && syncCoveredThrough ? {from: syncCoveredFrom, through: syncCoveredThrough} : null;
-				const recordsCoverage = accountResult.transactionsComplete && recordsSyncCoverage(connection.provider);
-				const coverage = recordsCoverage
-					? extendSyncCoverage(storedCoverage, {
-							options: accountResult.transactionsFetchOptions,
-							transactions: accountResult.transactions,
-							fetchedOn: fetchResult.fetchedThrough,
-						})
-					: storedCoverage;
-
-				let returnedTransactionIds: string[] = [];
-				let takenOverImportedIds: string[] = [];
-				if (accountResult.transactions.length > 0) {
-					const transactionPersistence = await this.bankTransactionPersistenceService.persistTransactions(
-						bankTransactionRepository,
-						accountResult.bankAccount,
-						accountResult.transactions,
-						connection.aspspName,
-						connection.provider,
-						{syncCoverage: recordsSyncCoverage(connection.provider) ? coverage : null},
-					);
-					transactionsAdded += transactionPersistence.transactionsAdded;
-					returnedTransactionIds = transactionPersistence.persistedTransactionIds;
-					takenOverImportedIds = transactionPersistence.takenOverImportedIds;
-					persistedTransactionIds.push(...returnedTransactionIds);
-				}
-
-				if (accountResult.transactionsComplete) {
-					formerCounterpartIds.push(
-						...(await this.bankTransactionPersistenceService.removeUnreturnedPendingTransactions(
-							bankTransactionRepository,
-							accountResult.bankAccount.id,
-							returnedTransactionIds,
-							accountResult.transactionsFetchOptions.dateFrom ?? null,
-						)),
-					);
-				}
-
-				if (recordsCoverage && coverage) {
-					await bankAccountRepository.update(
-						{id: accountResult.bankAccount.id},
-						{syncCoveredFrom: coverage.from, syncCoveredThrough: coverage.through},
-					);
-					// Sync is final for these days now: imported rows there it never sent go.
-					const pendingStarts = await this.bankTransactionPersistenceService.findPendingTransactionStarts(
-						bankTransactionRepository,
-						[accountResult.bankAccount.id],
-					);
-					const finalDays = finalSyncDays({
-						provider: connection.provider,
-						syncCoveredFrom: coverage.from,
-						syncCoveredThrough: coverage.through,
-						oldestPendingDay: pendingStarts.get(accountResult.bankAccount.id) ?? null,
-					});
-					if (finalDays) {
-						const swept = await this.bankTransactionPersistenceService.sweepImportedRows(
-							bankTransactionRepository,
-							accountResult.bankAccount,
-							finalDays,
-							connection.aspspName,
-							takenOverImportedIds,
-						);
-						formerCounterpartIds.push(...swept.recomputeIds);
-					}
-				}
-
-				if (accountResult.transactionsSucceeded) {
-					await bankAccountRepository.update(
-						{id: accountResult.bankAccount.id},
-						{transactionsFetchedThrough: fetchResult.fetchedThrough},
-					);
-				}
+				const recorded = await this.accountHistoryWriter.recordBankFetch(write, {
+					bankAccount: accountResult.bankAccount,
+					connection,
+					transactions: accountResult.transactions,
+					fetchOptions: accountResult.transactionsFetchOptions,
+					succeeded: accountResult.transactionsSucceeded,
+					complete: accountResult.transactionsComplete,
+					fetchedThrough: fetchResult.fetchedThrough,
+				});
+				transactionsAdded += recorded.transactionsAdded;
+				persistedTransactionIds.push(...recorded.change.writtenIds);
+				formerCounterpartIds.push(...recorded.change.formerCounterpartIds);
 
 				if (accountResult.balancesSucceeded && accountResult.balances.length > 0) {
 					const preferredBalance = selectPreferredBalance(accountResult.balances);
@@ -875,8 +819,11 @@ export class BankingSyncService {
 
 		return {
 			transactionsAdded,
-			persistedTransactionIds: [...new Set(persistedTransactionIds)],
-			formerCounterpartIds: [...new Set(formerCounterpartIds)],
+			change: {
+				kind: 'sync-write',
+				writtenIds: [...new Set(persistedTransactionIds)],
+				formerCounterpartIds: [...new Set(formerCounterpartIds)],
+			},
 		};
 	}
 

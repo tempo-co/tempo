@@ -67,6 +67,10 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
 		message: 'This file does not belong to the chosen account. Drop the statements of one account in its currency.',
 	},
+	account_bank_conflict: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message: "This account number is already used by another bank's statements. Nothing was imported.",
+	},
 	account_busy: {
 		status: HttpStatus.CONFLICT,
 		message: 'This account is syncing with your bank. Try again in a moment.',

@@ -41,7 +41,7 @@ const row = (index: number, bookingDate: string, overrides: Partial<Row> = {}): 
     displayDescription: `Example Shop ${index + 1}`,
     amount: '-10.00',
     amountInBaseCurrency: '-10.00',
-    category: 'FOOD_AND_DRINK',
+    category: 'GROCERIES',
     categoryStatus: 'COMPLETED',
     categorySource: 'AI',
     bankName: MOCK_CONNECTION.aspspName,
@@ -450,14 +450,14 @@ test('filters from a two-pane panel whose options alone scroll', async ({page}) 
   // The filter list stays put.
   expect((await boxOf(tabs)).y).toBeCloseTo(tabsBefore.y, 0);
 
-  await panel.getByRole('option', {name: 'Food and drink', exact: true}).click();
-  await expect(tabs.getByRole('tab', {name: 'Categories Food and drink'})).toBeVisible();
+  await panel.getByRole('option', {name: 'Groceries', exact: true}).click();
+  await expect(tabs.getByRole('tab', {name: 'Categories Groceries'})).toBeVisible();
   await openTransactionFilter(page, 'Bank accounts');
   await expect.poll(scrollers).toEqual({areas: 1, nested: 0});
   // The same size whichever filter it shows.
   expect((await boxOf(panel)).height).toBeCloseTo(panelBox.height, 0);
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', {name: 'Remove filter: Food and drink'})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Remove filter: Groceries'})).toBeVisible();
   await expect(page.getByTestId('bank-transaction-filters-trigger')).toContainText('1');
 });
 
@@ -468,7 +468,7 @@ test('shows every filter in force as a removable chip, Home drills included', as
     incomeSource: 'Example Employer',
     recurringSeriesKey: 'b'.repeat(32),
     categoryStatuses: JSON.stringify(['FAILED']),
-    categories: JSON.stringify(['FOOD_AND_DRINK', 'SHOPPING', 'HEALTH']),
+    categories: JSON.stringify(['GROCERIES', 'SHOPPING', 'HEALTH']),
     date: JSON.stringify({from: '2026-10-03', to: '2026-10-20'}),
     baseAmount: 'PRESENT',
   });

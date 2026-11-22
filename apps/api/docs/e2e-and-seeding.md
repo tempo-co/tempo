@@ -44,7 +44,7 @@ Consequences:
 
 ## Reusing test setup
 
-- `test/setup/e2e.setup.ts`: `getApp`, `loginAgent`, and `enableAiCategorizationE2e()` or `enableMerchantLogosE2e()` at module scope. `test/utils/wait-utils.ts`: `waitFor` until background workers finish. `test/utils/auth-utils.ts`: `createVerifiedAccount`, `expectValidationMessage`. `test/utils/email-utils.ts`: Mailpit reads, taken once the email queue has no pending jobs, so an absent email is really absent; a wait past 1 s logs the jobs still pending.
+- `test/setup/e2e.setup.ts`: `getApp`, `loginAgent`, and `enableAiCategorizationE2e()` or `enableMerchantLogosE2e()` at module scope. `test/utils/wait-utils.ts`: `waitFor` until background workers finish, and `lockWaits`, how many test database sessions wait on a lock, for a race that must reach a lock first. `test/utils/auth-utils.ts`: `createVerifiedAccount`, `expectValidationMessage`. `test/utils/email-utils.ts`: Mailpit reads, taken once the email queue has no pending jobs, so an absent email is really absent; a wait past 1 s logs the jobs still pending.
 - Use `BankingFixtures` (`scripts/seed-data/banking-fixtures.ts`, valid defaults; pass only the fields a test depends on) for persisted connections, accounts and transactions. Use `test/fixtures/bank-transaction.fixture.ts` for an in-memory entity in unit tests; it does not set up database relationships or replace persisted fixtures.
 - Use `test/utils/banking-utils.ts` to create an isolated user with real signup, verification and login, plus one connection and an empty bank account. Pass the base currency explicitly and keep scenario rows local:
 

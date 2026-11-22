@@ -26,7 +26,7 @@ test('a real category total in a month reconciles with its transaction drill', a
   const row = page
     .getByRole('dialog', {name: 'August 2026'})
     .getByRole('region', {name: 'Where it went'})
-    .getByRole('link', {name: /Uncategorized/});
+    .getByRole('link', {name: /Not categorized/});
   await expect(row).toContainText(
     new Intl.NumberFormat(undefined, {
       style: 'currency',

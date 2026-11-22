@@ -13,6 +13,7 @@ export const bankImportQueryKeys = {
   doubtfulRows: (importId: string) => ['bank-imports', 'doubtful-rows', importId] as const,
   neverSentRows: (importId: string) => ['bank-imports', 'never-sent-rows', importId] as const,
   layouts: ['bank-imports', 'layouts'] as const,
+  banks: ['bank-imports', 'banks'] as const,
 };
 
 /** The deployment answers 404 on every import route while file import is off. */

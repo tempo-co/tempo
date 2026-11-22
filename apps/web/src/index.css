@@ -90,10 +90,11 @@
   --color-scrim: hsl(var(--scrim));
 
   --color-category-housing: rgb(var(--category-housing));
-  --color-category-food-and-drink: rgb(var(--category-food-and-drink));
+  --color-category-home-improvement: rgb(var(--category-home-improvement));
+  --color-category-groceries: rgb(var(--category-groceries));
+  --color-category-eating-out: rgb(var(--category-eating-out));
   --color-category-transportation: rgb(var(--category-transportation));
   --color-category-shopping: rgb(var(--category-shopping));
-  --color-category-subscriptions: rgb(var(--category-subscriptions));
   --color-category-health: rgb(var(--category-health));
   --color-category-travel: rgb(var(--category-travel));
   --color-category-entertainment: rgb(var(--category-entertainment));
@@ -101,6 +102,7 @@
   --color-category-services: rgb(var(--category-services));
   --color-category-education: rgb(var(--category-education));
   --color-category-insurance: rgb(var(--category-insurance));
+  --color-category-loans-and-debt: rgb(var(--category-loans-and-debt));
   --color-category-fees: rgb(var(--category-fees));
   --color-category-taxes-and-government: rgb(var(--category-taxes-and-government));
   --color-category-gifts-and-donations: rgb(var(--category-gifts-and-donations));
@@ -109,7 +111,6 @@
   --color-category-refund: rgb(var(--category-refund));
   --color-category-transfer-in: rgb(var(--category-transfer-in));
   --color-category-transfer-out: rgb(var(--category-transfer-out));
-  --color-category-other: rgb(var(--category-other));
 
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
@@ -215,10 +216,11 @@
     --scrim: 252 10.2% 9.6%;       /* Night: overlay backdrop (dark uses a deeper Night) */
 
     --category-housing: 138 103 18;
-    --category-food-and-drink: 160 86 44;
+    --category-home-improvement: 80 101 124;
+    --category-groceries: 160 86 44;
+    --category-eating-out: 176 62 28;
     --category-transportation: 23 108 116;
     --category-shopping: 86 63 141;
-    --category-subscriptions: 80 101 124;
     --category-health: 153 51 76;
     --category-travel: 32 112 151;
     --category-entertainment: 138 56 108;
@@ -226,6 +228,7 @@
     --category-services: 81 103 50;
     --category-education: 48 71 145;
     --category-insurance: 111 109 42;
+    --category-loans-and-debt: 118 72 46;
     --category-fees: 134 44 39;
     --category-taxes-and-government: 114 92 49;
     --category-gifts-and-donations: 113 61 69;
@@ -234,7 +237,6 @@
     --category-refund: 72 119 49;
     --category-transfer-in: 82 77 106;
     --category-transfer-out: 108 92 75;
-    --category-other: 98 94 102;
 
     --destructive: 6 62% 42%;
     --destructive-foreground: 8 60% 96%;
@@ -294,10 +296,11 @@
     --scrim: 252 12% 3%;            /* deeper Night: the dark page is already Night */
 
     --category-housing: 214 176 75;
-    --category-food-and-drink: 229 152 108;
+    --category-home-improvement: 170 187 207;
+    --category-groceries: 229 152 108;
+    --category-eating-out: 240 146 96;
     --category-transportation: 110 195 201;
     --category-shopping: 171 151 216;
-    --category-subscriptions: 170 187 207;
     --category-health: 224 133 156;
     --category-travel: 125 196 232;
     --category-entertainment: 210 137 183;
@@ -305,6 +308,7 @@
     --category-services: 179 206 141;
     --category-education: 141 161 226;
     --category-insurance: 202 199 114;
+    --category-loans-and-debt: 214 166 134;
     --category-fees: 222 120 115;
     --category-taxes-and-government: 213 190 144;
     --category-gifts-and-donations: 209 159 167;
@@ -313,7 +317,6 @@
     --category-refund: 148 209 117;
     --category-transfer-in: 168 163 194;
     --category-transfer-out: 191 173 155;
-    --category-other: 183 176 186;
 
     --destructive: 4 70% 66%;
     --destructive-foreground: 4 40% 12%;

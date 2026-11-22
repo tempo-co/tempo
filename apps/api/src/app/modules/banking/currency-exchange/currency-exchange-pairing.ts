@@ -1,8 +1,15 @@
 import {compareIds} from '../own-transfer/own-transfer-detection';
 
+/**
+ * Which legs can be the two halves of one exchange, which happens inside one bank: a bank connection's legs share its
+ * connection; on the imported-files connection, which holds files of many banks, only legs of accounts recording the
+ * same bank do (`bank-identity.ts`). Null for a leg whose account records no bank there: it pairs with nothing.
+ */
+export type CurrencyExchangeGroup = string | null;
+
 export type CurrencyExchangeLeg = {
 	id: string;
-	connectionId: string;
+	exchangeGroup: CurrencyExchangeGroup;
 	/** ISO date (YYYY-MM-DD): booking date, else transaction date. */
 	date: string | null;
 	indicator: string | null;
@@ -18,7 +25,7 @@ export type CurrencyExchangeLeg = {
 /** A leg that carries an exchange marker, before it is known to be half of an exchange. */
 export type CurrencyExchangeCandidate = {
 	id: string;
-	connectionId: string;
+	exchangeGroup: CurrencyExchangeGroup;
 	bankAccountId: string;
 	/** ISO date (YYYY-MM-DD): booking date, else transaction date. */
 	date: string | null;
@@ -30,15 +37,15 @@ export type CurrencyExchangeCandidate = {
 
 /**
  * Returns the candidates that are currency exchange legs, each with the currency it exchanges into. A leg is one
- * only when another marked leg answers it: same connection and day, another of the owner's accounts, the opposite
+ * only when another marked leg answers it: same exchange group (`CurrencyExchangeGroup`) and day, another of the owner's accounts, the opposite
  * direction, and another currency that the debit's named target (if any) agrees with. A marker alone never makes an
  * exchange. A debit that names no target takes the one currency of its answering credits, or none when they differ.
  */
 export function confirmCurrencyExchanges(candidates: readonly CurrencyExchangeCandidate[]): Map<string, string | null> {
 	const byDay = new Map<string, CurrencyExchangeCandidate[]>();
 	for (const candidate of candidates) {
-		if (!candidate.date) continue;
-		const key = `${candidate.connectionId}:${candidate.date}`;
+		if (!candidate.date || candidate.exchangeGroup === null) continue;
+		const key = JSON.stringify([candidate.exchangeGroup, candidate.date]);
 		byDay.set(key, [...(byDay.get(key) ?? []), candidate]);
 	}
 
@@ -83,7 +90,7 @@ type Assignment = {cost: number; creditIndexes: number[]};
  * Links the two legs of each currency exchange. Pure and deterministic: the same legs always produce the
  * same pairs, independent of input order.
  *
- * Both legs of an exchange share the connection, date and target currency. A group with one debit and one
+ * Both legs of an exchange share the exchange group, date and target currency. A group with one debit and one
  * credit is one exchange. A group of several exchanges is matched on how well base amounts agree, when
  * one assignment fits clearly better than every other distinct one; assignments that differ only by
  * swapping identical legs count as the same. Anything else stays unlinked.
@@ -91,8 +98,8 @@ type Assignment = {cost: number; creditIndexes: number[]};
 export function pairCurrencyExchanges(legs: readonly CurrencyExchangeLeg[]): Map<string, string> {
 	const groups = new Map<string, {debits: CurrencyExchangeLeg[]; credits: CurrencyExchangeLeg[]}>();
 	for (const leg of [...legs].sort((first, second) => compareIds(first.id, second.id))) {
-		if (!leg.date || !leg.targetCurrency) continue;
-		const key = `${leg.connectionId}:${leg.date}:${leg.targetCurrency}`;
+		if (!leg.date || !leg.targetCurrency || leg.exchangeGroup === null) continue;
+		const key = JSON.stringify([leg.exchangeGroup, leg.date, leg.targetCurrency]);
 		const group = groups.get(key) ?? {debits: [], credits: []};
 		if (leg.indicator === 'DBIT') group.debits.push(leg);
 		else if (leg.indicator === 'CRDT') group.credits.push(leg);

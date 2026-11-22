@@ -47,6 +47,11 @@ export const BANK_IMPORT_ERROR_CODES = [
 	 */
 	'target_account_unconfirmed',
 	'target_account_mismatch',
+	/**
+	 * A statement names an account by an id that is no IBAN which another bank's statements already use: its BIC or
+	 * bank differs from the one the imported account records, or from another statement's in the drop.
+	 */
+	'account_bank_conflict',
 	'account_busy',
 	'multiple_bank_connections',
 	/** Other drops took every upload slot for too long (HTTP 503 with `Retry-After`): the same files can be sent again. */
@@ -92,6 +97,12 @@ export type BankImportAccountQuestion = {
 	 * then among `candidates`, and `new` goes to it.
 	 */
 	newAccount: boolean;
+	/**
+	 * The rows as the owner's saved layout of a file with no header that names no account read them, when one did: it
+	 * recognises the file by its columns alone, so nothing in it shows it is this bank's, and the owner checks them on
+	 * every drop. Null for any other question.
+	 */
+	layoutPreview: BankImportLayoutPreview | null;
 };
 
 /** The body of a refused `POST /bank-imports`. */
@@ -367,7 +378,10 @@ export type BankImportLayoutPreview = {
 	rowCount: number;
 	dateFrom: string | null;
 	dateTo: string | null;
-	/** The first 5 rows, and the last 2 when there are more than 7. */
+	/**
+	 * The first 5 rows, and the last 2 when there are more than 7. In an account question: the first 2 rows of each
+	 * file, at most 10, and no last rows.
+	 */
 	firstRows: BankImportLayoutPreviewRow[];
 	lastRows: BankImportLayoutPreviewRow[];
 	/** Money in and money out per currency, both as positive decimal strings. */
@@ -422,3 +436,21 @@ export type BankImportLayout = {
 	bankName: string;
 	createdAt: string;
 };
+
+/**
+ * `GET /bank-imports/layout-proposals/:proposalId/banks`: the owner's own banks, to name the proposal's layout after
+ * without typing one: their connected or once-connected banks, the banks their imported-files accounts record by name
+ * (kept from a removed connection or from earlier imports) and their saved layouts'; only those its confirmation
+ * accepts. Each bank once, ignoring case and spacing, sorted.
+ */
+export type BankImportBanks = {banks: string[]};
+
+/** A bank name as Tempo shows and keeps it: trimmed, with single spaces. */
+export function bankNameSpelling(name: string): string {
+	return name.trim().replace(/\s+/g, ' ');
+}
+
+/** How bank names compare wherever an owner names or picks a bank: ignoring case and spacing. */
+export function bankNameKey(name: string): string {
+	return bankNameSpelling(name).toLowerCase();
+}

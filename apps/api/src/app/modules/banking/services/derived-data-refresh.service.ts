@@ -33,8 +33,6 @@ export type DerivedDataChange =
 type RefreshPlan = {
 	/** Reconcile the reporting currency, telling it whether the history is settled; null skips the reconcile. */
 	reconcile: {historySettled: boolean} | null;
-	/** Recompute exchanges before own transfers; skipping it leaves them as they were. */
-	recomputeExchanges: boolean;
 	/**
 	 * The rows own transfers can have changed around besides the reclassified exchanges; null is the whole history, and
 	 * `if-reclassified` the whole history only when the exchange recompute reclassified a row or failed.
@@ -53,7 +51,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// The run finished, so the owner can be asked to choose among several currencies now.
 				reconcile: {historySettled: true},
-				recomputeExchanges: true,
 				ownTransferIds: [...change.writtenIds, ...change.formerCounterpartIds],
 				writtenIds: change.writtenIds,
 				logoTransactionIds: change.writtenIds,
@@ -61,7 +58,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 		case 'failed-sync-write':
 			return {
 				reconcile: null,
-				recomputeExchanges: true,
 				ownTransferIds: null,
 				writtenIds: [],
 				logoTransactionIds: [],
@@ -70,7 +66,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// An import can add accounts in another currency, and its history is complete once it commits.
 				reconcile: {historySettled: true},
-				recomputeExchanges: true,
 				ownTransferIds: null,
 				writtenIds: change.writtenIds,
 				logoTransactionIds: null,
@@ -80,9 +75,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			return {
 				// Accounts that all hold one currency set it right away; a choice among several waits for a sync.
 				reconcile: {historySettled: false},
-				// Moved accounts change which legs share a connection, so exchanges can pair or part. A removal leaves them
-				// as they were, since legs moved onto the imported-files connection do not pair reliably yet.
-				recomputeExchanges: change.kind === 'authorization',
 				ownTransferIds: null,
 				writtenIds: [],
 				logoTransactionIds: [],
@@ -94,7 +86,6 @@ function planRefresh(change: DerivedDataChange): RefreshPlan | null {
 			if (!change.amountsConverted && !change.reportingCurrencyChanged) return null;
 			return {
 				reconcile: null,
-				recomputeExchanges: true,
 				ownTransferIds: 'if-reclassified',
 				writtenIds: [],
 				logoTransactionIds: [],
@@ -119,8 +110,8 @@ function ownTransferScope(
 
 /**
  * Brings the values derived from an owner's transaction history up to date after a write has committed. Each step
- * tolerates the failure of an earlier one; the daily whole-history recompute corrects the own transfers a failure left
- * behind, and the owner's next refresh the exchanges.
+ * tolerates the failure of an earlier one; the daily recompute corrects the exchanges and own transfers a failure left
+ * behind.
  */
 @Injectable()
 export class DerivedDataRefreshService {
@@ -143,29 +134,29 @@ export class DerivedDataRefreshService {
 	}
 
 	/**
-	 * Daily safety net: recomputes every owner's own transfers over the whole history, so a change no scoped recompute
-	 * saw (a crash between a sync's commit and its refresh, a write whose commit was not acknowledged) is corrected
-	 * within a day.
+	 * Daily safety net: per owner, recomputes exchanges, then own transfers over the whole history, then queues the former
+	 * exchange legs for categorization, so a change no refresh saw (a crash between a write's commit and its refresh, a
+	 * write whose commit was not acknowledged, a recompute that failed) is corrected within a day.
 	 */
-	async recomputeAllOwnTransfers(): Promise<void> {
+	async recomputeAllLabels(): Promise<void> {
 		const owners: Array<{accountId: string}> = await this.dataSource.query(
 			'SELECT DISTINCT "accountId" FROM "bank_connections" ORDER BY "accountId"',
 		);
-		for (const {accountId} of owners) await this.recomputeOwnTransfers(accountId);
+		for (const {accountId} of owners) {
+			await this.recomputeLabels(accountId, {ownTransferIds: null, writtenIds: []});
+		}
 	}
 
 	/**
-	 * Recomputes exchanges when the plan asks, then own transfers, then queues the written rows and the former exchange
+	 * Recomputes exchanges, then own transfers, then queues the written rows and the former exchange
 	 * legs for categorization. Exchanges go first: own-transfer detection skips exchange legs. Both run before the
 	 * enqueues, so new exchanges and own transfers are labelled before the worker can claim a row.
 	 */
 	private async recomputeLabels(
 		ownerId: Account['id'],
-		{recomputeExchanges, ownTransferIds, writtenIds}: RefreshPlan,
+		{ownTransferIds, writtenIds}: Pick<RefreshPlan, 'ownTransferIds' | 'writtenIds'>,
 	): Promise<void> {
-		const exchanges = recomputeExchanges
-			? await this.recomputeExchanges(ownerId)
-			: {reclassifiedIds: [], requeuedIds: []};
+		const exchanges = await this.recomputeExchanges(ownerId);
 		// Own transfers can only change around the given rows and the rows whose exchange classification changed, so a
 		// write that changed none of them does no own-transfer work.
 		const scope = ownTransferScope(ownTransferIds, exchanges?.reclassifiedIds ?? null);

@@ -1,3 +1,5 @@
+import {DataSource} from 'typeorm';
+
 /** Re-reads until the value matches, for effects that background workers finish after the request returns. */
 export async function waitFor<T>(
 	read: () => Promise<T>,
@@ -13,4 +15,13 @@ export async function waitFor<T>(
 	if (!predicate(value))
 		throw new Error(`Timed out after ${timeoutMs}ms waiting for the expected response: ${JSON.stringify(value)}`);
 	return value;
+}
+
+/** How many sessions of the test database wait on a lock, for a race that must reach a lock before it goes on. */
+export async function lockWaits(dataSource: DataSource): Promise<number> {
+	const [{waiting}] = await dataSource.query<Array<{waiting: number}>>(
+		`SELECT count(*)::int AS "waiting" FROM pg_stat_activity
+		WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+	);
+	return waiting;
 }

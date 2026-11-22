@@ -371,7 +371,7 @@ describe('BankTransactionController', () => {
 			creditDebitIndicator: 'CRDT',
 			description: 'Source sort transaction',
 		});
-		await bankTransactionRepository.update({id: fixtureTransaction.id}, {category: 'FOOD_AND_DRINK'});
+		await bankTransactionRepository.update({id: fixtureTransaction.id}, {category: 'GROCERIES'});
 		await bankTransactionRepository.update({id: fixtureGroceriesTransaction.id}, {category: 'SHOPPING'});
 
 		try {
@@ -383,7 +383,7 @@ describe('BankTransactionController', () => {
 				categoryAscendingResponse.body.transactions
 					.slice(0, 2)
 					.map(({category}: {category: string}) => category),
-			).toEqual(['FOOD_AND_DRINK', 'SHOPPING']);
+			).toEqual(['GROCERIES', 'SHOPPING']);
 
 			const categoryDescendingResponse = await verifiedAgent
 				.get('/bank-transactions')
@@ -393,7 +393,7 @@ describe('BankTransactionController', () => {
 				categoryDescendingResponse.body.transactions
 					.slice(0, 2)
 					.map(({category}: {category: string}) => category),
-			).toEqual(['SHOPPING', 'FOOD_AND_DRINK']);
+			).toEqual(['SHOPPING', 'GROCERIES']);
 
 			const sourceAscendingResponse = await verifiedAgent
 				.get('/bank-transactions')
@@ -496,13 +496,13 @@ describe('BankTransactionController', () => {
 	});
 
 	it('applies one or multiple category filters', async () => {
-		await bankTransactionRepository.update({id: fixtureTransaction.id}, {category: 'FOOD_AND_DRINK'});
+		await bankTransactionRepository.update({id: fixtureTransaction.id}, {category: 'GROCERIES'});
 		await bankTransactionRepository.update({id: fixtureGroceriesTransaction.id}, {category: 'SHOPPING'});
 
 		try {
 			const singleCategoryResponse = await verifiedAgent
 				.get('/bank-transactions')
-				.query({'filter[categories][]': 'FOOD_AND_DRINK'})
+				.query({'filter[categories][]': 'GROCERIES'})
 				.expect(200);
 
 			expect(singleCategoryResponse.body.total).toBe(1);
@@ -510,7 +510,7 @@ describe('BankTransactionController', () => {
 
 			const multipleCategoriesResponse = await verifiedAgent
 				.get('/bank-transactions')
-				.query({'filter[categories][]': ['FOOD_AND_DRINK', 'SHOPPING']})
+				.query({'filter[categories][]': ['GROCERIES', 'SHOPPING']})
 				.expect(200);
 
 			expect(multipleCategoriesResponse.body.total).toBe(2);
@@ -526,7 +526,7 @@ describe('BankTransactionController', () => {
 	it('filters uncategorized transactions and categorization sources', async () => {
 		await bankTransactionRepository.update(
 			{id: fixtureTransaction.id},
-			{category: 'FOOD_AND_DRINK', categoryStatus: 'COMPLETED', categorySource: 'MANUAL'},
+			{category: 'GROCERIES', categoryStatus: 'COMPLETED', categorySource: 'MANUAL'},
 		);
 		await bankTransactionRepository.update(
 			{id: fixtureGroceriesTransaction.id},
@@ -573,7 +573,7 @@ describe('BankTransactionController', () => {
 
 			const mixedCategoryResponse = await verifiedAgent
 				.get('/bank-transactions')
-				.query({'filter[categories][]': ['FOOD_AND_DRINK', 'UNCATEGORIZED']})
+				.query({'filter[categories][]': ['GROCERIES', 'UNCATEGORIZED']})
 				.expect(200);
 
 			expect(mixedCategoryResponse.body.total).toBe(2);
@@ -1009,14 +1009,14 @@ describe('BankTransactionController', () => {
 	it('allows verified owners to correct categories without exposing audit fields', async () => {
 		const transactionPath = `/bank-transactions/${fixtureTransaction.id}/category`;
 
-		await otherVerifiedAgent.patch(transactionPath).send({category: 'FOOD_AND_DRINK'}).expect(404);
+		await otherVerifiedAgent.patch(transactionPath).send({category: 'GROCERIES'}).expect(404);
 		await verifiedAgent.patch(transactionPath).send({category: 'NOT_A_CATEGORY'}).expect(400);
 
-		const response = await verifiedAgent.patch(transactionPath).send({category: 'FOOD_AND_DRINK'}).expect(200);
+		const response = await verifiedAgent.patch(transactionPath).send({category: 'GROCERIES'}).expect(200);
 
 		expect(response.body).toMatchObject({
 			id: fixtureTransaction.id,
-			category: 'FOOD_AND_DRINK',
+			category: 'GROCERIES',
 			categoryStatus: 'COMPLETED',
 			categorySource: 'MANUAL',
 			categoryConfidence: null,
@@ -1034,7 +1034,7 @@ describe('BankTransactionController', () => {
 
 		const persisted = await bankTransactionRepository.findOneByOrFail({id: fixtureTransaction.id});
 		expect(persisted).toMatchObject({
-			category: 'FOOD_AND_DRINK',
+			category: 'GROCERIES',
 			categoryStatus: 'COMPLETED',
 			categorySource: 'MANUAL',
 			categoryConfidence: null,

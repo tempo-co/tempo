@@ -91,6 +91,11 @@ const REFUSAL_COPY: Record<
     title: 'This file belongs to a different account',
     description: "Its account or currency doesn't match the one chosen.",
   },
+  account_bank_conflict: {
+    title: "This account number belongs to another bank's statements",
+    description:
+      "Another bank's statements already use this account number, so the two accounts can't be told apart.",
+  },
   multiple_bank_connections: {
     title: 'These files belong to more than one bank',
     description: "Import each bank's files separately.",

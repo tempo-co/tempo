@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {Logger} from '@nestjs/common';
 import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
+import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 
 import {ConfigurationService} from '@core/config/config.service';
 
 import {toBankTransactionCategorizationInput} from '../bank-transaction-categorization-input';
 import {toInputContract} from '../bank-transaction-categorization-input.schema';
+import {BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION} from '../bank-transaction-categorization.constants';
 import {
 	BANK_TRANSACTION_CATEGORIZATION_MAX_SEARCH_TRACE_ITEMS,
 	BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH,
@@ -96,7 +98,7 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 function classification(overrides: Record<string, unknown> = {}) {
-	return {correlationId: '0', category: 'FOOD_AND_DRINK', confidence: 0.9, evidenceType: 'MCC', ...overrides};
+	return {correlationId: '0', category: 'EATING_OUT', confidence: 0.9, evidenceType: 'MCC', ...overrides};
 }
 
 /** The categorizing call's reply: the answer as the input of its one StructuredOutput tool call. */
@@ -171,7 +173,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 					amount: '-10.00',
 					currency: 'EUR',
 					direction: 'EXPENSE' as const,
-					category: 'FOOD_AND_DRINK' as const,
+					category: 'EATING_OUT' as const,
 				},
 				{
 					date: '2026-07-15',
@@ -185,7 +187,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		await expect(provider.categorize([transaction], BANK_TRANSACTION_CATEGORY_DEFINITIONS)).resolves.toEqual([
 			{
 				correlationId: 'transaction-1',
-				category: 'FOOD_AND_DRINK',
+				category: 'EATING_OUT',
 				confidence: 0.9,
 				provider: 'claude-api',
 				model,
@@ -213,7 +215,12 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		expect(JSON.parse(request.messages[0].content)).toEqual({
 			transactions: [{...transaction, correlationId: '0'}],
 		});
-		expect(request.system[0].text).toContain('Use OTHER only when the evidence names a kind of spending');
+		expect(request.system[0].text).toContain(
+			'or the evidence names a kind of spending that none of the supplied categories cover',
+		);
+		expect(request.system[0].text).toContain(
+			'is NEEDS_REVIEW only when it names a purpose that none of the supplied categories cover',
+		);
 		expect(request.system[0].text).toContain(
 			'previousManualCategories holds a single category other than TRANSFER_OUT',
 		);
@@ -321,15 +328,39 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		const transaction = {
 			...input(),
 			ownerBank: {name: 'Example Bank', country: 'NL'},
+			bookingDate: '2026-09-02',
+			valueDate: '2026-09-01',
+			bankTransactionCode: 'PMNT',
+			bankTransactionSubCode: 'CCRD',
+			bankTransactionDescription: 'Example card purchase',
+			merchantLocation: {city: 'Example City', region: 'Example Region', country: 'NL'},
 			amount: '-42.17',
 			remittanceInformation: 'synthetic-private-note',
 			previousManualCategories: [
 				{
-					category: 'FOOD_AND_DRINK' as const,
+					category: 'EATING_OUT' as const,
 					count: 2,
 					recentExamples: [
 						{amount: '-9.99', currency: 'EUR', date: '2026-08-01', text: 'synthetic-history-note'},
 					],
+				},
+			],
+			sameAmountPayments: [
+				{
+					date: '2026-08-01',
+					category: 'EATING_OUT' as const,
+					source: 'MANUAL' as const,
+					text: 'synthetic-note',
+				},
+				{date: '2026-07-01', category: 'EATING_OUT' as const, source: 'AI' as const, text: 'synthetic-ai-note'},
+			],
+			counterpartyHistory: [
+				{
+					date: '2026-06-01',
+					amount: '-8.50',
+					currency: 'EUR',
+					direction: 'EXPENSE' as const,
+					category: 'EATING_OUT' as const,
 				},
 			],
 		};
@@ -338,7 +369,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 		).resolves.toEqual([
 			{
 				correlationId: 'transaction-1',
-				category: 'FOOD_AND_DRINK',
+				category: 'EATING_OUT',
 				confidence: 0.9,
 				provider: 'claude-api',
 				model: 'claude-sonnet-5-5',
@@ -359,6 +390,21 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			transactions: [{...transaction, correlationId: '0'}],
 			merchantSearch: {query: SEARCH_QUERY, results: SEARCH_RESULTS},
 		});
+		// A change to the prompt, tools or messages these requests send, or to the input schema, changes the hash: bump the prompt version with it.
+		const promptRequestFields = create.mock.calls.map(([{system, tools, tool_choice, messages}]) => ({
+			system,
+			tools,
+			tool_choice,
+			messages,
+		}));
+		const promptHash = createHash('sha256')
+			.update(JSON.stringify({requests: promptRequestFields, input: toInputContract().input}))
+			.digest('hex')
+			.slice(0, 16);
+		expect({version: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION, promptHash}).toEqual({
+			version: 'bank-transaction-categorization-v22',
+			promptHash: '0493e5ad1d3de1f0',
+		});
 	});
 
 	it('looks up the merchant when the first answer leaves an outgoing card payment in review without asking for a lookup', async () => {
@@ -376,7 +422,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 	});
 
 	it.each([
-		['the first answer asks for no lookup', {lookUpMerchant: false, kind: 'search', category: 'FOOD_AND_DRINK'}],
+		['the first answer asks for no lookup', {lookUpMerchant: false, kind: 'search', category: 'EATING_OUT'}],
 		[
 			'a payment that is not by card is left in review without asking for a lookup',
 			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', transactionType: 'TRANSFER'},
@@ -385,7 +431,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			'an incoming card payment is left in review without asking for a lookup',
 			{lookUpMerchant: false, kind: 'search', category: 'NEEDS_REVIEW', direction: 'INCOME'},
 		],
-		['the group has no merchant query', {lookUpMerchant: true, kind: 'plain', category: 'FOOD_AND_DRINK'}],
+		['the group has no merchant query', {lookUpMerchant: true, kind: 'plain', category: 'EATING_OUT'}],
 		[
 			'the first answer files it as a transfer to a person',
 			{lookUpMerchant: true, kind: 'search', category: 'TRANSFER_OUT'},

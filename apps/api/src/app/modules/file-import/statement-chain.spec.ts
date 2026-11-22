@@ -36,6 +36,7 @@ const statement = (
 	accountIban: 'NL91ABNA0417164300',
 	accountOtherId: null,
 	bank: null,
+	servicerBic: null,
 	accountCurrency: 'EUR',
 	sequenceNumber: null,
 	entriesSkipped: 0,

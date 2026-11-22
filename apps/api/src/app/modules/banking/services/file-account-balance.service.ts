@@ -11,11 +11,12 @@ import {BankConnection} from '../bank-connection.entity';
 import {BalanceFromBankException} from '../errors/balance-from-bank.exception';
 import {FILE_ANCHOR_MAX_DAYS, FileAnchor, StatedBalanceRow, findFileAnchor} from '../file-account-balance';
 import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
+import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 /** The balance type of an imported-files account's balance: a closing balance, from the file or the owner. */
 export const FILE_ACCOUNT_BALANCE_TYPE = 'CLBD';
 
-type BalanceFields = Pick<BankAccount, 'currentBalanceAmount' | 'currentBalanceType' | 'balanceUpdatedAt'>;
+export type FileAccountBalance = Pick<BankAccount, 'currentBalanceAmount' | 'currentBalanceType' | 'balanceUpdatedAt'>;
 
 /**
  * The balance of an account that exists only from imported files. It is the anchor amount plus every row booked
@@ -27,7 +28,10 @@ type BalanceFields = Pick<BankAccount, 'currentBalanceAmount' | 'currentBalanceT
  */
 @Injectable()
 export class FileAccountBalanceService {
-	constructor(private readonly dataSource: DataSource) {}
+	constructor(
+		private readonly dataSource: DataSource,
+		private readonly importedRowRecords: ImportedRowRecordsRegistry,
+	) {}
 
 	/**
 	 * Stores the balance the owner entered for an imported-files account, dated their today in their time zone, and
@@ -76,18 +80,18 @@ export class FileAccountBalanceService {
 		manager: EntityManager,
 		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
-	): Promise<BalanceFields | null> {
+	): Promise<FileAccountBalance | null> {
 		const account = await manager.getRepository(BankAccount).findOne({
 			where: {id: bankAccountId, bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE}},
 		});
 		if (!account) return null;
-		const fileAnchor = await this.findFileAnchor(manager, account.id);
+		const fileAnchor = await this.findFileAnchor(manager, ownerId, account.id);
 		const anchor: FileAnchor | null =
 			fileAnchor ??
 			(account.statedBalanceAmount !== null && account.statedBalanceDate !== null
 				? {date: account.statedBalanceDate, amount: account.statedBalanceAmount}
 				: null);
-		const fields: BalanceFields = anchor
+		const fields: FileAccountBalance = anchor
 			? await this.balanceFrom(manager, account.id, anchor)
 			: {currentBalanceAmount: null, currentBalanceType: null, balanceUpdatedAt: null};
 		await manager.getRepository(BankAccount).update({id: account.id}, fields);
@@ -104,14 +108,7 @@ export class FileAccountBalanceService {
 		ownerId: Account['id'],
 		connectionId: BankConnection['id'],
 	): Promise<BankAccount['id'][]> {
-		const rows: Array<{bankAccountId: string}> = await manager.query(
-			`SELECT DISTINCT closing->>'bankAccountId' AS "bankAccountId"
-			FROM "bank_imports" bank_import
-			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
-			WHERE bank_import."bankConnectionId" = $1 AND bank_import."accountId" = $2`,
-			[connectionId, ownerId],
-		);
-		return rows.map(({bankAccountId}) => bankAccountId);
+		return this.importedRowRecords.records.findAccountsWithClosingBalances(manager, ownerId, connectionId);
 	}
 
 	/** Recomputes the given imported-files accounts under the owner's locked imported-files connection. */
@@ -133,6 +130,7 @@ export class FileAccountBalanceService {
 	/** Where each account's balance comes from, for accounts the caller already scoped to their owner. */
 	async findBalanceSources(
 		manager: EntityManager,
+		ownerId: Account['id'],
 		accounts: readonly (Pick<
 			BankAccount,
 			'id' | 'currentBalanceAmount' | 'statedBalanceAmount' | 'statedBalanceDate'
@@ -146,7 +144,7 @@ export class FileAccountBalanceService {
 				sources.set(account.id, 'file');
 			} else {
 				// A file anchor wins over a stated balance, so only an account with both needs its rows read.
-				sources.set(account.id, (await this.findFileAnchor(manager, account.id)) ? 'file' : 'stated');
+				sources.set(account.id, (await this.findFileAnchor(manager, ownerId, account.id)) ? 'file' : 'stated');
 			}
 		}
 		return sources;
@@ -156,20 +154,16 @@ export class FileAccountBalanceService {
 	 * The account's file anchor: the newer of its rows' (`findRowAnchor`) and the newest closing balance its imports
 	 * that are not undone recorded, the rows' on the same day.
 	 */
-	private async findFileAnchor(manager: EntityManager, bankAccountId: BankAccount['id']): Promise<FileAnchor | null> {
+	private async findFileAnchor(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		bankAccountId: BankAccount['id'],
+	): Promise<FileAnchor | null> {
 		const rowAnchor = await this.findRowAnchor(manager, bankAccountId);
-		// Joined through the account's own connection, so only its owner's imports count.
-		const [statement]: FileAnchor[] = await manager.query(
-			`SELECT closing->>'date' AS "date", closing->>'amount' AS "amount"
-			FROM "bank_accounts" bank_account
-			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-			JOIN "bank_imports" bank_import ON bank_import."accountId" = connection."accountId"
-				AND bank_import."undoneAt" IS NULL
-			CROSS JOIN LATERAL jsonb_array_elements(bank_import."closingBalances") closing
-			WHERE bank_account."id" = $1 AND closing->>'bankAccountId' = $1::text
-			ORDER BY closing->>'date' DESC, bank_import."createdAt" DESC
-			LIMIT 1`,
-			[bankAccountId],
+		const statement = await this.importedRowRecords.records.findNewestClosingBalance(
+			manager,
+			ownerId,
+			bankAccountId,
 		);
 		if (!statement) return rowAnchor;
 		return rowAnchor && rowAnchor.date >= statement.date ? rowAnchor : statement;
@@ -197,7 +191,7 @@ export class FileAccountBalanceService {
 		manager: EntityManager,
 		bankAccountId: BankAccount['id'],
 		anchor: FileAnchor,
-	): Promise<BalanceFields> {
+	): Promise<FileAccountBalance> {
 		const [{amount, reported}]: Array<{amount: string; reported: string}> = await manager.query(
 			`SELECT ($3::numeric + COALESCE(SUM(t."amount") FILTER (WHERE t."bookingDate" > $2::date), 0))::text AS "amount",
 				to_char(GREATEST($2::date, MAX(t."bookingDate")), 'YYYY-MM-DD') AS "reported"

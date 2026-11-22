@@ -78,7 +78,7 @@ describe('Bank transaction category impact', () => {
 			),
 			historySibling: await create(
 				ownerAccount,
-				categorizedRow('2026-09-09', '-12.00', {category: 'FOOD_AND_DRINK', categorySource: 'HISTORY'}),
+				categorizedRow('2026-09-09', '-12.00', {category: 'EATING_OUT', categorySource: 'HISTORY'}),
 			),
 			failedSibling: await create(
 				ownerAccount,
@@ -173,7 +173,7 @@ describe('Bank transaction category impact', () => {
 					displayDescription: 'Transfer to ALEX-SAM EXAMPLE',
 					amount: '-12.00000000',
 					currency: 'EUR',
-					category: 'FOOD_AND_DRINK',
+					category: 'EATING_OUT',
 					categoryStatus: 'COMPLETED',
 					categorySource: 'HISTORY',
 				},
@@ -221,13 +221,13 @@ describe('Bank transaction category impact', () => {
 	it('changes only the corrected row when no other row is selected', async () => {
 		await ownerAgent
 			.patch(`/bank-transactions/${rows.cafeCorrected.id}/category`)
-			.send({category: 'FOOD_AND_DRINK'})
+			.send({category: 'EATING_OUT'})
 			.expect(200);
 
-		expect(await reload('cafeCorrected')).toMatchObject({category: 'FOOD_AND_DRINK', categorySource: 'MANUAL'});
+		expect(await reload('cafeCorrected')).toMatchObject({category: 'EATING_OUT', categorySource: 'MANUAL'});
 		expect(await reload('cafeSibling')).toMatchObject({category: 'SHOPPING', categorySource: 'AI'});
 		// Not remembered: the sibling is offered again next time.
-		const response = await ownerAgent.get(impactPath('cafeCorrected', 'FOOD_AND_DRINK')).expect(200);
+		const response = await ownerAgent.get(impactPath('cafeCorrected', 'EATING_OUT')).expect(200);
 		expect(response.body.transactions.map(({id}: {id: string}) => id)).toEqual([rows.cafeSibling.id]);
 	});
 
@@ -269,7 +269,7 @@ describe('Bank transaction category impact', () => {
 		expect(applied).toMatchObject({category: 'TRAVEL', categorySource: 'HISTORY', categoryStatus: 'COMPLETED'});
 		expect(applied.categoryAppliedInputHash).toBe(applied.categoryInputHash);
 		// Eligible but left unticked.
-		expect(await reload('historySibling')).toMatchObject({category: 'FOOD_AND_DRINK', categorySource: 'HISTORY'});
+		expect(await reload('historySibling')).toMatchObject({category: 'EATING_OUT', categorySource: 'HISTORY'});
 		expect(await reload('failedSibling')).toMatchObject({category: null, categoryStatus: 'FAILED'});
 		expect(await reload('pendingSibling')).toMatchObject({category: 'SHOPPING', categorySource: 'AI'});
 		for (const name of ineligible) {

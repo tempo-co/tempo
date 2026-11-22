@@ -13,7 +13,7 @@ function payment(date: string, overrides: Partial<RecurringCandidate> = {}): Rec
 		amountCents: 2400n,
 		baseAmountCents: 2400n,
 		name: 'Example Motion Ltd',
-		category: 'SUBSCRIPTIONS',
+		category: 'SERVICES',
 		...overrides,
 	};
 }

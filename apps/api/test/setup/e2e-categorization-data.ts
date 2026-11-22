@@ -23,6 +23,8 @@ export const CATEGORIZATION_E2E_COUNTERPARTY_TRANSACTION_ID = '00000000-0000-400
 export const CATEGORIZATION_E2E_GOVERNMENT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000114';
 export const CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID = '00000000-0000-4000-8000-000000000115';
 export const CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID = '00000000-0000-4000-8000-000000000116';
+/** A stored category value that is no longer in the category list. */
+export const CATEGORIZATION_E2E_REMOVED_CATEGORY = 'RETIRED_CATEGORY';
 /** Published example IBANs: the gym's own account, and a payment processor's account that collects for two shops. */
 export const CATEGORIZATION_E2E_COUNTERPARTY_IBAN = 'DE89370400440532013000';
 const CATEGORIZATION_E2E_PROCESSOR_IBAN = 'GB82WEST12345698765432';
@@ -121,7 +123,7 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 			amount: '-31.00',
 			description: 'BEA, Google Pay Synthetic Market,PAS001 NR:SY0006, 08.09.26/09:15 SYNTHTOWN',
 			counterpartyName: null,
-			category: 'FOOD_AND_DRINK',
+			category: 'GROCERIES',
 			categoryStatus: 'COMPLETED',
 			categorySource: 'AI',
 		},
@@ -205,7 +207,7 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		},
 		{
 			...personTransfer,
-			...completed('FOOD_AND_DRINK', 'MANUAL'),
+			...completed('GROCERIES', 'MANUAL'),
 			transactionDate: '2026-08-20',
 			amount: '-12.00',
 			description: 'To Example H',
@@ -237,7 +239,7 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 	};
 	const gymPayment = (transactionDate: string, amount: string, values: Partial<BankTransaction> = {}) => ({
 		...gym,
-		...completed('SUBSCRIPTIONS', 'AI'),
+		...completed('HEALTH', 'AI'),
 		transactionDate,
 		amount,
 		...values,
@@ -277,6 +279,8 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		gymRefund('2025-06-01', '14.00'),
 		gymRefund('2025-01-01', '15.00'),
 		gymRefund('2024-10-15', '16.00'),
+		// The owner's pick of a category no longer in the list, at the same amount: no hint carries it.
+		gymPayment('2026-08-20', '-30.00', completed(CATEGORIZATION_E2E_REMOVED_CATEGORY, 'MANUAL')),
 		// After the September payment, a row still waiting for a category, and an own transfer: none is history.
 		gymPayment('2026-10-01', '-38.00'),
 		gymPayment('2026-07-15', '-40.00', {...completed('TRANSFER_OUT', 'AI'), ownTransferEvidence: 'NAME'}),
@@ -291,7 +295,7 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		// Two shops paid through one processor account: a payment at either matches that shop's rows by name only.
 		{
 			transactionType: BANK_TRANSACTION_TYPES.TRANSFER,
-			...completed('FOOD_AND_DRINK', 'AI'),
+			...completed('GROCERIES', 'AI'),
 			counterpartyName: 'Example Bakery',
 			description: 'Example Bakery',
 			counterpartyIban: CATEGORIZATION_E2E_PROCESSOR_IBAN,

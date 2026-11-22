@@ -36,6 +36,7 @@ import {RecurringContinuationUnlink} from './recurring/recurring-continuation-un
 import {RecurringSeriesHide} from './recurring/recurring-series-hide.entity';
 import {RecurringSeriesService} from './recurring/recurring-series.service';
 import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
+import {AccountHistoryWriterService} from './services/account-history-writer.service';
 import {AspspCatalogService} from './services/aspsp-catalog.service';
 import {BankAuthorizationService} from './services/bank-authorization.service';
 import {BankConnectionQueryService} from './services/bank-connection-query.service';
@@ -56,6 +57,7 @@ import {BankingSyncService} from './services/banking-sync.service';
 import {DerivedDataRefreshService} from './services/derived-data-refresh.service';
 import {FileAccountBalanceService} from './services/file-account-balance.service';
 import {FxRateService} from './services/fx-rate.service';
+import {ImportedRowRecordsRegistry} from './services/imported-row-records';
 import {McpReaderService} from './services/mcp-reader.service';
 import {MerchantSpendingService} from './services/merchant-spending.service';
 import {OwnTransferService} from './services/own-transfer.service';
@@ -88,6 +90,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		NotificationsModule,
 	],
 	providers: [
+		AccountHistoryWriterService,
 		AspspCatalogService,
 		BankAuthorizationService,
 		BankConnectionQueryService,
@@ -97,6 +100,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		McpReaderService,
 		BankingConnectionLockService,
 		BankTransactionPersistenceService,
+		ImportedRowRecordsRegistry,
 		BankingSyncService,
 		BankingSyncQueueService,
 		BankingSyncProcessor,
@@ -117,7 +121,9 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		ReportingCurrencyService,
 	],
 	exports: [
+		AccountHistoryWriterService,
 		BankTransactionPersistenceService,
+		ImportedRowRecordsRegistry,
 		FileAccountBalanceService,
 		BankingConnectionLockService,
 		ReportingCurrencyService,

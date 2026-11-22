@@ -21,6 +21,7 @@ export const BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE = 'bank-transaction-amount
 export const BACKFILL_BANK_TRANSACTION_AMOUNTS_JOB = 'backfill-bank-transaction-amounts';
 export const BANK_TRANSACTION_AMOUNT_CONVERSION_JOB = 'convert-bank-transaction-amounts';
 export const BANK_TRANSACTION_AMOUNT_CONVERSION_SCHEDULER_ID = 'bank-transaction-amount-conversion-scheduler';
+/** The daily recompute of exchanges and own transfers; Redis holds the job and scheduler under these names. */
 export const RECOMPUTE_OWN_TRANSFERS_JOB = 'recompute-own-transfers';
 export const OWN_TRANSFER_RECOMPUTE_SCHEDULER_ID = 'own-transfer-recompute-scheduler';
 

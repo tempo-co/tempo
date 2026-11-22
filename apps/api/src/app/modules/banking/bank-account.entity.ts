@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 
 import {BankConnection} from './bank-connection.entity';
+import type {BankIdentity} from './bank-identity';
 
 @Entity('bank_accounts')
 @Index('idx_bank_accounts_connection_identification_hash', ['bankConnection', 'identificationHash'])
@@ -70,6 +71,14 @@ export class BankAccount {
 
 	@Column({type: 'date', nullable: true})
 	statedBalanceDate: string | null;
+
+	/**
+	 * The bank that holds the account (`bank-identity.ts`): its connection's institution, or for an imported-files
+	 * account the best evidence its statements gave; null when nothing says. Exchange legs on the imported-files
+	 * connection pair only within one.
+	 */
+	@Column({type: 'varchar', nullable: true})
+	bankIdentity: BankIdentity | null;
 
 	@Column({type: 'boolean', default: true})
 	isActive: boolean;

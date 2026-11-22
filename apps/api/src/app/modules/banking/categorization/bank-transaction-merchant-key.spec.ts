@@ -14,6 +14,12 @@ describe('getBankTransactionMerchantKey', () => {
 		['BEA, Betaalpas Example Rail 305,PAS123 NR:EX0002, 03.01.26/09:00 EXAMPLETOWN', 'EXPENSE:example rail'],
 		['BEA, Apple Pay CCV*Example Cafe,PAS123 NR:EX0003, 04.01.26/12:30 OTHERTOWN', 'EXPENSE:example cafe'],
 		['GEA, Betaalpas Example Bank Atm 12,PAS123 NR:EX0004, 05.01.26/18:00 EXAMPLETOWN', 'EXPENSE:example bank atm'],
+		['BEA, Google Pay Example Burger00632,PAS123 NR:EX0005, 06.01.26/22:30 EXAMPLETOWN', 'EXPENSE:example burger'],
+		['BEA, Google Pay Example Burger 01022,PAS123 NR:EX0006, 07.01.26/21:00 OTHERTOWN', 'EXPENSE:example burger'],
+		[
+			'BEA, Betaalpas Example Clinic R10,PAS123 NR:EX0007, 08.01.26/09:00 EXAMPLETOWN',
+			'EXPENSE:example clinic r10',
+		],
 	])('normalizes the card line %s', (description, expected) => {
 		expect(getBankTransactionMerchantKey({description, counterpartyName: null, creditDebitIndicator: 'DBIT'})).toBe(
 			expected,

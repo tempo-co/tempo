@@ -64,7 +64,7 @@ function transaction(
     bankName: 'Example Bank',
     bankCountry: 'NL',
     bankAccountName: 'Example account',
-    category: 'FOOD_AND_DRINK',
+    category: 'GROCERIES',
     categoryStatus: 'COMPLETED',
     categorySource: 'AI',
     categoryConfidence: '0.99',
@@ -203,7 +203,7 @@ async function mockMerchantLogos(page: Page) {
         typicalAmount: '24.50',
         amountKind: 'FIXED',
         currency: 'EUR',
-        category: 'FOOD_AND_DRINK',
+        category: 'GROCERIES',
         merchantLogoUrl: LOGO,
         flags: [],
       },
@@ -401,7 +401,7 @@ for (const width of [1440, 390]) {
         if (width < 1024) {
           // Phones keep the small category icon in the meta line under the title.
           const meta = tableRow(withLogo).getByTestId('ledger-row-meta');
-          await expect(meta).toContainText('Food and drink');
+          await expect(meta).toContainText('Groceries');
           await expect(meta.locator('svg')).toHaveCount(1);
           await expect(meta.locator('img')).toHaveCount(0);
         }

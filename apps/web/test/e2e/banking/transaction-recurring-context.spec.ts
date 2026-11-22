@@ -27,7 +27,7 @@ const transaction: BankTransaction = createBankTransaction({
   bankName: 'Example Bank',
   bankCountry: 'NL',
   bankAccountName: 'Everyday',
-  category: 'SUBSCRIPTIONS',
+  category: 'ENTERTAINMENT',
   categoryStatus: 'COMPLETED',
   categorySource: 'AI',
   categoryConfidence: null,
@@ -126,7 +126,7 @@ for (const width of [320, 390, 1440]) {
         total: 0,
       });
       await page.route(`**/bank-transactions/${ID}/category`, (route) => {
-        saved = {...saved, category: 'OTHER', categorySource: 'MANUAL'};
+        saved = {...saved, category: 'SHOPPING', categorySource: 'MANUAL'};
         recurring = null;
         return fulfillJson(route, saved);
       });
@@ -252,7 +252,7 @@ for (const width of [320, 390, 1440]) {
       await expect(amount).toContainText('12.99');
       await page.clock.resume();
       await inspector.getByRole('combobox', {name: 'Transaction category'}).click();
-      await page.getByRole('option', {name: 'Other', exact: true}).click();
+      await page.getByRole('option', {name: 'Shopping', exact: true}).click();
       await expect(source).toHaveText('Manual');
       await expect.poll(() => reads).toBeGreaterThan(1);
       await expect(

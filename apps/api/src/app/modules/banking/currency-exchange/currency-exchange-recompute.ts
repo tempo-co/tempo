@@ -5,10 +5,13 @@ import {
 	detectCurrencyExchangeMarker,
 } from '../bank-transaction-financial-event';
 import {BATCH_WRITE_CHUNK_SIZE, buildPostgresValuesList, chunkArray} from '../banking.utils';
+import {categoryResetSql} from '../categorization/category-fields';
 import {compareIds} from '../own-transfer/own-transfer-detection';
 import type {OwnTransferSqlExecutor} from '../own-transfer/own-transfer-recompute';
+import {BANK_CONNECTION_PROVIDERS} from '../services/banking-sync.constants';
 import {
 	CurrencyExchangeCandidate,
+	CurrencyExchangeGroup,
 	CurrencyExchangeLeg,
 	confirmCurrencyExchanges,
 	pairCurrencyExchanges,
@@ -17,6 +20,8 @@ import {
 type LegRow = {
 	id: string;
 	connectionId: string;
+	provider: string;
+	bankIdentity: string | null;
 	bankAccountId: string;
 	date: string | null;
 	indicator: string | null;
@@ -48,10 +53,14 @@ const OWNER_ACCOUNTS_SQL = `SELECT account."id" FROM "bank_accounts" account
 	JOIN "bank_connections" connection ON connection."id" = account."bankConnectionId"
 	WHERE connection."accountId" = $1`;
 
-const CATEGORIZATION_RESET_SQL = `"category" = NULL, "categorySource" = NULL, "categoryConfidence" = NULL,
-	"categoryAppliedInputHash" = NULL, "categoryProvider" = NULL, "categoryModel" = NULL,
-	"categoryPromptVersion" = NULL, "categorySearchTrace" = NULL, "categoryLastError" = NULL,
-	"categoryUpdatedAt" = NULL`;
+/**
+ * A bank connection's legs form one group. The imported-files connection holds the files of every bank, so there legs
+ * group by the bank their account records, and a leg whose account records none joins no group.
+ */
+function exchangeGroup({connectionId, provider, bankIdentity}: LegRow): CurrencyExchangeGroup {
+	if (provider !== BANK_CONNECTION_PROVIDERS.FILE) return connectionId;
+	return bankIdentity === null ? null : `${connectionId}:${bankIdentity}`;
+}
 
 /**
  * Recomputes which of one owner's rows are currency exchanges, and their pairs. Must run inside a transaction: the
@@ -62,12 +71,18 @@ const CATEGORIZATION_RESET_SQL = `"category" = NULL, "categorySource" = NULL, "c
 export async function recomputeCurrencyExchanges(
 	executor: OwnTransferSqlExecutor,
 	ownerId: string,
+	/**
+	 * Whether `bank_accounts.bankIdentity` exists yet. Only a migration that runs before it (`AddCurrencyExchangePairing`)
+	 * says no; imported-files accounts, the only ones grouped by it, did not exist then either.
+	 */
+	{bankIdentityColumn = true}: {bankIdentityColumn?: boolean} = {},
 ): Promise<CurrencyExchangeRecomputeResult> {
 	await executor.query(`SELECT pg_advisory_xact_lock(hashtext('currency-exchange:' || $1))`, [ownerId]);
 
 	// The text and code conditions only narrow the read; detectCurrencyExchangeMarker decides exactly.
 	const rows = (await executor.query(
-		`SELECT transaction."id", account."bankConnectionId" AS "connectionId", transaction."bankAccountId",
+		`SELECT transaction."id", account."bankConnectionId" AS "connectionId", connection."provider",
+			${bankIdentityColumn ? 'account."bankIdentity"' : 'NULL::varchar AS "bankIdentity"'}, transaction."bankAccountId",
 			to_char(COALESCE(transaction."bookingDate", transaction."transactionDate"), 'YYYY-MM-DD') AS "date",
 			transaction."creditDebitIndicator" AS "indicator", transaction."amount"::text AS "amount",
 			transaction."currency", account."currency" AS "accountCurrency", transaction."description",
@@ -98,7 +113,7 @@ export async function recomputeCurrencyExchanges(
 			bankTransactionSubCode: row.bankTransactionSubCode,
 			bankTransactionDescription: row.bankTransactionDescription,
 		});
-		return marker ? [{...row, ...marker}] : [];
+		return marker ? [{...row, exchangeGroup: exchangeGroup(row), ...marker}] : [];
 	});
 	const confirmed = confirmCurrencyExchanges(candidates);
 	const pairs = pairCurrencyExchanges(
@@ -165,7 +180,7 @@ export async function recomputeCurrencyExchanges(
 	// (for example a manual category) commits first.
 	for (const ids of chunkArray(becameExchange, BATCH_WRITE_CHUNK_SIZE)) {
 		await executor.query(
-			`UPDATE "bank_transactions" SET ${CATEGORIZATION_RESET_SQL}, "categoryStatus" = 'NOT_APPLICABLE'
+			`UPDATE "bank_transactions" SET ${categoryResetSql('NOT_APPLICABLE')}
 			WHERE "id" = ANY($2::uuid[]) AND "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 				AND "financialEventType" = $3 AND "categorySource" IS DISTINCT FROM 'MANUAL'`,
 			[ownerId, ids, CURRENCY_EXCHANGE],
@@ -174,7 +189,7 @@ export async function recomputeCurrencyExchanges(
 	const requeuedIds: string[] = [];
 	for (const ids of chunkArray(leftExchange, BATCH_WRITE_CHUNK_SIZE)) {
 		const result = (await executor.query(
-			`UPDATE "bank_transactions" SET ${CATEGORIZATION_RESET_SQL}, "categoryStatus" = 'PENDING'
+			`UPDATE "bank_transactions" SET ${categoryResetSql('PENDING')}
 			WHERE "id" = ANY($2::uuid[]) AND "bankAccountId" IN (${OWNER_ACCOUNTS_SQL})
 				AND "financialEventType" IS NULL AND "categoryStatus" = 'NOT_APPLICABLE'
 				AND "categorySource" IS DISTINCT FROM 'MANUAL'

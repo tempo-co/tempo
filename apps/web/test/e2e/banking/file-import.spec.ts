@@ -3,6 +3,7 @@ import {
   type AddBankImportNeverSentRowsRequest,
   BANK_IMPORT_MAX_ROWS_PER_ADD,
   type BankConnection,
+  type BankImportBanks,
   type BankImportDoubtfulRow,
   type BankImportError,
   type BankImportLayout,
@@ -18,7 +19,7 @@ import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 import {openDetails, routeMockedBankApp} from '../../utils/bank-connections';
-import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+import {animationsSettled, boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 import {countAfterToasts} from '../../utils/toasts';
 
 const TODAY = new Date('2026-11-12T10:00:00+01:00');
@@ -27,6 +28,8 @@ const FILE_ACCOUNT_ID = '00000000-0000-4000-8000-000000000401';
 const SYNCED_LINE =
   'These are almost always in Tempo already from your bank, so leaving them without an answer loses nothing.';
 const LAYOUT_ID = '00000000-0000-4000-8000-000000000601';
+/** The owner's own banks to pick a layout's bank from, as the API sorts them. */
+const KNOWN_BANKS = ['ABN AMRO', 'Example Bank', 'ING'];
 const RESERVED_BANK_NAME =
   "Revolut's own exports already import into your Revolut accounts. Name this bank differently.";
 
@@ -154,6 +157,8 @@ type ImportApi = {
   undos: string[];
   proposals: Request[];
   confirms: ConfirmBankImportLayoutProposalRequest[];
+  /** How often a proposal's list of banks was read. */
+  banksReads: number;
   rejects: string[];
   layouts: BankImportLayout[];
   removed: string[];
@@ -175,6 +180,8 @@ async function mockFileImport(
     mapper = false,
     proposals = [],
     layouts = [],
+    banks = KNOWN_BANKS,
+    banksFailures = 0,
   }: {
     imports?: BankImportSummary[];
     uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
@@ -189,6 +196,10 @@ async function mockFileImport(
     /** The answer to each proposal in turn. */
     proposals?: ((route: Route) => Promise<void>)[];
     layouts?: BankImportLayout[];
+    /** The banks `GET /bank-imports/layout-proposals/:proposalId/banks` lists. */
+    banks?: string[];
+    /** How many reads of the banks fail first (429, which the query does not retry). */
+    banksFailures?: number;
   } = {},
 ) {
   const api: ImportApi = {
@@ -201,6 +212,7 @@ async function mockFileImport(
     undos: [],
     proposals: [],
     confirms: [],
+    banksReads: 0,
     rejects: [],
     layouts: [...layouts],
     removed: [],
@@ -263,6 +275,10 @@ async function mockFileImport(
     if (!answer) throw new Error('Unexpected proposal');
     await answer(route);
   });
+  // The API answers a confirmed proposal's list of banks with a conflict.
+  const confirmed = new Set<string>();
+  const proposalOf = (route: Route) =>
+    new URL(route.request().url()).pathname.split('/').slice(-2)[0];
   await page.route(`${API_URL}/bank-imports/layout-proposals/*/confirm`, (route) => {
     const request = route.request().postDataJSON() as ConfirmBankImportLayoutProposalRequest;
     api.confirms.push(request);
@@ -274,6 +290,7 @@ async function mockFileImport(
       );
     const layout = {id: LAYOUT_ID, bankName: request.bankName, createdAt: TODAY.toISOString()};
     api.layouts = [layout, ...api.layouts];
+    confirmed.add(proposalOf(route));
     return fulfillJson(route, layout, 201);
   });
   await page.route(`${API_URL}/bank-imports/layout-proposals/*/reject`, (route) => {
@@ -282,6 +299,18 @@ async function mockFileImport(
     return route.fulfill({status: 204});
   });
   await page.route(`${API_URL}/bank-imports/layouts`, (route) => fulfillJson(route, api.layouts));
+  let banksFailed = 0;
+  await page.route(`${API_URL}/bank-imports/layout-proposals/*/banks`, (route) => {
+    if (route.request().resourceType() === 'document') return route.continue();
+    api.banksReads += 1;
+    if (confirmed.has(proposalOf(route)))
+      return fulfillJson(route, {statusCode: 409, message: 'Conflict'}, 409);
+    if (banksFailed < banksFailures) {
+      banksFailed += 1;
+      return fulfillJson(route, {statusCode: 429, message: 'Too Many Requests'}, 429);
+    }
+    return fulfillJson(route, {banks} satisfies BankImportBanks);
+  });
   await page.route(`${API_URL}/bank-imports/layouts/*`, (route) => {
     const id = new URL(route.request().url()).pathname.split('/').pop()!;
     api.removed.push(id);
@@ -377,18 +406,6 @@ async function expectCurrencyInside(field: Locator, currency: string) {
   ]);
   expect(suffixBox.x + suffixBox.width).toBeLessThanOrEqual(box.x + box.width);
   expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
-}
-
-/** Waits out a dialog's or sheet's opening animation, so boxes read in one go come from one frame. */
-async function settled(scope: Locator) {
-  await scope.evaluate((element) =>
-    Promise.all(
-      element
-        .getAnimations({subtree: true})
-        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
-        .map((animation) => animation.finished),
-    ),
-  );
 }
 
 async function openImport(page: Page) {
@@ -1141,9 +1158,27 @@ test.describe('statement file import on Connections', () => {
     await page.goto('/bank-connections');
     const dialog = await openImport(page);
 
-    await dialog.getByRole('button', {name: 'Supported files'}).click();
-
+    // An Escape pressed as the list opens, before the dialogs settle, closes only the list.
+    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    await page.evaluate(() => {
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('[data-testid="supported-files"]')) return;
+        observer.disconnect();
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true}),
+        );
+        document.body.dataset.earlyEscape = 'sent';
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
+    });
+    await supportedFiles.click();
+    await expect(page.locator('body')).toHaveAttribute('data-early-escape', 'sent');
     const supported = page.getByRole('dialog', {name: 'Supported files'});
+    await expect(supported).toBeHidden();
+    await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+    await expect(supportedFiles).toBeFocused();
+
+    await supportedFiles.click();
     await expect(supported.getByText('CAMT.053, MT940, OFX and QFX')).toBeVisible();
     await expect(
       supported.getByRole('list', {name: 'Bank exports'}).getByRole('listitem'),
@@ -1233,7 +1268,9 @@ test.describe('statement file import on Connections', () => {
     // The spinner sits on the text's line. It rotates, which grows its box around a fixed centre, so compare centres.
     const [line, spinner] = [await boxOf(working), await boxOf(working.locator('svg'))];
     expect(line.height).toBeLessThan(28);
-    expect(Math.abs(spinner.y + spinner.height / 2 - (line.y + line.height / 2))).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(spinner.y + spinner.height / 2 - (line.y + line.height / 2)),
+    ).toBeLessThanOrEqual(2);
     await expect(dialog.getByRole('button', {name: 'Cancel'})).toBeEnabled();
     answer();
 
@@ -1258,13 +1295,22 @@ test.describe('statement file import on Connections', () => {
     );
     await expect(preview.getByText('Account DE89370400440532013000')).toBeVisible();
     await expect(preview.getByTestId('bank-import-date-check')).toHaveCount(0);
-    await expect(preview.getByLabel('Bank')).toHaveValue('Example Bank');
+    // The bank Tempo guessed is picked among the owner's banks; any other can be picked instead.
+    const bank = preview.getByLabel('Bank', {exact: true});
+    await expect(bank).toHaveText('Example Bank');
+    await expect(preview.getByLabel('Bank name')).toHaveCount(0);
     await expect(preview.getByLabel('Currency')).toHaveCount(0);
+    await bank.click();
+    await expect(page.getByRole('option')).toHaveText([...KNOWN_BANKS, 'Other']);
+    await page.getByRole('option', {name: 'ING'}).click();
+    await expect(bank).toHaveText('ING');
 
     await dialog.getByRole('button', {name: 'Looks right'}).click();
 
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
-    expect(api.confirms).toEqual([{bankName: 'Example Bank'}]);
+    expect(api.confirms).toEqual([{bankName: 'ING'}]);
+    // The saved proposal's banks are not read again.
+    expect(api.banksReads).toBe(1);
     // The same drop went again, unchanged.
     expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
       ['statement-april.xml', 'export-example.csv'],
@@ -1354,15 +1400,23 @@ test.describe('statement file import on Connections', () => {
       'Tempo read 03/04/2026 as 3 April 2026',
     );
     const confirm = dialog.getByRole('button', {name: 'Looks right'});
-    await expect(preview.getByLabel('Bank')).toHaveValue('');
+    const bank = preview.getByLabel('Bank', {exact: true});
+    await expect(bank).toHaveText('Choose a bank');
+    await expect(confirm).toBeDisabled();
+    // A bank the owner does not have yet is typed after Other.
+    await bank.click();
+    await page.getByRole('option', {name: 'Other'}).click();
+    const bankName = preview.getByLabel('Bank name');
+    await expect(bankName).toHaveValue('');
+    await expect(bankName).toHaveAttribute('maxlength', '60');
     await expect(confirm).toBeDisabled();
     // A name the API refuses says why under the field, and the preview stays.
-    await preview.getByLabel('Bank').fill('Revolut');
+    await bankName.fill('Revolut');
     await confirm.click();
     await expect(preview.getByText(RESERVED_BANK_NAME)).toBeVisible();
-    await expect(preview.getByLabel('Bank')).toHaveAttribute('aria-invalid', 'true');
+    await expect(bankName).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText("Couldn't save this layout")).toHaveCount(0);
-    await preview.getByLabel('Bank').fill('  Example Savings Bank ');
+    await bankName.fill('  Example Savings Bank ');
     await expect(preview.getByText(RESERVED_BANK_NAME)).toHaveCount(0);
     await expect(preview.getByLabel('Currency')).toHaveText('EUR');
     await preview.getByLabel('Currency').click();
@@ -1382,6 +1436,79 @@ test.describe('statement file import on Connections', () => {
       {bankName: 'Revolut', currency: 'EUR'},
       {bankName: 'Example Savings Bank', currency: 'GBP'},
     ]);
+  });
+
+  test("a failed load of the owner's banks says so in the picker's place, and Try again brings the picker back", async ({
+    page,
+  }) => {
+    await mockFileImport(page, {
+      mapper: true,
+      uploads: [refused({code: 'layout_unknown', file: 1})],
+      proposals: [proposed(layoutProposal())],
+      banksFailures: 1,
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    const preview = dialog.getByTestId('bank-import-layout-preview');
+    const failed = preview.getByRole('alert').filter({hasText: "Couldn't load your banks"});
+    await expect(failed).toHaveCount(1);
+    await expect(failed).toContainText('429');
+    // The failure is said once: in the picker's place, with no toast besides.
+    expect(await countAfterToasts(page, page.locator('[data-sonner-toast]'))).toBe(0);
+    await expect(preview.getByLabel('Bank', {exact: true})).toHaveCount(0);
+    await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeDisabled();
+
+    // The list loading again shows as such until it arrives.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(`${API_URL}/bank-imports/layout-proposals/*/banks`, async (route) => {
+      await held;
+      await route.fallback();
+    });
+    const bank = preview.getByLabel('Bank', {exact: true});
+    try {
+      await failed.getByRole('button', {name: 'Try again'}).click();
+      await expect(failed).toHaveCount(0);
+      await expect(bank).toHaveText('Loading your banks…');
+      await expect(bank).toBeDisabled();
+      await expect(preview.getByLabel('Bank name')).toHaveCount(0);
+    } finally {
+      release();
+    }
+
+    await expect(bank).toHaveText('Example Bank');
+    await expect(dialog.getByRole('button', {name: 'Looks right'})).toBeEnabled();
+  });
+
+  test('a guessed bank the owner does not have starts as Other with the guess typed in, on a phone too', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 844});
+    const api = await mockFileImport(page, {
+      mapper: true,
+      uploads: [
+        refused({code: 'layout_unknown', file: 1}),
+        created(importSummary({filesCount: 1, format: 'csv'})),
+      ],
+      proposals: [proposed(layoutProposal({bankName: 'example  bank'}))],
+      banks: ['ABN AMRO', 'ING'],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+
+    const preview = dialog.getByTestId('bank-import-layout-preview');
+    await expect(preview.getByLabel('Bank', {exact: true})).toHaveText('Other');
+    await expect(preview.getByLabel('Bank name')).toHaveValue('example  bank');
+    await expectNoHorizontalOverflow(page);
+    await dialog.getByRole('button', {name: 'Looks right'}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(api.confirms).toEqual([{bankName: 'example  bank'}]);
   });
 
   test('Not right discards the proposal and imports nothing; Cancel or closing stops waiting and keeps the files', async ({
@@ -1614,6 +1741,7 @@ test.describe('statement file import on Connections', () => {
               ],
               // The imported-files account of this bank and currency exists: it is offered as itself.
               newAccount: false,
+              layoutPreview: null,
             },
           ],
         }),
@@ -1627,9 +1755,7 @@ test.describe('statement file import on Connections', () => {
     await expect(dialog.getByRole('heading', {name: 'Which account is this?'})).toBeVisible();
     const question = dialog.getByRole('group', {name: 'Example Bank · EUR'});
     await expect(
-      question.getByText(
-        'Few of these transactions match what Tempo already has for Example Holder.',
-      ),
+      question.getByText("Few of these transactions match what's already in Example Holder."),
     ).toBeVisible();
     const radios = question.getByRole('radio');
     await expect(radios).toHaveCount(3);
@@ -1674,6 +1800,87 @@ test.describe('statement file import on Connections', () => {
     expect(JSON.parse(retry.fields.accountChoices)).toEqual({'Example Bank:EUR': CHECKING.id});
   });
 
+  test("shows a saved layout's rows for a file without a header or account, then sends the answer", async ({
+    page,
+  }) => {
+    const row = {
+      date: '2026-03-02',
+      amount: '-12.50',
+      currency: 'EUR',
+      counterparty: null,
+      description: 'Example Shop',
+      balanceAfter: null,
+    };
+    const api = await mockFileImport(page, {
+      uploads: [
+        refused({
+          statusCode: 409,
+          code: 'target_account_unconfirmed',
+          accountQuestions: [
+            {
+              bank: 'Example Bank',
+              currency: 'EUR',
+              candidates: [],
+              newAccount: true,
+              layoutPreview: {
+                rowCount: 2,
+                dateFrom: '2026-03-02',
+                dateTo: '2026-03-03',
+                firstRows: [
+                  row,
+                  {...row, date: '2026-03-03', amount: '2500.00', description: 'Example Employer'},
+                ],
+                lastRows: [],
+                totals: [{currency: 'EUR', moneyIn: '2500.00', moneyOut: '12.50'}],
+                accounts: [],
+              },
+            },
+          ],
+        }),
+        created(importSummary({filesCount: 1})),
+      ],
+    });
+    await page.goto('/bank-connections');
+    const dialog = await openImport(page);
+    await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
+
+    const question = dialog.getByRole('group', {name: 'Example Bank · EUR'});
+    await expect(
+      question.getByText(
+        'This file has no header and names no account, so it may not be from Example Bank. Check the transactions below look right.',
+      ),
+    ).toBeVisible();
+    const rows = question.getByTestId('bank-import-layout-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('Example Shop');
+    await expect(rows.nth(1)).toContainText('Example Employer');
+    await expect(question.getByTestId('bank-import-layout-totals')).toContainText('2,500.00');
+    // A preview row is shaped like a transaction row on every surface.
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({width, height: 844});
+      await animationsSettled(dialog);
+      // The last row, which no divider adds to.
+      // Resizing across the phone width remounts the dialog as a drawer, which then animates in.
+      await expect
+        .poll(async () => {
+          const [box, tile] = await Promise.all([
+            boxOf(rows.last()),
+            boxOf(rows.last().locator('[aria-hidden="true"]').first()),
+          ]);
+          return [box.height, tile.width, tile.height];
+        })
+        .toEqual([60, 36, 36]);
+      await expectNoHorizontalOverflow(page);
+    }
+    await question.getByText('A new account').click();
+    await dialog.getByRole('button', {name: 'Import', exact: true}).click();
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(JSON.parse(sentForm(api.uploads[1]).fields.accountChoices)).toEqual({
+      'Example Bank:EUR': 'new',
+    });
+  });
+
   test('a new account answers the question too, and Cancel goes back to choosing files', async ({
     page,
   }) => {
@@ -1698,8 +1905,15 @@ test.describe('statement file import on Connections', () => {
             },
           ],
           newAccount: true,
+          layoutPreview: null,
         },
-        {bank: 'Example Bank', currency: 'USD', candidates: [], newAccount: true},
+        {
+          bank: 'Example Bank',
+          currency: 'USD',
+          candidates: [],
+          newAccount: true,
+          layoutPreview: null,
+        },
       ],
     };
     const api = await mockFileImport(page, {
@@ -2341,7 +2555,7 @@ test.describe('statement file import on Connections', () => {
       dialog.getByText('Tempo works out earlier balances from your transactions.'),
     ).toBeVisible();
     const field = dialog.getByLabel('Balance of Example Wallet today');
-    await settled(dialog);
+    await animationsSettled(dialog);
     await expectCurrencyInside(field, 'EUR');
     // Cancel and Save under the field, Save last.
     const [fieldBox, cancelBox, saveBox] = await Promise.all([
@@ -2370,7 +2584,7 @@ test.describe('statement file import on Connections', () => {
     dialog = page.getByRole('dialog');
     const phoneField = dialog.getByLabel('Balance of Example Savings today');
     await expectInsideViewport(page, dialog.getByRole('button', {name: 'Cancel'}));
-    await settled(dialog);
+    await animationsSettled(dialog);
     await expectCurrencyInside(phoneField, 'EUR');
     const [phoneFieldBox, phoneSave, phoneCancel] = await Promise.all([
       boxOf(phoneField),
@@ -2685,6 +2899,23 @@ test.describe('statement file import on Connections', () => {
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
     await expect(dialog.getByTestId('bank-import-date-check')).toBeVisible();
 
+    // A preview row is shaped like a transaction row on every surface.
+    // The last row, which no divider adds to.
+    const previewRow = dialog.getByTestId('bank-import-layout-row').last();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({width, height: 844});
+      await animationsSettled(dialog);
+      // Resizing across the phone width remounts the dialog as a drawer, which then animates in.
+      await expect
+        .poll(async () => {
+          const [box, tile] = await Promise.all([
+            boxOf(previewRow),
+            boxOf(previewRow.locator('[aria-hidden="true"]').first()),
+          ]);
+          return [box.height, tile.width, tile.height];
+        })
+        .toEqual([60, 36, 36]);
+    }
     for (const width of [390, 320]) {
       await page.setViewportSize({width, height: 700});
       await expectNoHorizontalOverflow(page);
@@ -2861,6 +3092,10 @@ test.describe('statement file import on Connections', () => {
       expect(await look(addOnlyRow)).toEqual(await look(addGroup));
       const [groupBox, rowBox] = await Promise.all([boxOf(addGroup), boxOf(addRow)]);
       expect(Math.abs(groupBox.x + groupBox.width - rowBox.x - rowBox.width)).toBeLessThan(1);
+      // Names the owner adds from wrap in full, so rows that differ only at the end tell apart.
+      await expectWrappedInFull(groups.first().getByText(LONG_ACCOUNT, {exact: true}));
+      await expectWrappedInFull(groups.first().getByText(`${LONG_ACCOUNT} 0`, {exact: true}));
+      await expectWrappedInFull(dialog.getByText(`${LONG_ACCOUNT} 5`, {exact: true}));
       await expectNothingWiderThan(dialog);
       await dialog.getByRole('button', {name: 'Show 6 more'}).click();
       await expect(groups).toHaveCount(56);
@@ -2872,6 +3107,8 @@ test.describe('statement file import on Connections', () => {
       await expect(dialog.getByTestId('bank-import-doubtful-row')).toHaveCount(40);
       // On phones the file row's amount and its choice's amount still share one right edge.
       const block = dialog.getByTestId('bank-import-doubtful-row').first();
+      await expectWrappedInFull(block.getByText(`${LONG_ACCOUNT} payment 0`, {exact: true}));
+      await expectWrappedInFull(block.getByText(LONG_ACCOUNT, {exact: true}));
       const [fileAmount, candidateAmount] = await Promise.all([
         boxOf(block.locator('.numeric').first()),
         boxOf(block.locator('.numeric').last()),
@@ -2954,6 +3191,19 @@ async function expectInsideViewport(page: Page, locator: ReturnType<Page['locato
       return box.y >= 0 && box.y + box.height <= viewport.height;
     })
     .toBe(true);
+}
+
+/** `locator` wraps past two lines and shows all of its text, with no line cut off. */
+async function expectWrappedInFull(locator: Locator) {
+  const {lines, cut} = await locator.evaluate((element) => {
+    const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+    return {
+      lines: Math.round(element.getBoundingClientRect().height / lineHeight),
+      cut: element.scrollHeight > element.clientHeight + 0.5,
+    };
+  });
+  expect(lines).toBeGreaterThan(2);
+  expect(cut).toBe(false);
 }
 
 /** No element in `scope` reaches past the viewport's right edge. */

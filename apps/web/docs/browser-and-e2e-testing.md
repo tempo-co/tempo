@@ -31,7 +31,10 @@ A mocked spec is a UI integration test, not full-stack coverage. Report it separ
 
 ## Flaky tests
 
-CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project and the first attempt's error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error; the trace (`on-first-retry`) records the retry, not the failure. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
+CI retries a failed test twice, so a test that fails and then passes leaves the run green. The `Web E2E tests` job lists every such test in its run summary, with its project, the line the first attempt failed on and its first error; the shard logs end with the same names under `flaky`. A flake is fixed at its cause, in the test or in the product: find which step failed and why from the first attempt's error; the trace (`on-first-retry`) records the retry, not the failure. Raising a timeout, adding retries or sleeps, skipping the test or loosening a tolerance without a measured reason is not a fix.
+
+- A shard's blob report keeps the first attempt's page snapshot for one day: `gh run download <run> -n playwright-blob-<shard>`, then read the Markdown file in the unzipped report's resources folder.
+- CPU throttling rarely reproduces a race between a user action and React's next render. To hit the gap, send the action from a `MutationObserver` in the same task the element appears in, then once with `setTimeout(…, 0)`. A race goes red on the first and green on the second. `test/e2e/banking/file-import.spec.ts` ("lists the supported files") presses Escape this way.
 
 ## Contracts to assert exactly
 
@@ -75,7 +78,7 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 - `test/e2e/settings/dialog-focus.spec.ts` dismisses every settings drawer with Escape and Cancel; extend that loop for drawer regressions (the `shouldScaleBackground` rule is in `docs/frontend-conventions.md`).
 - On phone viewports, the fixed tab bar and stacked toasts cover controls near the bottom. Use `focus()` plus `keyboard.press('Enter')`, or scroll the control to the centre first. `locator.click()`, `fill()` and `toBeInViewport()` pass even when another layer would take a real tap; to prove a tap lands, tap the box centre with `page.touchscreen.tap` or `page.mouse.click`.
 - Phone screenshots are viewport shots, not `fullPage`: a full-page capture paints the fixed tab bar in the middle of the list.
-- Wait out open animations before screenshots or measuring (`Promise.all(element.getAnimations().map((a) => a.finished))`, as `test/e2e/mobile-selection-controls.spec.ts` does); a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
+- Wait out open animations before screenshots or measuring with `animationsSettled` from `test/utils/layout.ts`; a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
 - Theme: the storage key is `vite-ui-theme`. Set it with `page.addInitScript` and assert the rendered theme; a different key leaves both captures in the default theme.
 - The Transactions Filters control scrolls only inside its Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`): the desktop panel's options pane and the phone sheet's body. Filter components rendered with `variant='pane'` have no scroll box of their own. `openTransactionFilter` in `test/utils/transaction-filters.ts` opens one filter on either layout.
 
@@ -89,7 +92,7 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 - WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
 - Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch, native drag-and-drop and the Android on-screen keyboard are not covered; check them by hand on a device.
-- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `test/e2e/home/where-you-stand.spec.ts` does.
+- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `test/e2e/home/where-you-stand.spec.ts` does. `animationsSettled` polls because awaiting `animation.finished` fails in WebKit when an animation is cancelled.
 - WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
 - Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine.
 

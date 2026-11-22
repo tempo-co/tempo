@@ -44,6 +44,7 @@ export function parseAbnAmroTxt(bytes: Uint8Array): NormalizedStatement[] {
 			accountIban: iban,
 			accountOtherId: null,
 			bank: null,
+			servicerBic: null,
 			accountCurrency: currency,
 			sequenceNumber: null,
 			entriesSkipped: 0,

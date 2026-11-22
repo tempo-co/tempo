@@ -243,12 +243,12 @@ describe('DerivedDataRefreshService', () => {
 		expect(await labels(untouchedDebit, untouchedCredit)).toEqual([unlabelled, unlabelled]);
 		// The history is settled and holds two currencies, so the owner is asked to choose.
 		expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: 'SETUP_PENDING'});
-		// Exchange legs take no category; the untouched purchase waits for the hourly logo reconcile.
-		expect(await queuedForCategorization()).toEqual(sortedIds(writtenDebit, writtenCredit, writtenPurchase));
+		// Exchange legs and own transfers take no model category; the untouched purchase waits for the hourly logo reconcile.
+		expect(await queuedForCategorization()).toEqual(sortedIds(writtenPurchase));
 		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 	});
 
-	it('after a sync write that unpaired an exchange, labels the leg it did not write as an own transfer and queues both legs for categorization', async () => {
+	it('after a sync write that unpaired an exchange, labels the leg it did not write as an own transfer and queues the other leg for categorization', async () => {
 		const {owner, current, savings, usd} = await createOwner();
 		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
 		await service.refresh(owner.id, {kind: 'failed-sync-write'});
@@ -268,7 +268,7 @@ describe('DerivedDataRefreshService', () => {
 			unlabelled,
 			unlabelled,
 		]);
-		expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
+		expect(await queuedForCategorization()).toEqual(sortedIds(exchangeCredit));
 	});
 
 	it('after a file write, settles the reporting currency, labels the whole history and queues the written rows for categorization and the owner for logos', async () => {
@@ -276,10 +276,10 @@ describe('DerivedDataRefreshService', () => {
 		const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
 		const [writtenDebit, writtenCredit] = await createSavingsTransfer(current, savings, '25.00', '2026-01-12');
 		const [untouchedDebit, untouchedCredit] = await createSavingsTransfer(current, savings, '55.00', '2026-01-16');
-		await createPurchase(current, 'Example Shop', '2026-01-17');
+		const writtenPurchase = await createPurchase(current, 'Example Shop', '2026-01-17');
 		const other = await createOwner();
 		await createPurchase(other.current, 'Other Example Shop', '2026-01-17');
-		const writtenIds = [writtenDebit.id, writtenCredit.id];
+		const writtenIds = [writtenDebit.id, writtenCredit.id, writtenPurchase.id];
 
 		await service.refresh(owner.id, {kind: 'file-write', writtenIds});
 
@@ -295,18 +295,16 @@ describe('DerivedDataRefreshService', () => {
 		]);
 		// The import's history is complete once it commits and holds two currencies, so the owner is asked to choose.
 		expect(await accounts.findOneByOrFail({id: owner.id})).toMatchObject({baseCurrencyState: 'SETUP_PENDING'});
-		expect(await queuedForCategorization()).toEqual(sortedIds(writtenDebit, writtenCredit));
+		// The written own transfers take the transfer category without the model.
+		expect(await queuedForCategorization()).toEqual(sortedIds(writtenPurchase));
 		// Every merchant of the owner's history is queued for identification, and no other owner's.
 		expect(await ownerMerchants(owner)).toEqual([{key: 'example shop', queued: true}]);
 		expect(await ownerMerchants(other.owner)).toEqual([]);
 	});
 
-	it.each([
-		['an authorization, labels exchanges and', 'authorization', true],
-		['a removal, leaves exchanges as they were and labels', 'removal', false],
-	] as const)(
-		'after %s own transfers over the whole history and leaves a choice among several currencies for the sync',
-		async (_, kind, exchangesRecomputed) => {
+	it.each(['authorization', 'removal'] as const)(
+		'after %s, labels exchanges and own transfers over the whole history and leaves a choice among several currencies for the sync',
+		async (kind) => {
 			const {owner, current, savings, usd} = await createOwner();
 			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
 			const [transferDebit, transferCredit] = await createSavingsTransfer(
@@ -319,13 +317,11 @@ describe('DerivedDataRefreshService', () => {
 
 			await service.refresh(owner.id, {kind});
 
-			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it. Left
-			// unpaired, the exchange debit reads as an own transfer by the holder's name.
+			// The savings transfer is no exchange leg, so only a whole-history own-transfer recompute labels it. The
+			// exchange debit names the holder, so only the exchange recompute keeps it from reading as an own transfer.
 			expect(await labels(exchangeDebit, exchangeCredit, transferDebit, transferCredit)).toEqual([
-				exchangesRecomputed
-					? exchangeLeg
-					: {financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
-				exchangesRecomputed ? exchangeLeg : unlabelled,
+				exchangeLeg,
+				exchangeLeg,
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);
@@ -341,7 +337,7 @@ describe('DerivedDataRefreshService', () => {
 		['converted amounts', {amountsConverted: true, reportingCurrencyChanged: false}],
 		['a reporting currency change', {amountsConverted: false, reportingCurrencyChanged: true}],
 	] as const)(
-		'after %s, an exchange whose marker is gone is unpaired, its legs are queued for categorization and own transfers are labelled over the whole history',
+		'after %s, an exchange whose marker is gone is unpaired, its leg that is not an own transfer is queued for categorization and own transfers are labelled over the whole history',
 		async (_, changed) => {
 			const {owner, current, savings, usd} = await createOwner();
 			const [exchangeDebit, exchangeCredit] = await createExchange(current, usd);
@@ -363,7 +359,7 @@ describe('DerivedDataRefreshService', () => {
 				ownTransferLeg(transferCredit),
 				ownTransferLeg(transferDebit),
 			]);
-			expect(await queuedForCategorization()).toEqual(sortedIds(exchangeDebit, exchangeCredit));
+			expect(await queuedForCategorization()).toEqual(sortedIds(exchangeCredit));
 			expect(await ownerMerchants(owner)).toEqual([]);
 		},
 	);
@@ -423,8 +419,13 @@ describe('DerivedDataRefreshService', () => {
 		]);
 	});
 
-	it('daily, labels every owner’s own transfers over the whole history', async () => {
+	it('daily, per owner labels exchanges, then own transfers over the whole history, and queues the former exchange leg that is not an own transfer', async () => {
 		const [first, second] = [await createOwner(), await createOwner()];
+		const [exchangeDebit, exchangeCredit] = await createExchange(first.current, first.usd);
+		const [formerDebit, formerCredit] = await createExchange(second.current, second.usd);
+		await service.refresh(second.owner.id, {kind: 'failed-sync-write'});
+		// The provider corrected a description after the second owner's exchange was paired.
+		await fixtures.transactions.update(formerCredit.id, {description: 'Corrected provider description'});
 		const [firstDebit, firstCredit] = await createSavingsTransfer(
 			first.current,
 			first.savings,
@@ -438,13 +439,23 @@ describe('DerivedDataRefreshService', () => {
 			'2026-01-16',
 		);
 
-		await service.recomputeAllOwnTransfers();
+		await service.recomputeAllLabels();
 
-		expect(await labels(firstDebit, firstCredit, secondDebit, secondCredit)).toEqual([
-			ownTransferLeg(firstCredit),
-			ownTransferLeg(firstDebit),
-			ownTransferLeg(secondCredit),
-			ownTransferLeg(secondDebit),
+		// The exchange debit names the holder, so it is labelled an exchange before own transfers would claim it.
+		expect(await labels(exchangeDebit, exchangeCredit, firstDebit, firstCredit, secondDebit, secondCredit)).toEqual(
+			[
+				exchangeLeg,
+				exchangeLeg,
+				ownTransferLeg(firstCredit),
+				ownTransferLeg(firstDebit),
+				ownTransferLeg(secondCredit),
+				ownTransferLeg(secondDebit),
+			],
+		);
+		expect(await labels(formerDebit, formerCredit)).toEqual([
+			{financialEventType: null, ownTransferEvidence: 'NAME', ownTransferCounterpartId: null},
+			unlabelled,
 		]);
+		expect(await queuedForCategorization()).toEqual(sortedIds(formerCredit));
 	});
 });

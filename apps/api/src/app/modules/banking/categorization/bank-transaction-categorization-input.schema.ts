@@ -103,7 +103,7 @@ const hintFields = {
 	/**
 	 * Earlier categorized payments in either direction with the same counterparty (the same IBAN or merchant name)
 	 * within the months before this one, newest first per direction, leaving out those in `sameAmountPayments`.
-	 * Reveals subscriptions, refunds and money paid back.
+	 * Reveals recurring bills, refunds and money paid back.
 	 */
 	counterpartyHistory: z
 		.array(counterpartyHistoryEntrySchema)

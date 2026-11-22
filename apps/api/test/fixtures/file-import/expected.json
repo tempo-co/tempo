@@ -5,6 +5,7 @@
 			{
 				"accountIban": "NL91ABNA0417164300",
 				"accountOtherId": null,
+				"servicerBic": "ABNANL2A",
 				"accountCurrency": "EUR",
 				"sequenceNumber": "6101",
 				"entriesSkipped": 0,
@@ -73,6 +74,7 @@
 			{
 				"accountIban": "NL91ABNA0417164300",
 				"accountOtherId": null,
+				"servicerBic": "ABNANL2A",
 				"accountCurrency": "EUR",
 				"sequenceNumber": "6102",
 				"entriesSkipped": 0,
@@ -158,6 +160,7 @@
 			{
 				"accountIban": "NL91ABNA0417164300",
 				"accountOtherId": null,
+				"servicerBic": "ABNANL2A",
 				"accountCurrency": "EUR",
 				"sequenceNumber": "6103",
 				"entriesSkipped": 0,

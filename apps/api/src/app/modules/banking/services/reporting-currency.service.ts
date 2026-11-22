@@ -7,6 +7,7 @@ import {Account, BaseCurrencyState} from '@modules/account/account.entity';
 
 import {REPORTING_CURRENCY_UNSUPPORTED} from '../api/constants/banking-messages.constants';
 import {addDays, safeErrorName} from '../banking.utils';
+import {convertAgainForChange} from '../converted-amounts';
 import {lockReportingCurrencyForChange} from '../reporting-currency';
 import {BankTransactionAmountConversionQueueService} from './bank-transaction-amount-conversion.queue.service';
 import {SQL_INTERNAL} from './bank-transaction-filters';
@@ -192,8 +193,7 @@ async function findConnectedCurrencies(manager: EntityManager, ownerId: string):
 }
 
 /**
- * Sets a new reporting currency and clears every converted amount of the owner, copying the ones already in it, so no
- * amount is ever read as the new currency while it is in the old one. When amounts are left to convert, bumps the
+ * Sets a new reporting currency and has every converted amount of the owner converted again (`convertAgainForChange`). When amounts are left to convert, bumps the
  * revision the conversion job has to finish before totals are ready again and returns it; otherwise the totals are
  * complete at once and it returns null. Runs under {@link lockReportingCurrencyForChange}.
  */
@@ -208,27 +208,7 @@ async function changeBaseCurrency(
 		WHERE "id" = $1`,
 		[ownerId, currency, state],
 	);
-	await manager.query(
-		`UPDATE "bank_transactions" t
-		SET "amountInBaseCurrency" = CASE WHEN t."currency" = $2 THEN ROUND(t."amount", 2) END,
-			"baseAmountMethod" = CASE WHEN t."currency" = $2 THEN 'SAME' END,
-			"baseAmountRateDate" = NULL,
-			"updatedAt" = CURRENT_TIMESTAMP
-		FROM "bank_accounts" bank_account
-		INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-		WHERE t."bankAccountId" = bank_account."id" AND connection."accountId" = $1
-			AND (t."baseAmountMethod" IS NOT NULL OR t."currency" = $2)`,
-		[ownerId, currency],
-	);
-	const [{toConvert}] = await manager.query<Array<{toConvert: boolean}>>(
-		`SELECT EXISTS (
-			SELECT 1 FROM "bank_transactions" t
-			INNER JOIN "bank_accounts" bank_account ON bank_account."id" = t."bankAccountId"
-			INNER JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-			WHERE connection."accountId" = $1 AND t."baseAmountMethod" IS NULL
-		) AS "toConvert"`,
-		[ownerId],
-	);
+	const toConvert = await convertAgainForChange(manager, ownerId, currency);
 	if (!toConvert) {
 		// Also finishes an earlier change still waiting for its conversion pass: nothing is left for it to convert.
 		await manager.query(`UPDATE "accounts" SET "baseAmountsRevision" = "baseCurrencyRevision" WHERE "id" = $1`, [

@@ -5,6 +5,7 @@ import {
 
 import {
   BANK_TRANSACTION_FILTER_KEYS,
+  BANK_TRANSACTION_UNCATEGORIZED_LABEL,
   type BankTransactionFilterParams,
 } from '../types/bank-transaction';
 
@@ -18,7 +19,7 @@ export const CASH_FLOW_LABELS: Record<BankTransactionCashFlowFilterValue, string
 };
 
 export const CATEGORY_STATUS_LABELS: Record<BankTransactionCategoryStatusFilterValue, string> = {
-  FAILED: 'Not categorized',
+  FAILED: BANK_TRANSACTION_UNCATEGORIZED_LABEL,
   CATEGORIZING: 'Categorizing',
 };
 

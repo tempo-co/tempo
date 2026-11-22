@@ -53,7 +53,7 @@ import {waitFor} from '../../utils/wait-utils';
 enableAiCategorizationE2e();
 enableAiCategorizationWebSearchE2e();
 
-const AI_CATEGORY = 'FOOD_AND_DRINK' as const;
+const AI_CATEGORY = 'EATING_OUT' as const;
 const AI_CONFIDENCE = 0.875;
 const WEB_CATEGORY = 'SHOPPING' as const;
 const WEB_CONFIDENCE = 0.812;
@@ -195,6 +195,44 @@ describe('Bank transaction categorization integration', () => {
 			remittanceInformation: 'Fiction and non-fiction',
 		});
 		expect(categorizeSpy.mock.calls[0][1]).toEqual(BANK_TRANSACTION_CATEGORY_DEFINITIONS);
+		// The model chooses from the 23 categories, each described with what it includes and what belongs elsewhere.
+		expect(categorizeSpy.mock.calls[0][1].map(({value, label}) => `${value}: ${label}`)).toEqual([
+			'HOUSING_AND_UTILITIES: Housing and utilities',
+			'HOME_IMPROVEMENT: Home improvement',
+			'GROCERIES: Groceries',
+			'EATING_OUT: Eating out',
+			'TRANSPORTATION: Transportation',
+			'SHOPPING: Shopping',
+			'HEALTH: Health and fitness',
+			'PERSONAL_CARE: Personal care',
+			'ENTERTAINMENT: Entertainment',
+			'TRAVEL: Travel',
+			'SERVICES: Services',
+			'EDUCATION: Education',
+			'INSURANCE: Insurance',
+			'LOANS_AND_DEBT: Loans and debt',
+			'FEES: Fees',
+			'TAXES_AND_GOVERNMENT: Taxes and government',
+			'GIFTS_AND_DONATIONS: Gifts and donations',
+			'CASH_WITHDRAWAL: Cash withdrawal',
+			'INCOME: Income',
+			'REFUND: Refund',
+			'TRANSFER_IN: Transfer in',
+			'TRANSFER_OUT: Transfer out',
+			'NEEDS_REVIEW: Needs review',
+		]);
+		expect(categorizeSpy.mock.calls[0][1]).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					value: 'GROCERIES',
+					description: expect.stringContaining('food delivery orders belong in Eating out'),
+				}),
+				expect.objectContaining({
+					value: 'LOANS_AND_DEBT',
+					description: expect.stringContaining('a mortgage belongs in Housing and utilities'),
+				}),
+			]),
+		);
 		// The call may search for the merchant; this model skipped it, so the row stores no search trace.
 		expect(categorizeSpy.mock.calls[0][2]).toEqual({searchQuery: 'Lantern Books'});
 
@@ -343,21 +381,24 @@ describe('Bank transaction categorization integration', () => {
 			direction,
 			category,
 		});
+		// The owner's pick of a category no longer in the list is in no hint: not as a manual choice, a same-amount
+		// payment or counterparty history.
+		expect(gymPayment?.previousManualCategories).toBeUndefined();
 		expect(gymPayment?.sameAmountPayments).toEqual([
-			{date: '2026-08-01', category: 'SUBSCRIPTIONS', source: 'AI', text: 'Example Gym'},
-			{date: '2026-09-01', category: 'SUBSCRIPTIONS', source: 'AI', text: 'Example Gym'},
+			{date: '2026-08-01', category: 'HEALTH', source: 'AI', text: 'Example Gym'},
+			{date: '2026-09-01', category: 'HEALTH', source: 'AI', text: 'Example Gym'},
 		]);
 		// Newest first: the six newest payments to the gym that sameAmountPayments does not already show, one matched
 		// by its IBAN alone, and the four newest payments back from it. Never a later or uncategorized
 		// row, nor another owner's.
 		expect(gymPayment?.counterpartyHistory).toEqual([
 			entry('2026-09-15', '12.00', 'INCOME', 'REFUND'),
-			entry('2026-07-01', '-31.00', 'EXPENSE', 'SUBSCRIPTIONS'),
-			entry('2026-06-01', '-32.00', 'EXPENSE', 'SUBSCRIPTIONS'),
-			entry('2026-05-01', '-33.00', 'EXPENSE', 'SUBSCRIPTIONS'),
-			entry('2026-04-01', '-34.00', 'EXPENSE', 'SUBSCRIPTIONS'),
-			entry('2026-03-01', '-35.00', 'EXPENSE', 'SUBSCRIPTIONS'),
-			entry('2026-02-01', '-36.00', 'EXPENSE', 'SUBSCRIPTIONS'),
+			entry('2026-07-01', '-31.00', 'EXPENSE', 'HEALTH'),
+			entry('2026-06-01', '-32.00', 'EXPENSE', 'HEALTH'),
+			entry('2026-05-01', '-33.00', 'EXPENSE', 'HEALTH'),
+			entry('2026-04-01', '-34.00', 'EXPENSE', 'HEALTH'),
+			entry('2026-03-01', '-35.00', 'EXPENSE', 'HEALTH'),
+			entry('2026-02-01', '-36.00', 'EXPENSE', 'HEALTH'),
 			entry('2025-12-01', '13.00', 'INCOME', 'REFUND'),
 			entry('2025-06-01', '14.00', 'INCOME', 'REFUND'),
 			entry('2025-01-01', '15.00', 'INCOME', 'REFUND'),
@@ -370,7 +411,7 @@ describe('Bank transaction categorization integration', () => {
 		// An IBAN the owner's rows show under two merchants is a processor's: each shop's history is its own rows, never
 		// the other shop's on the same account.
 		expect(inputs.get(CATEGORIZATION_E2E_SHARED_IBAN_TRANSACTION_ID)?.counterpartyHistory).toEqual([
-			entry('2026-09-05', '-6.00', 'EXPENSE', 'FOOD_AND_DRINK'),
+			entry('2026-09-05', '-6.00', 'EXPENSE', 'GROCERIES'),
 		]);
 		expect(inputs.get(CATEGORIZATION_E2E_SHARED_IBAN_OTHER_MERCHANT_TRANSACTION_ID)?.counterpartyHistory).toEqual([
 			entry('2026-09-10', '-14.00', 'EXPENSE', 'ENTERTAINMENT'),

@@ -33,6 +33,7 @@ import {
 import {ClaudeBankTransactionCategorizationProvider} from '../categorization/providers/claude-bank-transaction-categorization.provider';
 import merchantContract from '../categorization/providers/claude-merchant-contract.json';
 import {LogoDevClient} from './logo-dev.client';
+import {toMerchantDomain} from './merchant-domain';
 import {MERCHANT_LOGO_STATUSES, MerchantLogo} from './merchant-logo.entity';
 import {
 	Homepage,
@@ -124,14 +125,14 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 
 	/**
 	 * Called after a sync persisted rows: adds the merchants of those rows (all of the owner's without ids) and queues
-	 * identification right away, without failing the sync; the hourly reconcile picks up anything missed, such as a
+	 * the owner's identifications right away, without failing the sync; the hourly reconcile picks up anything missed, such as a
 	 * row that stopped being an own transfer.
 	 */
 	async enqueueForOwnerSafely(accountId: string, transactionIds?: readonly string[]): Promise<void> {
 		if (!this.canAcquire()) return;
 		try {
 			await this.addMerchants(accountId, transactionIds);
-			await this.enqueuePendingIdentifications();
+			await this.enqueuePendingIdentifications(accountId);
 		} catch (error) {
 			this.logger.warn(`Merchant logo enqueue failed: ${safeErrorName(error)}`);
 		}
@@ -156,7 +157,14 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 	async identifyMerchants(merchantIds: readonly string[]): Promise<void> {
 		if (!this.canAcquire()) return;
 		const ids = In([...new Set(merchantIds)].slice(0, BATCH_SIZE));
-		const merchants = await this.merchants.find({where: {id: ids, status: PENDING}});
+		// A job queued before batches were split per owner can still name several owners: only the first one's
+		// merchants are sent, and the rest stay pending for their own batch.
+		// A merchant waiting out a retry delay is left to the job that runs after it.
+		const found = await this.merchants.find({
+			where: {id: ids, status: PENDING, retryAfter: Or(IsNull(), LessThanOrEqual(new Date()))},
+			order: {id: 'ASC'},
+		});
+		const merchants = found.filter(({accountId}) => accountId === found[0]?.accountId);
 		const byId = new Map(merchants.map((merchant) => [merchant.id, merchant]));
 		const inputs: MerchantIdentificationInput[] = [];
 		for (const merchant of merchants) {
@@ -178,7 +186,8 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 			// A payment service the statement names on its own shows its own logo.
 			const named = result.kind === 'BUSINESS' || result.kind === 'PAYMENT_SERVICE';
 			const status = named && result.brand ? IDENTIFIED : NONE;
-			const logo = status === IDENTIFIED && result.domain ? await this.findOrCreateLogo(result.domain) : null;
+			const domain = toMerchantDomain(result.domain);
+			const logo = status === IDENTIFIED && domain ? await this.findOrCreateLogo(domain) : null;
 			// A payment service moved someone else's money: it keeps its own brand even when a business of that brand
 			// recorded another company.
 			const company =
@@ -197,8 +206,8 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 					status,
 					brand: result.brand,
 					company,
-					domain: result.domain,
-					domainConfident: result.domainConfident,
+					domain,
+					domainConfident: !!domain && result.domainConfident,
 					logoId: logo?.id ?? null,
 					retryAfter: null,
 				},
@@ -219,6 +228,11 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		if (!this.canAcquire()) return;
 		const logo = await this.logos.findOneBy({id: logoId});
 		if (!logo || (logo.retryAfter && logo.retryAfter > new Date())) return;
+		// A domain stored before identification checked it is never looked up, and is not picked up again.
+		if (!toMerchantDomain(logo.domain)) {
+			await this.logos.update(logo.id, {status: MISSING, attempts: 0, retryAfter: null});
+			return;
+		}
 		const origin = `https://${logo.domain}/`;
 		const homepage = await this.fetcher
 			.fetch(origin, {accept: 'text/html,application/xhtml+xml', maxBytes: HOMEPAGE_BYTES, truncate: true})
@@ -371,13 +385,25 @@ export class MerchantLogoService implements OnApplicationBootstrap {
 		);
 	}
 
-	private async enqueuePendingIdentifications(): Promise<void> {
+	/** Queues the pending identifications of one owner, or of every owner. */
+	private async enqueuePendingIdentifications(accountId?: string): Promise<void> {
 		const pending = await this.merchants.find({
-			select: {id: true},
-			where: {status: PENDING, retryAfter: Or(IsNull(), LessThanOrEqual(new Date()))},
+			select: {id: true, accountId: true},
+			where: {
+				...(accountId && {accountId}),
+				status: PENDING,
+				retryAfter: Or(IsNull(), LessThanOrEqual(new Date())),
+			},
 			order: {id: 'ASC'},
 		});
-		for (const batch of chunkArray(pending, BATCH_SIZE)) {
+		// Each batch holds one owner's merchants, so the model never sees another account's names.
+		const byOwner = new Map<string, Merchant[]>();
+		for (const merchant of pending) {
+			const owned = byOwner.get(merchant.accountId) ?? [];
+			owned.push(merchant);
+			byOwner.set(merchant.accountId, owned);
+		}
+		for (const batch of [...byOwner.values()].flatMap((owned) => chunkArray(owned, BATCH_SIZE))) {
 			const merchantIds = batch.map(({id}) => id);
 			await this.queue.add(
 				IDENTIFY_MERCHANTS_JOB,

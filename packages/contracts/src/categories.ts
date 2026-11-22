@@ -1,16 +1,18 @@
 export const BANK_TRANSACTION_CATEGORIES = [
 	'HOUSING_AND_UTILITIES',
-	'FOOD_AND_DRINK',
+	'HOME_IMPROVEMENT',
+	'GROCERIES',
+	'EATING_OUT',
 	'TRANSPORTATION',
 	'SHOPPING',
-	'SUBSCRIPTIONS',
 	'HEALTH',
-	'TRAVEL',
-	'ENTERTAINMENT',
 	'PERSONAL_CARE',
+	'ENTERTAINMENT',
+	'TRAVEL',
 	'SERVICES',
 	'EDUCATION',
 	'INSURANCE',
+	'LOANS_AND_DEBT',
 	'FEES',
 	'TAXES_AND_GOVERNMENT',
 	'GIFTS_AND_DONATIONS',
@@ -20,7 +22,6 @@ export const BANK_TRANSACTION_CATEGORIES = [
 	'TRANSFER_IN',
 	'TRANSFER_OUT',
 	'NEEDS_REVIEW',
-	'OTHER',
 ] as const;
 
 export type BankTransactionCategory = (typeof BANK_TRANSACTION_CATEGORIES)[number];
@@ -48,73 +49,85 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'HOUSING_AND_UTILITIES',
 		label: 'Housing and utilities',
 		description:
-			'Household rent, mortgage, energy, water, internet, and phone bills, including recurring bills; repairs, furnishings, one-off household purchases, and municipal taxes belong elsewhere.',
+			'Rent, mortgage payments, energy, water, internet, and mobile and home phone plans; furniture, repairs, and maintenance belong in Home improvement, home insurance in Insurance, and municipal taxes in Taxes and government.',
 	},
 	{
-		value: 'FOOD_AND_DRINK',
-		label: 'Food and drink',
+		value: 'HOME_IMPROVEMENT',
+		label: 'Home improvement',
 		description:
-			'Food and beverages for consumption, including groceries, typical convenience-store purchases, restaurants, cafes, takeaways, workplace coffee and tea, drinks, snacks, vending purchases, and dietary supplements such as protein or vitamins; equipment, installation, servicing, fuel, and other non-food purchases are excluded.',
+			'Furniture, hardware, DIY and building supplies, garden supplies, and repairs and maintenance of the home, including tradespeople such as plumbers, electricians, and locksmiths; rent, mortgage, and utility bills belong in Housing and utilities, small household items from a general retailer in Shopping, and household cleaning in Services.',
+	},
+	{
+		value: 'GROCERIES',
+		label: 'Groceries',
+		description:
+			'Food and beverages bought to prepare or consume at home: supermarkets, grocery and food shops, bakeries, butchers, markets, typical convenience-store purchases, and dietary supplements such as protein or vitamins; restaurants, cafes, takeaways, and food delivery orders belong in Eating out, and fuel, household equipment, and other non-food purchases belong elsewhere.',
+	},
+	{
+		value: 'EATING_OUT',
+		label: 'Eating out',
+		description:
+			'Food and beverages bought ready to consume: restaurants, cafes, bars, takeaways, fast food, food delivery orders, workplace coffee and tea, and vending purchases; food bought to prepare at home and food from supermarkets and convenience stores belong in Groceries, and a separate parcel or courier delivery fee in Services.',
 	},
 	{
 		value: 'TRANSPORTATION',
 		label: 'Transportation',
 		description:
-			'Require evidence of an actual transportation purchase, such as fuel, public transport, parking, taxis, cycling, or a vehicle purchase; incidental logistics, delivery, servicing, or transport activities of a merchant do not qualify.',
+			"Getting around: fuel and vehicle charging, public transport fares and transit passes, parking, tolls, taxis, cycling and scooter hire, vehicle and bike leases, vehicle purchases, and vehicle and bike servicing, repairs, inspections, and car washes. A merchant's own deliveries or logistics are not transportation. Flights, car rental, and trains or coaches booked for a trip away belong in Travel, vehicle insurance in Insurance, vehicle tax in Taxes and government, and car-loan repayments in Loans and debt.",
 	},
 	{
 		value: 'SHOPPING',
 		label: 'Shopping',
 		description:
-			'Goods bought from general retailers, including clothing, electronics, household items, drugstore items, online orders, and items bought as a gift; repairs, cleaning, postage, food, bills, and other services belong elsewhere.',
-	},
-	{
-		value: 'SUBSCRIPTIONS',
-		label: 'Subscriptions',
-		description:
-			'Recurring access to software, media, memberships, or other services; ordinary household bills and one-off purchases belong elsewhere.',
+			'Goods bought from general retailers, including clothing, electronics, household items, books, musical instruments, sports and hobby equipment, pet supplies, tobacco and vaping products, online orders, items bought as a gift, and shopping memberships such as delivery or marketplace subscriptions; toiletries and cosmetics belong in Personal care, medicines in Health and fitness, software and apps in Services, furniture and hardware in Home improvement, food and drink in Groceries or Eating out, and repairs, cleaning, postage, bills, and other services elsewhere.',
 	},
 	{
 		value: 'HEALTH',
-		label: 'Health',
+		label: 'Health and fitness',
 		description:
-			'Medical, dental, vision, pharmacy, therapy, and other healthcare services or treatment; classify ordinary personal care and general retail purchases elsewhere.',
-	},
-	{
-		value: 'TRAVEL',
-		label: 'Travel',
-		description:
-			'Flights, accommodation, travel agencies, and holiday or trip expenses; everyday local transport belongs in Transportation.',
-	},
-	{
-		value: 'ENTERTAINMENT',
-		label: 'Entertainment',
-		description:
-			'Leisure and recreation such as cinema, concerts, games, hobbies, books, and sporting events; courses and essential services are not entertainment.',
+			'Medical, dental, vision, pharmacy and medicines, therapy, and other healthcare services or treatment, vet bills, and fitness memberships and sessions: gyms, sports clubs, and fitness classes; toiletries, cosmetics, and ordinary personal care belong in Personal care, sports equipment and general retail purchases in Shopping, tickets to watch sporting events in Entertainment, and insurance premiums in Insurance.',
 	},
 	{
 		value: 'PERSONAL_CARE',
 		label: 'Personal care',
 		description:
-			'Hair, beauty, grooming, cosmetics, toiletries, and similar personal-care services or products, including drugstore purchases of them; medical treatment belongs in Health.',
+			'Hair, beauty, grooming, cosmetics, toiletries, laundry and dry cleaning, and similar personal-care services or products, including those bought at a drugstore; medicines and medical treatment belong in Health and fitness.',
+	},
+	{
+		value: 'ENTERTAINMENT',
+		label: 'Entertainment',
+		description:
+			'Leisure experiences and media: cinema, concerts, events, sporting events, attractions, games and in-game purchases, gambling and lotteries, and streaming and media services for video, music, audiobooks, news, or games; books, instruments, and other hobby or sports equipment belong in Shopping, gyms and sports clubs in Health and fitness, courses in Education, and software and online tools in Services.',
+	},
+	{
+		value: 'TRAVEL',
+		label: 'Travel',
+		description:
+			'Getting to and staying on a trip away: flights, accommodation, travel agencies, package holidays, car rental, and trains or coaches booked for the trip; everyday local transport belongs in Transportation, and meals, shopping, and other purchases while away keep their own category.',
 	},
 	{
 		value: 'SERVICES',
 		label: 'Services',
 		description:
-			'Paid practical services and small service charges, such as repairs of shoes, phones, bikes, or clothing, alterations, cleaning, laundry and dry cleaning, postage, parcel and delivery fees, and locksmiths; food delivery orders, bank fees, subscriptions, personal grooming, and utilities belong to their own categories.',
+			'Paid practical, professional, and digital services: repairs of shoes, phones, or clothing, alterations, home cleaning, postage, parcel and delivery fees, childcare, legal, accounting, and advice services, and software, apps, cloud storage, and online tools; streaming and media services belong in Entertainment, vehicle and bike servicing in Transportation, home repairs and tradespeople in Home improvement, food delivery orders in Eating out, bank fees in Fees, personal grooming, laundry, and dry cleaning in Personal care, and utilities in Housing and utilities.',
 	},
 	{
 		value: 'EDUCATION',
 		label: 'Education',
 		description:
-			'Schools, tuition, courses, training, and educational materials; general books, childcare, and recreational activities need evidence of an educational purpose.',
+			'Schools, tuition, courses, training, and educational materials such as study books; general books and recreational activities need evidence of an educational purpose, and childcare belongs in Services.',
 	},
 	{
 		value: 'INSURANCE',
 		label: 'Insurance',
 		description:
-			'Premiums or payments for an insurance policy; a claim payout, repair, or ordinary service charge is not insurance.',
+			'Premiums or payments for an insurance policy, such as health, home, vehicle, travel, or liability insurance; a claim payout, repair, or ordinary service charge is not insurance.',
+	},
+	{
+		value: 'LOANS_AND_DEBT',
+		label: 'Loans and debt',
+		description:
+			'Repayments of debt: personal, car, and student loans, buy-now-pay-later instalments, and credit-card bills paid to a card whose account is not connected; a mortgage belongs in Housing and utilities, a payment to a person is a loan repayment only when its text or earlier picks the owner made for that person say so, and money moved to savings or investments is Transfer out.',
 	},
 	{
 		value: 'FEES',
@@ -144,7 +157,7 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'INCOME',
 		label: 'Income',
 		description:
-			'Money received as salary, wages, interest, benefits, or other earned income, and money received from a government, such as income tax refunds, allowances, and benefits, unless it pays back a payment the owner made from their account (Refund); refunds of purchases, reimbursements, and transfers have separate categories.',
+			'Money received as salary, wages, interest, or other earned income, money from selling goods or services, and money received from a government, such as income tax refunds, allowances, and benefits, unless it pays back a payment the owner made from their account (Refund); refunds of purchases, reimbursements, and transfers have separate categories.',
 	},
 	{
 		value: 'REFUND',
@@ -162,17 +175,19 @@ export const BANK_TRANSACTION_CATEGORY_DEFINITIONS: readonly BankTransactionCate
 		value: 'TRANSFER_OUT',
 		label: 'Transfer out',
 		description:
-			'Money moved out to another account or person that is not a payment for goods, services, or fees, and not a gift.',
+			'Money moved out to another account or person that is not a payment for goods, services, fees, or debt, and not a gift, including money moved to savings or investments; loan, buy-now-pay-later, and credit-card repayments belong in Loans and debt.',
 	},
 	{
 		value: 'NEEDS_REVIEW',
 		label: 'Needs review',
 		description:
-			'Use when the transaction is real but the available evidence is insufficient or conflicting and its purpose cannot be determined reliably.',
-	},
-	{
-		value: 'OTHER',
-		label: 'Other',
-		description: 'Use when evidence supports that the transaction falls outside the other categories.',
+			'Use when the transaction is real but the available evidence is insufficient or conflicting and its purpose cannot be determined reliably, or when the evidence names a kind of spending that none of the other categories cover.',
 	},
 ];
+
+/** The filter-only `UNCATEGORIZED` value, as category lists the API serves describe it. */
+export const BANK_TRANSACTION_UNCATEGORIZED_DEFINITION = {
+	value: BANK_TRANSACTION_UNCATEGORIZED,
+	label: 'Not categorized',
+	description: 'Filter transactions without a category.',
+} as const;

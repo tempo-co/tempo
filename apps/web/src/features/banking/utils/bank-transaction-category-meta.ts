@@ -4,12 +4,12 @@ import {
   ArrowUpRight,
   Banknote,
   BusFront,
-  CalendarSync,
   CircleAlert,
-  CircleHelp,
   Clapperboard,
   Gift,
   GraduationCap,
+  Hammer,
+  HandCoins,
   HeartPulse,
   House,
   Landmark,
@@ -18,6 +18,7 @@ import {
   Scissors,
   ShieldCheck,
   ShoppingBag,
+  ShoppingBasket,
   TrendingUp,
   Undo2,
   Utensils,
@@ -54,10 +55,20 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     House,
     'border-category-housing/30 bg-category-housing/10 text-category-housing',
   ),
-  FOOD_AND_DRINK: createCategoryMeta(
-    'FOOD_AND_DRINK',
+  HOME_IMPROVEMENT: createCategoryMeta(
+    'HOME_IMPROVEMENT',
+    Hammer,
+    'border-category-home-improvement/30 bg-category-home-improvement/10 text-category-home-improvement',
+  ),
+  GROCERIES: createCategoryMeta(
+    'GROCERIES',
+    ShoppingBasket,
+    'border-category-groceries/30 bg-category-groceries/10 text-category-groceries',
+  ),
+  EATING_OUT: createCategoryMeta(
+    'EATING_OUT',
     Utensils,
-    'border-category-food-and-drink/30 bg-category-food-and-drink/10 text-category-food-and-drink',
+    'border-category-eating-out/30 bg-category-eating-out/10 text-category-eating-out',
   ),
   TRANSPORTATION: createCategoryMeta(
     'TRANSPORTATION',
@@ -69,30 +80,25 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     ShoppingBag,
     'border-category-shopping/30 bg-category-shopping/10 text-category-shopping',
   ),
-  SUBSCRIPTIONS: createCategoryMeta(
-    'SUBSCRIPTIONS',
-    CalendarSync,
-    'border-category-subscriptions/30 bg-category-subscriptions/10 text-category-subscriptions',
-  ),
   HEALTH: createCategoryMeta(
     'HEALTH',
     HeartPulse,
     'border-category-health/30 bg-category-health/10 text-category-health',
   ),
-  TRAVEL: createCategoryMeta(
-    'TRAVEL',
-    Plane,
-    'border-category-travel/30 bg-category-travel/10 text-category-travel',
+  PERSONAL_CARE: createCategoryMeta(
+    'PERSONAL_CARE',
+    Scissors,
+    'border-category-personal-care/30 bg-category-personal-care/10 text-category-personal-care',
   ),
   ENTERTAINMENT: createCategoryMeta(
     'ENTERTAINMENT',
     Clapperboard,
     'border-category-entertainment/30 bg-category-entertainment/10 text-category-entertainment',
   ),
-  PERSONAL_CARE: createCategoryMeta(
-    'PERSONAL_CARE',
-    Scissors,
-    'border-category-personal-care/30 bg-category-personal-care/10 text-category-personal-care',
+  TRAVEL: createCategoryMeta(
+    'TRAVEL',
+    Plane,
+    'border-category-travel/30 bg-category-travel/10 text-category-travel',
   ),
   SERVICES: createCategoryMeta(
     'SERVICES',
@@ -108,6 +114,11 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'INSURANCE',
     ShieldCheck,
     'border-category-insurance/30 bg-category-insurance/10 text-category-insurance',
+  ),
+  LOANS_AND_DEBT: createCategoryMeta(
+    'LOANS_AND_DEBT',
+    HandCoins,
+    'border-category-loans-and-debt/30 bg-category-loans-and-debt/10 text-category-loans-and-debt',
   ),
   FEES: createCategoryMeta(
     'FEES',
@@ -153,10 +164,5 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'NEEDS_REVIEW',
     CircleAlert,
     'border-muted-foreground/30 bg-muted text-muted-foreground',
-  ),
-  OTHER: createCategoryMeta(
-    'OTHER',
-    CircleHelp,
-    'border-category-other/30 bg-category-other/10 text-category-other',
   ),
 };

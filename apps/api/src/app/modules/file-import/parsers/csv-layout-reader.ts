@@ -371,6 +371,7 @@ function readRows(
 		accountOtherId: null,
 		// A file that names no account is told apart by its bank, as the owner named it.
 		bank: group[0].iban ? null : layout.bank,
+		servicerBic: null,
 		accountCurrency: group[0].currency,
 		sequenceNumber: null,
 		entriesSkipped: 0,

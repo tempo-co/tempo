@@ -1,8 +1,11 @@
+import type {BankTransaction} from '@tempo/contracts';
+
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {
   AFTER_SEEDED_TRANSACTION_YEAR_NOW,
   SEEDED_TRANSACTION_YEAR_NOW,
 } from '../../constants/seed.constants';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {expect, test} from '../../fixtures';
 import {
   fulfillJson,
@@ -13,6 +16,7 @@ import {
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 import {openTransactionFilter} from '../../utils/transaction-filters';
 
+const CLASSIFY_TRANSACTION_ID = '00000000-0000-4000-8000-000000000012';
 const DETAIL_TRANSACTION_ID = '00000000-0000-4000-8000-000000000011';
 
 test.describe('bank transactions', () => {
@@ -209,80 +213,6 @@ test.describe('bank transactions', () => {
     await sheet.getByRole('option', {name: 'Currency exchange', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
     await expect(page.getByTestId('ledger-row-meta')).toHaveText('Currency exchange');
-  });
-
-  test('classifies a transaction from the detail inspector', async ({page}) => {
-    // Only this test changes a category, and only on this seeded transaction, so no other test
-    // depends on it. Picking a category the row does not have yet keeps the test retry-safe.
-    const transactionName = 'Extra transaction 1';
-    await page.goto('/bank-transactions');
-    const transactionRow = page
-      .getByTestId(/^bank-transaction-row-/)
-      .filter({hasText: transactionName});
-    const rowCategory = transactionRow.getByTestId('ledger-row-category');
-    await expect(rowCategory).toBeVisible();
-    const currentCategory = await rowCategory.textContent();
-    const target = currentCategory?.includes('Services')
-      ? {
-          name: 'Gifts and donations',
-          className: /text-category-gifts-and-donations/,
-          icon: 'svg.lucide-gift',
-        }
-      : {name: 'Services', className: /text-category-services/, icon: 'svg.lucide-wrench'};
-
-    await transactionRow
-      .getByRole('button', {name: `View ${transactionName} transaction details`})
-      .click();
-
-    const inspector = page.getByTestId('bank-transaction-inspector');
-    const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
-    await expect(categorySelect).toBeVisible();
-    await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(22);
-    await expect(page.getByRole('option')).toHaveText([
-      'Housing and utilities',
-      'Food and drink',
-      'Transportation',
-      'Shopping',
-      'Subscriptions',
-      'Health',
-      'Travel',
-      'Entertainment',
-      'Personal care',
-      'Services',
-      'Education',
-      'Insurance',
-      'Fees',
-      'Taxes and government',
-      'Gifts and donations',
-      'Cash withdrawal',
-      'Income',
-      'Refund',
-      'Transfer in',
-      'Transfer out',
-      'Needs review',
-      'Other',
-    ]);
-    // Every option has a category icon; the selected one also shows a check mark.
-    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(22);
-    const targetOption = page.getByRole('option', {name: target.name, exact: true});
-    await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
-    await targetOption.click();
-
-    await expect(categorySelect).toHaveText(target.name);
-    await expect(categorySelect.locator(target.icon).locator('..')).toHaveClass(target.className);
-    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText('Manual');
-
-    await inspector.getByRole('button', {name: 'Close transaction details'}).click();
-    await expect(inspector).toBeHidden();
-    await expect(rowCategory).toHaveText(target.name);
-    await expect(rowCategory.locator('svg').locator('..')).toHaveClass(target.className);
-    await transactionRow
-      .getByRole('button', {name: `View ${transactionName} transaction details`})
-      .click();
-    await expect(inspector).toBeVisible();
-    await expect(categorySelect).toHaveText(target.name);
-    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText('Manual');
   });
 
   test('does not show the bank account filter when there is one account', async ({page}) => {
@@ -662,9 +592,7 @@ test.describe('bank transactions', () => {
 
     const lastYear = new Date().getFullYear() - 1;
     await expect(page).toHaveURL(/[?&]date=/);
-    await expect(trigger).toHaveAccessibleName(
-      `Date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`,
-    );
+    await expect(trigger).toHaveAccessibleName(`Date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`);
     await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -706,7 +634,7 @@ test.describe('bank transactions', () => {
       const categorizedTransactions = [
         ...payload.transactions.map((transaction, index) => ({
           ...transaction,
-          category: index === 0 ? 'FOOD_AND_DRINK' : index === 1 ? 'SHOPPING' : 'NEEDS_REVIEW',
+          category: index === 0 ? 'EATING_OUT' : index === 1 ? 'SHOPPING' : 'NEEDS_REVIEW',
           categoryStatus: 'COMPLETED',
           categorySource: index === 0 ? 'MANUAL' : index === 1 ? 'HISTORY' : 'AI',
         })),
@@ -747,12 +675,12 @@ test.describe('bank transactions', () => {
     await page.goto('/bank-transactions');
 
     const filters = await openTransactionFilter(page, 'Categories');
-    await expect(filters.getByRole('option')).toHaveCount(23);
-    await page.getByRole('option', {name: 'Food and drink', exact: true}).click();
+    await expect(filters.getByRole('option')).toHaveCount(24);
+    await page.getByRole('option', {name: 'Eating out', exact: true}).click();
 
     const singleCategoryParam = new URL(page.url()).searchParams.get('categories');
     expect(singleCategoryParam).not.toBeNull();
-    expect(JSON.parse(singleCategoryParam!)).toEqual(['FOOD_AND_DRINK']);
+    expect(JSON.parse(singleCategoryParam!)).toEqual(['EATING_OUT']);
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
     await expect(page.getByText('Salary', {exact: true})).not.toBeVisible();
 
@@ -762,7 +690,7 @@ test.describe('bank transactions', () => {
 
     const multipleCategoryParam = new URL(page.url()).searchParams.get('categories');
     expect(multipleCategoryParam).not.toBeNull();
-    expect(JSON.parse(multipleCategoryParam!)).toEqual(['FOOD_AND_DRINK', 'SHOPPING']);
+    expect(JSON.parse(multipleCategoryParam!)).toEqual(['EATING_OUT', 'SHOPPING']);
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Salary'}),
@@ -772,7 +700,7 @@ test.describe('bank transactions', () => {
     const categoryWithNeedsReviewParam = new URL(page.url()).searchParams.get('categories');
     expect(categoryWithNeedsReviewParam).not.toBeNull();
     expect(JSON.parse(categoryWithNeedsReviewParam!)).toEqual([
-      'FOOD_AND_DRINK',
+      'EATING_OUT',
       'SHOPPING',
       'NEEDS_REVIEW',
     ]);
@@ -785,7 +713,7 @@ test.describe('bank transactions', () => {
     const categoryWithUncategorizedParam = new URL(page.url()).searchParams.get('categories');
     expect(categoryWithUncategorizedParam).not.toBeNull();
     expect(JSON.parse(categoryWithUncategorizedParam!)).toEqual([
-      'FOOD_AND_DRINK',
+      'EATING_OUT',
       'SHOPPING',
       'NEEDS_REVIEW',
       'UNCATEGORIZED',
@@ -1345,5 +1273,105 @@ test.describe('bank transactions without synced data', () => {
     ).toBeVisible();
     await page.getByRole('link', {name: 'Connect a bank'}).click();
     await expect(page).toHaveURL(/\/bank-connections$/);
+  });
+});
+
+test.describe('bank transaction inspector on a fresh account', () => {
+  test('classifies a transaction from the detail inspector', async ({page, freshAccount}) => {
+    const transactionName = 'Example Shop';
+    const target = {
+      name: 'Services',
+      className: /text-category-services/,
+      icon: 'svg.lucide-wrench',
+    };
+    let saved: BankTransaction = createBankTransaction({
+      id: CLASSIFY_TRANSACTION_ID,
+      displayDescription: transactionName,
+      transactionDate: '2026-09-10',
+      bookingDate: '2026-09-11',
+      category: null,
+      categoryStatus: 'PENDING',
+    });
+    await page.route('**/bank-transactions?**', (route) =>
+      ['fetch', 'xhr'].includes(route.request().resourceType())
+        ? fulfillJson(route, {transactions: [saved], total: 1})
+        : route.continue(),
+    );
+    await page.route(`**/bank-transactions/${CLASSIFY_TRANSACTION_ID}`, (route) =>
+      fulfillJson(route, saved),
+    );
+    await page.route(
+      `**/bank-transactions/${CLASSIFY_TRANSACTION_ID}/category-impact?**`,
+      (route) => fulfillJson(route, {action: null, category: null, transactions: [], total: 0}),
+    );
+    await page.route(`**/bank-transactions/${CLASSIFY_TRANSACTION_ID}/category`, (route) => {
+      const {category} = route.request().postDataJSON() as {category: BankTransaction['category']};
+      saved = {...saved, category, categoryStatus: 'COMPLETED', categorySource: 'MANUAL'};
+      return fulfillJson(route, saved);
+    });
+
+    await page.goto('/bank-transactions');
+    await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
+
+    const transactionRow = page
+      .getByTestId(/^bank-transaction-row-/)
+      .filter({hasText: transactionName});
+    const rowCategory = transactionRow.getByTestId('ledger-row-category');
+    await expect(rowCategory).toBeVisible();
+
+    await transactionRow
+      .getByRole('button', {name: `View ${transactionName} transaction details`})
+      .click();
+
+    const inspector = page.getByTestId('bank-transaction-inspector');
+    const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
+    await expect(categorySelect).toBeVisible();
+    await categorySelect.click();
+    await expect(page.getByRole('option')).toHaveCount(23);
+    await expect(page.getByRole('option')).toHaveText([
+      'Housing and utilities',
+      'Home improvement',
+      'Groceries',
+      'Eating out',
+      'Transportation',
+      'Shopping',
+      'Health and fitness',
+      'Personal care',
+      'Entertainment',
+      'Travel',
+      'Services',
+      'Education',
+      'Insurance',
+      'Loans and debt',
+      'Fees',
+      'Taxes and government',
+      'Gifts and donations',
+      'Cash withdrawal',
+      'Income',
+      'Refund',
+      'Transfer in',
+      'Transfer out',
+      'Needs review',
+    ]);
+    // Every option has a category icon; the selected one also shows a check mark.
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(23);
+    const targetOption = page.getByRole('option', {name: target.name, exact: true});
+    await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
+    await targetOption.click();
+
+    await expect(categorySelect).toHaveText(target.name);
+    await expect(categorySelect.locator(target.icon).locator('..')).toHaveClass(target.className);
+    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText('Manual');
+
+    await inspector.getByRole('button', {name: 'Close transaction details'}).click();
+    await expect(inspector).toBeHidden();
+    await expect(rowCategory).toHaveText(target.name);
+    await expect(rowCategory.locator('svg').locator('..')).toHaveClass(target.className);
+    await transactionRow
+      .getByRole('button', {name: `View ${transactionName} transaction details`})
+      .click();
+    await expect(inspector).toBeVisible();
+    await expect(categorySelect).toHaveText(target.name);
+    await expect(inspector.getByTestId('bank-transaction-category-status')).toHaveText('Manual');
   });
 });

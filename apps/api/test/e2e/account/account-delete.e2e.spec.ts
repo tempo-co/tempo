@@ -3,19 +3,23 @@ import {INestApplication} from '@nestjs/common';
 import Redis from 'ioredis';
 import {Server} from 'node:net';
 import request from 'supertest';
-import {DataSource} from 'typeorm';
+import {DataSource, EntityManager} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {REDIS} from '@core/redis/redis.constants';
 import {ACCOUNT_DELETED_EMAIL_SUBJECT, ACCOUNT_DELETED_MESSAGE} from '@modules/account/account-deletion.service';
+import {Account} from '@modules/account/account.entity';
 import {INVALID_PASSWORD, PASSWORD_RESET_INVALID_TOKEN} from '@modules/auth/api/constants/api-messages.constants';
 import {BankAccountBalance} from '@modules/banking/bank-account-balance.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {BankingSyncOwnershipLostError} from '@modules/banking/errors/banking-sync-ownership-lost.error';
+import {AccountHistoryWriterService} from '@modules/banking/services/account-history-writer.service';
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
+import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -25,6 +29,7 @@ import {getApp, loginAgent, webOrigin} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {fetchedTransactions} from '../../utils/banking-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
+import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 describe('AccountController - DELETE /accounts/me', () => {
 	let app: INestApplication;
@@ -256,6 +261,157 @@ describe('AccountController - DELETE /accounts/me', () => {
 		} finally {
 			releaseFetch();
 			for (const spy of syncSpies) spy.mockRestore();
+		}
+	}, 30_000);
+
+	it('holds the account deletion until a sync write that started first commits, then deletes what it wrote', async () => {
+		const {
+			id: accountId,
+			credentials: {password},
+			agent,
+		} = await createVerifiedAccount(httpServer, mailpitApiUrl);
+		const connection = await fixtures.createConnection(
+			{id: accountId},
+			{providerSessionId: encryption.encrypt('account-delete-write-session'), nextSyncAt: new Date(0)},
+		);
+		// Inactive until the provider lists it again: the write updates the account before it records the fetch.
+		const bankAccount = await fixtures.createBankAccount(connection, {
+			providerAccountId: 'account-delete-write',
+			isActive: false,
+		});
+		const writer = app.get(AccountHistoryWriterService);
+		const recordBankFetch = writer.recordBankFetch.bind(writer);
+		let fetchReached!: () => void;
+		const reachedFetch = new Promise<void>((resolve) => (fetchReached = resolve));
+		let releaseWrite!: () => void;
+		const released = new Promise<void>((resolve) => (releaseWrite = resolve));
+		const refresh = jest.spyOn(app.get(DerivedDataRefreshService), 'refresh');
+		const syncSpies = [
+			refresh,
+			jest
+				.spyOn(enableBankingClient, 'getSessionAccounts')
+				.mockResolvedValue({status: 'AUTHORIZED', accountIds: ['account-delete-write']}),
+			jest.spyOn(enableBankingClient, 'getAccountBalances').mockResolvedValue([]),
+			jest
+				.spyOn(enableBankingClient, 'getAccountTransactions')
+				.mockResolvedValue(
+					fetchedTransactions([
+						{amount: '10.00', currency: 'EUR', creditDebitIndicator: 'DBIT', bookingDate: '2026-08-20'},
+					]),
+				),
+			jest.spyOn(writer, 'recordBankFetch').mockImplementation(async (write, fetch) => {
+				fetchReached();
+				await released;
+				return recordBankFetch(write, fetch);
+			}),
+		];
+
+		try {
+			const sync = app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+			const syncOutcome = sync.then(
+				() => 'finished',
+				(error: unknown) => error,
+			);
+			await Promise.race([reachedFetch, syncOutcome]);
+			const deletion = agent
+				.delete('/accounts/me')
+				.send({password})
+				.then((response) => response);
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting > 0,
+			);
+			releaseWrite();
+
+			expect(await syncOutcome).toBeInstanceOf(BankingSyncOwnershipLostError);
+			expect((await deletion).status).toBe(200);
+			// The sync's write committed before the deletion went on.
+			expect(
+				refresh.mock.calls.filter(([ownerId]) => ownerId === accountId).map(([, change]) => change.kind),
+			).toEqual(['sync-write']);
+			expect(await connectionRepository.countBy({id: connection.id})).toBe(0);
+			expect(await bankAccountRepository.countBy({id: bankAccount.id})).toBe(0);
+			expect(await transactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(0);
+		} finally {
+			releaseWrite();
+			for (const spy of syncSpies) spy.mockRestore();
+		}
+	}, 30_000);
+
+	it('makes a sync write wait for an account deletion still in progress, then refuses it as no longer the run owner', async () => {
+		const {
+			id: accountId,
+			credentials: {password},
+			agent,
+		} = await createVerifiedAccount(httpServer, mailpitApiUrl);
+		const connection = await fixtures.createConnection(
+			{id: accountId},
+			{providerSessionId: encryption.encrypt('account-delete-first-session'), nextSyncAt: new Date(0)},
+		);
+		const bankAccount = await fixtures.createBankAccount(connection, {providerAccountId: 'account-delete-first'});
+		let fetchStarted!: () => void;
+		const started = new Promise<void>((resolve) => (fetchStarted = resolve));
+		let releaseFetch!: () => void;
+		const fetchReleased = new Promise<void>((resolve) => (releaseFetch = resolve));
+		let accountDeleted!: () => void;
+		const deleted = new Promise<void>((resolve) => (accountDeleted = resolve));
+		let releaseDeletion!: () => void;
+		const deletionReleased = new Promise<void>((resolve) => (releaseDeletion = resolve));
+		const deleteRows = EntityManager.prototype.delete;
+		const spies = [
+			jest
+				.spyOn(enableBankingClient, 'getSessionAccounts')
+				.mockResolvedValue({status: 'AUTHORIZED', accountIds: ['account-delete-first']}),
+			jest.spyOn(enableBankingClient, 'getAccountBalances').mockResolvedValue([]),
+			jest.spyOn(enableBankingClient, 'getAccountTransactions').mockImplementation(async () => {
+				fetchStarted();
+				await fetchReleased;
+				return fetchedTransactions([
+					{amount: '10.00', currency: 'EUR', creditDebitIndicator: 'DBIT', bookingDate: '2026-08-20'},
+				]);
+			}),
+			// Holds the deletion's transaction open after its delete, before it commits.
+			jest.spyOn(EntityManager.prototype, 'delete').mockImplementation(async function (
+				this: EntityManager,
+				...args: Parameters<EntityManager['delete']>
+			) {
+				const result = await deleteRows.apply(this, args);
+				if (args[0] === Account) {
+					accountDeleted();
+					await deletionReleased;
+				}
+				return result;
+			}),
+		];
+
+		try {
+			const sync = app.get(BankingSyncService).synchronizeAutomatically(connection.id);
+			const syncOutcome = sync.then(
+				() => 'finished',
+				(error: unknown) => error,
+			);
+			await Promise.race([started, syncOutcome]);
+			const deletion = agent
+				.delete('/accounts/me')
+				.send({password})
+				.then((response) => response);
+			// A deletion refused before its delete ends the race here instead of leaving the sync paused.
+			await Promise.race([deleted, deletion]);
+			releaseFetch();
+			await waitFor(
+				() => lockWaits(dataSource),
+				(waiting) => waiting > 0,
+			);
+			releaseDeletion();
+
+			expect((await deletion).status).toBe(200);
+			expect(await syncOutcome).toBeInstanceOf(BankingSyncOwnershipLostError);
+			expect(await bankAccountRepository.countBy({id: bankAccount.id})).toBe(0);
+			expect(await transactionRepository.countBy({bankAccountId: bankAccount.id})).toBe(0);
+		} finally {
+			releaseFetch();
+			releaseDeletion();
+			for (const spy of spies) spy.mockRestore();
 		}
 	}, 30_000);
 

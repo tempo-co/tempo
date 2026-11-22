@@ -1,5 +1,6 @@
 import {BadRequestException, ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import type {
+	BankImportBanks,
 	BankImportLayoutColumn,
 	BankImportLayoutMapping,
 	BankImportLayoutPreview,
@@ -8,23 +9,42 @@ import type {
 	BankImportLayout as BankImportLayoutResponse,
 	ConfirmBankImportLayoutProposalRequest,
 } from '@tempo/contracts';
-import {BANK_IMPORT_CURRENCIES, BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} from '@tempo/contracts';
+import {
+	BANK_IMPORT_CURRENCIES,
+	BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY,
+	bankNameKey,
+	bankNameSpelling,
+} from '@tempo/contracts';
 import {createHash, randomUUID} from 'node:crypto';
-import {DataSource, EntityManager, MoreThan} from 'typeorm';
+import {DataSource, EntityManager, In, MoreThan, Not} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {Account} from '@modules/account/account.entity';
+import {BankAccount} from '@modules/banking/bank-account.entity';
+import {BankConnection} from '@modules/banking/bank-connection.entity';
+import {identityBankName, nameBankIdentity, namedBankIdentities} from '@modules/banking/bank-identity';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	DESTRUCTIVE_CONNECTION_STATUSES,
+} from '@modules/banking/services/banking-sync.constants';
 
 import {BankImportLayoutProposal, LayoutProposalStatus} from './bank-import-layout-proposal.entity';
 import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
-import {LayoutAnswer, toMapperInput} from './mapper/layout-mapper.contract';
-import {CsvByDirection, CsvLayout, MAX_SKIP_AFTER, MAX_SKIP_BEFORE, validateCsvLayout} from './parsers/csv-layout';
-import {NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
+import {LayoutAnswer, MAX_MAPPER_INPUT_BYTES, toMapperInput} from './mapper/layout-mapper.contract';
+import {
+	CsvByDirection,
+	CsvLayout,
+	MAX_SKIP_AFTER,
+	MAX_SKIP_BEFORE,
+	fitsLayoutHeader,
+	validateCsvLayout,
+} from './parsers/csv-layout';
+import {CSV_LAYOUTS, NO_ACCOUNT_LAYOUT_BANKS, namesNoAccount} from './parsers/csv-layouts';
 import {ISO_CURRENCY_CODES} from './parsers/currency-codes';
 import {amountScale, formatUnits, parseDecimal} from './parsers/decimal';
-import {NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
+import {FORMAT_BANKS, NormalizedRow, NormalizedStatement, STATEMENT_BANKS} from './parsers/parse-result';
 import {MaskedTable} from './parsers/table-mask';
 import {TableSample} from './parsers/table-sample';
 import {ParseRunnerService} from './runner/parse-runner.service';
@@ -71,6 +91,61 @@ export class BankImportLayoutService {
 		private readonly configurationService: ConfigurationService,
 	) {}
 
+	/**
+	 * The banks the owner can pick for a layout (`BankImportBanks`): their own banks only, those of their bank
+	 * connections, of their imported-files accounts that record a bank by name (kept from a removed connection, or
+	 * from earlier imports) and of their saved layouts; never Revolut, whose own files already name their accounts'
+	 * bank. Each bank once, spelled as a connection, saved layout or Tempo's built-in format writes it, else as the
+	 * account records it. Only names the proposal's layout can be confirmed under (`layoutBankRefusal`).
+	 */
+	async knownBanks(ownerId: Account['id'], proposalId: string): Promise<BankImportBanks> {
+		const proposal = await this.dataSource
+			.getRepository(BankImportLayoutProposal)
+			.findOne({where: {id: proposalId, accountId: ownerId}});
+		if (!proposal) throw new NotFoundException(LAYOUT_PROPOSAL_NOT_FOUND);
+		if (proposal.status !== 'proposed' || !proposal.layout) throw new ConflictException(LAYOUT_PROPOSAL_DECIDED);
+		const {layout} = proposal;
+		const [connections, layouts, fileAccounts] = await Promise.all([
+			this.dataSource.getRepository(BankConnection).find({
+				select: {aspspName: true},
+				// Only a connection that holds bank data is the owner's bank: never a pending, cancelled or failed one.
+				where: {
+					accountId: ownerId,
+					provider: Not(BANK_CONNECTION_PROVIDERS.FILE),
+					status: In([...DESTRUCTIVE_CONNECTION_STATUSES]),
+				},
+			}),
+			this.dataSource
+				.getRepository(BankImportLayout)
+				.find({select: {bankName: true}, where: {accountId: ownerId}}),
+			this.dataSource.getRepository(BankAccount).find({
+				select: {bankIdentity: true},
+				where: {
+					bankConnection: {accountId: ownerId, provider: BANK_CONNECTION_PROVIDERS.FILE},
+					bankIdentity: namedBankIdentities(),
+				},
+			}),
+		]);
+		const owned = [...connections.map(({aspspName}) => aspspName), ...layouts.map(({bankName}) => bankName)];
+		const spellings = new Map<string, string>();
+		for (const bank of [...owned, ...Object.values(FORMAT_BANKS), ...CSV_LAYOUTS.map((layout) => layout.bank)]) {
+			const name = bankNameSpelling(bank);
+			if (name && !spellings.has(nameBankIdentity(name))) spellings.set(nameBankIdentity(name), name);
+		}
+		const identities = new Set([
+			...owned.filter((bank) => bank.trim()).map(nameBankIdentity),
+			...fileAccounts.flatMap(({bankIdentity}) =>
+				identityBankName(bankIdentity) === null ? [] : [bankIdentity!],
+			),
+		]);
+		return {
+			banks: [...identities]
+				.map((identity) => spellings.get(identity) ?? identityBankName(identity)!)
+				.filter((bank) => layoutBankName(bank) === bank && layoutBankRefusal(bank, layout) === null)
+				.sort((left, right) => left.localeCompare(right, 'en', {sensitivity: 'base'})),
+		};
+	}
+
 	/** Whether this deployment works out unknown files' columns. */
 	mapperEnabled(): boolean {
 		return this.configurationService.get('FILE_IMPORT_MAPPER_ENABLED') === true;
@@ -113,7 +188,8 @@ export class BankImportLayoutService {
 	/**
 	 * Finds the file's table in the parse child, asks the model once with its masked sample, checks the answer as a
 	 * layout and reads the whole file with it in the parse child. Every model call counts against the owner's daily
-	 * limit; a refusal before it (off, not a table, a table the limits do not allow) does not.
+	 * limit; a refusal before it (off, not a table, a table the limits do not allow, a header no layout can hold, a
+	 * request over `MAX_MAPPER_INPUT_BYTES`) does not.
 	 */
 	async propose(ownerId: Account['id'], file: Buffer): Promise<BankImportLayoutProposalResponse> {
 		if (!this.mapperEnabled()) throw this.refuse('mapper_unavailable');
@@ -129,12 +205,23 @@ export class BankImportLayoutService {
 		) {
 			throw this.refuse('layout_not_mappable');
 		}
+		// Any answer for a header the layout cannot hold fails validation or saving, and a request this large is no bank
+		// export.
+		const input = toMapperInput(sample);
+		if (
+			(sample.header &&
+				(!fitsLayoutHeader(sample.header) ||
+					Buffer.byteLength(JSON.stringify(sample.header)) > MAX_SAVED_LAYOUT_BYTES)) ||
+			Buffer.byteLength(JSON.stringify(input)) > MAX_MAPPER_INPUT_BYTES
+		) {
+			throw this.refuse('layout_not_mappable');
+		}
 		const owner = await this.dataSource.getRepository(Account).findOneByOrFail({id: ownerId});
 		const proposal = await this.reserve(ownerId, file, sample);
 
 		let answer: LayoutAnswer;
 		try {
-			answer = await this.mapper.mapLayout(toMapperInput(sample));
+			answer = await this.mapper.mapLayout(input);
 		} catch (error) {
 			const code =
 				error instanceof LayoutMapperError && error.reason === 'invalid'
@@ -173,22 +260,18 @@ export class BankImportLayoutService {
 		proposalId: string,
 		request: ConfirmBankImportLayoutProposalRequest,
 	): Promise<BankImportLayoutResponse> {
-		const bankName =
-			typeof request.bankName === 'string' ? request.bankName.replace(CONTROL_CHARACTERS, ' ').trim() : '';
-		if (!bankName || bankName.length > MAX_BANK_NAME_LENGTH) throw new BadRequestException(INVALID_BANK_NAME);
-		const reserved = STATEMENT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase());
+		const bankName = typeof request.bankName === 'string' ? layoutBankName(request.bankName) : null;
+		if (bankName === null) throw new BadRequestException(INVALID_BANK_NAME);
+		// Revolut needs no layout, so it is refused before the proposal is read; the full check runs under the lock.
+		const reserved = reservedBank(bankName);
 		if (reserved) throw new BadRequestException(reservedBankName(reserved));
 		return this.dataSource.transaction(async (manager) => {
 			await lockOwner(manager, ownerId);
 			const proposal = await this.lockProposal(manager, ownerId, proposalId);
 			if (proposal.expiresAt.getTime() <= Date.now())
 				throw new BankImportRefusalException('layout_proposal_expired');
-			// A layout whose files name no account goes by its bank, so it cannot take a built-in one's. Unlike the
-			// Revolut check above, this one needs the proposal's layout, so it runs under the lock.
-			const builtIn = namesNoAccount(proposal.layout)
-				? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bank.toLowerCase() === bankName.toLowerCase())
-				: undefined;
-			if (builtIn) throw new BadRequestException(reservedBankName(builtIn));
+			const refusal = layoutBankRefusal(bankName, proposal.layout);
+			if (refusal) throw new BadRequestException(refusal);
 			if (proposal.currencyNeeded) {
 				if (typeof request.currency !== 'string' || !IMPORT_CURRENCY_CODES.has(request.currency)) {
 					throw new BadRequestException(INVALID_CURRENCY);
@@ -307,6 +390,34 @@ async function lockOwner(manager: EntityManager, ownerId: Account['id']): Promis
 
 function toLayoutResponse(row: BankImportLayout): BankImportLayoutResponse {
 	return {id: row.id, bankName: row.bankName, createdAt: row.createdAt.toISOString()};
+}
+
+/**
+ * The bank name a layout is saved under: plain text of 1 to 60 characters as written, with its spacing then made
+ * single (`bankNameSpelling`); null when the name cannot be saved.
+ */
+function layoutBankName(name: string): string | null {
+	const written = name.replace(CONTROL_CHARACTERS, ' ').trim();
+	return written && written.length <= MAX_BANK_NAME_LENGTH ? bankNameSpelling(written) : null;
+}
+
+/** The bank of `STATEMENT_BANKS` the name names, ignoring case and spacing. */
+function reservedBank(name: string): string | undefined {
+	return STATEMENT_BANKS.find((bank) => bankNameKey(bank) === bankNameKey(name));
+}
+
+/**
+ * Why a layout cannot be saved under the bank name (`layoutBankName` of it), null when it can: Revolut's files need
+ * no layout, and a layout whose files name no account goes by its bank, so it cannot take the bank of a built-in one
+ * that names none either.
+ */
+function layoutBankRefusal(bankName: string, layout: CsvLayout): string | null {
+	const reserved =
+		reservedBank(bankName) ??
+		(namesNoAccount(layout)
+			? NO_ACCOUNT_LAYOUT_BANKS.find((bank) => bankNameKey(bank) === bankNameKey(bankName))
+			: undefined);
+	return reserved ? reservedBankName(reserved) : null;
 }
 
 /** The model's bank guess as plain text of at most 60 characters; null when it gave none. */
@@ -514,7 +625,14 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 
 /** The rows as Tempo would store them: the first 5 and the last 2, counts, dates and totals per currency. */
 export function previewOf(statements: readonly NormalizedStatement[]): BankImportLayoutPreview {
-	const rows = statements.flatMap((statement) => statement.rows);
+	return previewOfRows(
+		statements.flatMap((statement) => statement.rows),
+		[...new Set(statements.flatMap(({accountIban}) => (accountIban ? [accountIban] : [])))],
+	);
+}
+
+/** Rows as a layout read them (`BankImportLayoutPreview`), with the IBANs they name. */
+export function previewOfRows(rows: readonly NormalizedRow[], accounts: string[]): BankImportLayoutPreview {
 	const dates = rows.flatMap((row) => {
 		const date = dayOf(row);
 		return date ? [date] : [];
@@ -540,7 +658,7 @@ export function previewOf(statements: readonly NormalizedStatement[]): BankImpor
 			moneyIn: formatUnits(moneyIn, scale),
 			moneyOut: formatUnits(moneyOut, scale),
 		})),
-		accounts: [...new Set(statements.flatMap(({accountIban}) => (accountIban ? [accountIban] : [])))],
+		accounts,
 	};
 }
 
@@ -548,7 +666,7 @@ function dayOf(row: NormalizedRow): string | null {
 	return row.bookingDate ?? row.valueDate ?? row.transactionDate;
 }
 
-function previewRow(row: NormalizedRow): BankImportLayoutPreviewRow {
+export function previewRow(row: NormalizedRow): BankImportLayoutPreviewRow {
 	return {
 		date: dayOf(row),
 		amount: row.amount,

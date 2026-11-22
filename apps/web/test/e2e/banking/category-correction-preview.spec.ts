@@ -5,11 +5,12 @@ import {createAccount} from '../../data/account.data';
 import {createBankTransaction} from '../../data/bank-transaction.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockBankConnections, mockJson} from '../../utils/api-mocks';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {animationsSettled, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const ID = '00000000-0000-4000-8000-000000000201';
 const FIRST_ID = '00000000-0000-4000-8000-000000000202';
 const SECOND_ID = '00000000-0000-4000-8000-000000000203';
+const THIRD_ID = '00000000-0000-4000-8000-000000000204';
 const transaction: BankTransaction = createBankTransaction({
   id: ID,
   displayDescription: 'Example Shop',
@@ -37,23 +38,27 @@ const transaction: BankTransaction = createBankTransaction({
 const impact: BankTransactionCategoryImpact = {
   action: 'APPLY',
   category: 'TRAVEL',
-  total: 2,
-  transactions: [FIRST_ID, SECOND_ID].map((id, index) => ({
+  total: 3,
+  transactions: [FIRST_ID, SECOND_ID, THIRD_ID].map((id, index) => ({
     id,
-    displayDescription: `Example Shop ${index + 1}`,
+    displayDescription: 'Example Shop',
     transactionDate: `2026-09-0${9 - index}`,
     bookingDate: null,
     amount: '-12.00',
     currency: 'EUR',
-    category: 'SHOPPING',
+    category: index === 1 ? 'EATING_OUT' : 'SHOPPING',
     categorySource: 'AI',
     categoryStatus: 'COMPLETED',
   })),
 };
 
-async function mockCorrection(page: Page, preview: BankTransactionCategoryImpact = impact) {
+async function mockCorrection(
+  page: Page,
+  preview: BankTransactionCategoryImpact = impact,
+  corrected: Partial<BankTransaction> = {},
+) {
   const state = {
-    saved: {...transaction},
+    saved: {...transaction, ...corrected},
     writes: [] as Array<{
       category: NonNullable<BankTransaction['category']>;
       applyToTransactionIds: string[];
@@ -99,7 +104,8 @@ async function mockCorrection(page: Page, preview: BankTransactionCategoryImpact
 
 const PREVIEW_FAILED = 'Category changes could not be previewed. Nothing was saved. Try again.';
 const categorySelect = (page: Page) => page.getByRole('combobox', {name: 'Transaction category'});
-const impactDialog = (page: Page) => page.getByRole('dialog', {name: 'Update other transactions?'});
+const impactDialog = (page: Page) =>
+  page.getByRole('dialog', {name: 'Move other Example Shop payments to Travel too?'});
 
 async function chooseTravel(page: Page) {
   await categorySelect(page).click();
@@ -133,13 +139,13 @@ async function holdSave(page: Page) {
 }
 
 for (const viewport of [
-  {width: 1280, height: 800},
+  {width: 1440, height: 900},
   {width: 390, height: 844},
 ]) {
   test.describe(`category correction at ${viewport.width}px`, () => {
     test.use({viewport, storageState: {cookies: [], origins: []}});
 
-    test('previews before saving, defaults to all selected, and applies only ticked rows', async ({
+    test('previews before saving, groups the other payments by the category they move from, and applies only ticked rows', async ({
       page,
     }, testInfo) => {
       const state = await mockCorrection(page);
@@ -147,19 +153,74 @@ for (const viewport of [
       const dialog = impactDialog(page);
       await expect(dialog).toBeVisible();
       expect(state.writes).toEqual([]);
+      await expect(dialog).toContainText('This payment moves');
+      await expect(dialog).toContainText('3 other Example Shop payments can follow:');
+      const shopping = dialog.getByRole('checkbox', {name: 'Shopping to Travel', exact: true});
+      const food = dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
+      await expect(shopping).toBeChecked();
+      await expect(food).toBeChecked();
+      // Each group's payments stay folded until its count is opened.
       await expect(dialog.getByRole('checkbox')).toHaveCount(2);
-      await expect(dialog.getByRole('checkbox').nth(0)).toBeChecked();
-      await expect(dialog.getByRole('checkbox').nth(1)).toBeChecked();
-      await expect(dialog).toContainText('Sep 9, 2026');
+      await expect(dialog.getByRole('button', {name: 'Only this one', exact: true})).toBeVisible();
+      const moveAll = dialog.getByRole('button', {name: 'Move all 3 to Travel', exact: true});
+      await expect(moveAll).toBeVisible();
+      const shoppingRows = dialog.getByRole('button', {name: '2 Shopping payments', exact: true});
+      await expect(shoppingRows).toHaveAttribute('aria-expanded', 'false');
+      await shoppingRows.click();
+      await animationsSettled(dialog);
+      await expect(shoppingRows).toHaveAttribute('aria-expanded', 'true');
+      const first = dialog.getByRole('checkbox', {
+        name: 'Example Shop, Sep 9, 2026, -€12.00',
+        exact: true,
+      });
+      const third = dialog.getByRole('checkbox', {
+        name: 'Example Shop, Sep 7, 2026, -€12.00',
+        exact: true,
+      });
+      await expect(first).toBeChecked();
+      await expect(third).toBeChecked();
       await expect(dialog).toContainText('€12.00');
-      await expect(dialog).toContainText('Shopping → Travel');
+      for (const icon of await dialog.getByTestId('category-icon').all()) {
+        const box = await icon.boundingBox();
+        expect([box!.width, box!.height]).toEqual([20, 20]);
+      }
+      if (page.viewportSize()!.width < 768) {
+        const primary = await moveAll.boundingBox();
+        const secondary = await dialog
+          .getByRole('button', {name: 'Only this one', exact: true})
+          .boundingBox();
+        expect(primary!.y).toBeLessThan(secondary!.y);
+      }
+      const firstRow = await first.locator('xpath=ancestor::label[1]').boundingBox();
+      expect(firstRow!.height).toBe(60);
+      const tile = await dialog.getByTestId('merchant-logo-tile').first().boundingBox();
+      expect([tile!.width, tile!.height]).toEqual([36, 36]);
       await expectNoHorizontalOverflow(page);
       await testInfo.attach('category-impact', {
         body: await page.screenshot(),
         contentType: 'image/png',
       });
-      await dialog.getByRole('checkbox').nth(1).uncheck();
-      await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
+      await third.uncheck();
+      await expect(shopping).toHaveAttribute('aria-checked', 'mixed');
+      await expect(shoppingRows).toHaveText('1 of 2 payments');
+      await food.uncheck();
+      // Holds the refresh that follows the save, while the dialog shows its pending state.
+      let releaseRefresh!: () => void;
+      const refreshHeld = new Promise<void>((resolve) => {
+        releaseRefresh = resolve;
+      });
+      await page.route('**/bank-transactions?**', async (route) => {
+        if (state.writes.length > 0) await refreshHeld;
+        await route.fallback();
+      });
+      await dialog.getByRole('button', {name: 'Move 1 to Travel', exact: true}).click();
+      try {
+        await expect(dialog.getByRole('button', {name: 'Saving…'})).toBeVisible();
+        await expect.poll(() => state.writes.length).toBe(1);
+        await expect(dialog.getByText('Not categorized', {exact: true})).toBeVisible();
+      } finally {
+        releaseRefresh();
+      }
       await expect(dialog).toBeHidden();
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]}]);
       await expect(categorySelect(page)).toHaveText('Travel');
@@ -182,15 +243,17 @@ for (const viewport of [
         expect(state.writes).toEqual([]);
         // A cancelled selection is not held locally: a fresh correction starts with all ticked again.
         await chooseTravel(page);
-        await expect(dialog.getByRole('checkbox').nth(1)).toBeChecked();
+        await expect(
+          dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true}),
+        ).toBeChecked();
       });
     }
 
-    test('Just this one sends an empty selection', async ({page}) => {
+    test('Only this one sends an empty selection', async ({page}) => {
       const state = await mockCorrection(page);
       await chooseTravel(page);
       const dialog = impactDialog(page);
-      await dialog.getByRole('button', {name: 'Just this one', exact: true}).click();
+      await dialog.getByRole('button', {name: 'Only this one', exact: true}).click();
       await expect(dialog).toBeHidden();
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: []}]);
     });
@@ -236,15 +299,142 @@ for (const viewport of [
         total: 600,
       });
       await chooseTravel(page);
-      const dialog = impactDialog(page);
-      await expect(dialog).toContainText('Showing the newest 2 of 600 matches');
+      const dialog = page.getByRole('dialog', {
+        name: 'Let AI re-check the newest 3 of 600 other Example Shop payments?',
+      });
+      await expect(dialog).toContainText('Each can end up in a different category.');
+      await expect(dialog).toContainText('The 597 older payments stay as they are.');
       await expect(
-        dialog.getByText('Shopping → Will be re-checked by AI', {exact: true}),
-      ).toHaveCount(2);
-      await dialog.getByRole('button', {name: 'Update selected (2)', exact: true}).click();
+        dialog.getByRole('checkbox', {name: 'Shopping to AI picks again', exact: true}),
+      ).toBeChecked();
+      await expect(dialog.getByText('AI picks again', {exact: true})).toHaveCount(2);
+      // The outcome is unknown, so only the corrected payment's own swap carries an arrow.
+      await expect(dialog.locator('svg.lucide-arrow-right')).toHaveCount(1);
+      await dialog.getByRole('button', {name: 'Re-check newest 3', exact: true}).click();
       await expect(dialog).toBeHidden();
       expect(state.writes).toEqual([
-        {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, SECOND_ID]},
+        {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, SECOND_ID, THIRD_ID]},
+      ]);
+    });
+
+    test('a long worst-case preview from another category names it in full, scrolls, and keeps its actions in reach', async ({
+      page,
+      browserName,
+    }) => {
+      const phone = page.viewportSize()!.width < 768;
+      // The longest category name, on the narrowest phone this run covers.
+      if (phone) await page.setViewportSize({width: 320, height: 640});
+      const rows = Array.from({length: 100}, (_, index) => ({
+        ...impact.transactions[0],
+        id: `00000000-0000-4000-8000-${String(400 + index).padStart(12, '0')}`,
+        displayDescription:
+          index === 2 ? 'Example Regional Department Store Terminal 202' : 'Example Shop',
+        ...(index === 3 && {
+          amount: '-98765432.00',
+          currency: 'IDR',
+          transactionDate: '2025-09-28',
+        }),
+      }));
+      const state = await mockCorrection(page, {
+        ...impact,
+        category: 'TAXES_AND_GOVERNMENT',
+        total: 600,
+        transactions: rows,
+      });
+      await chooseTravel(page);
+      const dialog = page.getByRole('dialog', {
+        name: 'Move other matching payments to Taxes and government too?',
+      });
+      await expect(dialog).toContainText('The newest 100 of 600 other payments can follow:');
+      await expect(
+        dialog.getByRole('checkbox', {name: 'Shopping to Taxes and government', exact: true}),
+      ).toBeChecked();
+      const move = dialog.getByRole('button', {
+        name: 'Move newest 100 to Taxes and government',
+        exact: true,
+      });
+      await dialog.getByRole('button', {name: '100 Shopping payments', exact: true}).click();
+      await animationsSettled(dialog);
+      const isCut = (element: HTMLElement) =>
+        element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
+      expect(await move.evaluate(isCut)).toBe(false);
+      // The widest amount leaves its row's date whole.
+      expect(await dialog.getByText('Sep 28, 2025', {exact: true}).evaluate(isCut)).toBe(false);
+      // With the browser's text at 150%, the widest amount and a long category name still show whole.
+      await page.addStyleTag({content: 'html { font-size: 150%; }'});
+      await dialog
+        .getByRole('checkbox', {
+          name: 'Example Regional Department Store Terminal 202, Sep 9, 2026, -€12.00',
+          exact: true,
+        })
+        .uncheck();
+      const within = (element: HTMLElement) => {
+        const box = element.getBoundingClientRect();
+        const row = element.closest('li')!.getBoundingClientRect();
+        return box.left >= row.left && box.right <= row.right;
+      };
+      for (const label of [
+        dialog.getByText('Taxes and government', {exact: true}).first(),
+        dialog.getByText(/IDR/).first(),
+      ]) {
+        expect(await label.evaluate(isCut)).toBe(false);
+        expect(await label.evaluate(within)).toBe(true);
+      }
+      await page.addStyleTag({content: 'html { font-size: 100%; }'});
+      await dialog
+        .getByRole('checkbox', {
+          name: 'Example Regional Department Store Terminal 202, Sep 9, 2026, -€12.00',
+          exact: true,
+        })
+        .check();
+      // A long name wraps in full: these rows don't open, and its end can tell two payments apart.
+      const longName = dialog.getByText('Example Regional Department Store Terminal 202', {
+        exact: true,
+      });
+      expect(await longName.evaluate(isCut)).toBe(false);
+      await expectNoHorizontalOverflow(page);
+
+      const viewport = dialog.locator('[data-radix-scroll-area-viewport]');
+      const body = await viewport.boundingBox();
+      const x = body!.x + body!.width / 2;
+      // Touch gestures are sent with Chromium DevTools; WebKit scrolls with the wheel.
+      if (phone && browserName === 'chromium') {
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send('Emulation.setTouchEmulationEnabled', {enabled: true});
+        const [from, to] = [body!.y + body!.height - 20, body!.y + 20];
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [{x, y: from}],
+        });
+        for (let step = 1; step <= 10; step++) {
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: [{x, y: from + ((to - from) * step) / 10}],
+          });
+          await page.evaluate(() => new Promise(requestAnimationFrame));
+        }
+        await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+        await cdp.send('Emulation.setTouchEmulationEnabled', {enabled: false});
+      } else {
+        await page.mouse.move(x, body!.y + body!.height / 2);
+        await page.mouse.wheel(0, 4000);
+      }
+      await expect
+        .poll(() => viewport.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(100);
+
+      // On a short landscape phone the header scrolls away with the list; every action stays on screen.
+      if (phone) await page.setViewportSize({width: 667, height: 300});
+      for (const name of ['Cancel', 'Only this one']) {
+        const box = await dialog.getByRole('button', {name, exact: true}).boundingBox();
+        expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+      }
+      const box = await move.boundingBox();
+      expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await expect(dialog).toBeHidden();
+      expect(state.writes).toEqual([
+        {category: 'TRAVEL', applyToTransactionIds: rows.map(({id}) => id)},
       ]);
     });
 
@@ -340,17 +530,19 @@ for (const viewport of [
         state.saveStatus = status;
         await chooseTravel(page);
         const dialog = impactDialog(page);
-        await dialog.getByRole('checkbox').nth(1).uncheck();
-        await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
+        const food = dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
+        await food.uncheck();
+        const move = dialog.getByRole('button', {name: 'Move 2 to Travel', exact: true});
+        await move.click();
         await expect(page.getByText(message, {exact: true})).toBeVisible();
         await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
-        await expect(dialog.getByRole('checkbox').nth(1)).not.toBeChecked();
+        await expect(food).not.toBeChecked();
         state.saveStatus = 200;
-        await dialog.getByRole('button', {name: 'Update selected (1)', exact: true}).click();
+        await move.click();
         await expect(dialog).toBeHidden();
         expect(state.writes).toEqual([
-          {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]},
-          {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]},
+          {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, THIRD_ID]},
+          {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, THIRD_ID]},
         ]);
       });
     }

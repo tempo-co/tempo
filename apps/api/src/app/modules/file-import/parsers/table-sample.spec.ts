@@ -100,17 +100,28 @@ describe('maskTable', () => {
 		expect(masked.rows.map(([value]) => value)).toEqual(sent);
 	});
 
-	it('masks a header cell with a digit, which a header never needs', () => {
-		const masked = maskTable({
-			header: ['Datum', 'Rekening NL91ABNA0417164300'],
-			headerAsWritten: true,
-			linesAbove: [],
-			rows: [['1', '2']],
-			linesBelow: [],
-			columnCount: 2,
-		});
+	it('masks a header cell with any numeral, digits or not, which a header never needs', () => {
+		const sample = sampleTable(
+			Buffer.from(
+				[
+					'Datum;Betrag;Rekening NL91ABNA0417164300;Saldo ²;Rate ½;Teil Ⅻ',
+					'2026-03-02;-12.50;x;x;x;x',
+					'2026-03-03;-4.20;x;x;x;x',
+					'',
+				].join('\n'),
+			),
+		)!;
+		const sent = JSON.stringify(toMapperInput(sample));
 
-		expect(masked.header).toEqual(['Datum', 'Aaaaaaaa AA99AAAA9999999999']);
+		expect(JSON.parse(sent).header).toEqual([
+			'Datum',
+			'Betrag',
+			'Aaaaaaaa AA99AAAA9999999999',
+			'Aaaaa 9',
+			'Aaaa 9',
+			'Aaaa 9',
+		]);
+		expect(sent).not.toMatch(/NL91|0417|²|½|Ⅻ/);
 	});
 
 	it('lists the distinct shapes each column takes over the whole table, most frequent first, and whether it repeats one value', () => {
@@ -283,7 +294,7 @@ describe('sampleTable', () => {
 
 			expect(sample.header).toEqual(holder.split(';'));
 			expect(sample.masked.header).toEqual(['Aaaa', 'Aaaa Aaa', 'Aaaaaa', 'Aaa Aaaaaa', 'Aaaa', 'Aaaaaaaaaaa']);
-			expect(JSON.stringify(sample.masked)).not.toMatch(/Jane|Roe|Elm|Springfield/);
+			expect(JSON.stringify(toMapperInput(sample))).not.toMatch(/Jane|Roe|Elm|Springfield/);
 			expect(() => validateSampleOutput({ok: true, sample})).not.toThrow();
 		}
 		// A header that names the date column is sent as written, in whatever language or compound.

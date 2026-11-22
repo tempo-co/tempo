@@ -151,6 +151,7 @@ function revolutStatements(records: readonly RevolutRecord[], format: StatementF
 			accountIban: null,
 			accountOtherId: null,
 			bank: 'Revolut',
+			servicerBic: null,
 			accountCurrency: currency,
 			sequenceNumber: null,
 			entriesSkipped: 0,
