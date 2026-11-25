@@ -167,6 +167,21 @@ update_pinned() {
     log "updated ${changed[*]}"
 }
 
+# A new host has no deployed images yet: start the whole stack from the tags. There is nothing
+# to back up or roll back to; a failed start removes the deployed images, so the next run starts over.
+if ! grep -qs '^TEMPO_API_IMAGE=' "$IMAGES_FILE"; then
+    first_api=$(resolve api "${REQUESTED[api]:-$DEFAULT_TAG}")
+    first_web=$(resolve web "${REQUESTED[web]:-$DEFAULT_TAG}")
+    log "first start: API $(revision "$first_api") (${first_api#*@}), web $(revision "$first_web") (${first_web#*@})"
+    write_images "$first_api" "$first_web" || die 'could not write the deployed images'
+    if ! compose up -d --wait --wait-timeout "$WAIT_TIMEOUT" || ! healthy; then
+        rm -f -- "$IMAGES_FILE"
+        die 'first start failed; the next run starts over'
+    fi
+    log 'first start: healthy'
+    exit 0
+fi
+
 # shellcheck disable=SC2086 # space-separated service list
 update_pinned compose app ${PINNED_SERVICES:-}
 [[ -z ${TAILSCALE_COMPOSE_FILE:-} ]] || update_pinned tailscale_compose tailscale tailscale

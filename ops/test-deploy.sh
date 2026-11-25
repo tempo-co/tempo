@@ -135,6 +135,8 @@ case $1 in
             esac
             shift
         done
+        # No service named: every service in the Compose file, in file order.
+        ((${#services[@]})) || mapfile -t services < <(sed -nE 's/^  ([a-z]+):$/\1/p' "$file")
         pinned() { sed -nE "/^  $1:\$/,/image:/ s/^ +image: (.*)\$/\1/p" "$file"; }
         image_for() {
             local var
@@ -348,6 +350,45 @@ test_changed_pin_recreates_its_service() {
     expect_no_event '^backup$'
     expect_no_event '^compose (pull|up) postgres'
     expect_equal "$(container redis)" "$(redis_pin 2)" 'running redis image'
+}
+
+# A new host: no deployed images yet and no containers.
+new_host() {
+    rm -f -- "$SB/state/deployed.env" "$SB/fake/containers/"*
+}
+
+test_first_deploy_on_a_new_host_starts_the_whole_stack() {
+    new_host
+    deploy
+    expect_status 0
+    expect_events_in_order 'pull ghcr.io/tempo-co/api:release' 'pull ghcr.io/tempo-co/web:release' \
+        "compose up postgres $(postgres_pin 1)" "compose up redis $(redis_pin 1)" \
+        "compose up api $(api_ref 1)" "compose up web $(web_ref 1)" \
+        'health http://wisp.example.test/api/health' 'health http://wisp.example.test/'
+    expect_no_event '^backup$'
+    expect_output 'first start: healthy'
+    expect_deployed "$(api_ref 1)" "$(web_ref 1)"
+
+    publish api 2
+    deploy
+    expect_status 0
+    expect_events_in_order backup "compose up api $(api_ref 2)"
+    expect_deployed "$(api_ref 2)" "$(web_ref 1)"
+}
+
+test_failed_first_deploy_is_tried_again_from_scratch() {
+    new_host
+    web_ref 1 >"$SB/fake/unhealthy"
+    deploy
+    expect_status 1
+    expect_output 'first start failed'
+    [[ ! -e $SB/state/deployed.env ]] || fail 'deployed.env kept after a failed first start'
+
+    : >"$SB/fake/unhealthy"
+    deploy
+    expect_status 0
+    expect_output 'first start: healthy'
+    expect_deployed "$(api_ref 1)" "$(web_ref 1)"
 }
 
 tests=$(declare -F | awk '$3 ~ /^test_/ { print $3 }')
