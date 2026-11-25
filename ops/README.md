@@ -17,8 +17,8 @@ CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API, web and Caddy |
 | `Caddyfile` | Caddy's site config: HTTPS for `app.wispmoney.com`, HSTS, the bare domain's redirect (see Public entry) |
 | `ghcr-retention.sh` | Weekly GHCR cleanup of both packages (`.github/workflows/ghcr-retention.yml`): keeps `main`, `release`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the images of the last 5 `main` commits that changed the app as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |
-| `systemd/` | Production deploy, backup and restore-drill timers, the egress firewall and the failure-email hook (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
-| `staging/` | Staging Compose files (stack and Tailscale sidecar), env template, database refresh |
+| `systemd/` | Production timers, the egress firewall and the failure-email hook (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
+| `staging/` | Staging Compose files (stack and Tailscale sidecar), env templates, database refresh |
 
 ## Production
 
@@ -78,7 +78,11 @@ Restic reads `RESTIC_REPOSITORY` (such as `sftp:u000000.your-storagebox.de:wisp`
 
 ### Failure emails
 
-Every production unit (deploy, pin sync, backup, restore drill, egress firewall) has `OnFailure=wisp-failure-email@%n.service`, which runs `failure-email.sh`: it emails `OPERATOR_ALERT_EMAIL` the unit's name and its last 40 journal lines through the API's own SMTP settings (installed Compose file and `/etc/wisp/production.env`). Without `OPERATOR_ALERT_EMAIL` or `EMAIL_FROM` the hook fails and the alert stays in the journal (`journalctl -u 'wisp-failure-email@*'`). A new unit takes the same line; `test-backup.sh` fails for a `wisp-*.service` without it.
+Every production unit has `OnFailure=wisp-failure-email@%n.service`, which runs `failure-email.sh`: it emails `OPERATOR_ALERT_EMAIL` the unit's name and its last 40 journal lines through the API's own SMTP settings (installed Compose file and `/etc/wisp/production.env`). Without `OPERATOR_ALERT_EMAIL` or `EMAIL_FROM` the hook fails and the alert stays in the journal (`journalctl -u 'wisp-failure-email@*'`). A new unit takes the same line; `test-backup.sh` fails for a `wisp-*.service` without it.
+
+### Staging copy
+
+`wisp-staging-copy.timer` (`wisp-staging-copy.sh`, `wisp-staging-copy.sql`, `wisp-staging-copy-serve.sh`) builds staging's encrypted owner-only copy nightly: see [`docs/staging-feed.md`](../docs/staging-feed.md).
 
 ### Public entry
 
@@ -115,4 +119,4 @@ ops/install.sh staging                         # after changing ops/
 tempo-deploy staging --api pr-115 --web main
 ```
 
-A successful deploy refreshes the staging database from the newest production backup, so staging stays on loopback and the tailnet: no Funnel, port forward or other route. See [`staging/README.md`](staging/README.md).
+A successful deploy refreshes the staging database from production data, so staging stays on loopback and the tailnet: no Funnel, port forward or other route. See [`staging/README.md`](staging/README.md).

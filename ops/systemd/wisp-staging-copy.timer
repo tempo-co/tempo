@@ -1,0 +1,11 @@
+[Unit]
+Description=Build staging's owner-only copy nightly (catches up after downtime)
+
+[Timer]
+# 01:15, after the 00:30 backup has published its dump.
+OnCalendar=*-*-* 01:15:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
