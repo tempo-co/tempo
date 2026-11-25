@@ -12,6 +12,9 @@
 
 app.wispmoney.com {
 	import hsts
+	# Sign-up stays closed until the free launch opens it; logins and existing accounts are unaffected.
+	@signup path /api/auth/signup /api/auth/signup/*
+	respond @signup "Sign-up is not open yet." 403
 	# Sends the client address as the only X-Forwarded-For entry, which web's Nginx trusts from Caddy's address.
 	reverse_proxy web:8080
 }
