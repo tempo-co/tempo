@@ -61,7 +61,7 @@ The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env
 
 ### Operator alerts
 
-`OPERATOR_ALERT_EMAIL` in `/etc/tempo/production.env` is where the API emails failures no user sees, through the app's SMTP settings: a scheduled bank sync run that fails as a whole, at most once a day per kind of failure. Without it, nothing is sent.
+`OPERATOR_ALERT_EMAIL` in `/etc/wisp/production.env` is where the API emails failures no user sees, through the app's SMTP settings: a scheduled bank sync run that fails as a whole, at most once a day per kind of failure. Without it, nothing is sent.
 
 ### Network boundary
 
