@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tempo production DB backup: validated custom-format pg_dump, keep the newest $KEEP.
+# Wisp production DB backup: validated custom-format pg_dump, keep the newest $KEEP.
 #
 #   BACKUP_DIR=<dir> [KEEP=<n>] backup.sh
 #
@@ -12,11 +12,11 @@ LOG="$BACKUP_DIR/backup.log"
 KEEP=${KEEP:-7}
 [[ $KEEP =~ ^[1-9][0-9]*$ ]] || { printf 'ERROR: KEEP must be a positive integer\n' >&2; exit 1; }
 MIN_FREE_BYTES=$((1024 * 1024 * 1024)) # refuse to run if the backup filesystem has < 1 GiB free
-CONTAINER="tempo-api-production-postgres-1"
-DB_USER="tempo"
-DB_NAME="tempo"
+CONTAINER="wisp-production-postgres-1"
+DB_USER="wisp"
+DB_NAME="wisp"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-TARGET="$BACKUP_DIR/tempo-$STAMP.dump"
+TARGET="$BACKUP_DIR/wisp-$STAMP.dump"
 TEMP_FILE=''
 
 log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
@@ -42,7 +42,7 @@ if (( free_bytes < MIN_FREE_BYTES )); then
 fi
 
 [[ ! -e $TARGET ]] || fail "timestamped backup already exists: $TARGET"
-TEMP_FILE=$(mktemp "$BACKUP_DIR/.tempo-$STAMP.XXXXXX.tmp")
+TEMP_FILE=$(mktemp "$BACKUP_DIR/.wisp-$STAMP.XXXXXX.tmp")
 
 # 2) Dump to a private temporary file. Custom format is compressed by pg_dump.
 if ! docker exec "$CONTAINER" pg_dump --format=custom -U "$DB_USER" "$DB_NAME" > "$TEMP_FILE"; then
@@ -74,8 +74,8 @@ log_path = Path(sys.argv[3])
 archives = [
     path
     for path in backup_dir.iterdir()
-    # Only timestamped archives; manual dumps such as tempo-pre-<reason>-*.dump are never pruned.
-    if re.fullmatch(r'tempo-\d{8}-\d{6}\.dump', path.name)
+    # Only timestamped archives; manual dumps such as wisp-pre-<reason>-*.dump are never pruned.
+    if re.fullmatch(r'wisp-\d{8}-\d{6}\.dump', path.name)
     and path.is_file()
     and not path.is_symlink()
 ]

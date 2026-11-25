@@ -1,4 +1,4 @@
-name: tempo-api-production
+name: wisp-production
 
 # Every service drops all capabilities and cannot gain privileges; see "Container privileges" in ops/README.md.
 x-no-new-privileges: &no-new-privileges
@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - tempo_production_postgres_data:/var/lib/postgresql/data
+      - wisp_production_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 5s
@@ -30,13 +30,13 @@ services:
     <<: *no-new-privileges
     cap_drop: [ALL]
     cap_add: [CHOWN, SETGID, SETUID]
-    # tempo_readonly reads banking:* keys and lists or counts key names; it cannot write, run scripts
+    # wisp_readonly reads banking:* keys and lists or counts key names; it cannot write, run scripts
     # or read sessions. See "Read-only Redis access" in ops/README.md.
     command:
       [
         'redis-server',
         '--user',
-        'tempo_readonly',
+        'wisp_readonly',
         'on',
         'nopass',
         'resetchannels',
@@ -63,7 +63,7 @@ services:
     <<: *no-new-privileges
     cap_drop: [ALL]
     env_file:
-      - ${TEMPO_PRODUCTION_ENV_FILE:-/etc/tempo/production.env}
+      - ${WISP_PRODUCTION_ENV_FILE:-/etc/wisp/production.env}
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -133,4 +133,4 @@ networks:
           ip_range: 10.213.47.8/29
 
 volumes:
-  tempo_production_postgres_data:
+  wisp_production_postgres_data:

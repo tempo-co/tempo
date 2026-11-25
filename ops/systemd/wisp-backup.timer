@@ -1,5 +1,5 @@
 [Unit]
-Description=Tempo production database backup nightly at 03:30 (catches up after downtime)
+Description=Wisp production database backup nightly at 03:30 (catches up after downtime)
 
 [Timer]
 OnCalendar=*-*-* 03:30:00

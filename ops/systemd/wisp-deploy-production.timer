@@ -1,5 +1,5 @@
 [Unit]
-Description=Deploy new Tempo production images every 5 minutes
+Description=Deploy new Wisp production images every 5 minutes
 
 [Timer]
 OnBootSec=5min

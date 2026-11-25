@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copy image-pin bumps for the installed production Compose files from main.
 #
-#   sync-pins.sh   # as root, run by tempo-sync-pins.service before every deploy
+#   sync-pins.sh   # as root, run by wisp-sync-pins.service before every deploy
 #
 # A file is replaced only when every changed line is a tag@digest `image:` line for the same
 # image, major version and variant that moves forward (a higher version, or a rebuild of the
@@ -17,14 +17,14 @@ export LC_ALL=C
 REPO_URL=https://github.com/tempo-co/tempo
 # Fetched by commit, not branch: the raw CDN caches branch files and could serve an older pin.
 SOURCE=${SYNC_PINS_SOURCE:-}
-STATE=${STATE_DIRECTORY:-/var/lib/tempo-sync-pins}
+STATE=${STATE_DIRECTORY:-/var/lib/wisp-sync-pins}
 declare -A FILES=(
-    [ops/production.compose.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/production.compose.yml
-    [ops/tailscale.compose.yml]=${SYNC_PINS_ETC:-/etc/tempo/compose}/tailscale.compose.yml
+    [ops/production.compose.yml]=${SYNC_PINS_ETC:-/etc/wisp/compose}/production.compose.yml
+    [ops/tailscale.compose.yml]=${SYNC_PINS_ETC:-/etc/wisp/compose}/tailscale.compose.yml
 )
 PIN='^( +)image: ([a-z0-9._/-]+):([A-Za-z0-9._-]+)@(sha256:[0-9a-f]{64})$'
 
-log() { echo "tempo-sync-pins: $*"; }
+log() { echo "wisp-sync-pins: $*"; }
 
 suffix() { [[ $1 == *-* ]] && echo "${1#*-}"; }
 

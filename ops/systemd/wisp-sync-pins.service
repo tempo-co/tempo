@@ -1,14 +1,14 @@
 # Installed by `sudo ops/install.sh production`. Runs as root before every production deploy.
 # It fails once per new change that needs a manual install, for the host's failure alert.
 [Unit]
-Description=Copy Tempo image-pin bumps from main into the installed Compose files
+Description=Copy Wisp image-pin bumps from main into the installed Compose files
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/lib/tempo-deploy/sync-pins.sh
-StateDirectory=tempo-sync-pins
+ExecStart=/usr/local/lib/wisp-deploy/sync-pins.sh
+StateDirectory=wisp-sync-pins
 # Worst case is about 140s (main lookup, two downloads, two Docker Hub requests per changed pin).
 TimeoutStartSec=5min
 NoNewPrivileges=true
@@ -16,7 +16,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 # Root only for file ownership; no capabilities. Only the Compose directory is writable, not the secrets.
-ReadWritePaths=/etc/tempo/compose
+ReadWritePaths=/etc/wisp/compose
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
