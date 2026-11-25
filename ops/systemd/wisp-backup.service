@@ -1,0 +1,18 @@
+# Installed by `sudo ops/install.sh production`, which fills in @USER@ and @HOME@.
+# Restic settings come from /etc/wisp/backup.env (see "Backups" in ops/README.md).
+[Unit]
+Description=Wisp production database backup to the off-site restic repository
+OnFailure=wisp-failure-email@%n.service
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=@USER@
+Environment=BACKUP_DIR=@HOME@/backups/wisp
+Environment=KEEP=4
+Environment=UPLOAD=true
+EnvironmentFile=/etc/wisp/backup.env
+ExecStart=/usr/local/lib/wisp-deploy/backup.sh
+TimeoutStartSec=1h

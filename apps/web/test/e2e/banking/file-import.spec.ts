@@ -1863,11 +1863,12 @@ test.describe('statement file import on Connections', () => {
       // Resizing across the phone width remounts the dialog as a drawer, which then animates in.
       await expect
         .poll(async () => {
+          // Null while the drawer remounts the row, so the poll waits instead of failing.
           const [box, tile] = await Promise.all([
-            boxOf(rows.last()),
-            boxOf(rows.last().locator('[aria-hidden="true"]').first()),
+            rows.last().boundingBox(),
+            rows.last().locator('[aria-hidden="true"]').first().boundingBox(),
           ]);
-          return [box.height, tile.width, tile.height];
+          return box && tile ? [box.height, tile.width, tile.height] : null;
         })
         .toEqual([60, 36, 36]);
       await expectNoHorizontalOverflow(page);
@@ -2908,11 +2909,12 @@ test.describe('statement file import on Connections', () => {
       // Resizing across the phone width remounts the dialog as a drawer, which then animates in.
       await expect
         .poll(async () => {
+          // Null while the drawer remounts the row, so the poll waits instead of failing.
           const [box, tile] = await Promise.all([
-            boxOf(previewRow),
-            boxOf(previewRow.locator('[aria-hidden="true"]').first()),
+            previewRow.boundingBox(),
+            previewRow.locator('[aria-hidden="true"]').first().boundingBox(),
           ]);
-          return [box.height, tile.width, tile.height];
+          return box && tile ? [box.height, tile.width, tile.height] : null;
         })
         .toEqual([60, 36, 36]);
     }

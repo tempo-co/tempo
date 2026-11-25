@@ -1,0 +1,11 @@
+[Unit]
+Description=Wisp restore drill monthly (catches up after downtime)
+
+[Timer]
+# The 2nd at 09:15, clear of the 6-hourly backups' repository lock.
+OnCalendar=*-*-02 09:15:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

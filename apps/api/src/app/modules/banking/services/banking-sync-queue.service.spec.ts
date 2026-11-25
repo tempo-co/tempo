@@ -2,6 +2,7 @@ import {Queue} from 'bullmq';
 import {Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {OperatorAlertService} from '@core/operator-alert/operator-alert.service';
 import {
 	BANK_CONNECTION_SYNC_QUEUE,
 	BANK_CONNECTION_SYNC_SCHEDULER_ID,
@@ -23,7 +24,21 @@ describe('BankingSyncQueueService', () => {
 	let bankConnectionRepository: {createQueryBuilder: jest.Mock; update: jest.Mock};
 	let queue: QueueMock;
 	let connectionLockService: {isHeld: jest.Mock};
+	let operatorAlertService: {send: jest.Mock};
 	let service: BankingSyncQueueService;
+
+	function buildService({
+		serviceQueue = queue,
+		configurationService = {get: jest.fn().mockReturnValue('10m')},
+	}: {serviceQueue?: object; configurationService?: {get: jest.Mock}} = {}): BankingSyncQueueService {
+		return new BankingSyncQueueService(
+			bankConnectionRepository as unknown as Repository<BankConnection>,
+			serviceQueue as unknown as Queue,
+			configurationService as unknown as ConfigurationService,
+			connectionLockService as never,
+			operatorAlertService as unknown as OperatorAlertService,
+		);
+	}
 
 	beforeEach(() => {
 		queue = {
@@ -36,12 +51,8 @@ describe('BankingSyncQueueService', () => {
 			update: jest.fn().mockResolvedValue({affected: 1}),
 		};
 		connectionLockService = {isHeld: jest.fn().mockResolvedValue(false)};
-		service = new BankingSyncQueueService(
-			bankConnectionRepository as unknown as Repository<BankConnection>,
-			queue as unknown as Queue,
-			{get: jest.fn().mockReturnValue('10m')} as unknown as ConfigurationService,
-			connectionLockService as never,
-		);
+		operatorAlertService = {send: jest.fn().mockResolvedValue(undefined)};
+		service = buildService();
 	});
 
 	it('enqueues only authorized connections whose durable gate is due', async () => {
@@ -144,6 +155,20 @@ describe('BankingSyncQueueService', () => {
 			expect.objectContaining({every: 600_000}),
 			expect.objectContaining({name: DISPATCH_BANK_CONNECTION_SYNCS_JOB}),
 		);
+		expect(operatorAlertService.send).not.toHaveBeenCalled();
+	});
+
+	it('emails the operator when the scheduled run cannot start because its scheduler is not installed', async () => {
+		queue.upsertJobScheduler.mockRejectedValue(
+			Object.assign(new Error('connection refused'), {name: 'ReplyError'}),
+		);
+
+		await service.onModuleInit();
+
+		expect(operatorAlertService.send).toHaveBeenCalledTimes(1);
+		expect(operatorAlertService.send).toHaveBeenCalledWith(
+			expect.objectContaining({kind: 'bank-sync-scheduler-not-installed'}),
+		);
 	});
 
 	it('uses the automatic sync queue name for the dispatcher and connection jobs', () => {
@@ -152,20 +177,16 @@ describe('BankingSyncQueueService', () => {
 
 	describe('with banking integration disabled', () => {
 		function createDisabledService(removeJobScheduler: jest.Mock) {
-			const disabledQueue = {...queue, removeJobScheduler};
-			const disabledService = new BankingSyncQueueService(
-				bankConnectionRepository as unknown as Repository<BankConnection>,
-				disabledQueue as unknown as Queue,
-				{
+			return buildService({
+				serviceQueue: {...queue, removeJobScheduler},
+				configurationService: {
 					get: jest.fn((key: string) => {
 						if (key === 'BANKING_INTEGRATION_ENABLED') return false;
 						if (key === 'NODE_ENV') return 'production';
 						return '10m';
 					}),
-				} as unknown as ConfigurationService,
-				connectionLockService as never,
-			);
-			return disabledService;
+				},
+			});
 		}
 
 		it('does not schedule or enqueue banking work', async () => {
@@ -180,6 +201,7 @@ describe('BankingSyncQueueService', () => {
 			expect(removeJobScheduler).toHaveBeenCalledWith(BANK_CONNECTION_SYNC_SCHEDULER_ID);
 			expect(queue.add).not.toHaveBeenCalled();
 			expect(bankConnectionRepository.createQueryBuilder).not.toHaveBeenCalled();
+			expect(operatorAlertService.send).not.toHaveBeenCalled();
 		});
 	});
 });

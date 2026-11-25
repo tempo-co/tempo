@@ -7,7 +7,7 @@ Staging is a separate copy of Tempo on the production server, deployed with `tem
 - Rootless Docker daemon: socket `$XDG_RUNTIME_DIR/tempo-staging/docker.sock`
 - Compose project `tempo-staging`: its own PostgreSQL, Redis, Mailpit, API, web, volumes and networks
 - Compose project `tempo-staging-tailscale`: the Tailscale sidecar giving staging its own tailnet device, `tempo-staging`, on the same daemon. Staging deploys recreate it only when its pinned image changes.
-- Config: `staging.compose.yml`, `tailscale.compose.yml`, `tailscale-serve.json` and `staging.env` (secrets, the tailnet origin and the deployed image digests; template in `staging.env.example`), installed to `~/.config/tempo-staging/` by `ops/install.sh staging`
+- Config: `staging.compose.yml`, `tailscale.compose.yml`, `tailscale-serve.json` and `staging.env` (secrets, the tailnet origin and the deployed image digests; template in `staging.env.example`), installed to `~/.config/tempo-staging/` by `ops/install.sh staging`, plus `feed.env` and its keys, made by hand (Database feed)
 - URLs: app `http://127.0.0.1:8119/` and `https://tempo-staging.<tailnet>.ts.net/`; Mailpit `http://127.0.0.1:8125/`, loopback only
 
 ## Deploying
@@ -27,15 +27,24 @@ The Compose file hard-codes `BANKING_INTEGRATION_ENABLED=false`, `AI_CATEGORIZAT
 
 ## Database refresh
 
-After a deploy changes an image, `tempo-staging-refresh.sh` restores the newest scheduled production backup into a temporary staging database, applies the current schema, clears provider sessions and sync state, swaps it in, flushes staging Redis and health-checks the stack. If staging is unhealthy after the swap, the previous database is put back. It never connects to production. `tempo-staging-refresh.sh seed --confirm-seeded-reset` does the same with seed data instead.
+After a deploy changes an image, `tempo-staging-refresh.sh` restores production data from the feed (below) into a temporary staging database, applies the current schema, clears provider sessions and sync state, swaps it in, flushes staging Redis and health-checks the stack. If staging is unhealthy after the swap, the previous database is put back. It never connects to production's database. `tempo-staging-refresh.sh seed --confirm-seeded-reset` does the same with seed data instead.
 
 Restored bank connections are marked `EXPIRED` with provider sessions, consent and sync scheduling cleared. Retained accounts, balances and transactions stay visible in Home with a reconnect warning.
 
 The restored data includes production logins, which is why staging is reachable only on loopback and from the tailnet, through its own device. Never enable Funnel on it. Production sessions are not copied, so sign in again after a refresh.
 
+## Database feed
+
+`STAGING_FEED` in `~/.config/tempo-staging/feed.env` (template `feed.env.example`) picks where a refresh takes production data from:
+
+- `server-copy`: the production server's nightly owner-only copy (`../README.md`, Staging copy). The refresh fetches the newest over SSH as `STAGING_FEED_SSH` (the server's `wisp-staging-feed` account), with the key and pinned host key in `~/.config/tempo-staging/feed-ssh/` (`id_ed25519`, `known_hosts`). It decrypts the copy with the secret key in `~/.config/tempo-staging/feed-gnupg/` into a private work directory under `~/.local/state/tempo-staging/`, deleted when the run ends, and fails unless the restored copy holds exactly one account.
+- `local-backups`, also when the file or setting is missing: the newest `tempo-<YYYYMMDD-HHMMSS>.dump` in `~/backups/tempo`.
+
+Setting up `server-copy` on both machines: [`docs/staging-feed.md`](../../docs/staging-feed.md).
+
 ## Tailnet device
 
-The sidecar works like production's (`../README.md`): userspace networking, no capabilities, HTTPS on 443 proxied to web over the `tempo-staging-tailscale` network, where it has the fixed address `10.213.47.2` that web's Nginx trusts for `X-Forwarded-For`. That network lives on the staging daemon, so the address does not collide with production's.
+The sidecar uses userspace networking and no capabilities. It serves HTTPS on 443 proxied to web over the `tempo-staging-tailscale` network, where it has the fixed address `10.213.47.2` that web's Nginx trusts for `X-Forwarded-For`, the address Caddy holds in production (`../README.md`, Network boundary). That network lives on the staging daemon, so the address does not collide with production's.
 
 `STAGING_WEB_BASE_URL` in `staging.env` holds the tailnet origin (`https://tempo-staging.<tailnet>.ts.net`, no trailing slash). The API accepts one origin, so with it set, CORS, CSRF-checked requests and emailed links use the tailnet origin; the loopback URL still serves the app and health checks. Unset, the origin is `http://127.0.0.1:8119`. A changed value reaches the API when it is recreated: any deploy that changes an image does that through the database refresh, and `compose up -d --force-recreate api web` on the staging project does it without a deploy (web too, since its Nginx resolves the API address at startup).
 

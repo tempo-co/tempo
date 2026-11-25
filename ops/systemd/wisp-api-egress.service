@@ -1,15 +1,16 @@
 # Installed by `sudo ops/install.sh production`. Reload after installing or after recreating a filtered network.
 [Unit]
-Description=Limit what the Tempo API uid and containers can reach
+Description=Limit what the Wisp API uid and containers can reach
+OnFailure=wisp-failure-email@%n.service
 Wants=docker.service
 After=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/tempo-api-egress
-ExecReload=/usr/local/sbin/tempo-api-egress
-ExecStop=/usr/sbin/nft delete table inet tempo_api_egress
+ExecStart=/usr/local/sbin/wisp-api-egress
+ExecReload=/usr/local/sbin/wisp-api-egress
+ExecStop=/usr/sbin/nft delete table inet wisp_api_egress
 TimeoutStartSec=60
 
 [Install]

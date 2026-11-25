@@ -67,19 +67,6 @@ link() {
     fi
 }
 
-# Files earlier installs put elsewhere; in check mode, report any still there.
-remove_old() {
-    local file
-    for file in "$@"; do
-        if ! $CHECK; then
-            rm -f "$file"
-        elif [[ -e $file ]]; then
-            echo "leftover $file"
-            drift=1
-        fi
-    done
-}
-
 install_script() {
     local dir=$1
     copy 755 "$REPO/ops/deploy.sh" "$dir/deploy.sh"
@@ -112,20 +99,24 @@ case ${1:-} in
         # Production runs exactly what is on main; fetch first as the normal user. A check compares any clean commit.
         [[ -z $(git status --porcelain) ]] || { echo 'checkout has uncommitted changes' >&2; exit 1; }
         $CHECK || [[ $VERSION == "$(git rev-parse origin/main)" ]] || { echo 'checkout is not origin/main; run git fetch and check out origin/main' >&2; exit 1; }
-        install_script /usr/local/lib/tempo-deploy
-        copy 755 "$REPO/ops/sync-pins.sh" /usr/local/lib/tempo-deploy/sync-pins.sh
-        copy 644 "$REPO/ops/production.compose.yml" /etc/tempo/compose/production.compose.yml
-        copy 644 "$REPO/ops/tailscale.compose.yml" /etc/tempo/compose/tailscale.compose.yml
-        copy 755 "$REPO/ops/tempo-api-egress.sh" /usr/local/sbin/tempo-api-egress
-        # Earlier installs kept these next to the secrets.
-        remove_old /etc/tempo/production.compose.yml /etc/tempo/tailscale.compose.yml
-        for unit in tempo-deploy-production.service tempo-deploy-production.timer tempo-sync-pins.service \
-            tempo-backup.service tempo-backup.timer tempo-api-egress.service; do
+        install_script /usr/local/lib/wisp-deploy
+        copy 755 "$REPO/ops/sync-pins.sh" /usr/local/lib/wisp-deploy/sync-pins.sh
+        copy 755 "$REPO/ops/restore-drill.sh" /usr/local/lib/wisp-deploy/restore-drill.sh
+        copy 755 "$REPO/ops/failure-email.sh" /usr/local/lib/wisp-deploy/failure-email.sh
+        copy 755 "$REPO/ops/wisp-staging-copy.sh" /usr/local/lib/wisp-deploy/wisp-staging-copy.sh
+        copy 644 "$REPO/ops/wisp-staging-copy.sql" /usr/local/lib/wisp-deploy/wisp-staging-copy.sql
+        copy 755 "$REPO/ops/wisp-staging-copy-serve.sh" /usr/local/lib/wisp-deploy/wisp-staging-copy-serve.sh
+        copy 644 "$REPO/ops/production.compose.yml" /etc/wisp/compose/production.compose.yml
+        copy 644 "$REPO/ops/Caddyfile" /etc/wisp/compose/caddy/Caddyfile
+        copy 755 "$REPO/ops/wisp-api-egress.sh" /usr/local/sbin/wisp-api-egress
+        for unit in wisp-deploy-production.service wisp-deploy-production.timer wisp-sync-pins.service \
+            wisp-backup.service wisp-backup.timer wisp-restore-drill.service wisp-restore-drill.timer \
+            wisp-staging-copy.service wisp-staging-copy.timer wisp-failure-email@.service wisp-api-egress.service; do
             copy_rendered 644 "$REPO/ops/systemd/$unit" "/etc/systemd/system/$unit" "$SUDO_USER" "$home"
         done
         if ! $CHECK; then
             systemctl daemon-reload
-            echo 'if the egress script or unit changed: sudo systemctl reload tempo-api-egress'
+            echo 'if the egress script or unit changed: sudo systemctl reload wisp-api-egress'
         fi
         ;;
     *) usage ;;
@@ -134,5 +125,5 @@ if $CHECK; then
     ((drift)) && exit 1
     echo "installed files match $VERSION"
 else
-    echo "installed tempo-deploy $VERSION"
+    echo "installed deploy tooling $VERSION"
 fi

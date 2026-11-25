@@ -1,0 +1,16 @@
+# Installed by `sudo ops/install.sh production`, which fills in @USER@.
+# Every server unit names this hook: OnFailure=wisp-failure-email@%n.service. The instance is the failed unit.
+[Unit]
+Description=Email the operator that %i failed
+
+[Service]
+Type=oneshot
+User=@USER@
+# Reads the failed unit's journal.
+SupplementaryGroups=systemd-journal
+ExecStart=/usr/local/lib/wisp-deploy/failure-email.sh %i
+TimeoutStartSec=2min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

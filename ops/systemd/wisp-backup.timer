@@ -1,0 +1,10 @@
+[Unit]
+Description=Wisp production database backup every 6 hours (catches up after downtime)
+
+[Timer]
+OnCalendar=*-*-* 00/6:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

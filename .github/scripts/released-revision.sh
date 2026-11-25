@@ -2,11 +2,18 @@
 # Print the commit (org.opencontainers.image.revision label) a public GHCR image tag was built from.
 #
 #   released-revision.sh tempo-co/api main
+#
+# Exits 3 when the tag does not exist.
 set -euo pipefail
 repo=$1 tag=$2
 token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo:pull" | jq -r .token)
 get() { curl -fsSL -H "Authorization: Bearer $token" -H "Accept: $2" "https://ghcr.io/v2/$repo/$1"; }
 accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+code=$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $accept" "https://ghcr.io/v2/$repo/manifests/$tag")
+if [[ $code == 404 ]]; then
+    echo "$repo:$tag does not exist" >&2
+    exit 3
+fi
 manifest=$(get "manifests/$tag" "$accept")
 if jq -e '.manifests' <<<"$manifest" >/dev/null; then
     digest=$(jq -r '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")][0].digest' <<<"$manifest")

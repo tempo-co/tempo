@@ -1,0 +1,20 @@
+# Installed by `sudo ops/install.sh production`, which fills in @USER@ and @HOME@.
+# The owner account comes from /etc/wisp/staging-copy.env (see "Staging copy" in ops/README.md).
+[Unit]
+Description=Build staging's encrypted owner-only copy from the newest Wisp backup
+OnFailure=wisp-failure-email@%n.service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=@USER@
+SupplementaryGroups=docker
+Environment=DUMP_DIR=@HOME@/backups/wisp
+Environment=OUTBOX=/var/lib/wisp-staging-copy
+Environment=KEEP=3
+Environment=STAGING_COPY_RECIPIENT_FILE=/etc/wisp/staging-copy.pub.asc
+EnvironmentFile=/etc/wisp/staging-copy.env
+ExecStart=/usr/local/lib/wisp-deploy/wisp-staging-copy.sh
+TimeoutStartSec=1h
+PrivateTmp=true

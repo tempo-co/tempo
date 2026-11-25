@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Tempo production DB backup: validated custom-format pg_dump, keep the newest $KEEP.
+# Wisp production DB backup: validated custom-format pg_dump, keep the newest $KEEP.
 #
-#   BACKUP_DIR=<dir> [KEEP=<n>] backup.sh
+#   BACKUP_DIR=<dir> [KEEP=<n>] [UPLOAD=true] backup.sh
 #
-# The backup timer and the pre-deploy hook set their own directories (see install.sh).
+# With UPLOAD=true the dump is also uploaded with restic to $RESTIC_REPOSITORY (password in
+# $RESTIC_PASSWORD) and the repository's retention policy applied. The backup timer uploads; the
+# pre-deploy hook keeps its dumps local. Both set their own directories (see install.sh).
 set -Eeuo pipefail
 umask 077
 
@@ -11,12 +13,20 @@ BACKUP_DIR=${BACKUP_DIR:?BACKUP_DIR must be set}
 LOG="$BACKUP_DIR/backup.log"
 KEEP=${KEEP:-7}
 [[ $KEEP =~ ^[1-9][0-9]*$ ]] || { printf 'ERROR: KEEP must be a positive integer\n' >&2; exit 1; }
+UPLOAD=${UPLOAD:-false}
+[[ $UPLOAD == true || $UPLOAD == false ]] || { printf 'ERROR: UPLOAD must be true or false\n' >&2; exit 1; }
+if [[ $UPLOAD == true ]]; then
+    [[ -n ${RESTIC_REPOSITORY:-} && -n ${RESTIC_PASSWORD:-} ]] ||
+        { printf 'ERROR: UPLOAD=true needs RESTIC_REPOSITORY and RESTIC_PASSWORD\n' >&2; exit 1; }
+fi
+# Snapshots are grouped under this host name, so a rebuilt server continues the same history.
+RESTIC_HOST=wisp-production
 MIN_FREE_BYTES=$((1024 * 1024 * 1024)) # refuse to run if the backup filesystem has < 1 GiB free
-CONTAINER="tempo-api-production-postgres-1"
-DB_USER="tempo"
-DB_NAME="tempo"
+CONTAINER="wisp-production-postgres-1"
+DB_USER="wisp"
+DB_NAME="wisp"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-TARGET="$BACKUP_DIR/tempo-$STAMP.dump"
+TARGET="$BACKUP_DIR/wisp-$STAMP.dump"
 TEMP_FILE=''
 
 log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
@@ -42,7 +52,7 @@ if (( free_bytes < MIN_FREE_BYTES )); then
 fi
 
 [[ ! -e $TARGET ]] || fail "timestamped backup already exists: $TARGET"
-TEMP_FILE=$(mktemp "$BACKUP_DIR/.tempo-$STAMP.XXXXXX.tmp")
+TEMP_FILE=$(mktemp "$BACKUP_DIR/.wisp-$STAMP.XXXXXX.tmp")
 
 # 2) Dump to a private temporary file. Custom format is compressed by pg_dump.
 if ! docker exec "$CONTAINER" pg_dump --format=custom -U "$DB_USER" "$DB_NAME" > "$TEMP_FILE"; then
@@ -74,8 +84,8 @@ log_path = Path(sys.argv[3])
 archives = [
     path
     for path in backup_dir.iterdir()
-    # Only timestamped archives; manual dumps such as tempo-pre-<reason>-*.dump are never pruned.
-    if re.fullmatch(r'tempo-\d{8}-\d{6}\.dump', path.name)
+    # Only timestamped archives; manual dumps such as wisp-pre-<reason>-*.dump are never pruned.
+    if re.fullmatch(r'wisp-\d{8}-\d{6}\.dump', path.name)
     and path.is_file()
     and not path.is_symlink()
 ]
@@ -86,3 +96,17 @@ with log_path.open('a', encoding='utf-8') as log:
         old.unlink()
         log.write(f'{stamp} PRUNED {old}\n')
 PY
+
+# 5) Upload to the off-site repository, then apply its retention: every snapshot of the last
+#    7 days (6-hourly), then the newest of each week up to 30 days.
+[[ $UPLOAD == true ]] || exit 0
+if ! restic backup --retry-lock 15m --host "$RESTIC_HOST" --tag wisp-db \
+    --stdin --stdin-filename wisp.dump <"$TARGET"; then
+    fail "upload of $TARGET to the restic repository failed"
+fi
+log "UPLOADED $TARGET"
+if ! restic forget --retry-lock 15m --host "$RESTIC_HOST" --tag wisp-db \
+    --keep-within 7d --keep-within-weekly 30d --prune; then
+    fail 'restic retention (forget --prune) failed'
+fi
+log 'RETENTION applied'

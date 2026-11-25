@@ -1,6 +1,7 @@
 import {Job} from 'bullmq';
 import {Repository} from 'typeorm';
 
+import {OperatorAlertService} from '@core/operator-alert/operator-alert.service';
 import {DISPATCH_BANK_CONNECTION_SYNCS_JOB, SYNC_BANK_CONNECTION_JOB} from '@core/queue/queue.constants';
 
 import {BankConnection} from '../bank-connection.entity';
@@ -31,6 +32,7 @@ describe('BankingSyncProcessor', () => {
 			repository as unknown as Repository<BankConnection>,
 			synchronizationService as unknown as BankingSyncService,
 			queueService as unknown as BankingSyncQueueService,
+			{send: jest.fn()} as unknown as OperatorAlertService,
 		);
 	});
 

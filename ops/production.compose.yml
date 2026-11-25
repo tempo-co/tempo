@@ -1,4 +1,4 @@
-name: tempo-api-production
+name: wisp-production
 
 # Every service drops all capabilities and cannot gain privileges; see "Container privileges" in ops/README.md.
 x-no-new-privileges: &no-new-privileges
@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - tempo_production_postgres_data:/var/lib/postgresql/data
+      - wisp_production_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
       interval: 5s
@@ -30,13 +30,13 @@ services:
     <<: *no-new-privileges
     cap_drop: [ALL]
     cap_add: [CHOWN, SETGID, SETUID]
-    # tempo_readonly reads banking:* keys and lists or counts key names; it cannot write, run scripts
+    # wisp_readonly reads banking:* keys and lists or counts key names; it cannot write, run scripts
     # or read sessions. See "Read-only Redis access" in ops/README.md.
     command:
       [
         'redis-server',
         '--user',
-        'tempo_readonly',
+        'wisp_readonly',
         'on',
         'nopass',
         'resetchannels',
@@ -63,12 +63,13 @@ services:
     <<: *no-new-privileges
     cap_drop: [ALL]
     env_file:
-      - ${TEMPO_PRODUCTION_ENV_FILE:-/etc/tempo/production.env}
+      - ${WISP_PRODUCTION_ENV_FILE:-/etc/wisp/production.env}
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379
-      EMAIL_HOST: smtp.gmail.com
+      # Scaleway Transactional Email; user and password (project ID, API secret key) are in the env file.
+      EMAIL_HOST: smtp.tem.scaleway.com
       EMAIL_PORT: '587'
       EMAIL_SECURE: 'false'
       EMAIL_REQUIRE_TLS: 'true'
@@ -107,7 +108,7 @@ services:
     networks:
       - frontend
       - ingress
-      - tailscale
+      - proxy
     depends_on:
       api:
         condition: service_healthy
@@ -118,14 +119,42 @@ services:
       retries: 5
       start_period: 5s
 
+  # The public entry: HTTPS for app.wispmoney.com and wispmoney.com (ops/Caddyfile), proxied to web.
+  caddy:
+    image: caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
+    restart: unless-stopped
+    <<: *no-new-privileges
+    cap_drop: [ALL]
+    # The caddy binary carries the capability to bind ports 80 and 443 and cannot start without it.
+    cap_add: [NET_BIND_SERVICE]
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      # The directory, not the file: install.sh replaces the file, which a single-file mount would not see.
+      - ./caddy:/etc/caddy:ro
+      # Certificates and ACME account keys. Losing them means asking Let's Encrypt again, within its rate limits.
+      - wisp_production_caddy_data:/data
+      - wisp_production_caddy_config:/config
+    networks:
+      proxy:
+        # Web's Nginx trusts X-Forwarded-For only from this address.
+        ipv4_address: 10.213.47.2
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2019/config/']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 networks:
   default: {}
   frontend:
     internal: true
   ingress: {}
-  # Joins web and the Tailscale sidecar (ops/tailscale.compose.yml). The fixed subnet gives the sidecar a
-  # static address outside the dynamic range, the only address web's Nginx trusts for X-Forwarded-For.
-  tailscale:
+  # Joins web and Caddy. The fixed subnet gives Caddy a static address outside the dynamic range,
+  # the only address web's Nginx trusts for X-Forwarded-For.
+  proxy:
     ipam:
       config:
         - subnet: 10.213.47.0/28
@@ -133,4 +162,6 @@ networks:
           ip_range: 10.213.47.8/29
 
 volumes:
-  tempo_production_postgres_data:
+  wisp_production_postgres_data:
+  wisp_production_caddy_data:
+  wisp_production_caddy_config:

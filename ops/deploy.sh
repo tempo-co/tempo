@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Deploy Tempo API and web images to production or staging.
+# Deploy the API and web images to production or staging.
 #
-#   deploy.sh production                      # deploy the :main images (run by the timer)
+#   deploy.sh production                      # deploy the :release images (run by the timer)
 #   deploy.sh staging --api pr-12 --web main  # omitted components keep their current image
 #
 # Tags resolve to immutable digests before rollout. A failed rollout restores the
@@ -33,7 +33,7 @@ while (($#)); do
     esac
 done
 
-log() { echo "tempo-deploy[$TARGET]: $*"; }
+log() { echo "deploy[$TARGET]: $*"; }
 die() {
     log "ERROR: $*" >&2
     exit 1
@@ -214,7 +214,7 @@ fi
 rm -f -- "$FAILED_FILE"
 log 'deployed and healthy'
 
-# Remove Tempo images that no container (running or stopped) uses.
+# Remove this repository's images that no container (running or stopped) uses.
 docker image prune --all --force --filter 'label=org.opencontainers.image.source=https://github.com/tempo-co/tempo' >/dev/null || true
 
 if [[ -n ${AFTER_DEPLOY:-} ]]; then

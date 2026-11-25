@@ -6,7 +6,7 @@
 - Automatic features use general, tested rules over stored transaction evidence, never hidden merchant or account exception lists. A user's own actions (category corrections, confirm or dismiss choices) are legitimate inputs.
 - Commit messages follow Conventional Commits (`feat: ...`, `fix(web): ...`).
 - A change that touches both apps is one PR: CI runs web E2E against the API image built from the same commit.
-- Merging to `main` ships: CI tags the tested images of the apps that changed as `:main`, and production deploys `:main` within minutes. Read `docs/ci-and-images.md` before touching workflows, Dockerfiles or image tags.
+- Merging to `main` releases that night: CI tags the tested images of the apps that changed as `:main`, a nightly workflow (or a manual run on the owner's word) moves `:release` to the newest green `:main`, and production deploys `:release` within minutes. Keep `main` releasable at all times. Read `docs/ci-and-images.md` before touching workflows, Dockerfiles or image tags.
 
 ## Privacy
 

@@ -1,7 +1,7 @@
 import {jest} from '@jest/globals';
 import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication, Logger} from '@nestjs/common';
-import {Queue} from 'bullmq';
+import {Job, Queue} from 'bullmq';
 import Redis from 'ioredis';
 import {generateKeyPairSync, randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
@@ -9,7 +9,11 @@ import request from 'supertest';
 import TestAgent from 'supertest/lib/agent';
 import {DataSource, In, Repository} from 'typeorm';
 
-import {BANK_CONNECTION_SYNC_QUEUE, SYNC_BANK_CONNECTION_JOB} from '@core/queue/queue.constants';
+import {
+	BANK_CONNECTION_SYNC_QUEUE,
+	DISPATCH_BANK_CONNECTION_SYNCS_JOB,
+	SYNC_BANK_CONNECTION_JOB,
+} from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
 import {AccountDeletionService} from '@modules/account/account-deletion.service';
@@ -34,6 +38,7 @@ import {BankTransactionAmountConversionQueueService} from '@modules/banking/serv
 import {BankingAuthorizationStateService} from '@modules/banking/services/banking-authorization-state.service';
 import {BankingEncryptionService} from '@modules/banking/services/banking-encryption.service';
 import {BankingSyncQueueService} from '@modules/banking/services/banking-sync-queue.service';
+import {BankingSyncProcessor} from '@modules/banking/services/banking-sync.processor';
 import {BankingSyncService} from '@modules/banking/services/banking-sync.service';
 import {EnableBankingClient, EnableBankingClientError} from '@modules/banking/services/enable-banking.client';
 
@@ -45,14 +50,22 @@ import {
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
 import {camt053} from '../../fixtures/statement-file.fixture';
-import {enableFileImportE2e, getApp, loginAgent} from '../../setup/e2e.setup';
+import {
+	OPERATOR_ALERT_E2E_EMAIL,
+	enableFileImportE2e,
+	enableOperatorAlertsE2e,
+	getApp,
+	loginAgent,
+} from '../../setup/e2e.setup';
+import {MailpitResponse} from '../../types/mailpit';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {createBankingOwner, fetchedTransactions} from '../../utils/banking-utils';
-import {MAILPIT_API_URL} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 // Kept accounts take statement files.
 enableFileImportE2e();
+enableOperatorAlertsE2e();
 
 // The concrete adapter is exercised below against a mocked transport, never a live provider.
 process.env.ENABLE_BANKING_API_URL = 'https://provider.example.test';
@@ -3845,6 +3858,53 @@ describe('BankConnectionController', () => {
 		}
 	});
 
+	it('sends the operator nothing when a scheduled run fails for one connection only', async () => {
+		const {connection} = await createAuthorizedConnection('operator-alert-one-connection');
+		await bankConnectionRepository.update(connection.id, {nextSyncAt: new Date(Date.now() - 60_000)});
+		getSessionAccounts.mockRejectedValueOnce(new EnableBankingClientError('UNAUTHORIZED_ACCESS', 401));
+		await EmailUtils.clearEmails(MAILPIT_API_URL);
+
+		try {
+			await app.get(BankingSyncProcessor).process(scheduledRun());
+
+			await waitFor(
+				() => bankConnectionRepository.findOneByOrFail({id: connection.id}),
+				(saved) => saved.syncStatus === 'FAILED',
+			);
+			expect(await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL)).toBeUndefined();
+		} finally {
+			await bankConnectionRepository.delete(connection.id);
+		}
+	});
+
+	it('emails the operator once a day when a scheduled run fails as a whole', async () => {
+		const outage = Object.assign(new Error('connect ECONNREFUSED'), {name: 'ExampleDatabaseOutage'});
+		const dispatch = jest
+			.spyOn(app.get(BankingSyncQueueService), 'dispatchDueConnections')
+			.mockRejectedValue(outage);
+		await EmailUtils.clearEmails(MAILPIT_API_URL);
+
+		try {
+			await expect(app.get(BankingSyncProcessor).process(scheduledRun())).rejects.toBe(outage);
+
+			const email = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+			expect(email).toMatchObject({Subject: 'Tempo: scheduled bank sync failed'});
+			expect(email?.Text).toContain('ExampleDatabaseOutage');
+			expect(email?.Text).not.toContain('ECONNREFUSED');
+
+			// The same failure again that day sends nothing more.
+			await expect(app.get(BankingSyncProcessor).process(scheduledRun())).rejects.toBe(outage);
+			await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+			const response = await fetch(`${MAILPIT_API_URL}/api/v1/messages`);
+			const {messages} = (await response.json()) as MailpitResponse;
+			expect(
+				messages.filter((message) => message.To.some((to) => to.Address === OPERATOR_ALERT_E2E_EMAIL)),
+			).toHaveLength(1);
+		} finally {
+			dispatch.mockRestore();
+		}
+	});
+
 	it('rolls back balance and transaction persistence when a transaction cannot be stored', async () => {
 		const {connection, bankAccount} = await createAuthorizedConnection('rollback-sync-session');
 		getAccountBalances.mockResolvedValueOnce(makeBalances());
@@ -3974,6 +4034,11 @@ describe('BankConnectionController', () => {
 			syncStatus: 'QUEUED',
 		});
 		return app.get(BankingSyncService).synchronizeAutomatically(connectionId);
+	}
+
+	/** The job the bank sync scheduler adds on every dispatch interval. */
+	function scheduledRun(): Job {
+		return {name: DISPATCH_BANK_CONNECTION_SYNCS_JOB, data: {}} as Job;
 	}
 
 	async function createAuthorizedConnection(providerSessionId: string) {
