@@ -5,16 +5,15 @@
 # 1. Host-side: if code ever escapes as uid 10001, it may use DNS and the internet, and nothing on
 #    loopback (other local services and databases), the LAN, link-local or the tailnet.
 #    Only a positive uid match enters the chain, so socketless kernel packets (IPv6 ND, MLD) are untouched.
-# 2. Container-side: Wisp's API and web networks may reach the internet, not the LAN, link-local,
+# 2. Container-side: Wisp's API, web and Caddy networks may reach the internet, not the LAN, link-local,
 #    the tailnet or this host. Traffic between containers on one network never leaves its bridge.
-#    The Tailscale sidecar's network is left alone; it needs its peers.
 #
 # Re-resolves the bridges each run: `systemctl reload wisp-api-egress` after a network is recreated.
 set -Eeuo pipefail
 export LC_ALL=C
 TABLE=${TABLE:-wisp_api_egress}
 API_UID=${API_UID:-10001}
-NETWORKS=${NETWORKS:-wisp-production_default wisp-production_ingress}
+NETWORKS=${NETWORKS:-wisp-production_default wisp-production_ingress wisp-production_proxy}
 
 bridges=() missing=()
 for net in $NETWORKS; do

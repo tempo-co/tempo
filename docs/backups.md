@@ -19,7 +19,7 @@ sudo systemctl enable --now wisp-backup.timer wisp-restore-drill.timer
 sudo systemctl start wisp-backup.service && restic snapshots
 ```
 
-To list the snapshots later: `set -a; . /etc/wisp/backup.env; set +a; restic snapshots --host wisp-production`.
+`journalctl -u wisp-backup.service -n 50` shows the last runs. To list the snapshots: `set -a; . /etc/wisp/backup.env; set +a; restic snapshots --host wisp-production`.
 
 ## Restoring by hand
 

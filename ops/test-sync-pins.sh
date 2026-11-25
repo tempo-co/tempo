@@ -22,10 +22,8 @@ current_pin() { sed -nE "s|^ +image: ($1:[^@]+@sha256:[0-9a-f]{64})\$|\1|p" "$OP
 new_sandbox() {
     SB=$(mktemp -d "$ROOT/case.XXXXXX")
     mkdir -p "$SB/bin" "$SB/etc" "$SB/main/ops" "$SB/state"
-    for file in production.compose.yml tailscale.compose.yml; do
-        cp -- "$OPS_DIR/$file" "$SB/etc/$file"
-        cp -- "$OPS_DIR/$file" "$SB/main/ops/$file"
-    done
+    cp -- "$OPS_DIR/production.compose.yml" "$SB/etc/production.compose.yml"
+    cp -- "$OPS_DIR/production.compose.yml" "$SB/main/ops/production.compose.yml"
     : >"$SB/registry"
     : >"$SB/events.log"
     cat >"$SB/bin/curl" <<'EOF'
@@ -111,21 +109,19 @@ expect_refused() {
 }
 
 test_forward_bump_is_applied() {
-    local postgres tailscale
+    local postgres caddy
     postgres=$(current_pin postgres production.compose.yml)
-    tailscale=$(current_pin tailscale/tailscale tailscale.compose.yml)
-    [[ -n $postgres && -n $tailscale ]] || fail 'could not read the current pins'
-    # A higher version of PostgreSQL, and a rebuild of the same Tailscale tag.
+    caddy=$(current_pin caddy production.compose.yml)
+    [[ -n $postgres && -n $caddy ]] || fail 'could not read the current pins'
+    # A higher version of PostgreSQL, and a rebuild of the same Caddy tag.
     on_main production.compose.yml "$postgres" "postgres:17.99@$(digest postgres-17.99)"
     serve library/postgres:17.99 "$(digest postgres-17.99)"
-    on_main tailscale.compose.yml "$tailscale" "${tailscale%@*}@$(digest tailscale-rebuild)"
-    serve "${tailscale%@*}" "$(digest tailscale-rebuild)"
+    on_main production.compose.yml "$caddy" "${caddy%@*}@$(digest caddy-rebuild)"
+    serve "library/${caddy%@*}" "$(digest caddy-rebuild)"
     sync_pins
     expect_status 0
     expect_output "updated image pins in $SB/etc/production.compose.yml"
-    expect_output "updated image pins in $SB/etc/tailscale.compose.yml"
     expect_installed production.compose.yml "$SB/main/ops/production.compose.yml"
-    expect_installed tailscale.compose.yml "$SB/main/ops/tailscale.compose.yml"
     [[ ! -e $SB/state/pending ]] || fail 'pending exists after an applied bump'
     expect_no_calls
 }

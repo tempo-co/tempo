@@ -7,10 +7,13 @@ suffix=${tmp_dir##*/}
 image="tempo-web-security-headers:${suffix}"
 container="tempo-web-security-headers-${suffix}"
 mcp_upstream="${container}-mcp"
+neighbour="${container}-neighbour"
 
 cleanup() {
     docker rm -f "$mcp_upstream" >/dev/null 2>&1 || true
+    docker rm -f "$neighbour" >/dev/null 2>&1 || true
     docker rm -f "$container" >/dev/null 2>&1 || true
+    docker network rm "$neighbour" >/dev/null 2>&1 || true
     docker image rm "$image" >/dev/null 2>&1 || true
     python3 -c 'import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$tmp_dir"
 }
@@ -227,16 +230,35 @@ expect_client() {
     fi
 }
 
-# A request from the Tailscale proxy address uses the last X-Forwarded-For entry, which the proxy appends.
-trusted_proxy=10.213.47.2
+# Production's HTTPS proxy is Caddy, at its fixed address on web's proxy network.
+trusted_proxy=$(TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d \
+    ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null WISP_PRODUCTION_ENV_FILE=/dev/null docker compose -f "$repo_root/../../ops/production.compose.yml" config --format json |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["services"]["caddy"]["networks"]["proxy"]["ipv4_address"])')
+
+# A request from Caddy's address uses the last X-Forwarded-For entry, which the proxy appends.
 docker exec "$container" ip addr add "$trusted_proxy/32" dev lo
 docker exec "$container" curl -sS --max-time 5 -o /dev/null --interface "$trusted_proxy" \
     -H 'X-Forwarded-For: 198.51.100.7, 203.0.113.10' "http://$trusted_proxy:8080/?trusted-proxy"
 expect_client trusted-proxy 203.0.113.10
 
-# Any other sender, here the container network gateway, keeps its own address whatever it forwards.
+# Any other sender keeps its own address whatever it forwards: the container network gateway,
 gateway=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' "$container")
 curl -sS --max-time 5 -o /dev/null -H 'X-Forwarded-For: 203.0.113.10' "http://127.0.0.1:$port/?untrusted-sender"
 expect_client untrusted-sender "$gateway"
+
+# a local process in web's own container,
+docker exec "$container" curl -sS --max-time 5 -o /dev/null \
+    -H 'X-Forwarded-For: 203.0.113.10' "http://127.0.0.1:8080/?local-process"
+expect_client local-process 127.0.0.1
+
+# and another container on a network it shares with web.
+docker network create "$neighbour" >/dev/null
+docker network connect "$neighbour" "$container"
+docker run --detach --name "$neighbour" --network "$neighbour" --entrypoint sleep "$image" 60 >/dev/null
+neighbour_address=$(docker inspect --format "{{(index .NetworkSettings.Networks \"$neighbour\").IPAddress}}" "$neighbour")
+web_address=$(docker inspect --format "{{(index .NetworkSettings.Networks \"$neighbour\").IPAddress}}" "$container")
+docker exec "$neighbour" curl -sS --max-time 5 -o /dev/null \
+    -H 'X-Forwarded-For: 203.0.113.10' "http://$web_address:8080/?other-container"
+expect_client other-container "$neighbour_address"
 
 echo 'tempo web security headers: PASS'
