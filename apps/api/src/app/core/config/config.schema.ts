@@ -112,6 +112,8 @@ export const configSchema = z
 		EMAIL_PASSWORD: z.string().min(1).optional(),
 		EMAIL_REQUIRE_TLS: strictBooleanEnvSchema.default(false),
 		EMAIL_FROM: z.string().trim().min(1).optional(),
+		/** Where operator alerts go, such as a scheduled bank sync run that fails as a whole; unset or empty sends none. */
+		OPERATOR_ALERT_EMAIL: emptyAsUnset(z.string().trim().email().optional()),
 		EMAIL_VERIFICATION_EXPIRATION: durationSchema,
 		EMAIL_VERIFICATION_REDIS_KEY: z.string().min(1),
 
