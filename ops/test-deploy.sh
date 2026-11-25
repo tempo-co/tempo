@@ -378,17 +378,21 @@ test_first_deploy_on_a_new_host_starts_the_whole_stack() {
 
 test_failed_first_deploy_is_tried_again_from_scratch() {
     new_host
+    # Staging keeps its settings in the same file as the deployed images.
+    echo 'OTHER_SETTING=kept' >"$SB/state/deployed.env"
     web_ref 1 >"$SB/fake/unhealthy"
     deploy
     expect_status 1
     expect_output 'first start failed'
-    [[ ! -e $SB/state/deployed.env ]] || fail 'deployed.env kept after a failed first start'
+    expect_equal "$(cat "$SB/state/deployed.env")" 'OTHER_SETTING=kept' 'deployed.env after a failed first start'
 
     : >"$SB/fake/unhealthy"
     deploy
     expect_status 0
     expect_output 'first start: healthy'
-    expect_deployed "$(api_ref 1)" "$(web_ref 1)"
+    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nTEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s' "$(api_ref 1)" "$(web_ref 1)")" 'deployed.env'
+    expect_equal "$(container api)" "$(api_ref 1)" 'running api image'
+    expect_equal "$(container web)" "$(web_ref 1)" 'running web image'
 }
 
 tests=$(declare -F | awk '$3 ~ /^test_/ { print $3 }')

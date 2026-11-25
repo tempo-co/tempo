@@ -1,6 +1,6 @@
 # Tempo operations
 
-CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/{api,web}` tags for same-repo PRs and `main` (`docs/ci-and-images.md`). `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back. A new host gets the whole stack started, retried until healthy.
+CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/{api,web}` tags for same-repo PRs and `main` (`docs/ci-and-images.md`). `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back. A new host gets the whole stack started, retried by the next run.
 
 | File | Purpose |
 |---|---|

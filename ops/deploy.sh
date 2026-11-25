@@ -6,7 +6,8 @@
 #   deploy.sh staging --api pr-12 --web main  # omitted components keep their current image
 #
 # Tags resolve to immutable digests before rollout. A failed rollout restores the
-# previous images. Database migrations are not rolled back.
+# previous images. Database migrations are not rolled back. A host with no deployed
+# images yet gets the whole stack started instead.
 #
 # Services pinned by tag@digest in the installed Compose files (PINNED_SERVICES, Tailscale)
 # are recreated first whenever the pinned image differs from the running one.
@@ -96,13 +97,13 @@ resolve() {
 image_id() { docker image inspect --format '{{.Id}}' "$1" 2>/dev/null || echo "missing:$1"; }
 revision() { docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null || true; }
 
-# Replace only the image lines; for staging this file also holds the secrets.
+# Replace only the image lines (with no arguments, remove them); for staging this file also holds the secrets.
 write_images() {
     local tmp
     tmp=$(mktemp "$IMAGES_FILE.XXXXXX") || return 1
     if {
         if [[ -f $IMAGES_FILE ]]; then grep -vE '^TEMPO_(API|WEB)_IMAGE=' "$IMAGES_FILE" || (($? == 1)); fi
-        printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$1" "$2"
+        (($# == 0)) || printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$1" "$2"
     } >"$tmp" && chmod 600 "$tmp" && mv -- "$tmp" "$IMAGES_FILE"; then
         return 0
     fi
@@ -168,14 +169,14 @@ update_pinned() {
 }
 
 # A new host has no deployed images yet: start the whole stack from the tags. There is nothing
-# to back up or roll back to; a failed start removes the deployed images, so the next run starts over.
+# to back up or roll back to; a failed start removes the image lines, so the next run starts over.
 if ! grep -qs '^TEMPO_API_IMAGE=' "$IMAGES_FILE"; then
     first_api=$(resolve api "${REQUESTED[api]:-$DEFAULT_TAG}")
     first_web=$(resolve web "${REQUESTED[web]:-$DEFAULT_TAG}")
     log "first start: API $(revision "$first_api") (${first_api#*@}), web $(revision "$first_web") (${first_web#*@})"
     write_images "$first_api" "$first_web" || die 'could not write the deployed images'
     if ! compose up -d --wait --wait-timeout "$WAIT_TIMEOUT" || ! healthy; then
-        rm -f -- "$IMAGES_FILE"
+        write_images || log 'could not remove the image lines' >&2
         die 'first start failed; the next run starts over'
     fi
     log 'first start: healthy'
