@@ -68,7 +68,8 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379
-      EMAIL_HOST: smtp.gmail.com
+      # Scaleway Transactional Email; user and password (project ID, API secret key) are in the env file.
+      EMAIL_HOST: smtp.tem.scaleway.com
       EMAIL_PORT: '587'
       EMAIL_SECURE: 'false'
       EMAIL_REQUIRE_TLS: 'true'

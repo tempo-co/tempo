@@ -12,6 +12,7 @@ CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/
 | `install.sh` | Copies the above to the production server; `--check` lists installed files that differ from the checkout |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
 | `wisp-api-egress.sh` | Egress firewall for the API uid and production's container networks (see Egress firewall) |
+| `wizard.sh`, `table-check.sh` | A new server's setup and the move onto it (see New host); the move's per-table check |
 | `test-deploy.sh`, `test-sync-pins.sh` | Offline tests of `deploy.sh` and `sync-pins.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or installed file |
 | `test-backup.sh` | Offline tests of `backup.sh`, `restore-drill.sh` and `failure-email.sh`, run by CI's `Ops checks`: stub `docker` and `restic` and use a local fake mail server |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API, web and Caddy |
@@ -44,7 +45,7 @@ sudo ops/install.sh production
 
 To see whether the server runs what a checkout holds, run `sudo ops/install.sh production --check` (`ops/install.sh staging --check` for staging). It renders the same files the install would, prints a diff for each installed file that differs, is missing or has another mode, and exits 1 if any does. It writes nothing. The installed version it prints is informational: `main` moves on without ops changes.
 
-Production secrets live in `/etc/wisp/production.env` (mode 600), outside the repository. Its Redis key prefixes (`SESSION_REDIS_KEY`, `EMAIL_VERIFICATION_REDIS_KEY`, `PASSWORD_RESET_REDIS_KEY`) take `wisp-` values. Email goes through authenticated SMTP with STARTTLS required.
+Production secrets live in `/etc/wisp/production.env` (mode 600), outside the repository. Its Redis key prefixes (`SESSION_REDIS_KEY`, `EMAIL_VERIFICATION_REDIS_KEY`, `PASSWORD_RESET_REDIS_KEY`) take `wisp-` values. Email goes through Scaleway Transactional Email (`smtp.tem.scaleway.com`), authenticated, with STARTTLS required.
 
 ### Claude categorization
 
@@ -90,7 +91,9 @@ Caddy (`caddy` in `production.compose.yml`, configured by `Caddyfile`) publishes
 
 Certificates are issued only once both names resolve to the host, so set the DNS records first; until then Caddy retries on its own. A `Caddyfile` change reaches Caddy after `sudo ops/install.sh production` and `docker compose -p wisp-production exec caddy caddy reload --config /etc/caddy/Caddyfile`.
 
-A new host needs, before the first deploy: Docker Engine with the Compose plugin, `git`, `curl`, `jq`, `nftables` and `restic` (the install, deploy, pin-sync, egress and backup scripts), DNS A records (and AAAA if the host has IPv6) for both names, and a host firewall that admits TCP 80 and 443 from the internet and nothing else. Then run `sudo ops/install.sh production` and enable the units.
+### New host
+
+`ops/wizard.sh setup` takes a fresh Ubuntu 26.04 LTS server to this baseline, showing each root command for the owner to approve. From the laptop: `gate` checks the move gate, `rehearse` runs the move and puts the server back, `move` is move night. Details: [`docs/new-host.md`](../docs/new-host.md).
 
 ### Network boundary
 
