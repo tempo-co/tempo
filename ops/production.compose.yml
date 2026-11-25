@@ -107,7 +107,7 @@ services:
     networks:
       - frontend
       - ingress
-      - tailscale
+      - proxy
     depends_on:
       api:
         condition: service_healthy
@@ -118,14 +118,41 @@ services:
       retries: 5
       start_period: 5s
 
+  # The public entry: HTTPS for app.wispmoney.com and wispmoney.com (ops/Caddyfile), proxied to web.
+  caddy:
+    image: caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
+    restart: unless-stopped
+    <<: *no-new-privileges
+    cap_drop: [ALL]
+    # The caddy binary carries the capability to bind ports 80 and 443 and cannot start without it.
+    cap_add: [NET_BIND_SERVICE]
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account keys. Losing them means asking Let's Encrypt again, within its rate limits.
+      - wisp_production_caddy_data:/data
+      - wisp_production_caddy_config:/config
+    networks:
+      proxy:
+        # Web's Nginx trusts X-Forwarded-For only from this address.
+        ipv4_address: 10.213.47.2
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2019/config/']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 networks:
   default: {}
   frontend:
     internal: true
   ingress: {}
-  # Joins web and the Tailscale sidecar (ops/tailscale.compose.yml). The fixed subnet gives the sidecar a
-  # static address outside the dynamic range, the only address web's Nginx trusts for X-Forwarded-For.
-  tailscale:
+  # Joins web and Caddy. The fixed subnet gives Caddy a static address outside the dynamic range,
+  # the only address web's Nginx trusts for X-Forwarded-For.
+  proxy:
     ipam:
       config:
         - subnet: 10.213.47.0/28
@@ -134,3 +161,5 @@ networks:
 
 volumes:
   wisp_production_postgres_data:
+  wisp_production_caddy_data:
+  wisp_production_caddy_config:

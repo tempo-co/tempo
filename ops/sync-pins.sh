@@ -20,7 +20,6 @@ SOURCE=${SYNC_PINS_SOURCE:-}
 STATE=${STATE_DIRECTORY:-/var/lib/wisp-sync-pins}
 declare -A FILES=(
     [ops/production.compose.yml]=${SYNC_PINS_ETC:-/etc/wisp/compose}/production.compose.yml
-    [ops/tailscale.compose.yml]=${SYNC_PINS_ETC:-/etc/wisp/compose}/tailscale.compose.yml
 )
 PIN='^( +)image: ([a-z0-9._/-]+):([A-Za-z0-9._-]+)@(sha256:[0-9a-f]{64})$'
 

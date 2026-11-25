@@ -20,7 +20,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 ## What each job covers
 
 - `Docs check`: runs for every change. `.github/scripts/check-docs.mjs` fails when a living doc names a backticked path that is not tracked, an `npm run` script its package lacks, or exceeds its word budget; budgets, overrides and the allowed missing paths are in `.github/scripts/check-docs.json`, and `node --test .github/scripts/check-docs.test.mjs` tests the check.
-- `Ops checks`: `shellcheck -x` on the `ops/` scripts, the offline `ops/test-deploy.sh` and `ops/test-sync-pins.sh`, and `docker compose config -q` on the production, Tailscale and staging Compose files with synthetic values for every required variable. A new `${VAR:?}` in a Compose file needs a synthetic export there.
+- `Ops checks`: `shellcheck -x` on the `ops/` scripts, the offline `ops/test-deploy.sh` and `ops/test-sync-pins.sh`, `docker compose config -q` on the production and staging Compose files with synthetic values for every required variable, and `caddy validate` on `ops/Caddyfile` with the pinned Caddy image. A new `${VAR:?}` in a Compose file needs a synthetic export there.
 - `API lint & format`: the API's `lint:check`/`format:check`.
 - `API build`: `npm --prefix apps/api run build`.
 - `API unit tests`: Jest.

@@ -1,0 +1,23 @@
+# Installed to /etc/wisp/compose/Caddyfile by `sudo ops/install.sh production`; see "Public entry" in ops/README.md.
+{
+	# The firewall opens TCP 80 and 443 only, so HTTP/3 (UDP) is not offered.
+	servers {
+		protocols h1 h2
+	}
+}
+
+(hsts) {
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+app.wispmoney.com {
+	import hsts
+	# Sends the client address as the only X-Forwarded-For entry, which web's Nginx trusts from Caddy's address.
+	reverse_proxy web:8080
+}
+
+# The bare domain forwards to the app until the public site takes it.
+wispmoney.com {
+	import hsts
+	redir https://app.wispmoney.com{uri}
+}
