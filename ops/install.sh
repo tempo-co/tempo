@@ -101,11 +101,14 @@ case ${1:-} in
         $CHECK || [[ $VERSION == "$(git rev-parse origin/main)" ]] || { echo 'checkout is not origin/main; run git fetch and check out origin/main' >&2; exit 1; }
         install_script /usr/local/lib/wisp-deploy
         copy 755 "$REPO/ops/sync-pins.sh" /usr/local/lib/wisp-deploy/sync-pins.sh
+        copy 755 "$REPO/ops/restore-drill.sh" /usr/local/lib/wisp-deploy/restore-drill.sh
+        copy 755 "$REPO/ops/failure-email.sh" /usr/local/lib/wisp-deploy/failure-email.sh
         copy 644 "$REPO/ops/production.compose.yml" /etc/wisp/compose/production.compose.yml
         copy 644 "$REPO/ops/tailscale.compose.yml" /etc/wisp/compose/tailscale.compose.yml
         copy 755 "$REPO/ops/wisp-api-egress.sh" /usr/local/sbin/wisp-api-egress
         for unit in wisp-deploy-production.service wisp-deploy-production.timer wisp-sync-pins.service \
-            wisp-backup.service wisp-backup.timer wisp-api-egress.service; do
+            wisp-backup.service wisp-backup.timer wisp-restore-drill.service wisp-restore-drill.timer \
+            wisp-failure-email@.service wisp-api-egress.service; do
             copy_rendered 644 "$REPO/ops/systemd/$unit" "/etc/systemd/system/$unit" "$SUDO_USER" "$home"
         done
         if ! $CHECK; then

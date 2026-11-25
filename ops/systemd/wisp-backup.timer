@@ -1,8 +1,8 @@
 [Unit]
-Description=Wisp production database backup nightly at 03:30 (catches up after downtime)
+Description=Wisp production database backup every 6 hours (catches up after downtime)
 
 [Timer]
-OnCalendar=*-*-* 03:30:00
+OnCalendar=*-*-* 00/6:30:00
 Persistent=true
 RandomizedDelaySec=300
 

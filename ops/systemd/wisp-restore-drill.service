@@ -1,0 +1,20 @@
+# Installed by `sudo ops/install.sh production`, which fills in @USER@.
+# Restic settings come from /etc/wisp/backup.env (see "Restore drill" in ops/README.md).
+[Unit]
+Description=Restore the newest Wisp backup into a throwaway database and check it
+OnFailure=wisp-failure-email@%n.service
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=@USER@
+SupplementaryGroups=docker
+EnvironmentFile=/etc/wisp/backup.env
+# A restored table passes within 10% or 100 rows of live, whichever is larger.
+Environment=DRILL_ROW_TOLERANCE_PERCENT=10
+Environment=DRILL_ROW_TOLERANCE_ROWS=100
+ExecStart=/usr/local/lib/wisp-deploy/restore-drill.sh
+TimeoutStartSec=1h
+PrivateTmp=true

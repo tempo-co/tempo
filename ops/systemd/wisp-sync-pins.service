@@ -2,6 +2,7 @@
 # It fails once per new change that needs a manual install, for the host's failure alert.
 [Unit]
 Description=Copy Wisp image-pin bumps from main into the installed Compose files
+OnFailure=wisp-failure-email@%n.service
 Wants=network-online.target
 After=network-online.target
 

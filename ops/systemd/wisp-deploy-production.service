@@ -1,6 +1,7 @@
 # Installed by `sudo ops/install.sh production`, which fills in @USER@.
 [Unit]
 Description=Deploy the latest tested Wisp images to production
+OnFailure=wisp-failure-email@%n.service
 # Image-pin bumps from main land first; if that step fails, the deploy still runs.
 Wants=network-online.target wisp-sync-pins.service
 After=docker.service network-online.target wisp-sync-pins.service

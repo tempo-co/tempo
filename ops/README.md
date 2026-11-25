@@ -6,22 +6,25 @@ CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/
 |---|---|
 | `deploy.sh` | Deploy script for both targets |
 | `targets/production.env`, `targets/staging.env` | Non-secret per-target settings |
-| `backup.sh` | Validated `pg_dump`, scheduled and pre-deploy |
+| `backup.sh` | Validated `pg_dump`, scheduled (uploaded off-site with restic) and pre-deploy (local only) |
+| `restore-drill.sh` | Monthly restore of the newest off-site backup into a throwaway database, checked table by table |
+| `failure-email.sh` | Emails the operator when a server unit fails (see Failure emails) |
 | `install.sh` | Copies the above to the production server; `--check` lists installed files that differ from the checkout |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
 | `wisp-api-egress.sh` | Egress firewall for the API uid and production's container networks (see Egress firewall) |
 | `test-deploy.sh`, `test-sync-pins.sh` | Offline tests of `deploy.sh` and `sync-pins.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or installed file |
+| `test-backup.sh` | Offline tests of `backup.sh`, `restore-drill.sh` and `failure-email.sh`, run by CI's `Ops checks`: stub `docker` and `restic` and use a local fake mail server |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API and web |
 | `tailscale.compose.yml` | Tailscale sidecar giving production its own tailnet device |
 | `ghcr-retention.sh` | Weekly GHCR cleanup of both packages (`.github/workflows/ghcr-retention.yml`): keeps `main`, `release`, open PRs' `pr-<n>` and anything newer than 30 days. Also keeps the images of the last 5 `main` commits that changed the app as rollback targets. Dry run until the repo variable `GHCR_RETENTION_DELETE=true`; GitHub pauses scheduled workflows after 60 days without repo activity |
-| `systemd/` | Production deploy and backup timers and the egress firewall (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
+| `systemd/` | Production deploy, backup and restore-drill timers, the egress firewall and the failure-email hook (installed by `install.sh`); staging Docker daemon (user unit, installed once by hand) |
 | `staging/` | Staging Compose files (stack and Tailscale sidecar), env template, database refresh |
 
 ## Production
 
 The production host uses wisp names: Compose project `wisp-production` (containers such as `wisp-production-postgres-1`), database and database user `wisp`, units `wisp-*`, deploy tooling in `/usr/local/lib/wisp-deploy`, state in `/var/lib/wisp-deploy`, Compose files and secrets in `/etc/wisp`. Never run `sudo ops/install.sh production` on a host whose stack runs under another Compose project: the next deploy would start an empty stack beside the existing volumes.
 
-`wisp-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:release`. A failed image pull is retried twice, 15 and 30 seconds apart, before the run fails. Before any API image change it takes a validated database backup; a failed backup cancels the deploy. Images that fail to deploy are skipped until `:release` moves.
+`wisp-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:release`. A failed image pull is retried twice, 15 and 30 seconds apart, before the run fails. Before any API image change it takes a validated database backup into `/var/lib/wisp-deploy/pre-deploy-backups`, keeping the newest 3 there; a failed backup cancels the deploy. Images that fail to deploy are skipped until `:release` moves.
 
 CI moves `:release` to the newest green `:main` every night at 02:23 UTC, and the next deploy run picks it up (`docs/ci-and-images.md`, Release). To release now, run the `Release` workflow on `main` (Actions → Release → Run workflow, or `gh workflow run release.yml --ref main`); it ships everything merged since the last release, and its summary lists those commits. A deploy with an unchanged `:release` changes nothing.
 
@@ -31,8 +34,6 @@ PostgreSQL, Redis, Mailpit and Tailscale are pinned by `tag@digest` in the Compo
 journalctl -u wisp-deploy-production.service -n 50    # what happened
 cat /var/lib/wisp-deploy/deployed.env                 # what is deployed
 ```
-
-`wisp-backup.timer` runs `backup.sh` on a schedule and keeps a fixed number of timestamped `wisp-<YYYYMMDD-HHMMSS>.dump` archives in `~/backups/wisp`; manual `wisp-pre-*.dump` files are never pruned. Schedule, directory and retention are set by the units `install.sh` installs.
 
 After changing anything else in `ops/`, install from a clean `main` checkout:
 
@@ -64,6 +65,31 @@ The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env
 ### Operator alerts
 
 `OPERATOR_ALERT_EMAIL` in `/etc/wisp/production.env` is where the API emails failures no user sees, through the app's SMTP settings: a scheduled bank sync run that fails as a whole, at most once a day per kind of failure. Without it, nothing is sent.
+
+### Backups
+
+`wisp-backup.timer` runs `backup.sh` every 6 hours (00:30, 06:30, 12:30 and 18:30 server time) and catches up on a missed run after downtime. Each run takes a validated `pg_dump` into `~/backups/wisp` as `wisp-<YYYYMMDD-HHMMSS>.dump`, keeps the newest 4 there (manual `wisp-pre-*.dump` files are never pruned), and uploads it with restic over SFTP to the Hetzner Storage Box in Helsinki as `/wisp.dump` of host `wisp-production`, tag `wisp-db`. Restic encrypts before upload. It then applies the retention policy: every snapshot of the last 7 days, then the newest of each week up to 30 days, pruning the rest. A failed dump, upload or prune fails the unit, which sends a failure email; the local dump stays after a failed upload.
+
+The Storage Box's own automatic snapshots (set in the Hetzner console) keep copies the server cannot delete. The restic settings live in `/etc/wisp/backup.env` (mode 600, owned by the deploy user), read by the backup and drill units:
+
+```bash
+RESTIC_REPOSITORY=sftp:u000000.your-storagebox.de:wisp
+RESTIC_PASSWORD=<letters and digits only, typed by the owner>
+```
+
+The owner keeps a copy of the password off the server: without it no backup can be read. Setting up the repository on a new server, restoring by hand and rebuilding a lost server from Helsinki are in [`docs/backups.md`](../docs/backups.md).
+
+```bash
+journalctl -u wisp-backup.service -n 50      # the last runs
+```
+
+### Restore drill
+
+`wisp-restore-drill.timer` runs `restore-drill.sh` on the 2nd of every month at 09:15 and catches up after downtime. It restores the newest snapshot into a throwaway PostgreSQL container (the live image, no network, a random password, removed afterwards) and checks every table of the live database: the table must exist in the restored copy, answer a row count, and hold within 10% or 100 rows of the live count, whichever is larger (the unit's `DRILL_ROW_TOLERANCE_*` settings). Any failure fails the unit and sends a failure email. A table a migration added since the snapshot fails the drill until the next backup; run it again with `sudo systemctl start wisp-restore-drill.service`.
+
+### Failure emails
+
+Every production unit (deploy, pin sync, backup, restore drill and egress firewall) names `OnFailure=wisp-failure-email@%n.service`. When one fails, the hook runs `failure-email.sh`, which emails `OPERATOR_ALERT_EMAIL` the unit's name and the last 40 lines of its journal, through the API's own SMTP settings from the installed Compose file and `/etc/wisp/production.env`. Without `OPERATOR_ALERT_EMAIL` or `EMAIL_FROM`, the hook itself fails and the failure shows only in the journal (`journalctl -u 'wisp-failure-email@*'`). A new server unit gets the same line under `[Unit]`; `test-backup.sh` fails for a `wisp-*.service` without it.
 
 ### Network boundary
 

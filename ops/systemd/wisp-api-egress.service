@@ -1,6 +1,7 @@
 # Installed by `sudo ops/install.sh production`. Reload after installing or after recreating a filtered network.
 [Unit]
 Description=Limit what the Wisp API uid and containers can reach
+OnFailure=wisp-failure-email@%n.service
 Wants=docker.service
 After=docker.service
 
