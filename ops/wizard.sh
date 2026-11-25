@@ -1108,6 +1108,9 @@ if [[ $mode == move ]]; then
     remote_root systemctl start $(cat "$STATE/server-timers")
   fi
   rm -f -- "$STATE/server-timers"
+  # From here the server serves the moved data: a reset must never roll it back or restart the laptop.
+  : >"$STATE/moved"
+  rm -f -- "$STATE/moving" "$STATE/pre-move-dump" "$STATE/laptop-frozen"
   say "The first backup of the moved data runs now, in the background:"
   remote_root systemctl start --no-block wisp-backup.service
 fi
@@ -1141,7 +1144,7 @@ if [[ $mode == rehearse ]]; then
 else
   stage "The first sync and the laptop"
   rm -rf -- "$WORK"
-  rm -f -- "$STATE/laptop-frozen" "$STATE/moving" "$STATE/pre-move-dump"
+  rm -f -- "$STATE/moved"
   step "After the next scheduled sync (within 6 hours), check that each bank connection shows a sync after tonight."
   step "Keep the laptop's stack until the switch-off checks pass (docs/new-host.md): it is the way back."
   step "Then set up staging's feed with the owner account's id: docs/staging-feed.md, Setting it up."
@@ -1156,6 +1159,15 @@ reset_wizard() {
 TOTAL_STAGES=2
 stage "Settings"
 load_move_settings
+if [[ -e $STATE/moved ]]; then
+  stage "Tidy up after move night"
+  say "The server already serves the moved data, so nothing is rolled back and the laptop stays stopped."
+  remote "rm -rf -- $SERVER_WORK"
+  rm -rf -- "$WORK"
+  rm -f -- "$STATE/moved"
+  step "Finish the steps the wizard did not reach: device logins, notifications, the MCP URL (docs/new-host.md)."
+  return
+fi
 if [[ -e $STATE/moving ]]; then
   stage "Go back to the laptop"
   say "Move night stopped part-way. The server goes back to its pre-move database, so it holds none of the moved data, and the laptop serves again."
