@@ -1034,12 +1034,9 @@ say "Both hosts run the same API image."
 pause
 
 stage "Stop the server's app"
-# A retry after a stopped move keeps the list the first attempt saved, when the timers were still running.
-if [[ ! -e $STATE/server-timers ]]; then
-  for timer in "${SERVER_TIMERS[@]}"; do
-    if remote "systemctl is-active --quiet $timer"; then echo "$timer"; fi
-  done >"$STATE/server-timers"
-fi
+for timer in "${SERVER_TIMERS[@]}"; do
+  if remote "systemctl is-active --quiet $timer"; then echo "$timer"; fi
+done >"$STATE/server-timers"
 if [[ -s $STATE/server-timers ]]; then
   # shellcheck disable=SC2046 # one unit name per line
   remote_root systemctl stop $(cat "$STATE/server-timers")
@@ -1054,7 +1051,10 @@ if [[ $mode == rehearse ]]; then
     fail_stop "could not save the server's own database: run ops/wizard.sh reset"
   say "The server's timers, API and web are stopped; its own database is saved for the reset."
 else
-  remote "mkdir -p backups/wisp && docker exec $SERVER_PG pg_dump --format=custom -U wisp wisp >backups/wisp/wisp-pre-move-\$(date +%Y%m%d-%H%M%S).dump"
+  pre_move="backups/wisp/wisp-pre-move-$(date +%Y%m%d-%H%M%S).dump"
+  remote "mkdir -p backups/wisp && docker exec $SERVER_PG pg_dump --format=custom -U wisp wisp >$pre_move.tmp && mv $pre_move.tmp $pre_move" ||
+    fail_stop "could not save the server's pre-move database: run ops/wizard.sh reset"
+  echo "$pre_move" >"$STATE/pre-move-dump"
   say "The server's timers, API and web are stopped; its pre-move database is in ~/backups/wisp/wisp-pre-move-*.dump."
 fi
 pause
@@ -1141,7 +1141,7 @@ if [[ $mode == rehearse ]]; then
 else
   stage "The first sync and the laptop"
   rm -rf -- "$WORK"
-  rm -f -- "$STATE/laptop-frozen" "$STATE/moving"
+  rm -f -- "$STATE/laptop-frozen" "$STATE/moving" "$STATE/pre-move-dump"
   step "After the next scheduled sync (within 6 hours), check that each bank connection shows a sync after tonight."
   step "Keep the laptop's stack until the switch-off checks pass (docs/new-host.md): it is the way back."
   step "Then set up staging's feed with the owner account's id: docs/staging-feed.md, Setting it up."
@@ -1158,12 +1158,21 @@ stage "Settings"
 load_move_settings
 if [[ -e $STATE/moving ]]; then
   stage "Go back to the laptop"
-  say "Move night stopped part-way. The laptop serves again; the server's app and timers stay stopped, so only one host serves."
-  remote "docker stop $SERVER_WEB $SERVER_API >/dev/null 2>&1; rm -rf -- $SERVER_WORK"
+  say "Move night stopped part-way. The server goes back to its pre-move database, so it holds none of the moved data, and the laptop serves again."
+  remote "docker stop $SERVER_WEB $SERVER_API >/dev/null 2>&1 || true"
+  if [[ -s $STATE/pre-move-dump ]]; then
+    server_db_replace "$(cat "$STATE/pre-move-dump")" || fail_stop "the restore of the server's pre-move database failed; its app stays stopped"
+  fi
+  start_server_app
+  if [[ -s $STATE/server-timers ]]; then
+    # shellcheck disable=SC2046 # one unit name per line
+    remote_root systemctl start $(cat "$STATE/server-timers")
+  fi
+  remote "rm -rf -- $SERVER_WORK"
   reset_laptop
   rm -rf -- "$WORK"
-  rm -f -- "$STATE/moving"
-  note "Run ops/wizard.sh move again to retry; it replaces the server's database and starts its timers at the end."
+  rm -f -- "$STATE/moving" "$STATE/pre-move-dump" "$STATE/server-timers"
+  note "The server passes the move gate again: ops/wizard.sh move retries."
   return
 fi
 stage "Reset the server and the laptop"
