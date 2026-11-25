@@ -4,7 +4,7 @@
 #   ghcr-retention.sh <owner>/<repo> <package> <app directory> [--delete]
 #   ghcr-retention.sh tempo-co/tempo api apps/api
 #
-# Keeps versions tagged `main`, the images of the last KEEP_MAIN (default 5) main commits
+# Keeps versions tagged `main` or `release`, the images of the last KEEP_MAIN (default 5) main commits
 # that changed the app directory (rollback targets), versions tagged `pr-<n>` for open PRs,
 # versions younger than KEEP_DAYS (default 30), and every manifest those versions reference
 # (the platform image and its attestation, which GHCR lists as untagged versions).
@@ -32,7 +32,7 @@ cutoff=$(date -u -d "-$KEEP_DAYS days" +%Y-%m-%dT%H:%M:%SZ)
 jq -e 'any(.[]; .metadata.container.tags | index("main"))' <<<"$versions" >/dev/null ||
     { echo "no version of $PACKAGE is tagged main; refusing to continue" >&2; exit 1; }
 kept=$(jq -r --argjson open "$open_prs" --argjson main "$recent_main" --arg cutoff "$cutoff" '
-    .[] | select(.created_at >= $cutoff or any(.metadata.container.tags[]; . == "main" or IN($open[]) or IN($main[]))) | .name
+    .[] | select(.created_at >= $cutoff or any(.metadata.container.tags[]; . == "main" or . == "release" or IN($open[]) or IN($main[]))) | .name
 ' <<<"$versions")
 
 # Manifests referenced by kept image indexes must stay, or the kept tags stop pulling.
