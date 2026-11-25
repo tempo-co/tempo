@@ -9,7 +9,7 @@ How `src/app/modules/banking/merchant-logos/` finds, trusts, stores and serves a
 - No per-merchant rules (aliases, domain overrides, exception lists). Fix a miss with a general rule and a synthetic test, or leave the category icon.
 - Own transfers and currency exchanges never show a logo, even when they share a key with a purchase: rows with `ownTransferEvidence` or `financialEventType` are skipped in `addMerchants`, the identification input and `getLogoUrls`. Keep an E2E row of that shape.
 - The browser loads originals from `GET /merchant-logos/:id/:version` or display-only masks from `GET /merchant-logos/:id/:version/mask-v3`, never from merchant sites or logo services.
-- `MERCHANT_LOGOS_ENABLED=true` requires `ANTHROPIC_API_KEY` for acquisition; merchants would otherwise stay pending forever. Set `MERCHANT_LOGOS_CACHED_ONLY=true` to serve existing originals and masks without model credentials, identification, acquisition, reconciliation or their scheduling. This mode defaults off; the feature flag and user checks govern reads in either mode.
+- `MERCHANT_LOGOS_ENABLED=true` requires `ANTHROPIC_API_KEY` for acquisition; merchants would otherwise stay pending forever. Identification runs on `MERCHANT_IDENTIFICATION_MODEL` at `MERCHANT_IDENTIFICATION_EFFORT` (default Sonnet at `high`), apart from categorization's model. Set `MERCHANT_LOGOS_CACHED_ONLY=true` to serve existing originals and masks without model credentials, identification, acquisition, reconciliation or their scheduling. This mode defaults off; the feature flag and user checks govern reads in either mode.
 
 ## Data model
 

@@ -51,8 +51,8 @@ export const configSchema = z
 
 		// --- AI categorization ---
 		AI_CATEGORIZATION_ENABLED: strictBooleanEnvSchema.default(false),
-		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('claude-sonnet-5-5'),
-		AI_CATEGORIZATION_EFFORT: z.enum(categorizationContract.efforts).default('high'),
+		AI_CATEGORIZATION_MODEL: z.string().min(1).max(128).default('claude-haiku-5-5'),
+		AI_CATEGORIZATION_EFFORT: z.enum(categorizationContract.efforts).default('xhigh'),
 		AI_CATEGORIZATION_WEB_SEARCH_ENABLED: strictBooleanEnvSchema.default(false),
 		ANTHROPIC_API_KEY: z.string().min(1).optional(),
 		// Brave Search API key for merchant lookups during categorization.
@@ -60,6 +60,9 @@ export const configSchema = z
 
 		// --- Merchant logos ---
 		MERCHANT_LOGOS_ENABLED: strictBooleanEnvSchema.default(false),
+		// The call that names the business behind a merchant; it uses ANTHROPIC_API_KEY.
+		MERCHANT_IDENTIFICATION_MODEL: z.string().min(1).max(128).default('claude-sonnet-5-5'),
+		MERCHANT_IDENTIFICATION_EFFORT: z.enum(categorizationContract.efforts).default('high'),
 		MERCHANT_LOGOS_CACHED_ONLY: strictBooleanEnvSchema.default(false),
 		/** logo.dev's secret key; without it logos come from the merchants' own sites only. */
 		LOGO_DEV_SECRET_KEY: z.string().min(1).optional(),
