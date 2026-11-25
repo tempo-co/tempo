@@ -44,7 +44,7 @@ export function offlineShellPlugin(base: string): Plugin {
         hash.update(name).update(readFileSync(path.resolve('public', name)));
         files.push(name);
       }
-      const prefix = `tempo-shell-${base}-`;
+      const prefix = `wisp-shell-${base}-`;
       const cacheName = prefix + hash.update(base).digest('hex').slice(0, 16);
       this.emitFile({
         type: 'asset',

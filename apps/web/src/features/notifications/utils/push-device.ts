@@ -121,7 +121,7 @@ export async function unsubscribeDevice(): Promise<string | null> {
   return subscription.endpoint;
 }
 
-const TURNED_OFF_KEY = 'tempo-device-alerts-off';
+const TURNED_OFF_KEY = 'wisp-device-alerts-off';
 
 /**
  * Whether this device was turned off in Settings, so Tempo leaves it unsubscribed until Allow is tapped. Unreadable

@@ -12,7 +12,7 @@ import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {bankQueryKeys} from '@/features/banking/api/query-keys';
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';
 
-const CACHE_KEY = 'tempo-offline-cache';
+const CACHE_KEY = 'wisp-offline-cache';
 export const OFFLINE_MAX_AGE = 24 * 60 * 60 * 1000;
 /** Room, in JSON characters, for loaded data that is neither kept nor on screen. */
 const RECENT_DATA_BUDGET = 2 * 1024 * 1024;
@@ -210,7 +210,7 @@ export function createOfflinePersistence(
   return {
     persister,
     maxAge: OFFLINE_MAX_AGE,
-    buster: 'tempo-offline-v5',
+    buster: 'wisp-offline-v5',
     dehydrateOptions: {
       shouldDehydrateMutation: () => false,
       shouldDehydrateQuery: (query) =>

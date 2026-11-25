@@ -4,7 +4,7 @@ import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
 
-const CACHE_KEY = 'tempo-offline-cache';
+const CACHE_KEY = 'wisp-offline-cache';
 /** Pads each transactions page so that a few of them exceed the 2 MiB offline budget. */
 const PAGE_PADDING = 700_000;
 type SavedCache = {timestamp: number; clientState: {queries: {queryKey: unknown[]}[]}};

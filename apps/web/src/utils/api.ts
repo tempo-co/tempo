@@ -62,7 +62,7 @@ let sessionController = new AbortController();
 
 /** Cancels foreground work at logout intent and whenever this tab changes sessions. */
 export const getSessionSignal = () => sessionController.signal;
-const PENDING_LOGOUT_KEY = 'tempo-pending-logout';
+const PENDING_LOGOUT_KEY = 'wisp-pending-logout';
 let logoutRequest: Promise<void> | undefined;
 let unpersistedLogout = false;
 
@@ -79,7 +79,7 @@ export async function completePendingLogout() {
   if (!hasPendingLogout()) return;
   if (logoutRequest) return logoutRequest;
   logoutRequest = (async () => {
-    await navigator.locks.request('tempo-logout', async () => {
+    await navigator.locks.request('wisp-logout', async () => {
       // Another tab may have completed the logout while this tab waited for the lock.
       if (!hasPendingLogout()) return;
       if (!onlineManager.isOnline()) throw new NetworkError();
