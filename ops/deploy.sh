@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # Deploy the API and web images to production or staging.
 #
-#   deploy.sh production                      # deploy the :main images (run by the timer)
+#   deploy.sh production                      # deploy the :release images (run by the timer)
 #   deploy.sh staging --api pr-12 --web main  # omitted components keep their current image
 #
 # Tags resolve to immutable digests before rollout. A failed rollout restores the

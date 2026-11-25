@@ -19,8 +19,11 @@ web_ref() { echo "ghcr.io/tempo-co/web@$(digest "web-$1")"; }
 postgres_pin() { echo "postgres:17.11@$(digest "postgres-$1")"; }
 redis_pin() { echo "redis:7.4.12@$(digest "redis-$1")"; }
 
-# Usage: publish <api|web> <build>: points the component's :main tag at that build.
-publish() { digest "$1-$2" >"$SB/fake/tags/$1_main"; }
+# The tag the real production target deploys by default.
+RELEASE_TAG=$(sed -n 's/^DEFAULT_TAG=//p' "$OPS_DIR/targets/production.env")
+
+# Usage: publish <api|web> <build> [tag]: points the component's tag (default: the production tag) at that build.
+publish() { digest "$1-$2" >"$SB/fake/tags/$1_${3:-$RELEASE_TAG}"; }
 # Usage: pin <service> <pin>: rewrites the service's image line in the installed Compose file.
 pin() { sed -i -E "/^  $1:\$/,/image:/ s|image: .*|image: $2|" "$SB/etc/production.compose.yml"; }
 container() { cat "$SB/fake/containers/wisp-test-$1-1"; }
@@ -38,7 +41,7 @@ IMAGES_FILE=$SB/state/deployed.env
 DOCKER_HOST=unix://$SB/docker.sock
 DOCKER_CONFIG=$SB/docker-config
 STATE_DIR=$SB/state
-DEFAULT_TAG=main
+DEFAULT_TAG=$RELEASE_TAG
 HEALTH_URLS="http://wisp.example.test/api/health http://wisp.example.test/"
 PINNED_SERVICES="postgres redis"
 TAILSCALE_COMPOSE_FILE=
@@ -62,8 +65,10 @@ EOF
     web_ref 1 >"$SB/fake/containers/wisp-test-web-1"
     postgres_pin 1 >"$SB/fake/containers/wisp-test-postgres-1"
     redis_pin 1 >"$SB/fake/containers/wisp-test-redis-1"
-    publish api 1
-    publish web 1
+    for tag in main "$RELEASE_TAG"; do
+        publish api 1 "$tag"
+        publish web 1 "$tag"
+    done
     : >"$SB/fake/unhealthy"
     : >"$SB/fake/unreachable"
     : >"$SB/events.log"
@@ -230,16 +235,20 @@ test_healthy_deploy() {
     publish api 2
     deploy
     expect_status 0
+    expect_events_in_order 'pull ghcr.io/tempo-co/api:release' 'pull ghcr.io/tempo-co/web:release'
     expect_events_in_order backup "compose up api $(api_ref 2)" "compose up web $(web_ref 1)" \
         'health http://wisp.example.test/api/health' 'health http://wisp.example.test/' 'image prune'
     expect_output 'deployed and healthy'
     expect_deployed "$(api_ref 2)" "$(web_ref 1)"
     [[ ! -e $SB/state/failed-images ]] || fail 'failed-images exists after a healthy deploy'
 
+    publish api 3 main
+    publish web 3 main
     deploy
     expect_status 0
     expect_output 'no change'
     expect_no_event '^(backup|compose up)'
+    expect_deployed "$(api_ref 2)" "$(web_ref 1)"
 
     publish web 2
     deploy
@@ -250,7 +259,7 @@ test_healthy_deploy() {
     expect_deployed "$(api_ref 2)" "$(web_ref 2)"
 }
 
-test_unhealthy_image_rolls_back_and_is_skipped_until_main_moves() {
+test_unhealthy_image_rolls_back_and_is_skipped_until_the_release_moves() {
     publish api 2
     api_ref 2 >"$SB/fake/unhealthy"
     deploy
@@ -291,8 +300,8 @@ test_failed_pull_is_retried_twice() {
     echo 2 >"$SB/fake/pull-failures"
     deploy
     expect_status 0
-    expect_events_in_order 'pull ghcr.io/tempo-co/api:main' 'sleep 15' 'pull ghcr.io/tempo-co/api:main' 'sleep 30' \
-        'pull ghcr.io/tempo-co/api:main' 'pull ghcr.io/tempo-co/web:main' "compose up web $(web_ref 2)"
+    expect_events_in_order 'pull ghcr.io/tempo-co/api:release' 'sleep 15' 'pull ghcr.io/tempo-co/api:release' 'sleep 30' \
+        'pull ghcr.io/tempo-co/api:release' 'pull ghcr.io/tempo-co/web:release' "compose up web $(web_ref 2)"
     expect_output 'pull failed (attempt 2 of 3); retrying in 30s'
     expect_deployed "$(api_ref 1)" "$(web_ref 2)"
 }
@@ -304,7 +313,7 @@ test_pull_failing_every_attempt_deploys_nothing() {
     expect_status 1
     expect_equal "$(grep -c '^pull ' "$SB/run.log")" 3 'pull attempts'
     expect_equal "$(grep '^sleep ' "$SB/run.log" | paste -sd ' ')" 'sleep 15 sleep 30' 'retry waits'
-    expect_output 'could not pull ghcr.io/tempo-co/api:main'
+    expect_output 'could not pull ghcr.io/tempo-co/api:release'
     expect_no_event '^(backup|compose up)'
     expect_deployed "$(api_ref 1)" "$(web_ref 1)"
 }

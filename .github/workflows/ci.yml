@@ -106,18 +106,19 @@ jobs:
 
             - name: Check deploy scripts and Compose files
               run: |
-                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/test-deploy.sh ops/test-sync-pins.sh
+                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/test-deploy.sh ops/test-sync-pins.sh .github/scripts/move-tag.sh .github/scripts/move-tag.test.sh .github/scripts/released-revision.sh
                   export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d WISP_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
                   docker compose -f ops/production.compose.yml config -q
                   docker compose -f ops/tailscale.compose.yml config -q
                   docker compose -f ops/staging/docker-compose.yml --env-file ops/staging/staging.env.example config -q
                   docker compose -f ops/staging/tailscale.compose.yml config -q
 
-            # Offline: stub docker and curl in a temporary sandbox; no daemon or registry is used.
+            # Offline: stub docker and curl (or the registry) in a temporary sandbox; no daemon or registry is used.
             - name: Test deploy scripts
               run: |
                   ops/test-deploy.sh
                   ops/test-sync-pins.sh
+                  .github/scripts/move-tag.test.sh
 
     api-lint-format:
         name: API lint & format
@@ -659,10 +660,9 @@ jobs:
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
 
-            # Retag the tested images without rebuilding, so production runs exactly what was tested.
-            # Only apps this commit changed are retagged; API first, so web never ships ahead of it.
-            # Each app's `:main` moves only forward: it is retagged when its current commit is an
-            # ancestor of this one, and left alone when a newer commit already released it.
+            # Retag the tested images without rebuilding, so what is released is exactly what was tested.
+            # Only apps this commit changed are retagged; API first, so web never moves ahead of it.
+            # Each app's `:main` moves only forward (.github/scripts/move-tag.sh).
             - name: Tag tested images as main
               run: |
                   set -euo pipefail
@@ -672,19 +672,5 @@ jobs:
                           echo "$app unchanged; its main tag stays"
                           continue
                       fi
-                      released=$(.github/scripts/released-revision.sh "$OWNER/$app" main)
-                      if [[ -z $released ]] || ! git cat-file -e "$released^{commit}" 2>/dev/null; then
-                          echo "::error::$app:main was built from an unknown commit (${released:-no revision label}); retag it by hand"
-                          exit 1
-                      fi
-                      if git merge-base --is-ancestor "$GITHUB_SHA" "$released" && [[ $released != "$GITHUB_SHA" ]]; then
-                          echo "$app:main is at $released, newer than $GITHUB_SHA; its main tag stays"
-                          continue
-                      fi
-                      if ! git merge-base --is-ancestor "$released" "$GITHUB_SHA"; then
-                          echo "::error::$app:main was built from $released, which is not on this commit's history; retag it by hand"
-                          exit 1
-                      fi
-                      image=ghcr.io/$OWNER/$app
-                      docker buildx imagetools create --tag "$image:main" "$image:sha-$GITHUB_SHA"
+                      .github/scripts/move-tag.sh "$OWNER/$app" main "$GITHUB_SHA"
                   done

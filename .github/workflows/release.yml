@@ -1,0 +1,54 @@
+name: Release
+
+# Moves each app's `:release` tag, which production deploys, to the image its `:main` tag points
+# at: nightly, or at once from the Actions tab (Run workflow on main). See docs/ci-and-images.md.
+on:
+    schedule:
+        - cron: '23 2 * * *'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    release:
+        name: Release main as release
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        # Shared with CI's `Release main images`, so `:main` never moves while `:release` follows it.
+        concurrency:
+            group: release
+            cancel-in-progress: false
+        permissions:
+            contents: read
+            packages: write
+        env:
+            OWNER: ${{ github.repository_owner }}
+        steps:
+            # Full history of main, so `:release` can be checked to move forward along it.
+            - name: Checkout main
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  ref: main
+                  persist-credentials: false
+                  fetch-depth: 0
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+            - name: Log in to GitHub Container registry
+              uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            # API first, so web never ships ahead of it. The summary lists the commits each app ships.
+            - name: Tag main images as release
+              run: |
+                  set -euo pipefail
+                  echo '```' >>"$GITHUB_STEP_SUMMARY"
+                  for app in api web; do
+                      .github/scripts/move-tag.sh "$OWNER/$app" release main | tee -a "$GITHUB_STEP_SUMMARY"
+                  done
+                  echo '```' >>"$GITHUB_STEP_SUMMARY"
