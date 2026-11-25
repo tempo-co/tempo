@@ -16,7 +16,7 @@ import {
   mockJson,
 } from '../../utils/api-mocks';
 
-const CACHE_KEY = 'tempo-offline-cache';
+const CACHE_KEY = 'wisp-offline-cache';
 type SavedCache = {
   timestamp: number;
   clientState: {queries: {queryKey: unknown[]; state: {dataUpdatedAt: number; data: unknown}}[]};

@@ -372,7 +372,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(card).toBeVisible();
     await page.clock.runFor(1100);
     await expect
-      .poll(() => page.evaluate(() => !!localStorage.getItem('tempo-offline-cache')))
+      .poll(() => page.evaluate(() => !!localStorage.getItem('wisp-offline-cache')))
       .toBe(true);
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'onLine', {value: false, configurable: true});
