@@ -233,6 +233,9 @@ SERVER_WEB=wisp-production-web-1
 SERVER_TIMERS=(wisp-deploy-production.timer wisp-backup.timer wisp-restore-drill.timer wisp-staging-copy.timer)
 # Rehearsal snapshots and the copied dump, in the admin user's home on the server.
 SERVER_WORK=wisp-move
+# Written on the server the moment it serves the moved data, and never removed: no later move, rehearsal or reset
+# may replace that data.
+SERVER_MOVED=.wisp-moved
 API_UID=10001
 
 # The laptop keeps its installed tempo names until it is switched off.
@@ -959,6 +962,8 @@ if [[ $mode == rehearse ]]; then banner "Wisp move rehearsal"; else banner "Wisp
 
 stage "Settings and the move gate"
 load_move_settings
+remote "test ! -e $SERVER_MOVED" || fail_stop "move night already happened (~/$SERVER_MOVED on the server): the server holds live data, and nothing here may replace it"
+[[ $mode == move || ! -e $STATE/moving ]] || fail_stop "a stopped move night is pending: run ops/wizard.sh reset first"
 remote "test ! -e $SERVER_WORK" || fail_stop "an earlier rehearsal left ~/$SERVER_WORK on the server: run ops/wizard.sh reset first"
 [[ ! -e $STATE/laptop-frozen ]] || fail_stop "an earlier rehearsal left the laptop frozen: run ops/wizard.sh reset first"
 remote "test -x $SERVER_CHECKOUT/ops/wizard.sh" || fail_stop "no ops/wizard.sh in ~/$SERVER_CHECKOUT on the server"
@@ -1101,6 +1106,10 @@ if [[ $mode == rehearse ]]; then
   note "Rehearsal only: the copy's bank connections have no scheduled sync and no stale run to pick up."
 fi
 start_server_app
+if [[ $mode == move ]]; then
+  remote "date -u +%FT%TZ >$SERVER_MOVED"
+  rm -f -- "$STATE/moving" "$STATE/pre-move-dump" "$STATE/laptop-frozen"
+fi
 if curl -fsS -o /dev/null --max-time 15 "$APP_ORIGIN/api/health"; then say "$APP_ORIGIN answers."; else warn "$APP_ORIGIN does not answer from here"; fi
 if [[ $mode == move ]]; then
   if [[ -s $STATE/server-timers ]]; then
@@ -1108,9 +1117,6 @@ if [[ $mode == move ]]; then
     remote_root systemctl start $(cat "$STATE/server-timers")
   fi
   rm -f -- "$STATE/server-timers"
-  # From here the server serves the moved data: a reset must never roll it back or restart the laptop.
-  : >"$STATE/moved"
-  rm -f -- "$STATE/moving" "$STATE/pre-move-dump" "$STATE/laptop-frozen"
   say "The first backup of the moved data runs now, in the background:"
   remote_root systemctl start --no-block wisp-backup.service
 fi
@@ -1144,7 +1150,6 @@ if [[ $mode == rehearse ]]; then
 else
   stage "The first sync and the laptop"
   rm -rf -- "$WORK"
-  rm -f -- "$STATE/moved"
   step "After the next scheduled sync (within 6 hours), check that each bank connection shows a sync after tonight."
   step "Keep the laptop's stack until the switch-off checks pass (docs/new-host.md): it is the way back."
   step "Then set up staging's feed with the owner account's id: docs/staging-feed.md, Setting it up."
@@ -1159,12 +1164,16 @@ reset_wizard() {
 TOTAL_STAGES=2
 stage "Settings"
 load_move_settings
-if [[ -e $STATE/moved ]]; then
+if remote "test -e $SERVER_MOVED"; then
   stage "Tidy up after move night"
   say "The server already serves the moved data, so nothing is rolled back and the laptop stays stopped."
+  if [[ -s $STATE/server-timers ]]; then
+    # shellcheck disable=SC2046 # one unit name per line
+    remote_root systemctl start $(cat "$STATE/server-timers")
+  fi
   remote "rm -rf -- $SERVER_WORK"
   rm -rf -- "$WORK"
-  rm -f -- "$STATE/moved"
+  rm -f -- "$STATE/server-timers"
   step "Finish the steps the wizard did not reach: device logins, notifications, the MCP URL (docs/new-host.md)."
   return
 fi
