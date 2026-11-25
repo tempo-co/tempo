@@ -55,7 +55,7 @@ export class BankingSyncProcessor extends WorkerHost {
 				subject: 'Tempo: scheduled bank sync failed',
 				text: [
 					`The scheduled bank sync run failed with ${errorName}, so no bank connection was synced.`,
-					'Check the API log. You get at most one email a day for this kind of failure.',
+					'Check the API log.',
 				].join('\n\n'),
 			});
 			throw error;

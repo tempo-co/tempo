@@ -74,7 +74,7 @@ export class BankingSyncQueueService implements OnModuleInit {
 			subject: 'Tempo: scheduled bank sync could not start',
 			text: [
 				'The API could not install the scheduled bank sync at start-up, so scheduled runs may not start.',
-				'Check the API log and Redis. You get at most one email a day for this kind of failure.',
+				'Check the API log and Redis.',
 			].join('\n\n'),
 		});
 	}
