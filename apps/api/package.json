@@ -35,8 +35,8 @@
 		"predb:seed": "npm run contracts:build",
 		"predb:schema": "npm run contracts:build",
 		"precontract:input": "npm run contracts:build",
-		"pretest:e2e": "npm run contracts:build",
-		"pretest:e2e:cov": "npm run contracts:build",
+		"pretest:e2e": "node scripts/check-installed.mjs && npm run contracts:build",
+		"pretest:e2e:cov": "node scripts/check-installed.mjs && npm run contracts:build",
 		"prelint": "npm run contracts:build",
 		"prelint:check": "npm run contracts:build"
 	},
