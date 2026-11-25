@@ -44,11 +44,11 @@ export const BANK_LIST: readonly Bank[] = [
 		formats: ['mt940', 'camt053'],
 		exportSteps: {
 			steps: [
-				'Log in to Mijn ING or the ING app and open your "Betaalrekening" (payment account).',
-				'Search the "Af- en bijschrijvingen" (debits and credits) for the period you want.',
-				'Download them as an "Afschrift" (statement) in the file type below.',
+				'Log in to Mijn ING and open your "Betaalrekening" (payment account).',
+				'Go to "Service" > "Af- en bijschrijvingen downloaden" (download debits and credits).',
+				'Choose the account and the period, then "Kommagescheiden" (comma-separated CSV), and download.',
 			],
-			file: 'CSV, MT940 or CAMT.053',
+			file: 'CSV ("Kommagescheiden")',
 		},
 	},
 	{
@@ -61,8 +61,8 @@ export const BANK_LIST: readonly Bank[] = [
 		exportSteps: {
 			steps: [
 				'Log in to Rabo Internetbankieren on a computer; the download is not in the Rabo app.',
-				'Go to "Settings" > "Payment accounts" > "Download transactions" (with the site in English).',
-				'Choose the account, the file type and the date range, then download.',
+				'Open "Maak een transactieoverzicht op maat" (make a custom transaction overview).',
+				'Choose the account, the "Downloadformaat" (download format) and a "Specifieke datumreeks" (specific date range), then download.',
 				'For a Rabobank credit card, download its CSV the same way on a computer, up to 15 months back.',
 			],
 			file: 'CSV',
@@ -144,7 +144,7 @@ export const BANK_LIST: readonly Bank[] = [
 		formats: ['abnAmroTxt', 'camt053'],
 		exportSteps: {
 			steps: [
-				'Log in to ABN AMRO Internet Banking and open "Bij- en afschrijvingen downloaden" (download debits and credits).',
+				'In "Internet Bankieren", go to "Zelf regelen" (self-service) > "Bij- en afschrijvingen downloaden" (download debits and credits).',
 				'Choose the account, the period (up to 18 months back) and the file type, then download.',
 			],
 			file: 'TXT or CAMT.053 (not XLS)',
@@ -173,9 +173,9 @@ export const BANK_LIST: readonly Bank[] = [
 		formats: ['revolutCsv', 'revolutXlsx'],
 		exportSteps: {
 			steps: [
-				'In the Revolut app, tap "Home", then "Accounts", and choose the currency.',
+				'In the Revolut app, tap "Home" and choose the currency account.',
 				'Tap "More (...)", then "Statement".',
-				'Choose the timeframe and Excel, then download.',
+				'Choose the timeframe and Excel, then tap "Generate".',
 			],
 			file: 'Excel',
 		},
@@ -249,7 +249,12 @@ export const BANK_LIST: readonly Bank[] = [
 		layouts: [],
 		formats: ['ofx'],
 		exportSteps: {
-			steps: ["In your LCL customer area, download your account's transactions as OFX."],
+			steps: [
+				'Open the "Comptes" (accounts) tab, then "Synthèse" (summary).',
+				'Select the "date de début" (start date) and "date de fin" (end date).',
+				'Select OFX as the "format de fichier" (file format).',
+				'Click "Valider" (confirm) to download.',
+			],
 			file: 'OFX',
 		},
 	},

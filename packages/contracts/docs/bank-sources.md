@@ -4,20 +4,20 @@ Where each entry's export steps in `src/banks.ts` come from. "Bank" is the bank'
 
 | Bank id | Steps from | Sources |
 | -- | -- | -- |
-| `ing-nl` | Search summary; private menu labels not confirmed | https://www.ing.nl/particulier/digitaal-bankieren/afschriften-downloaden, https://www.ing.nl/zakelijk/digitaal-bankieren/mijn-ing/papierloos-bankieren |
-| `rabobank` | Search summary (English interface labels) | https://rabobank.nl/particulieren/betalen/service/financiele-overzichten/overzicht-transacties-downloaden, https://www.rabobank.nl/particulieren/service/financiele-overzichten/overzicht-creditcarduitgaven-ontvangen |
+| `ing-nl` | Search summary and third party; ING's own pages were not read | https://www.ing.nl/particulier/digitaal-bankieren/afschriften-downloaden, https://statementdecoder-web.onrender.com/convert/ing (third party) |
+| `rabobank` | Search summary | https://www.rabobank.nl/particulieren/betalen/service/financiele-overzichten/digitaal-rekeningafschrift-downloaden/, https://www.rabobank.nl/particulieren/service/financiele-overzichten/overzicht-creditcarduitgaven-ontvangen |
 | `bunq` | Bank | https://help.bunq.com/articles/how-do-i-export-a-bank-statement |
-| `knab` | Bank (its help names PDF as the file type) | https://www.knab.nl/download-bankafschrift |
+| `knab` | Bank; its help names PDF as the only file type | https://www.knab.nl/download-bankafschrift |
 | `asn-bank` | Bank | https://www.asnbank.nl/service/asn-bank-rekeningafschriften.html, https://www.asnbank.nl/zakelijk/boekhoudpakket-koppelen/camt053.html |
 | `triodos-nl` | Bank | https://www.triodos.nl/veelgestelde-vragen/hoe-download-ik-een-overzicht-van-mijn-bij-en-afschrijvingen-in-mijn-boekhoudprogramma?id=126d202a2cba, https://www.triodos.nl/veelgestelde-vragen/in-welke-bestandstypen-kan-ik-overzichten-downloaden?id=ecea2482a3bc |
-| `abn-amro` | Search summary; menu title only | https://abnamro.nl/en/personal/payments/credit-and-debit-transactions/download.html |
+| `abn-amro` | Search summary | https://www.abnamro.nl/nl/prive/betalen/bij-en-afschrijvingen/downloaden.html, https://abnamro.nl/en/personal/payments/credit-and-debit-transactions/download.html |
 | `handelsbanken-nl` | Search summary of the business page; no private steps found | https://www.handelsbanken.nl/en/corporate/digital-banking, https://www.handelsbanken.nl/nl/particulier/digitaal-bankieren |
-| `revolut` | Search summary | https://help.revolut.com/en-US/help/profile-and-plan/managing-my-account/account-statement-per-chosen-currency/ |
+| `revolut` | Search summary | https://help.revolut.com/help/profile-and-plan/managing-my-account/account-statement-per-chosen-currency/ |
 | `banque-populaire` | Bank | https://www.banquepopulaire.fr/faq-particuliers/comptes-et-documents/operations/comment-exporter-mes-operations/ |
 | `caisse-epargne` | Bank | https://www.caisse-epargne.fr/faq-particuliers/comptes-et-documents/operations/comment-exporter-mes-operations/ |
 | `credit-agricole-fr` | Bank, format only; no menu steps found | https://www.credit-agricole.fr/content/dam/assetsca/cr848/npc/documents/aide-client.pdf |
 | `la-banque-postale` | Bank | https://www.labanquepostale.fr/particulier/faq-centre-aide/espace-client.question.html/comment-imprimer-mon-releve-de-compte-bancaire.html |
-| `lcl` | None found; the bank's page names PDF statements only | https://www.lcl.fr/compte-bancaire/releves-et-documents-en-ligne |
+| `lcl` | Bank; the page may describe an older version of the site | https://particuliers.secure.lcl.fr/UWDL/UWDLSTATIQUE/UWDLPUB/aide/b_telec.html |
 | `cic` | None found | None |
 | `gls-bank` | Bank | https://www.gls.de/gls-bank/service/fragen-antworten/onlinebanking/welche-umsaetze-kann-ich-abrufen/ |
 | `postbank` | Bank, filter steps only; the download step is not on a page reached | https://www.postbank.de/privatkunden/services/online-banking/anleitungen/umsaetze-filtern.html |
