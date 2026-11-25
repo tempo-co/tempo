@@ -131,7 +131,8 @@ services:
       - '80:80'
       - '443:443'
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The directory, not the file: install.sh replaces the file, which a single-file mount would not see.
+      - ./caddy:/etc/caddy:ro
       # Certificates and ACME account keys. Losing them means asking Let's Encrypt again, within its rate limits.
       - wisp_production_caddy_data:/data
       - wisp_production_caddy_config:/config

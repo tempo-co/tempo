@@ -5,6 +5,7 @@ import {Queue} from 'bullmq';
 import {LessThanOrEqual, Not, Repository} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {OperatorAlertService} from '@core/operator-alert/operator-alert.service';
 import {bootstrapJobScheduler} from '@core/queue/job-scheduler';
 import {
 	BANK_CONNECTION_SYNC_QUEUE,
@@ -42,6 +43,7 @@ export class BankingSyncQueueService implements OnModuleInit {
 		private readonly queue: Queue<BankConnectionSyncJobData>,
 		private readonly configurationService: ConfigurationService,
 		private readonly connectionLockService: BankingConnectionLockService,
+		private readonly operatorAlertService: OperatorAlertService,
 	) {
 		this.bankingIntegrationEnabled = configurationService.get('BANKING_INTEGRATION_ENABLED') !== false;
 	}
@@ -50,8 +52,9 @@ export class BankingSyncQueueService implements OnModuleInit {
 		return this.bankingIntegrationEnabled;
 	}
 
+	/** A dispatcher that can't be installed means no scheduled run can start, so the operator hears about it. */
 	async onModuleInit(): Promise<void> {
-		await bootstrapJobScheduler(
+		const installed = await bootstrapJobScheduler(
 			this.queue,
 			{
 				schedulerId: BANK_CONNECTION_SYNC_SCHEDULER_ID,
@@ -64,6 +67,16 @@ export class BankingSyncQueueService implements OnModuleInit {
 				logger: this.logger,
 			},
 		);
+		if (installed || !this.bankingIntegrationEnabled || this.configurationService.get('NODE_ENV') === 'test')
+			return;
+		await this.operatorAlertService.send({
+			kind: 'bank-sync-scheduler-not-installed',
+			subject: 'Tempo: scheduled bank sync could not start',
+			text: [
+				'The API could not install the scheduled bank sync at start-up, so scheduled runs may not start.',
+				'Check the API log and Redis. You get at most one email a day for this kind of failure.',
+			].join('\n\n'),
+		});
 	}
 
 	async enqueueInitialSync(connectionId: BankConnection['id']): Promise<void> {

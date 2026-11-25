@@ -107,7 +107,7 @@ case ${1:-} in
         copy 644 "$REPO/ops/wisp-staging-copy.sql" /usr/local/lib/wisp-deploy/wisp-staging-copy.sql
         copy 755 "$REPO/ops/wisp-staging-copy-serve.sh" /usr/local/lib/wisp-deploy/wisp-staging-copy-serve.sh
         copy 644 "$REPO/ops/production.compose.yml" /etc/wisp/compose/production.compose.yml
-        copy 644 "$REPO/ops/Caddyfile" /etc/wisp/compose/Caddyfile
+        copy 644 "$REPO/ops/Caddyfile" /etc/wisp/compose/caddy/Caddyfile
         copy 755 "$REPO/ops/wisp-api-egress.sh" /usr/local/sbin/wisp-api-egress
         for unit in wisp-deploy-production.service wisp-deploy-production.timer wisp-sync-pins.service \
             wisp-backup.service wisp-backup.timer wisp-restore-drill.service wisp-restore-drill.timer \

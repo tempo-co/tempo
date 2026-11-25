@@ -224,6 +224,7 @@ SERVER_ENV=/etc/wisp/production.env
 SERVER_BACKUP_ENV=/etc/wisp/backup.env
 SERVER_KEY=/etc/wisp/enable-banking-private.key
 SERVER_DEPLOYED=/var/lib/wisp-deploy/deployed.env
+SERVER_COMPOSE=/etc/wisp/compose/production.compose.yml
 SERVER_PG=wisp-production-postgres-1
 SERVER_REDIS=wisp-production-redis-1
 SERVER_API=wisp-production-api-1
@@ -236,7 +237,6 @@ API_UID=10001
 
 # The laptop keeps its installed tempo names until it is switched off.
 LAPTOP_ENV=/etc/tempo/production.env
-LAPTOP_DEPLOYED=/var/lib/tempo-deploy/deployed.env
 LAPTOP_TIMER=tempo-deploy-production.timer
 LAPTOP_DEPLOY_SERVICE=tempo-deploy-production.service
 LAPTOP_PG=tempo-api-production-postgres-1
@@ -429,7 +429,9 @@ wait_inactive_remote() {
   remote "while systemctl is-active --quiet $1; do sleep 5; done"
 }
 
-deployed_api() { sed -n 's/^TEMPO_API_IMAGE=//p' "$1"; }
+# The image a host's API container was created from (deployed.env is root-only).
+laptop_api_image() { docker inspect --format '{{.Config.Image}}' "$LAPTOP_API"; }
+server_api_image() { remote "docker inspect --format '{{.Config.Image}}' $SERVER_API"; }
 
 # ── Move gate ─────────────────────────────────────────────────────────────
 
@@ -504,9 +506,11 @@ server_db_replace() {
 server_fingerprints() {
   "$REPO/ops/table-check.sh" fingerprints ssh "$SERVER_SSH" docker exec -i "$SERVER_PG" psql -U wisp -d wisp
 }
+# Recreates API and web, because Compose reads the env file only when it creates a container.
 start_server_app() {
-  remote "docker start $SERVER_API >/dev/null && docker start $SERVER_WEB >/dev/null && $HEALTH_WAIT" ||
-    fail_stop "the server's app did not become healthy: docker logs $SERVER_API"
+  remote_root docker compose -p wisp-production -f "$SERVER_COMPOSE" --env-file "$SERVER_ENV" --env-file "$SERVER_DEPLOYED" \
+    up -d --no-deps --force-recreate --pull never api web
+  remote "$HEALTH_WAIT" || fail_stop "the server's app did not become healthy: docker logs $SERVER_API"
 }
 unfreeze_laptop() {
   say "The laptop's API and web start again, then its deploy timer."
@@ -959,6 +963,7 @@ remote "test ! -e $SERVER_WORK" || fail_stop "an earlier rehearsal left ~/$SERVE
 [[ ! -e $STATE/laptop-frozen ]] || fail_stop "an earlier rehearsal left the laptop frozen: run ops/wizard.sh reset first"
 remote "test -x $SERVER_CHECKOUT/ops/wizard.sh" || fail_stop "no ops/wizard.sh in ~/$SERVER_CHECKOUT on the server"
 gate_checks || fail_stop "the move gate fails; nothing has changed"
+[[ $mode == rehearse ]] || : >"$STATE/moving"
 if [[ $mode == rehearse ]]; then
   say "A rehearsal runs every step of the move, then puts the server back as it was and restarts the laptop."
   note "While it runs, the server's copy makes no scheduled bank syncs and sends no bank alerts."
@@ -1019,7 +1024,7 @@ say "The laptop's deploy timer, API and web are stopped; its database stays up f
 pause
 
 stage "The same release on both hosts"
-until [[ $(deployed_api "$LAPTOP_DEPLOYED") == "$(remote "sed -n 's/^TEMPO_API_IMAGE=//p' $SERVER_DEPLOYED")" ]]; do
+until laptop_image=$(laptop_api_image) && [[ -n $laptop_image && $laptop_image == "$(server_api_image)" ]]; do
   warn "The server runs another API image than the laptop: the restored schema must match its code."
   step "Release now: gh workflow run release.yml --ref main, wait for it, then deploy the server:"
   remote_root systemctl start wisp-deploy-production.service
@@ -1029,9 +1034,12 @@ say "Both hosts run the same API image."
 pause
 
 stage "Stop the server's app"
-for timer in "${SERVER_TIMERS[@]}"; do
-  if remote "systemctl is-active --quiet $timer"; then echo "$timer"; fi
-done >"$STATE/server-timers"
+# A retry after a stopped move keeps the list the first attempt saved, when the timers were still running.
+if [[ ! -e $STATE/server-timers ]]; then
+  for timer in "${SERVER_TIMERS[@]}"; do
+    if remote "systemctl is-active --quiet $timer"; then echo "$timer"; fi
+  done >"$STATE/server-timers"
+fi
 if [[ -s $STATE/server-timers ]]; then
   # shellcheck disable=SC2046 # one unit name per line
   remote_root systemctl stop $(cat "$STATE/server-timers")
@@ -1089,8 +1097,8 @@ pause
 
 stage "Start the server's app"
 if [[ $mode == rehearse ]]; then
-  remote "docker exec $SERVER_PG psql -U wisp -d wisp -qX -v ON_ERROR_STOP=1 -c 'update bank_connections set \"nextSyncAt\" = null'"
-  note "Rehearsal only: the copy's bank connections have no scheduled sync."
+  remote "docker exec $SERVER_PG psql -U wisp -d wisp -qX -v ON_ERROR_STOP=1 -c 'update bank_connections set \"nextSyncAt\" = null, \"syncStartedAt\" = null'"
+  note "Rehearsal only: the copy's bank connections have no scheduled sync and no stale run to pick up."
 fi
 start_server_app
 if curl -fsS -o /dev/null --max-time 15 "$APP_ORIGIN/api/health"; then say "$APP_ORIGIN answers."; else warn "$APP_ORIGIN does not answer from here"; fi
@@ -1133,7 +1141,7 @@ if [[ $mode == rehearse ]]; then
 else
   stage "The first sync and the laptop"
   rm -rf -- "$WORK"
-  rm -f -- "$STATE/laptop-frozen"
+  rm -f -- "$STATE/laptop-frozen" "$STATE/moving"
   step "After the next scheduled sync (within 6 hours), check that each bank connection shows a sync after tonight."
   step "Keep the laptop's stack until the switch-off checks pass (docs/new-host.md): it is the way back."
   step "Then set up staging's feed with the owner account's id: docs/staging-feed.md, Setting it up."
@@ -1148,6 +1156,16 @@ reset_wizard() {
 TOTAL_STAGES=2
 stage "Settings"
 load_move_settings
+if [[ -e $STATE/moving ]]; then
+  stage "Go back to the laptop"
+  say "Move night stopped part-way. The laptop serves again; the server's app and timers stay stopped, so only one host serves."
+  remote "docker stop $SERVER_WEB $SERVER_API >/dev/null 2>&1; rm -rf -- $SERVER_WORK"
+  reset_laptop
+  rm -rf -- "$WORK"
+  rm -f -- "$STATE/moving"
+  note "Run ops/wizard.sh move again to retry; it replaces the server's database and starts its timers at the end."
+  return
+fi
 stage "Reset the server and the laptop"
 reset_server
 reset_laptop

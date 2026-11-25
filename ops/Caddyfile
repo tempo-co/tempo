@@ -1,4 +1,4 @@
-# Installed to /etc/wisp/compose/Caddyfile by `sudo ops/install.sh production`; see "Public entry" in ops/README.md.
+# Installed to /etc/wisp/compose/caddy/Caddyfile by `sudo ops/install.sh production`; see "Public entry" in ops/README.md.
 {
 	# The firewall opens TCP 80 and 443 only, so HTTP/3 (UDP) is not offered.
 	servers {
