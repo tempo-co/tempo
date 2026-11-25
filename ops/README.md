@@ -57,6 +57,10 @@ The API calls the Anthropic API with `ANTHROPIC_API_KEY` from the production env
 
 `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY` and `WEB_PUSH_VAPID_SUBJECT` (a `mailto:` contact) in `/etc/tempo/production.env` turn push alerts on; generate the pair once with `npx web-push generate-vapid-keys`. Without them, Settings says the server sends no notifications. Changing the pair ends every device's subscription: on each device, turn notifications off and allow them again in Settings → Account. Pushes go out to Apple's, Google's, Mozilla's and Microsoft's push services.
 
+### Operator alerts
+
+`OPERATOR_ALERT_EMAIL` in `/etc/tempo/production.env` is where the API emails failures no user sees, through the app's SMTP settings: a scheduled bank sync run that fails as a whole, at most once a day per kind of failure. Without it, nothing is sent.
+
 ### Network boundary
 
 PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend`, the web-only `ingress` network that publishes its loopback port, and the `tailscale` network it shares with the Tailscale sidecar. Web therefore has no network path to the database or cache. Do not mark `default` internal: the API needs outbound access.

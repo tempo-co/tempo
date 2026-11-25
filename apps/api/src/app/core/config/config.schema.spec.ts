@@ -383,3 +383,17 @@ describe('web push configuration', () => {
 		).toBe(false);
 	});
 });
+
+describe('operator alert configuration', () => {
+	it('accepts no address, which sends no operator alerts, or one email address', () => {
+		expect(configSchema.parse(baseConfig).OPERATOR_ALERT_EMAIL).toBeUndefined();
+		expect(configSchema.parse({...baseConfig, OPERATOR_ALERT_EMAIL: ''}).OPERATOR_ALERT_EMAIL).toBeUndefined();
+		expect(
+			configSchema.parse({...baseConfig, OPERATOR_ALERT_EMAIL: 'operator@example.test'}).OPERATOR_ALERT_EMAIL,
+		).toBe('operator@example.test');
+	});
+
+	it('rejects an address that is not an email address', () => {
+		expect(configSchema.safeParse({...baseConfig, OPERATOR_ALERT_EMAIL: 'operator'}).success).toBe(false);
+	});
+});

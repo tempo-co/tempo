@@ -9,6 +9,8 @@ import webPush from 'web-push';
 import {ConfigurationService} from '@core/config/config.service';
 import {mcpOriginMiddleware} from '@core/personal-access-token/mcp-origin.middleware';
 
+export const OPERATOR_ALERT_E2E_EMAIL = 'operator@example.test';
+
 let app: INestApplication<Server>;
 let aiCategorizationEnabled = false;
 let aiCategorizationWebSearchEnabled = false;
@@ -16,6 +18,7 @@ let merchantLogosEnabled = false;
 let webPushEnabled = false;
 let fileImportEnabled = false;
 let fileImportMapperEnabled = false;
+let operatorAlertsEnabled = false;
 
 export function enableAiCategorizationE2e(): void {
 	aiCategorizationEnabled = true;
@@ -39,6 +42,11 @@ export function enableFileImportMapperE2e(): void {
 	fileImportMapperEnabled = true;
 }
 
+/** Gives the app an operator address, so operator alerts reach Mailpit. */
+export function enableOperatorAlertsE2e(): void {
+	operatorAlertsEnabled = true;
+}
+
 /** Gives the app throwaway VAPID keys; specs replace `WebPushSender.send`, so no push service is contacted. */
 export function enableWebPushE2e(): void {
 	webPushEnabled = true;
@@ -51,6 +59,9 @@ beforeAll(async () => {
 	process.env.MERCHANT_LOGOS_ENABLED = String(merchantLogosEnabled);
 	process.env.FILE_IMPORT_ENABLED = String(fileImportEnabled);
 	process.env.FILE_IMPORT_MAPPER_ENABLED = String(fileImportMapperEnabled);
+
+	if (operatorAlertsEnabled) process.env.OPERATOR_ALERT_EMAIL = OPERATOR_ALERT_E2E_EMAIL;
+	else delete process.env.OPERATOR_ALERT_EMAIL;
 
 	if (webPushEnabled) {
 		const {publicKey, privateKey} = webPush.generateVAPIDKeys();

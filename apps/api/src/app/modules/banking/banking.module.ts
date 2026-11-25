@@ -3,6 +3,7 @@ import {Module} from '@nestjs/common';
 import {TypeOrmModule} from '@nestjs/typeorm';
 
 import {EmailModule} from '@core/email/email.module';
+import {OperatorAlertModule} from '@core/operator-alert/operator-alert.module';
 import {
 	BANK_CONNECTION_ALERT_QUEUE,
 	BANK_CONNECTION_SYNC_QUEUE,
@@ -81,6 +82,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		BullModule.registerQueue({name: BANK_TRANSACTION_AMOUNT_CONVERSION_QUEUE}),
 		BullModule.registerQueue({name: BANK_CONNECTION_ALERT_QUEUE}),
 		EmailModule,
+		OperatorAlertModule,
 		AccountModule,
 		RedisModule,
 		BankingAuthorizationStateModule,

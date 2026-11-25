@@ -3,6 +3,7 @@ import {InjectRepository} from '@nestjs/typeorm';
 import {Job} from 'bullmq';
 import {Repository} from 'typeorm';
 
+import {OperatorAlertService} from '@core/operator-alert/operator-alert.service';
 import {
 	BANK_CONNECTION_SYNC_QUEUE,
 	DISPATCH_BANK_CONNECTION_SYNCS_JOB,
@@ -10,6 +11,7 @@ import {
 } from '@core/queue/queue.constants';
 
 import {BankConnection} from '../bank-connection.entity';
+import {safeErrorName} from '../banking.utils';
 import {BankConnectionSyncJobData, BankingSyncQueueService} from './banking-sync-queue.service';
 import {BankingSyncService} from './banking-sync.service';
 
@@ -20,6 +22,7 @@ export class BankingSyncProcessor extends WorkerHost {
 		private readonly bankConnectionRepository: Repository<BankConnection>,
 		private readonly bankingSyncService: BankingSyncService,
 		private readonly bankingSyncQueueService: BankingSyncQueueService,
+		private readonly operatorAlertService: OperatorAlertService,
 	) {
 		super();
 	}
@@ -27,7 +30,7 @@ export class BankingSyncProcessor extends WorkerHost {
 	async process(job: Job<BankConnectionSyncJobData>): Promise<void> {
 		if (!this.bankingSyncQueueService.isIntegrationEnabled()) return;
 		if (job.name === DISPATCH_BANK_CONNECTION_SYNCS_JOB) {
-			await this.bankingSyncQueueService.dispatchDueConnections();
+			await this.dispatchScheduledRun();
 			return;
 		}
 		if (job.name !== SYNC_BANK_CONNECTION_JOB) return;
@@ -39,5 +42,23 @@ export class BankingSyncProcessor extends WorkerHost {
 		if (!connection || !this.bankingSyncQueueService.isSynchronizationDue(connection)) return;
 
 		await this.bankingSyncService.synchronizeAutomatically(connection.id);
+	}
+
+	/** A connection's own failure stays with that connection; a run that fails as a whole reaches the operator. */
+	private async dispatchScheduledRun(): Promise<void> {
+		try {
+			await this.bankingSyncQueueService.dispatchDueConnections();
+		} catch (error) {
+			const errorName = safeErrorName(error);
+			await this.operatorAlertService.send({
+				kind: `bank-sync-run-${errorName}`,
+				subject: 'Tempo: scheduled bank sync failed',
+				text: [
+					`The scheduled bank sync run failed with ${errorName}, so no bank connection was synced.`,
+					'Check the API log. You get at most one email a day for this kind of failure.',
+				].join('\n\n'),
+			});
+			throw error;
+		}
 	}
 }
