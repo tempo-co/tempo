@@ -199,12 +199,14 @@ describe('session cookie configuration', () => {
 });
 
 describe('AI categorization configuration', () => {
-	it('defaults to disabled Claude categorization without credentials', () => {
+	it('defaults to disabled Claude categorization without credentials, on Haiku, and merchant identification on Sonnet', () => {
 		const parsed = configSchema.parse(baseConfig);
 
 		expect(parsed.AI_CATEGORIZATION_ENABLED).toBe(false);
-		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-sonnet-5-5');
-		expect(parsed.AI_CATEGORIZATION_EFFORT).toBe('high');
+		expect(parsed.AI_CATEGORIZATION_MODEL).toBe('claude-haiku-5-5');
+		expect(parsed.AI_CATEGORIZATION_EFFORT).toBe('xhigh');
+		expect(parsed.MERCHANT_IDENTIFICATION_MODEL).toBe('claude-sonnet-5-5');
+		expect(parsed.MERCHANT_IDENTIFICATION_EFFORT).toBe('high');
 	});
 
 	it('accepts only the effort levels Claude supports', () => {
@@ -212,6 +214,7 @@ describe('AI categorization configuration', () => {
 			'xhigh',
 		);
 		expect(() => configSchema.parse({...baseConfig, AI_CATEGORIZATION_EFFORT: 'extreme'})).toThrow();
+		expect(() => configSchema.parse({...baseConfig, MERCHANT_IDENTIFICATION_EFFORT: 'extreme'})).toThrow();
 	});
 
 	it('allows enabled categorization with an API key and any model name', () => {

@@ -86,6 +86,8 @@ function setup(overrides: Record<string, unknown> = {}) {
 				ANTHROPIC_API_KEY: 'synthetic-api-key',
 				AI_CATEGORIZATION_MODEL: 'claude-sonnet-5-5',
 				AI_CATEGORIZATION_EFFORT: 'high',
+				MERCHANT_IDENTIFICATION_MODEL: 'claude-sonnet-5-5',
+				MERCHANT_IDENTIFICATION_EFFORT: 'high',
 				...overrides,
 			})[key],
 	} as unknown as ConfigurationService;
@@ -719,8 +721,11 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			usage: {server_tool_use: {web_search_requests: 0}},
 		});
 
-		it('sends only merchant names with the merchant contract and keeps a well-formed official domain and a business’s company', async () => {
-			const {provider, create} = setup();
+		it('sends only merchant names with the merchant contract on its own model and effort, and keeps a well-formed official domain and a business’s company', async () => {
+			const {provider, create} = setup({
+				MERCHANT_IDENTIFICATION_MODEL: 'claude-opus-5-5',
+				MERCHANT_IDENTIFICATION_EFFORT: 'medium',
+			});
 			create.mockResolvedValue(
 				merchantResponse([
 					{
@@ -789,6 +794,7 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 				},
 			]);
 			const request = create.mock.calls[0][0];
+			expect(request).toMatchObject({model: 'claude-opus-5-5', output_config: {effort: 'medium'}});
 			expect(request.system).toBe(merchantContract.instructions);
 			expect(request.output_config.format.schema).toEqual(merchantContract.schema);
 			expect(request).not.toHaveProperty('tools');

@@ -101,7 +101,7 @@ const API_TIMEOUT_MS = 90_000;
 const UNAVAILABLE_STATUSES = new Set([401, 403, 429, 529]);
 // Anthropic answers an exhausted credit balance with 400 and this text, or with a billing error.
 const CREDIT_BALANCE_PATTERN = /credit balance is too low/i;
-// Adaptive thinking at high effort shares this budget with the reply, about 40 tokens per row of a 50-row group; a
+// Adaptive thinking shares this budget with the reply, about 40 tokens per row of a 50-row group; a
 // reply cut off at the limit fails the group rather than leaving it pending.
 const CATEGORIZATION_MAX_TOKENS = 16_384;
 // The categorizing call returns its answer as the input of this tool, which Tempo reads and never runs. A strict
@@ -120,6 +120,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 	private client?: ClaudeClient;
 	private readonly model: string;
 	private readonly effort: ClaudeEffort;
+	private readonly merchantModel: string;
+	private readonly merchantEffort: ClaudeEffort;
 	private readonly apiKey?: string;
 
 	constructor(
@@ -130,6 +132,8 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		this.model = configurationService.get('AI_CATEGORIZATION_MODEL');
 		// The config schema checks the value against the contract's effort list.
 		this.effort = configurationService.get('AI_CATEGORIZATION_EFFORT') as ClaudeEffort;
+		this.merchantModel = configurationService.get('MERCHANT_IDENTIFICATION_MODEL');
+		this.merchantEffort = configurationService.get('MERCHANT_IDENTIFICATION_EFFORT') as ClaudeEffort;
 		this.apiKey = configurationService.get('ANTHROPIC_API_KEY');
 		this.client = client;
 	}
@@ -245,7 +249,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		try {
 			const text = await this.callApi(
 				{kind: 'merchant identification', items: merchants.length},
-				this.createRequest(merchantContract.instructions, input, merchantContract.schema, 16384),
+				this.createRequest(merchantContract.instructions, input, merchantContract.schema, 16384, {
+					model: this.merchantModel,
+					effort: this.merchantEffort,
+				}),
 			);
 			return this.parseMerchants(this.parseJson(text), merchants);
 		} catch (error) {
@@ -274,10 +281,10 @@ export class ClaudeBankTransactionCategorizationProvider implements BankTransact
 		input: object,
 		schema: object,
 		maxTokens: number,
-		effort = this.effort,
+		{model, effort}: {model: string; effort: ClaudeEffort} = {model: this.model, effort: this.effort},
 	): MessageCreateParamsNonStreaming {
 		return {
-			model: this.model,
+			model,
 			max_tokens: maxTokens,
 			system,
 			messages: [{role: 'user', content: JSON.stringify(input)}],
