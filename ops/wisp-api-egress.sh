@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Installed as /usr/local/sbin/tempo-api-egress by `sudo ops/install.sh production`; loaded by tempo-api-egress.service.
+# Installed as /usr/local/sbin/wisp-api-egress by `sudo ops/install.sh production`; loaded by wisp-api-egress.service.
 #
 # The production API runs as uid 10001 on the root Docker daemon (ops/README.md, Container privileges).
 # 1. Host-side: if code ever escapes as uid 10001, it may use DNS and the internet, and nothing on
 #    loopback (other local services and databases), the LAN, link-local or the tailnet.
 #    Only a positive uid match enters the chain, so socketless kernel packets (IPv6 ND, MLD) are untouched.
-# 2. Container-side: Tempo's API and web networks may reach the internet, not the LAN, link-local,
+# 2. Container-side: Wisp's API and web networks may reach the internet, not the LAN, link-local,
 #    the tailnet or this host. Traffic between containers on one network never leaves its bridge.
 #    The Tailscale sidecar's network is left alone; it needs its peers.
 #
-# Re-resolves the bridges each run: `systemctl reload tempo-api-egress` after a network is recreated.
+# Re-resolves the bridges each run: `systemctl reload wisp-api-egress` after a network is recreated.
 set -Eeuo pipefail
 export LC_ALL=C
-TABLE=${TABLE:-tempo_api_egress}
+TABLE=${TABLE:-wisp_api_egress}
 API_UID=${API_UID:-10001}
-NETWORKS=${NETWORKS:-tempo-api-production_default tempo-api-production_ingress}
+NETWORKS=${NETWORKS:-wisp-production_default wisp-production_ingress}
 
 bridges=() missing=()
 for net in $NETWORKS; do
@@ -25,7 +25,7 @@ for net in $NETWORKS; do
     fi
 done
 # An empty set would never match; a placeholder keeps the ruleset valid.
-((${#bridges[@]})) || bridges=('"tempo-none"')
+((${#bridges[@]})) || bridges=('"wisp-none"')
 set_list=$(IFS=,; echo "${bridges[*]}")
 
 private4='0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 255.255.255.255'
@@ -65,7 +65,7 @@ table inet $TABLE {
 EOF
 
 if ((${#missing[@]})); then
-    echo "tempo-api-egress: networks not found, not filtered: ${missing[*]}" >&2
+    echo "wisp-api-egress: networks not found, not filtered: ${missing[*]}" >&2
     exit 1
 fi
-echo "tempo-api-egress: uid $API_UID and bridges ${bridges[*]} filtered"
+echo "wisp-api-egress: uid $API_UID and bridges ${bridges[*]} filtered"

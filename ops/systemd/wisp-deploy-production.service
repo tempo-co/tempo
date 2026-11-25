@@ -1,20 +1,20 @@
 # Installed by `sudo ops/install.sh production`, which fills in @USER@.
 [Unit]
-Description=Deploy the latest tested Tempo images to production
+Description=Deploy the latest tested Wisp images to production
 # Image-pin bumps from main land first; if that step fails, the deploy still runs.
-Wants=network-online.target tempo-sync-pins.service
-After=docker.service network-online.target tempo-sync-pins.service
+Wants=network-online.target wisp-sync-pins.service
+After=docker.service network-online.target wisp-sync-pins.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
 User=@USER@
 SupplementaryGroups=docker
-ExecStart=/usr/local/lib/tempo-deploy/deploy.sh production
+ExecStart=/usr/local/lib/wisp-deploy/deploy.sh production
 # Worst case: pulls, pre-deploy backup, then a failed rollout and its rollback (~13 min of health waits).
 TimeoutStartSec=30min
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/var/lib/tempo-deploy
+ReadWritePaths=/var/lib/wisp-deploy

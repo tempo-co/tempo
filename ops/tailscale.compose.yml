@@ -1,10 +1,10 @@
-# Gives production Tempo its own tailnet device (https://tempo.<tailnet>.ts.net) so it
+# Gives production its own tailnet device (https://tempo.<tailnet>.ts.net) so it
 # does not share a browser origin with other apps served from the host's address.
-# Installed to /etc/tempo/compose/tailscale.compose.yml by `ops/install.sh production`; the serve config
+# Installed to /etc/wisp/compose/tailscale.compose.yml by `ops/install.sh production`; the serve config
 # stays on the host. The node is logged in once and keeps its identity in the state volume, so no
 # auth key is passed after that. Separate project, so production deploys never recreate it
 # unless its pinned image changes.
-name: tempo-tailscale
+name: wisp-tailscale
 
 services:
   tailscale:
@@ -22,8 +22,8 @@ services:
       TS_USERSPACE: 'true'
       TS_EXTRA_ARGS: --accept-dns=false
     volumes:
-      - tempo_tailscale_state:/var/lib/tailscale
-      - /etc/tempo/tailscale-serve.json:/config/serve.json:ro
+      - wisp_tailscale_state:/var/lib/tailscale
+      - /etc/wisp/tailscale-serve.json:/config/serve.json:ro
     networks:
       tailscale:
         # Web's Nginx trusts X-Forwarded-For only from this address.
@@ -39,8 +39,8 @@ services:
 
 networks:
   tailscale:
-    name: tempo-api-production_tailscale
+    name: wisp-production_tailscale
     external: true
 
 volumes:
-  tempo_tailscale_state:
+  wisp_tailscale_state:

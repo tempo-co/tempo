@@ -1,12 +1,12 @@
 # Installed by `sudo ops/install.sh production`, which fills in @USER@ and @HOME@.
 [Unit]
-Description=Tempo production database backup
+Description=Wisp production database backup
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
 User=@USER@
-Environment=BACKUP_DIR=@HOME@/backups/tempo
+Environment=BACKUP_DIR=@HOME@/backups/wisp
 Environment=KEEP=14
-ExecStart=/usr/local/lib/tempo-deploy/backup.sh
+ExecStart=/usr/local/lib/wisp-deploy/backup.sh
