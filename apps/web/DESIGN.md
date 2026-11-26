@@ -31,7 +31,8 @@ stacked. The app shows the symbol alone (`src/assets/logo.tsx`).
 | White | `#FFFFFF` | The bars on dark and on Midnight |
 
 On dark, the bars turn white and the dot stays Rose: the symbol component switches to the reversed
-master under the `dark` class. These are fixed brand colours, not theme roles.
+master under the `dark` class, and `favicon.svg` does the same when the device prefers dark.
+These are fixed brand colours, not theme roles.
 
 Keep clear space of one bar width all round. The smallest size is 16 px, drawn from the
 pixel-snapped 16 px cut (`favicon-16.png`).
