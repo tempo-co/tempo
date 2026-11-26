@@ -240,7 +240,7 @@ test('Escape and the close button leave the month', async ({page, homePage}) => 
   await expect(page).toHaveURL('/');
 });
 
-test('a merchant opens its page in Merchants', async ({page, homePage}) => {
+test('a merchant opens its details in Insights', async ({page, homePage}) => {
   await mockSyntheticHome(page);
   // The merchant's own page is not part of this check; answer it without reaching an API.
   await page.route(`**/merchants/${MARKET_ID}**`, (route) =>
@@ -256,7 +256,7 @@ test('a merchant opens its page in Merchants', async ({page, homePage}) => {
     .getByRole('region', {name: 'Biggest merchants'});
   await expect(merchants.getByRole('button')).toHaveCount(2);
   await merchants.getByRole('button', {name: /Example Market/}).click();
-  await expect(page).toHaveURL(new RegExp(`merchants=open.*merchant=${MARKET_ID}`));
+  await expect(page).toHaveURL(new RegExp(`/insights\\?merchant=${MARKET_ID}$`));
 });
 
 test('a month outside the history says so', async ({page, homePage}) => {

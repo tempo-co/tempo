@@ -162,6 +162,8 @@ Data series use `chart-primary` (ink) and `chart-secondary` (a quiet grey) whose
 amount (ink on light, a dimmer grey on dark so light text stays readable). Midnight marks only a
 selected period or an action, never a data series.
 
+In bars are `success`, Out bars `chart-primary`.
+
 Each category keeps one colour and icon everywhere, from
 `src/features/banking/utils/bank-transaction-category-meta.ts`: the icon in `category-*` on its
 colour at 10% with a 30% edge, and `color` for charts and dots. Colours are distinct per category
@@ -245,8 +247,9 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
   (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
   (`90dvh`, `8em`), `var(--…)` and 1px pass.
 - **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
-- **Layout:** `test/e2e/home/layout.spec.ts` (Home, the shell), `test/e2e/recurring/layout.spec.ts`
-  and `test/e2e/settings/layout.spec.ts`: 1440 to 320px, both themes, demo and worst-case data.
+- **Layout:** `test/e2e/home/layout.spec.ts` (Home, Insights, shell),
+  `test/e2e/recurring/layout.spec.ts` and `test/e2e/settings/layout.spec.ts`: 1440 to 320px, both
+  themes, demo and worst-case data.
 
 An exception needs a reason:
 

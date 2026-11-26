@@ -182,6 +182,36 @@ describe('Merchant spending', () => {
 		expect(other.body.merchants).toEqual([expect.objectContaining({id: BURGER, spent: '999.00', count: 1})]);
 	});
 
+	it('totals each merchant group over a date range, leaving out groups without rows in it', async () => {
+		const {body} = await ownerAgent.get('/merchants').query({from: '2026-10-10', to: '2026-10-31'}).expect(200);
+		expect(body).toEqual({
+			baseCurrency: 'EUR',
+			total: 2,
+			merchants: [
+				expect.objectContaining({
+					id: CORNER,
+					spent: '6.00',
+					received: '0.00',
+					count: 2,
+					lastDate: '2026-10-16',
+				}),
+				expect.objectContaining({
+					id: BURGER,
+					spent: '2.50',
+					received: '0.00',
+					count: 2,
+					lastDate: '2026-10-14',
+				}),
+			],
+		});
+
+		const fromOnly = await ownerAgent.get('/merchants').query({from: '2026-10-06'}).expect(200);
+		expect(fromOnly.body.merchants.map(({id}: {id: string}) => id)).toEqual([CORNER, BURGER, FRIEND]);
+		const other = await otherAgent.get('/merchants').query({from: '2026-10-10', to: '2026-10-31'}).expect(200);
+		expect(other.body).toMatchObject({total: 0, merchants: []});
+		await ownerAgent.get('/merchants').query({from: '2026-13-01'}).expect(400);
+	});
+
 	it('shows a group’s all-time totals and variants, reconciling with the transactions filtered by it', async () => {
 		const {body} = await ownerAgent.get(`/merchants/${BURGER}`).expect(200);
 		expect(body).toEqual({

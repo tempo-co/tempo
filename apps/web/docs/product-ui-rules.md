@@ -4,7 +4,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 
 ## Pages
 
-- Each page answers one question. Home is for status: this month's spending against the usual pace, how far the imported data runs, and what to do next. Reports (cash flow, categories, year tables) belong in Insights, bills in Recurring, account management and imports in Accounts. Until Home and Insights get their own pages, both show the reports.
+- Each page answers one question. Home is for status: this month's spending against the usual pace, how far the imported data runs, and what to do next. Reports (cash flow, categories, year tables) belong in Insights, bills in Recurring, account management and imports in Accounts. Until Home gets its own page, it still shows the reports.
 
 ## Density and copy
 
@@ -19,6 +19,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 
 ## Charts and periods
 
+- A page with a period picker (Insights) applies the one period to every figure on it, the rail included, and keeps it in the address; figures that describe the present rather than a span (bills a month) say so in their label.
 - Absolute, comparable views over relative ones: a fixed scale with even round ticks and headroom over the tallest bar.
 - Every incomplete period (the running one, and one cut short by where history starts) is marked apart from complete ones and labelled "so far". Averages count complete periods only.
 - Weekly comparisons use the median of earlier full weeks, since one rent week inflates the mean.

@@ -9,7 +9,7 @@ import type {
 
 import {createAccount} from '../../data/account.data';
 import {createBankTransaction} from '../../data/bank-transaction.data';
-import {mockHistoryEndpoints} from '../../data/home-history.data';
+import {homeRecurring, mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {
   SETTLED_REPORTING_CURRENCY,
@@ -256,6 +256,9 @@ async function mockSignedIn(page: Page) {
   );
   await mockBankRefresh(page);
   await mockJson(page, '**/bank-connections/aspsps', []);
+  // Insights, where merchants open, reads the history and bills beside them.
+  await mockHistoryEndpoints(page);
+  await mockJson(page, `${API_URL}/recurring-series/summary?**`, homeRecurring().summary);
   await mockBankConnections(page, [
     {
       id: '00000000-0000-4000-8000-000000000002',
@@ -334,13 +337,17 @@ async function mockMerchants(page: Page) {
   return requests;
 }
 
-const dialog = (page: Page) => page.getByRole('dialog', {name: 'Merchants'});
+/** A merchant or the merchant list: in the Insights rail from 1280px, in a sheet narrower. */
+const panel = (page: Page) =>
+  page
+    .getByRole('complementary', {name: /^Merchants?$/})
+    .or(page.getByRole('dialog', {name: /^Merchants?$/}));
 
 for (const viewport of [
   {width: 1280, height: 900},
   {width: 375, height: 812},
 ]) {
-  test(`a month ranks its biggest merchants and opens them over Home at ${viewport.width}px`, async ({
+  test(`a month ranks its biggest merchants and opens them in Insights at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -377,15 +384,11 @@ for (const viewport of [
     }
     await expectNoHorizontalOverflow(page);
 
-    // A merchant opens over the month, and Back returns to it.
+    // A merchant opens in Insights, and Back returns to the month.
     await rows.nth(1).getByRole('button').click();
-    await expect(page).toHaveURL(`/?month=2026-10&merchants=open&merchant=${BRAND}`);
-    await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
-    await dialog(page).getByRole('button', {name: 'All merchants'}).click();
-    await expect(page).toHaveURL('/?month=2026-10&merchants=open');
-    await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
+    await expect(page).toHaveURL(`/insights?merchant=${BRAND}`);
+    await expect(panel(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
     await page.goBack();
-    await expect(dialog(page)).toBeHidden();
     await expect(page).toHaveURL('/?month=2026-10');
     await expect(card).toBeVisible();
   });
@@ -409,8 +412,8 @@ test('a page of merchants in a currency changed elsewhere reloads the list inste
       total: allMerchants.length,
     } satisfies MerchantGroupsResponse);
   });
-  await page.goto('/?merchants=open');
-  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  await page.goto('/insights?merchants=all');
+  const all = panel(page).getByRole('region', {name: 'All merchants'});
   await expect(all.getByRole('listitem')).toHaveCount(2);
   await expect(all.getByRole('listitem').first()).toContainText('€');
 
@@ -430,28 +433,26 @@ test('a page of merchants in a currency changed elsewhere reloads the list inste
   await expect(all.getByRole('listitem').first()).toContainText('$');
 });
 
-test('the merchants dialog ranks by week, month or year and searches every merchant', async ({
+test('every merchant of the period is listed, searchable, and opens in the rail', async ({
   page,
 }) => {
   await page.setViewportSize({width: 375, height: 812});
   await mockSignedIn(page);
   const requests = await mockMerchants(page);
-  await page.goto('/?merchants=open');
+  await page.goto('/insights?period=2025&merchants=all');
 
-  const top = dialog(page).getByRole('region', {name: 'Top merchants'});
-  await expect(top.getByRole('heading', {name: 'This month'})).toBeVisible();
-  await expect(top).toContainText('Compared with the last 6 months by this point.');
-  await expect(top.getByRole('listitem')).toHaveCount(5);
-  await expect(top).toContainText('Top 5 of 7 merchants.');
-  await top.getByRole('radio', {name: 'Year'}).click();
-  await expect(top.getByRole('heading', {name: 'This year'})).toBeVisible();
-  expect(requests.some((params) => params.get('interval') === 'year')).toBe(true);
-  // Opening a merchant and coming back keeps the period.
-  await top.getByRole('listitem').nth(1).getByRole('button').click();
-  await dialog(page).getByRole('button', {name: 'All merchants'}).click();
-  await expect(top.getByRole('radio', {name: 'Year'})).toBeChecked();
-
-  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  // The list covers the period the page shows.
+  await expect
+    .poll(() =>
+      requests.some(
+        (params) =>
+          params.get('from') === '2025-01-01' &&
+          params.get('to') === '2025-12-31' &&
+          params.get('limit') === '50',
+      ),
+    )
+    .toBe(true);
+  const all = panel(page).getByRole('region', {name: 'All merchants'});
   await expect(all).toContainText('5 merchants, most spent first');
   await expect(all.getByRole('listitem')).toHaveCount(2);
   await all.getByRole('button', {name: 'Load more'}).click();
@@ -465,25 +466,24 @@ test('the merchants dialog ranks by week, month or year and searches every merch
   await expect(all.getByRole('listitem').nth(2)).toContainText('1,284 transactions · last 12 Oct');
   await expectNoHorizontalOverflow(page);
 
-  await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('burger');
-  const results = dialog(page).getByRole('region', {name: 'Search results'});
+  await panel(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('burger');
+  const results = panel(page).getByRole('region', {name: 'Search results'});
   await expect(results).toContainText('1 match');
   await expect(results.getByRole('listitem')).toHaveCount(1);
-  await expect(top).toBeHidden();
   // Opening a result and coming back keeps the search.
   await results.getByRole('button').click();
-  await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
-  await dialog(page).getByRole('button', {name: 'All merchants'}).click();
+  await expect(panel(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+  await panel(page).getByRole('button', {name: 'All merchants'}).click();
   await expect(
-    dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}),
+    panel(page).getByRole('searchbox', {name: 'Search merchants and people'}),
   ).toHaveValue('burger');
   await expect(results.getByRole('listitem')).toHaveCount(1);
-  await dialog(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
+  await panel(page).getByRole('searchbox', {name: 'Search merchants and people'}).fill('nobody');
   await expect(results).toContainText('No merchant or person matches that name.');
 
-  // The clear button is a full touch target and brings the ranking back.
-  const search = dialog(page).getByRole('searchbox', {name: 'Search merchants and people'});
-  const clear = dialog(page).getByRole('button', {name: 'Clear search'});
+  // The clear button is a full touch target and brings the whole list back.
+  const search = panel(page).getByRole('searchbox', {name: 'Search merchants and people'});
+  const clear = panel(page).getByRole('button', {name: 'Clear search'});
   const clearBox = await boxOf(clear);
   expect(clearBox.width).toBeGreaterThanOrEqual(44);
   expect(clearBox.height).toBeGreaterThanOrEqual(44);
@@ -491,15 +491,16 @@ test('the merchants dialog ranks by week, month or year and searches every merch
   await expect(search).toHaveValue('');
   await expect(search).toBeFocused();
   await expect(clear).toBeHidden();
-  await expect(top).toBeVisible();
-  // Escape clears a filled search without closing the dialog; on an empty one it closes the dialog.
+  await expect(panel(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
+  // Escape clears a filled search without closing the sheet; on an empty one it closes the sheet.
   await search.fill('burger');
   await expect(results).toContainText('1 match');
   await search.press('Escape');
   await expect(search).toHaveValue('');
-  await expect(top).toBeVisible();
+  await expect(panel(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
   await search.press('Escape');
-  await expect(dialog(page)).toBeHidden();
+  await expect(panel(page)).toBeHidden();
+  await expect(page).toHaveURL('/insights?period=2025');
 });
 
 test('a later page of merchants or of a merchant’s transactions that fails keeps the loaded ones and tries that page again', async ({
@@ -513,9 +514,9 @@ test('a later page of merchants or of a merchant’s transactions that fails kee
     const offset = params.get('offset');
     return offset && offset !== '0' ? offset : null;
   });
-  await page.goto('/?merchants=open');
+  await page.goto('/insights?merchants=all');
 
-  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  const all = panel(page).getByRole('region', {name: 'All merchants'});
   await expectFailedPageRetried(all, all.getByRole('listitem'), merchantsLater, {
     loaded: 2,
     after: 4,
@@ -543,8 +544,8 @@ test('a later page of merchants or of a merchant’s transactions that fails kee
       return params.has('filter[merchantGroup]') && index && index !== '0' ? index : null;
     },
   );
-  await page.goto(`/?merchants=open&merchant=${BRAND}`);
-  const list = dialog(page).getByRole('region', {name: 'Transactions'});
+  await page.goto(`/insights?merchant=${BRAND}`);
+  const list = panel(page).getByRole('region', {name: 'Transactions'});
   await expect(list.getByRole('heading', {name: '25 transactions'})).toBeVisible();
   await expectFailedPageRetried(list, list.getByRole('listitem'), transactionsLater, {
     loaded: 20,
@@ -558,9 +559,9 @@ test('merchant details show all-time totals, periods, grouped names and transact
   await page.setViewportSize({width: 375, height: 812});
   await mockSignedIn(page);
   const requests = await mockMerchants(page);
-  await page.goto(`/?merchants=open&merchant=${BRAND}`);
+  await page.goto(`/insights?merchant=${BRAND}`);
 
-  const details = dialog(page);
+  const details = panel(page);
   await expect(details.getByRole('heading', {name: 'Example Burger'})).toBeVisible();
   await expect(details.getByText('2 names grouped by brand')).toBeVisible();
   await expect(details.getByText('Spent all time€310.40')).toBeVisible();
@@ -691,17 +692,10 @@ for (const scenario of [
     } else {
       await history.click();
     }
-    // The merchant opens over the transactions it came from, in place of the transaction.
-    await expect(page).toHaveURL(`/transactions?merchants=open&merchant=${BRAND}`);
-    await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
-    await expect(page.locator('main h1')).toHaveText('Transactions');
-    await expect(inspector).toHaveCount(0);
-    // Moving within the dialog keeps it over the same page.
-    await dialog(page).getByRole('button', {name: 'All merchants'}).click();
-    await expect(page).toHaveURL('/transactions?merchants=open');
-    await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
-    // Closing returns to the transaction it was opened from.
-    await dialog(page).getByRole('button', {name: 'Close merchants'}).click();
+    // The merchant opens in Insights, and Back returns to the transaction it was opened from.
+    await expect(page).toHaveURL(`/insights?merchant=${BRAND}`);
+    await expect(panel(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
+    await page.goBack();
     await expect(page).toHaveURL(new RegExp(`transactionId=${transaction.id}`));
   });
 }
@@ -709,17 +703,19 @@ for (const scenario of [
 test('a merchant without transactions shows not found', async ({page}) => {
   await mockSignedIn(page);
   await mockMerchants(page);
-  await page.goto(`/?merchants=open&merchant=${PERSON}`);
-  await expect(dialog(page).getByRole('heading', {name: 'Merchant not found'})).toBeVisible();
-  await dialog(page).getByRole('button', {name: 'All merchants'}).click();
-  await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
+  await page.goto(`/insights?merchant=${PERSON}`);
+  await expect(panel(page).getByRole('heading', {name: 'Merchant not found'})).toBeVisible();
+  await panel(page).getByRole('button', {name: 'Close', exact: true}).click();
+  await expect(page).toHaveURL('/insights');
+  await expect(page.getByRole('region', {name: 'Top merchants'})).toBeVisible();
 });
 
-test('an invalid merchant id in the link opens the list', async ({page}) => {
+test('an invalid merchant id in the link opens Insights without it', async ({page}) => {
   await mockSignedIn(page);
   await mockMerchants(page);
-  await page.goto('/?merchants=open&merchant=not-a-merchant');
-  await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
+  await page.goto('/insights?merchant=not-a-merchant');
+  await expect(page.getByRole('region', {name: 'Top merchants'})).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
 });
 
 /** Answers the reporting currency; with `holdNext` set, holds the next read, answering what the server had when it began. */
@@ -766,8 +762,8 @@ test('a list answering in a currency changed elsewhere while the settings are be
   const requests = await mockMerchants(page);
   const settings = await mockHeldSettings(page);
   const merchants = await mockMerchantsIn(page, requests);
-  await page.goto('/?merchants=open');
-  const all = dialog(page).getByRole('region', {name: 'All merchants'});
+  await page.goto('/insights?merchants=all');
+  const all = panel(page).getByRole('region', {name: 'All merchants'});
   await expect(all.getByRole('listitem').first()).toContainText('€');
   // Settled, so regaining focus reads the settings and the list again.
   await page.waitForTimeout(1_000);

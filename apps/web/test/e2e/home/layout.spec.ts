@@ -10,6 +10,7 @@ import {
   RENT_KEY,
   USUAL_SPENDING,
   homeHistory,
+  homeRecurring,
   mockSyntheticHome,
   monthTransactions,
 } from '../../data/home-history.data';
@@ -278,7 +279,7 @@ for (const {width, rows} of [
   });
 }
 
-test('Home’s text actions and Load more buttons share one style with the month’s, the Merchants’ and the Recurring ones, as do their transaction lists’ headings', async ({
+test('Home’s text actions and Load more buttons share one style with the month’s, a merchant’s and the Recurring ones, as do their transaction lists’ headings', async ({
   page,
   homePage,
 }) => {
@@ -349,8 +350,8 @@ test('Home’s text actions and Load more buttons share one style with the month
   await page.route('**/bank-transactions?**', (route) =>
     fulfillJson(route, {...monthTransactions('2026-10', 20), total: 45}),
   );
-  await page.goto(`/?merchants=open&merchant=${MARKET_ID}`);
-  const merchant = page.getByRole('dialog', {name: 'Merchants'});
+  await page.goto(`/insights?merchant=${MARKET_ID}`);
+  const merchant = page.getByRole('complementary', {name: 'Merchant'});
   styles.push(await style(merchant.getByRole('link', {name: 'Open in Transactions'})));
   loadMores.push(await style(merchant.getByRole('button', {name: 'Load more'})));
   headings.push(await heading(merchant.getByRole('heading', {name: '45 transactions'})));
@@ -493,6 +494,198 @@ for (const [name, data] of Object.entries(shellData)) {
         }
         expect.soft((await boxOf(tabs.getByText(badgeText, {exact: true}))).height).toBe(18);
       }
+    });
+  }
+}
+
+/**
+ * Worst-case Insights: the worst-case history with spending in many more categories (one only ever refunded), so the
+ * money flow merges many small ones and the list runs long, and a rail of top merchants with a long legal name, an
+ * unbroken one, a two-letter one, a count of 1 and of 1,284, and bills in the millions; all synthetic.
+ */
+function worstInsights() {
+  const base = worstCase();
+  const extra = [
+    'HOME_IMPROVEMENT',
+    'EATING_OUT',
+    'PERSONAL_CARE',
+    'EDUCATION',
+    'GIFTS_AND_DONATIONS',
+    'FEES',
+    'INSURANCE',
+    'TAXES_AND_GOVERNMENT',
+    'LOANS_AND_DEBT',
+    'SERVICES',
+    'CASH_WITHDRAWAL',
+    'UNCATEGORIZED',
+  ];
+  const amountsOf = (periods: typeof base.breakdown.month.category, month: string) =>
+    Object.fromEntries(
+      (periods.find((period) => period.start.startsWith(month))?.parts ?? []).map((part) => [
+        part.key,
+        Number(part.amount),
+      ]),
+    );
+  return homeHistory({
+    spending: (month) => {
+      const amounts = amountsOf(base.breakdown.month.category, month);
+      extra.forEach((key, index) => (amounts[key] = (index + 1) * 7 * SCALE));
+      amounts.ENTERTAINMENT = -15;
+      return amounts;
+    },
+    income: (month) => amountsOf(base.breakdown.month.source, month),
+    sourceLabels: Object.fromEntries(
+      base.breakdown.month.source[0].parts.map((part) => [part.key, part.label]),
+    ),
+    firstMonth: FIRST_MONTH,
+  });
+}
+
+const insightsMerchant = (id: string, name: string, spent: string, count: number) => ({
+  id,
+  name,
+  kind: 'MERCHANT' as const,
+  logoUrl: null,
+  spent,
+  received: '0.00',
+  count,
+  lastDate: '2026-11-01',
+});
+
+const insightsData = {
+  demo: {
+    history: homeHistory,
+    bills: '1250.00',
+    merchants: [
+      insightsMerchant(MARKET_ID, 'Example Market', '500.00', 9),
+      insightsMerchant(`k_${'e5'.repeat(16)}`, 'Example Landlord', '1200.00', 1),
+    ],
+  },
+  'worst-case': {
+    history: worstInsights,
+    bills: '1234567.89',
+    merchants: [
+      insightsMerchant(
+        MARKET_ID,
+        'Example Długoszewska-Przykładowa Catering & Events International Holdings',
+        '123456789.01',
+        1,
+      ),
+      insightsMerchant(
+        `k_${'a7'.repeat(16)}`,
+        'ExampleSuperLongMerchantNameWithoutAnySpacesAtAllBV',
+        '9876543.21',
+        1284,
+      ),
+      insightsMerchant(`k_${'b8'.repeat(16)}`, 'Jo', '0.01', 1),
+      insightsMerchant(`k_${'c9'.repeat(16)}`, 'Example Landlord', '1200.00', 12),
+      insightsMerchant(`k_${'d0'.repeat(16)}`, 'Example Market', '500.00', 9),
+    ],
+  },
+};
+
+for (const [name, data] of Object.entries(insightsData)) {
+  for (const {width, theme} of [
+    {width: 1440, theme: 'light'},
+    {width: 1440, theme: 'dark'},
+    {width: 1024, theme: 'light'},
+    {width: 390, theme: 'light'},
+    {width: 390, theme: 'dark'},
+    {width: 320, theme: 'dark'},
+  ] as const) {
+    test(`Insights fits ${name} data at ${width}px in ${theme}`, async ({page}) => {
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.setViewportSize({width, height: 1000});
+      await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
+      await mockSyntheticHome(page, {history: data.history()});
+      const recurring = homeRecurring().summary;
+      await page.route('**/recurring-series/summary?**', (route) =>
+        fulfillJson(route, {...recurring, expenseMonthlyTotal: data.bills}),
+      );
+      await page.route('**/merchants?**', (route) =>
+        fulfillJson(route, {
+          baseCurrency: 'EUR',
+          merchants: data.merchants,
+          total: data.merchants.length,
+        }),
+      );
+      const market = data.merchants[0];
+      await page.route(`**/merchants/${MARKET_ID}`, (route) =>
+        fulfillJson(route, {
+          ...market,
+          lastDate: '2026-10-28',
+          baseCurrency: 'EUR',
+          paid: market.spent,
+          refunded: '0.00',
+          paymentCount: market.count,
+          averagePayment: market.spent,
+          firstDate: '2025-01-02',
+          excluded: {missingBaseAmount: 0},
+          variants: [],
+        }),
+      );
+      await page.route(`**/merchants/${MARKET_ID}/periods?**`, (route) =>
+        fulfillJson(route, {baseCurrency: 'EUR', interval: 'month', periods: []}),
+      );
+      await page.route('**/bank-transactions?**', (route) =>
+        fulfillJson(route, {...monthTransactions('2026-10', 5), total: 5}),
+      );
+      const capture = async (view: string) => {
+        if (!process.env.HOME_POLISH_CAPTURE_DIR) return;
+        await mkdir(process.env.HOME_POLISH_CAPTURE_DIR, {recursive: true});
+        await page.screenshot({
+          path: join(process.env.HOME_POLISH_CAPTURE_DIR, `${view}-${name}-${theme}-${width}.png`),
+          fullPage: width >= 768,
+        });
+      };
+      const flow = page.getByRole('region', {name: 'Where the money went'});
+      const rail = page.getByRole('complementary', {name: 'Insights rail'});
+      const top = rail.getByRole('region', {name: 'Top merchants'});
+
+      for (const period of ['12m', 'all']) {
+        await page.goto(period === 'all' ? '/insights?period=all' : '/insights');
+        await expect(
+          page.getByRole('region', {name: 'Categories'}).getByRole('link').first(),
+        ).toBeVisible();
+        await expect(top.getByRole('button', {name: /Example/}).first()).toBeVisible();
+        await expectLoaded(page);
+        await page.evaluate(() => document.fonts.ready);
+        await capture(`insights-${period}`);
+        await expectNoHorizontalOverflow(page);
+        expect.soft(await brokenAmounts(page)).toEqual([]);
+        if (width < 640) expect.soft(await smallTargets(page, 'main')).toEqual([]);
+        // The diagram on wider screens; on a phone the money flow is one stacked bar over its legend.
+        const sources = await flow.getByTestId('money-flow-source').count();
+        if (width < 768) expect(sources).toBe(0);
+        else expect(sources).toBeGreaterThan(0);
+        await expect(flow.getByRole('list', {name: 'Went to'})).toBeVisible();
+        // Every money-flow label and rail row keeps inside its column.
+        expect.soft(await outside(flow, 'li span')).toEqual([]);
+        expect.soft(await outside(rail, 'button, a, span')).toEqual([]);
+        const main = await boxOf(page.getByRole('region', {name: 'Cash flow'}));
+        const side = await boxOf(rail);
+        // From 1280px the rail stands beside the page; narrower, it follows it.
+        if (width >= 1280) expect(side.x).toBeGreaterThan(main.x + main.width);
+        else expect(side.y).toBeGreaterThan(main.y + main.height);
+      }
+
+      // A merchant's details: in the rail beside the page, in a sheet narrower.
+      await top
+        .getByRole('button', {name: /Example/})
+        .first()
+        .click();
+      const details =
+        width >= 1280
+          ? page.getByRole('complementary', {name: 'Merchant'})
+          : page.getByRole('dialog', {name: 'Merchant'});
+      await expect(details.getByText('Spent all time')).toBeVisible();
+      await expectLoaded(details);
+      await capture('insights-merchant');
+      await expectNoHorizontalOverflow(page);
+      expect.soft(await brokenAmounts(page)).toEqual([]);
+      expect.soft(await outside(details, 'button, a, h2, dd')).toEqual([]);
+      expect(errors).toEqual([]);
     });
   }
 }
