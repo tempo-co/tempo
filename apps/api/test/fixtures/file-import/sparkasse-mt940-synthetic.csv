@@ -1,0 +1,5 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Beguenstigter/Zahlungspflichtiger";"Kontonummer";"BLZ";"Betrag";"Waehrung";"Info"
+"DE89370400440532013000";"01.10.26";"01.10.26";"LASTSCHRIFT";"Beitrag Oktober";"Example Insurance AG";"DE02120300000000202051";"BYLADEM1001";"-1.234,56";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"02.10.26";"02.10.26";"GUTSCHRIFT";"Erstattung";"Example Tenant";"1234567890";"37040044";"50,00";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"05.10.26";"05.10.26";"KARTENZAHLUNG";"Example Bakery";"Example Bakery";"";"";"-4,20";"EUR";"Umsatz vorgemerkt"
+"DE89370400440532013000";"06.10.26";"05.10.26";"ENTGELTABSCHLUSS";"Kontofuehrung";"";"";"";"-5,90";"EUR";"Umsatz gebucht"

@@ -1,0 +1,9 @@
+Umsätze Girokonto (00);;;Kundennummer: 123 4567890;;
+01.10.2026 - 06.10.2026;;;;;
+Letzter Kontostand;;;;1.427,50;EUR
+Vorgemerkte und noch nicht gebuchte Umsätze sind nicht Bestandteil dieser Übersicht.;;;;;
+Buchungstag;Wert;Verwendungszweck;Soll;Haben;Währung
+01.10.2026;01.10.2026;"EXAMPLE SHOP EXAMPLESTADT";-1.012,50;;EUR
+02.10.2026;02.10.2026;"GEHALT OKTOBER EXAMPLE EMPLOYER";;2.500,00;EUR
+05.10.2026;05.10.2026;"ABSCHLAG OKTOBER EXAMPLE ENERGY";-60,00;;EUR
+Kontostand;06.10.2026;;;1.427,50;EUR

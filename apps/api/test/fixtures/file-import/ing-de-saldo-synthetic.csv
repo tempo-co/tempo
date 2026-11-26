@@ -1,0 +1,17 @@
+Umsatzanzeige;Datei erstellt am: 06.10.2026 09:30
+
+IBAN;DE89370400440532013000
+Kontoname;Girokonto
+Bank;ING
+Kunde;Example Customer
+Zeitraum;01.10.2026 - 06.10.2026
+Saldo;1.626,55;EUR
+
+Sortierung;Datum absteigend
+
+In der CSV-Datei finden Sie alle bereits gebuchten Umsätze. Die vorgemerkten Umsätze werden nicht aufgenommen, auch wenn sie in Ihrem Internetbanking angezeigt werden.
+
+Buchung;Wertstellungsdatum;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Betrag;Währung
+05.10.2026;05.10.2026;VISA EXAMPLE SHOP;Lastschrift;NR XXXX 1234 EXAMPLESTADT KAUFUMSATZ 03.10;-1.023,45;EUR
+02.10.2026;01.10.2026;Example Employer GmbH;Gehalt/Rente;Gehalt Oktober;2.500,00;EUR
+01.10.2026;01.10.2026;Example Landlord;Dauerauftrag / Terminueberweisung;Miete Oktober;-850,00;EUR
