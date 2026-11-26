@@ -1,6 +1,15 @@
 import {BANK_LIST} from '@tempo/contracts';
 
-import {CORPUS_ENV, FileResult, MAPPER_ENV, checkFile, corpusDir, loadCorpus, rerunMapper} from './import-corpus';
+import {
+	CORPUS_ENV,
+	FileResult,
+	MAPPER_ENV,
+	OwnerProvenBank,
+	checkFile,
+	corpusDir,
+	loadCorpus,
+	rerunMapper,
+} from './import-corpus';
 
 const dir = corpusDir();
 
@@ -11,7 +20,7 @@ if (!dir) {
 		});
 	});
 } else {
-	const {entries, truth} = loadCorpus(dir);
+	const {entries, ownerProven, truth} = loadCorpus(dir);
 	const results = new Map<string, FileResult>();
 	const resultOf = (id: string) => {
 		const entry = entries.find((candidate) => candidate.id === id)!;
@@ -19,6 +28,7 @@ if (!dir) {
 		return results.get(id)!;
 	};
 	const verified = BANK_LIST.filter(({status}) => status === 'verified');
+	const proven = new Set(ownerProven.map(({bank}) => bank));
 
 	describe('the real-file import corpus', () => {
 		it.each(entries.map(({id}) => id))(
@@ -28,7 +38,7 @@ if (!dir) {
 			},
 		);
 
-		it.each(verified.map(({id}) => id))(
+		it.each(verified.filter(({id}) => !proven.has(id)).map(({id}) => id))(
 			'verified bank %s has a passing file read by one of its readers',
 			(bank) => {
 				const {layouts, formats} = verified.find(({id}) => id === bank)!;
@@ -60,6 +70,7 @@ if (!dir) {
 				summary(
 					entries.map(({id}) => resultOf(id)),
 					verified.map(({id}) => id),
+					ownerProven,
 				),
 			),
 		);
@@ -67,13 +78,14 @@ if (!dir) {
 }
 
 /** Counts only, plus each failing file's id and problems: never a row's content. */
-function summary(results: FileResult[], verifiedBanks: string[]): string {
+function summary(results: FileResult[], verifiedBanks: string[], ownerProven: OwnerProvenBank[]): string {
 	const failed = results.filter(({passed}) => !passed);
 	const damage = results.flatMap((result) => result.damage);
 	const required = damage.filter((copy) => copy.required);
 	const balances = results.map((result) => result.balances);
 	const banksWithFile = new Set(results.filter(({passed}) => passed).map(({entry}) => entry.bank));
-	const lacking = verifiedBanks.filter((bank) => !banksWithFile.has(bank));
+	const provenBanks = ownerProven.map(({bank}) => bank);
+	const lacking = verifiedBanks.filter((bank) => !banksWithFile.has(bank) && !provenBanks.includes(bank));
 	const unlisted = [...new Set(results.map(({entry}) => entry.bank))].filter((bank) => !verifiedBanks.includes(bank));
 	const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 	return [
@@ -85,6 +97,9 @@ function summary(results: FileResult[], verifiedBanks: string[]): string {
 		`  stated balances held: ${sum(balances.map(({checked, wrong}) => checked - wrong.length))} of ${sum(balances.map(({checked}) => checked))}`,
 		`  damaged copies refused: ${required.filter(({refused}) => refused).length} of ${required.length} detectable; ${damage.filter(({required: needed, refused}) => !needed && refused).length} of ${damage.length - required.length} others`,
 		`  verified banks with a passing file: ${verifiedBanks.length - lacking.length} of ${verifiedBanks.length}${lacking.length ? `; none for ${lacking.join(', ')}` : ''}`,
+		...ownerProven
+			.filter(({bank}) => verifiedBanks.includes(bank) && !banksWithFile.has(bank))
+			.map(({bank, note}) => `  ${bank}: proven on the owner's own export, no corpus file (${note})`),
 		...(unlisted.length
 			? [`  files of banks the list does not verify (checked, not required): ${unlisted.join(', ')}`]
 			: []),
