@@ -1,6 +1,6 @@
 # Product UI rules
 
-Standing rules for what Tempo's screens show and how they behave, for new and changed screens. Tokens and components are in `DESIGN.md`; shared code rules are in `docs/frontend-conventions.md`.
+Standing rules for what Tempo's screens show and how they behave, for new and changed screens. Anything visual (colours, type, sizes, components and patterns) is in `DESIGN.md`, which wins where this file seems to disagree; shared code rules are in `docs/frontend-conventions.md`.
 
 ## Density and copy
 

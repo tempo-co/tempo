@@ -1,6 +1,6 @@
 # Frontend conventions
 
-UI rules that the code follows but does not state. Formatting, lint and type settings live in `.prettierrc`, `eslint.config.js` and `tsconfig.app.json`; read those instead of copying them here.
+UI rules that the code follows but does not state. Anything visual (colours, type, sizes, components, patterns) is in `DESIGN.md`; read it before any UI change. Formatting, lint and type settings live in `.prettierrc`, `eslint.config.js` and `tsconfig.app.json`; read those instead of copying them here.
 
 ## Feedback: one message per event
 
@@ -24,12 +24,12 @@ Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 
 - Destructive buttons keep the `destructive` variant's `text-destructive-foreground` (`src/components/ui/button.tsx`). Never add a text-colour override on a destructive fill; contrast falls well below AA. For "inconsistent colour" reports, grep for per-call overrides of the variant and measure computed colours in both themes.
 - `.dark` sets `color-scheme: dark` in `src/index.css`; without it native scrollbars and form controls render light.
-- `--clay` (mid-tone Clay) is for large accents. Small text and controls on light use `--primary` (Clay strong). `DESIGN.md` holds the palette, contrast rules and component tokens.
+- Components use only the Tailwind colour names `src/index.css` exposes (the shadcn names and our additions); the scales and roles behind them are not utilities. In inline styles and SVG attributes, read the same names as `var(--color-…)`, never `hsl(var(--…))`. `DESIGN.md` (Foundations, Colour) says which name serves which job; `test/unit/theme-contrast.spec.ts` checks the contrast pairs.
 
 ## Merchant logo tiles
 
-- Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Its Clay field, ink and edge tokens are defined in `src/index.css` and `DESIGN.md`; do not recolor the ordinary `BankTransactionCategoryIcon` globally.
-- The tile loads `/mask-v3` as an ordinary `img` without `crossOrigin` (CSS masks would drop the API cookies) and tints it with an SVG `SourceAlpha` filter whose `floodColor` references the ink token; inherited `currentColor` leaves WebKit's tint stale after a theme change. Keep SVG definitions zero-sized and out of layout.
+- Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Its `transaction-tile` field, foreground and border colours are defined in `src/index.css` and `DESIGN.md`; do not recolor the ordinary `BankTransactionCategoryIcon` globally.
+- The tile loads `/mask-v3` as an ordinary `img` without `crossOrigin` (CSS masks would drop the API cookies) and tints it with an SVG `SourceAlpha` filter whose `floodColor` references `--color-transaction-tile-foreground`; inherited `currentColor` leaves WebKit's tint stale after a theme change. Keep SVG definitions zero-sized and out of layout.
 - Missing or failed derivatives show the fallback glyph. Failure state is keyed to the full source URL so a new version can recover. Never fall back to a full-color original or add merchant-specific artwork rules.
 
 ## Phone layouts
