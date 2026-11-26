@@ -16,6 +16,13 @@ export const DESTRUCTIVE_CONNECTION_STATUSES = [
 	BANK_CONNECTION_STATUSES.EXPIRED,
 ] as const;
 
+/** Authorization attempts that never finished: the callback is still due, the user cancelled, or it failed. */
+export const UNFINISHED_AUTHORIZATION_STATUSES = [
+	BANK_CONNECTION_STATUSES.PENDING_AUTHORIZATION,
+	BANK_CONNECTION_STATUSES.CANCELLED,
+	BANK_CONNECTION_STATUSES.FAILED,
+] as const;
+
 export const BANK_SYNC_STATUSES = {
 	IDLE: 'IDLE',
 	QUEUED: 'QUEUED',
