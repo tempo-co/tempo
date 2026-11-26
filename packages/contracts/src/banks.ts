@@ -234,16 +234,16 @@ export const BANK_LIST: readonly Bank[] = [
 		name: 'La Banque Postale',
 		country: 'FR',
 		status: 'verified',
-		layouts: [],
+		layouts: ['la-banque-postale-fr'],
 		formats: ['ofx'],
 		exportSteps: {
 			steps: [
 				'In the Espace Client Internet, click "Télécharger le détail" (download the details) in the navigation bar.',
 				'Click "Confirmer" (confirm) and check the account shown.',
-				'Choose "format OFX".',
+				'Choose "format OFX", or "tableur CSV" (spreadsheet CSV).',
 				'Click "Confirmer" again to download.',
 			],
-			file: 'format OFX',
+			file: 'format OFX or tableur CSV',
 		},
 	},
 	{
@@ -513,7 +513,7 @@ export const BANK_LIST: readonly Bank[] = [
 		name: 'FinecoBank',
 		country: 'IT',
 		status: 'verified',
-		layouts: ['fineco-it', 'fineco-it-value-date'],
+		layouts: ['fineco-it', 'fineco-it-value-date', 'fineco-it-xlsx'],
 		formats: [],
 		exportSteps: {
 			steps: [
@@ -521,7 +521,7 @@ export const BANK_LIST: readonly Bank[] = [
 				'Use the filter to choose the period, up to 4 years back.',
 				"Download the movements as a file. Fineco's help does not describe the download.",
 			],
-			file: 'CSV (not Excel)',
+			file: 'CSV or Excel (.xlsx)',
 		},
 	},
 	{
@@ -619,6 +619,132 @@ export const BANK_LIST: readonly Bank[] = [
 		},
 	},
 	{
+		id: 'kbc',
+		name: 'KBC',
+		country: 'BE',
+		status: 'verified',
+		layouts: ['kbc-be', 'kbc-be-creditcard'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'In KBC Touch, go to "Betalen" (payments), then "Zoeken en Rapporten" (search and reports).',
+				"Search the account's transactions for the period you want.",
+				'Click "Downloaden" (download) and choose CSV, not PDF.',
+				"Tempo also reads a KBC credit card's CSV file; KBC's pages do not describe its download.",
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'belfius',
+		name: 'Belfius',
+		country: 'BE',
+		status: 'verified',
+		layouts: ['belfius-be'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'In Belfius Direct Net, choose the account and, if you like, search criteria to narrow the dates.',
+				'Click "Exporteren" (export) below the transaction table.',
+				'Choose CSV, then click "Exporteren" again.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'ing-be',
+		name: 'ING',
+		country: 'BE',
+		status: 'verified',
+		layouts: ['ing-be'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"Log in to ING Home'Bank on a computer and open the account's transactions.",
+				"Choose the period and download the transactions as CSV. ING Belgium's help does not describe the download.",
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'bnp-paribas-fortis',
+		name: 'BNP Paribas Fortis',
+		country: 'BE',
+		status: 'verified',
+		layouts: ['bnp-paribas-fortis-be'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"Log in to BNP Paribas Fortis online banking on a computer and open the account's transactions.",
+				"Download the transactions as CSV. BNP Paribas Fortis's help describes downloads for business customers only.",
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'mbank',
+		name: 'mBank',
+		country: 'PL',
+		status: 'verified',
+		layouts: ['mbank-pl'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Open the account\'s transaction history ("Historia operacji").',
+				'Select the transactions you want, or leave all selected.',
+				'Click "Eksportuj listę" (export list) and choose CSV.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'aib',
+		name: 'AIB',
+		country: 'IE',
+		status: 'verified',
+		layouts: ['aib-ie'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Log in to AIB Internet Banking.',
+				'Open the historical transactions search and choose the period, up to two years back.',
+				'Click "Export" on the results page and save the CSV file.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'nordea-se',
+		name: 'Nordea',
+		country: 'SE',
+		status: 'verified',
+		layouts: ['nordea-se'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Log in to the netbank ("nätbanken") on the web; the app cannot export.',
+				'Open the account and choose the period ("datumperiod").',
+				'Click "CSV (Excel)".',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'handelsbanken-se',
+		name: 'Handelsbanken',
+		country: 'SE',
+		status: 'verified',
+		layouts: ['handelsbanken-se'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"In Handelsbanken's internet bank on a computer, open the account's transactions and choose the period.",
+				"Export them as Excel (.xlsx). Handelsbanken's help does not describe the export.",
+			],
+			file: 'Excel (.xlsx)',
+		},
+	},
+	{
 		id: 'boursobank',
 		name: 'BoursoBank',
 		country: 'FR',
@@ -692,6 +818,36 @@ export const BANK_LIST: readonly Bank[] = [
 			steps: [
 				'Open the "LISTA OPERACJI" (operations list) of the account or credit card.',
 				'Use the download-and-save option for the history and choose CSV. One file holds at most 1,500 transactions.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'pko-bp',
+		name: 'PKO Bank Polski',
+		country: 'PL',
+		status: 'unverified',
+		layouts: [],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"In iPKO, open the account's transaction history and choose the period, up to 12 months.",
+				"Download it as CSV. PKO's pages for private customers do not describe the download.",
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'santander-pl',
+		name: 'Santander Bank Polska',
+		country: 'PL',
+		status: 'unverified',
+		layouts: [],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"In Santander internet banking, open the account's transactions.",
+				"Export them as CSV, up to three months at a time. Santander's pages do not describe the export.",
 			],
 			file: 'CSV',
 		},
