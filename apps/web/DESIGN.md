@@ -247,9 +247,8 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
   (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
   (`90dvh`, `8em`), `var(--…)` and 1px pass.
 - **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
-- **Layout:** `test/e2e/home/layout.spec.ts` (Home and Insights from 1440 to 320px, the shell at
-  1440, 390 and 320px) and `test/e2e/settings/layout.spec.ts`, in both themes, with demo and
-  worst-case data.
+- **Layout:** `test/e2e/home/layout.spec.ts` (Home, Insights, shell) and
+  `test/e2e/settings/layout.spec.ts`: 1440 to 320px, both themes, demo and worst-case data.
 
 An exception needs a reason:
 
