@@ -210,13 +210,13 @@ REPO=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 APP_ORIGIN=https://app.wispmoney.com
 CALLBACK_PATH=/bank-connections/callback
 
-# The server: wisp names (ops/README.md, Production).
+# Installed paths (ops/README.md, Production).
 SERVER_ENV=/etc/wisp/production.env
 SERVER_BACKUP_ENV=/etc/wisp/backup.env
 SERVER_KEY=/etc/wisp/enable-banking-private.key
 API_UID=10001
 
-# shellcheck disable=SC2016 # runs in another shell, on either host
+# shellcheck disable=SC2016 # expanded by the bash -c that runs it
 HEALTH_WAIT='for _ in $(seq 60); do curl -fsS -o /dev/null http://127.0.0.1:8080/api/health && exit 0; sleep 5; done; exit 1'
 
 # ── Helpers ───────────────────────────────────────────────────────────────

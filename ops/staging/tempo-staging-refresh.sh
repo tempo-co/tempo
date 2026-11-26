@@ -5,8 +5,9 @@
 #   tempo-staging-refresh.sh seed --confirm-seeded-reset
 #
 # A refresh takes its data from the production server's encrypted owner-only copy, fetched over the
-# tailnet as the account in feed.env (see feed.env.example) and decrypted here. Restores into a temporary database, applies the current schema, clears
-# bank provider sessions and sync state, then swaps it in. If staging is unhealthy after the swap,
+# tailnet as the account in feed.env (see feed.env.example) and decrypted here. Restores into a
+# temporary database, applies the current schema, clears bank provider sessions and sync state,
+# then swaps it in. If staging is unhealthy after the swap,
 # the previous database is restored. Never connects to production's database or copies its Redis.
 set -Eeuo pipefail
 shopt -s inherit_errexit
