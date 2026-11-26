@@ -80,8 +80,8 @@ export function HeatTable({
           style={{minWidth: `calc(16.5rem + ${years.length} * ${columnWidth})`}}
         >
           <colgroup>
-            <col className='w-[12rem]' />
-            <col className='w-[4.5rem]' />
+            <col className='w-48' />
+            <col className='w-18' />
             {years.map((column) => (
               <col key={column.period.start} style={{width: columnWidth}} />
             ))}

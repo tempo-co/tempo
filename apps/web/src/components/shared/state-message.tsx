@@ -45,7 +45,7 @@ export function StateMessage({
         aria-hidden='true'
         className={cn(
           'grid shrink-0 place-items-center rounded-full border',
-          size === 'page' ? 'size-10 [&_svg]:size-5' : 'size-9 [&_svg]:size-[18px]',
+          size === 'page' ? 'size-10 [&_svg]:size-5' : 'size-9 [&_svg]:size-4.5',
           tone === 'error'
             ? 'border-destructive/30 bg-destructive/10 text-destructive'
             : 'border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground',

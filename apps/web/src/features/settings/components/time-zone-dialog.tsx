@@ -90,7 +90,7 @@ export function TimeZoneDialog({currentTimeZone}: TimeZoneDialogProps) {
             Alerts that would arrive between 21:00 and 09:00 here wait until 09:00.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
-        <div className='flex h-[min(60dvh,28rem)] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
+        <div className='flex h-[min(60dvh,--spacing(112))] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
           <label className='relative mb-2 block'>
             <span className='sr-only'>Search time zones</span>
             <Search

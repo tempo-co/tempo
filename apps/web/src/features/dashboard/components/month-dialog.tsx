@@ -84,7 +84,7 @@ export function MonthDialog({
     <ResponsiveDialog open={month !== null} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent
         onKeyDown={onKeyDown}
-        className='flex h-[94dvh] max-h-[94dvh] flex-col gap-0 overflow-hidden p-0 sm:h-[min(94vh,72rem)] sm:max-h-[94vh] sm:max-w-6xl [&>button:last-child]:hidden'
+        className='flex h-[94dvh] max-h-[94dvh] flex-col gap-0 overflow-hidden p-0 sm:h-[min(94vh,--spacing(288))] sm:max-h-[94vh] sm:max-w-6xl [&>button:last-child]:hidden'
       >
         <ResponsiveDialogCornerClose label='Close the month' />
         <ResponsiveDialogHeader className='shrink-0 border-b py-2 pr-16 pl-1 text-left sm:pl-4'>

@@ -115,7 +115,7 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
                   Your accounts&apos; currencies come first.
                 </ResponsiveDialogDescription>
               </ResponsiveDialogHeader>
-              <div className='flex h-[min(60dvh,28rem)] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
+              <div className='flex h-[min(60dvh,--spacing(112))] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
                 <CurrencyList
                   settings={settings}
                   value={selected}

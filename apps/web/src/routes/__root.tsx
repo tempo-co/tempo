@@ -34,7 +34,7 @@ function Root() {
     <>
       <AppHeader />
       {/* Reserves the tab bar's 3.5rem row plus its 1px top border. */}
-      <main className='min-w-0 max-md:pb-[calc(3.5rem+1px+env(safe-area-inset-bottom))]'>
+      <main className='min-w-0 max-md:pb-[calc(--spacing(14)+1px+env(safe-area-inset-bottom))]'>
         <Outlet />
       </main>
       <AppTabBar />

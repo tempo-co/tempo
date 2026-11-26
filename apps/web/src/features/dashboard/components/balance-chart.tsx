@@ -39,7 +39,7 @@ const POINTER = '[@media(hover:hover)_and_(pointer:fine)]:cursor-pointer';
  * it; stacked, it keeps a fixed height.
  */
 const BALANCE_BOX =
-  'relative flex min-h-72 flex-1 flex-col sm:min-h-80 @[60rem]:max-h-[40rem] @[60rem]:min-h-48';
+  'relative flex min-h-72 flex-1 flex-col sm:min-h-80 @[60rem]:max-h-160 @[60rem]:min-h-48';
 /** The y axis' labels, which {@link useLabelWidth} measures in the same type. */
 const Y_TICK = 'numeric text-caption';
 

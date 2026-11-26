@@ -151,7 +151,7 @@ export function BankTransactionFilters({
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent
           align='end'
-          className='flex h-[min(28rem,var(--radix-popover-content-available-height))] w-[38rem] flex-col p-0'
+          className='flex h-[min(--spacing(112),var(--radix-popover-content-available-height))] w-152 flex-col p-0'
           data-testid='bank-transaction-filters'
         >
           <div className='grid min-h-0 flex-1 grid-cols-[12.5rem_minmax(0,1fr)]'>
@@ -209,7 +209,7 @@ export function BankTransactionFilters({
       <DrawerTrigger asChild>{trigger}</DrawerTrigger>
       <DrawerContent
         data-testid='bank-transaction-filters'
-        className='h-[min(85dvh,46rem)] overflow-hidden p-0'
+        className='h-[min(85dvh,--spacing(184))] overflow-hidden p-0'
       >
         <DrawerHeader className='flex h-14 flex-row items-center gap-1 border-b px-2 py-0 text-left'>
           {shown ? (
@@ -252,7 +252,7 @@ export function BankTransactionFilters({
             </ul>
           )}
         </ScrollArea>
-        <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))]'>
           {resetButton(shown, 'mr-auto')}
           <Button variant='ghost' onClick={onClearFilters} disabled={!isFilteringApplied}>
             Clear all

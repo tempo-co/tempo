@@ -26,6 +26,7 @@ const ROWS = 4;
  * what it shows. 349px is that shape's height with its top border and padding: four 48px rows, the bar, the
  * totals and the header.
  */
+// eslint-disable-next-line design/tokens -- a measured height (349px, above), not a step on the size scale
 const RESERVE = '@[60rem]:min-h-[21.8125rem]';
 
 const ROW =

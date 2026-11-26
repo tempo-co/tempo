@@ -212,7 +212,7 @@ export function DoubtfulRowsReview({
         </Button>
       )}
       {/* Stays in reach at the bottom of the scrolling body, like the dialog's footer. */}
-      <div className='sticky bottom-0 -mx-4 -mb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col gap-2 border-t bg-background px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:-mx-6 md:-mb-6 md:flex-row md:items-center md:justify-end md:px-6 md:pb-4'>
+      <div className='sticky bottom-0 -mx-4 -mb-[calc(--spacing(4)+env(safe-area-inset-bottom))] flex flex-col gap-2 border-t bg-background px-4 pt-4 pb-[calc(--spacing(4)+env(safe-area-inset-bottom))] md:-mx-6 md:-mb-6 md:flex-row md:items-center md:justify-end md:px-6 md:pb-4'>
         {unsaved.length > 0 && unanswered > 0 && (
           <p className='text-xs text-muted-foreground md:mr-auto'>
             {unanswered === 1

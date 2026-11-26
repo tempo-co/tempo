@@ -134,8 +134,8 @@ the Wisp look as installed.
 | `transaction-tile` (+ `-foreground`, `-border`) | sunk, muted, hairline | The leading row tile |
 | `bank-logo-plate` (+ `-foreground`, `-border`) | plate | The light plate under bank artwork in both themes |
 
-Inline styles and SVG attributes read the same names as `var(--color-…)`. A job with no utility
-gets a role and a utility first, never a literal in a component.
+Inline styles and SVG attributes read `var(--color-…)`; a job with no utility gets a role and a
+utility first.
 
 **Contrast.** Every pair the app renders clears WCAG AA in both themes, and
 `test/unit/theme-contrast.spec.ts` checks these pairs against the shipped theme file:
@@ -160,8 +160,7 @@ transaction direction, sync state, categorisation state or an error by hue alone
 Data series use `chart-primary` (ink) and `chart-secondary` (a quiet grey) whose bars carry a 1px
 `chart-secondary-edge` outline at 3:1. Heat-table cells tint 5–45% of `chart-heat` behind their
 amount (ink on light, a dimmer grey on dark so light text stays readable). Midnight marks only a
-selected period or an action, never a data series. Chart colours come from the utilities, never
-literals.
+selected period or an action, never a data series.
 
 Each category keeps one colour across the app: the icon in `category-*` on a tile of the same colour
 at 10% with a 30% edge (`src/features/banking/utils/bank-transaction-category-meta.ts`). The colours
@@ -186,7 +185,7 @@ set in body. Use them rather than size and weight classes, and add no sizes outs
 | Body | `text-body` | 400, 14px/1.5 | Primary copy: row titles and amounts, menu items, navigation, field values |
 | Body small | `text-body-small` | 400, 13px/1.5 | Muted descriptions, button and segment labels, tooltips |
 | Label | `text-label` | 500, 12px/1.33 | Metadata, field labels, table headings, compact status |
-| Caption | `text-caption` | 11px/1 | Bottom tab labels and chart axis ticks only |
+| Caption | `text-caption` | 11px/1 | Fixed-space labels: tabs, axis ticks, flag codes |
 | Numeric | `numeric` | Tabular figures | Amounts and rates, so digits line up |
 
 Typed text is 16px below `md` (`text-base md:text-body`), because iOS zooms into smaller fields.
@@ -241,6 +240,20 @@ under `prefers-reduced-motion`.
 
 Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decorative one is
 `aria-hidden`.
+
+### Enforcement
+
+- **Lint** (`eslint-rules/design.js`): no raw colours, and no px or rem arbitrary values
+  (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
+  (`90dvh`, `8em`), `var(--…)` and 1px pass.
+- **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
+- **Layout:** `test/e2e/home/layout.spec.ts`, Home from 1440 to 320px in both themes.
+
+An exception needs a reason:
+
+```ts
+// eslint-disable-next-line design/tokens -- a fixed brand colour
+```
 
 ## Components
 

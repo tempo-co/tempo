@@ -135,7 +135,7 @@ export function BankConnectionPicker({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         {/* One height for every step and for loading, so the sheet never resizes under a thumb. */}
-        <div className='flex h-[min(68dvh,32rem)] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
+        <div className='flex h-[min(68dvh,--spacing(128))] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
           {isError ? (
             <div
               role='alert'
@@ -418,7 +418,7 @@ const FLAGS = import.meta.glob<string>('./*.svg', {
   import: 'default',
 });
 
-const TILE = 'inline-flex h-[21px] w-7 shrink-0 rounded-sm';
+const TILE = 'inline-flex aspect-4/3 w-7 shrink-0 rounded-sm';
 
 /**
  * A country's flag: flat, 28×21, the small corner radius, and a hairline edge so white and pale flags keep their
@@ -433,7 +433,7 @@ function CountryTile({code}: {code: string}) {
         aria-hidden='true'
         className={cn(
           TILE,
-          'items-center justify-center border border-border text-[10px] font-medium text-muted-foreground',
+          'items-center justify-center border border-border text-caption font-medium text-muted-foreground',
         )}
       >
         {code.toUpperCase()}

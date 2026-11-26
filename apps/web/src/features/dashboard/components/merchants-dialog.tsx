@@ -50,7 +50,7 @@ export function MerchantsDialog({
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent
         aria-label='Merchants'
-        className='flex h-[min(90dvh,56rem)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-3xl [&>button:last-child]:hidden'
+        className='flex h-[min(90dvh,--spacing(224))] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-3xl [&>button:last-child]:hidden'
       >
         <ResponsiveDialogCornerClose label='Close merchants' />
         <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>

@@ -4,6 +4,8 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import design from './eslint-rules/design.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compat = new FlatCompat({
   baseDirectory: __dirname,
@@ -58,6 +60,16 @@ export default [
     plugins: {'react-refresh': reactRefresh},
     rules: {
       'react-refresh/only-export-components': ['warn', {allowConstantExport: true}],
+    },
+  },
+  {
+    // Component source reaches colours and sizes through the theme (DESIGN.md, Enforcement); tests are out of scope.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/routeTree.gen.ts'],
+    plugins: {design},
+    rules: {
+      'design/tokens': 'error',
+      'design/exceptions': 'error',
     },
   },
   {

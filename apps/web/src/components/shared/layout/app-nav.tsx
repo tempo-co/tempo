@@ -86,7 +86,7 @@ function Badge({badge, className}: {badge: NavBadge; className?: string}) {
     <span
       aria-hidden='true'
       className={cn(
-        'grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground',
+        'grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground',
         className,
       )}
     >
@@ -210,7 +210,11 @@ export function AccountMenu() {
           {currentAccount.email}
         </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' sideOffset={8} className='w-60 max-w-[calc(100vw-2rem)]'>
+      <DropdownMenuContent
+        align='end'
+        sideOffset={8}
+        className='w-60 max-w-[calc(100vw-(--spacing(8)))]'
+      >
         <DropdownMenuLabel className='grid font-normal'>
           <span className='truncate text-body font-semibold'>{currentAccount.name}</span>
           <span className='truncate text-xs text-muted-foreground'>{currentAccount.email}</span>

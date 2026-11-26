@@ -96,7 +96,7 @@ export function BankTransactionReviewToggle({
       onClick={() => set(true)}
     >
       To review
-      <span className='grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground'>
+      <span className='grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground'>
         {toReview > 99 ? '99+' : toReview}
       </span>
     </Button>

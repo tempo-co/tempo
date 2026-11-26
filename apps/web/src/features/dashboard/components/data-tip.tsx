@@ -4,7 +4,7 @@ import {Tooltip, TooltipContent, TooltipPortal, TooltipTrigger} from '@/componen
 import {cn} from '@/utils/cn';
 
 /** Tips wrap rather than run off a phone screen, and sit above sticky table cells and dialogs. */
-const TIP_WIDTH = 'max-w-[min(20rem,calc(100vw-2rem))]';
+const TIP_WIDTH = 'max-w-[min(--spacing(80),calc(100vw-(--spacing(8))))]';
 const TIP = cn(TIP_WIDTH, 'text-xs');
 
 /** A readout's own box: on the card colour, its one column no wider than the box. */

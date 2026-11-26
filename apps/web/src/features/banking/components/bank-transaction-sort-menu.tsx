@@ -76,7 +76,7 @@ export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransacti
           <div
             role='radiogroup'
             aria-label='Order'
-            className='divide-y divide-border/60 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]'
+            className='divide-y divide-border/60 px-2 pb-[calc(--spacing(2)+env(safe-area-inset-bottom))]'
           >
             {SORT_IDS.map((id) => (
               <button
