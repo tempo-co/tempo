@@ -3,6 +3,7 @@ import type {
   BankConnection,
   BankTransaction,
   BankTransactionBulkCategoryPreview,
+  BankTransactionBulkCategoryPreviewRequest,
   BankTransactionCategoryImpact,
   BankTransactionDayTotals,
   BankTransactionTotals,
@@ -252,8 +253,9 @@ async function mockLedger(
         appliedCategory: other.category === 'TRANSFER_OUT' ? null : 'HOUSING_AND_UTILITIES',
       })),
       total: bulkOthers.length,
-      selected: (route.request().postDataJSON() as {transactionIds: string[]}).transactionIds
-        .length,
+      selected:
+        (route.request().postDataJSON() as BankTransactionBulkCategoryPreviewRequest).transactionIds
+          ?.length ?? 0,
     } satisfies BankTransactionBulkCategoryPreview),
   );
   await page.route(/\/bank-transactions\/[\da-f-]{36}\/category$/, (route) => {

@@ -173,17 +173,24 @@ export class ManualCategoryService {
 		const inputHashes = Object.fromEntries(
 			selected.map((transaction) => [transaction.id, createBankTransactionCategorizationInputHash(transaction)]),
 		);
-		const rowInputHash = () => 'CAST(:inputHashes AS jsonb) ->> CAST("id" AS text)';
+		const rowInputHashSql = () => 'CAST(:inputHashes AS jsonb) ->> CAST("id" AS text)';
 		const result = await repository
 			.createQueryBuilder()
 			.update(BankTransaction)
 			.set({
 				...manualCategoryValues(followUps.category, ''),
-				categoryInputHash: rowInputHash,
-				categoryAppliedInputHash: rowInputHash,
+				categoryInputHash: rowInputHashSql,
+				categoryAppliedInputHash: rowInputHashSql,
 			})
-			// The selection was read owner-scoped inside this write.
 			.where('id = ANY(:selectedIds)', {selectedIds: selected.map(({id}) => id)})
+			.andWhere(
+				`"bankAccountId" IN (
+					SELECT bank_account.id FROM bank_accounts bank_account
+					INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
+					WHERE connection."accountId" = :accountId
+				)`,
+				{accountId},
+			)
 			.setParameter('inputHashes', JSON.stringify(inputHashes))
 			.execute();
 		let updated = result.affected ?? 0;
