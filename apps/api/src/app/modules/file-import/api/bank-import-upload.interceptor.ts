@@ -17,10 +17,18 @@ import {MAX_DROP_BYTES, MAX_FILES_PER_DROP, MAX_FILE_BYTES, MULTIPART_ALLOWANCE_
 import {BankImportUploadQueue, ReleaseUploadSlot, UploadWaitEnded} from './bank-import-upload-queue';
 
 export const BANK_IMPORT_FILES_FIELD = 'files';
-/** The text fields the route reads: the account to import into, or the account per statement that names none. */
+/**
+ * The text fields the routes read: the account to import into, or the account per statement that names none, and the
+ * bank the owner picked.
+ */
 export const BANK_IMPORT_ACCOUNT_FIELD = 'bankAccountId';
 export const BANK_IMPORT_ACCOUNT_CHOICES_FIELD = 'accountChoices';
-const TEXT_FIELDS: readonly string[] = [BANK_IMPORT_ACCOUNT_FIELD, BANK_IMPORT_ACCOUNT_CHOICES_FIELD];
+export const BANK_IMPORT_BANK_FIELD = 'bankId';
+const TEXT_FIELDS: readonly string[] = [
+	BANK_IMPORT_ACCOUNT_FIELD,
+	BANK_IMPORT_ACCOUNT_CHOICES_FIELD,
+	BANK_IMPORT_BANK_FIELD,
+];
 /** The most an upload's body may hold: the drop's files together, plus the multipart framing around them. */
 const MAX_UPLOAD_BYTES = MAX_DROP_BYTES + MULTIPART_ALLOWANCE_BYTES;
 /** Seconds a busy refusal asks the client to wait before sending the same files again. */
@@ -54,7 +62,7 @@ function countingStreamHandler(request: UploadRequest, busboy: Writable) {
 
 // Without a storage or destination, multer keeps each file in memory as a buffer.
 const Upload = FilesInterceptor(BANK_IMPORT_FILES_FIELD, MAX_FILES_PER_DROP + 1, {
-	// The route reads two short text fields; more fields are refused instead of collected in memory. 4 KB holds an
+	// The routes read three short text fields; more fields are refused instead of collected in memory. 4 KB holds an
 	// account choice for every currency a bank offers.
 	limits: {fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_DROP + 1, fields: TEXT_FIELDS.length, fieldSize: 4096},
 	// Counts files as they arrive, so a size refusal can name the file by its position.
@@ -83,7 +91,7 @@ function discardBody(request: Request): Promise<void> {
 }
 
 /**
- * Reads the `files` field into memory with the drop's limits, refuses any text field but `bankAccountId` and
+ * Reads the `files` field into memory with the drop's limits, refuses any text field but `bankAccountId`, `bankId` and
  * `accountChoices`, and turns multer's limit errors into typed refusals. Nothing reaches disk.
  *
  * Each upload first takes one of the queue's slots and keeps it until its import has finished or failed, so at most

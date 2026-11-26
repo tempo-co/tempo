@@ -102,6 +102,15 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(
 			await dataSource.query('SELECT 1 FROM bank_history_changes WHERE "accountId" = $1', [accountId]),
 		).not.toEqual([]);
+		// What file import keeps about the banks the owner picked and asked for.
+		await dataSource.query(
+			`INSERT INTO "bank_import_layout_misses" ("accountId", "bankId", "outcome") VALUES ($1, 'ing-nl', 'mapper')`,
+			[accountId],
+		);
+		await dataSource.query(
+			`INSERT INTO "bank_requests" ("accountId", "bankName", "country", "fileTypes") VALUES ($1, 'Example Bank', 'DE', '["csv"]')`,
+			[accountId],
+		);
 		const connectionsAtRevocation: number[] = [];
 		deleteSession.mockImplementation(async (sessionId) => {
 			connectionsAtRevocation.push(await countOwnedAccounts(connectionRepository, accountId));
@@ -181,6 +190,8 @@ describe('AccountController - DELETE /accounts/me', () => {
 		expect(
 			await dataSource.query('SELECT 1 FROM bank_history_changes WHERE "accountId" = $1', [accountId]),
 		).toEqual([]);
+		for (const table of ['bank_import_layout_misses', 'bank_requests'])
+			expect(await dataSource.query(`SELECT 1 FROM "${table}" WHERE "accountId" = $1`, [accountId])).toEqual([]);
 
 		// The owned pending authorization state is gone; the other account's survives.
 		expect(await redis.get(ownedStateKey)).toBeNull();

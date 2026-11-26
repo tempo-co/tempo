@@ -57,6 +57,13 @@ A saved layout without header or account can read another bank's export of its s
 
 Limits: 5 proposals per user per day, a proposal lasts an hour, 50 saved layouts per user. Proposals store the header and column shapes, never row content. Learned layouts are never shared between users; a layout worth sharing is added to `src/app/modules/file-import/parsers/csv-layouts.ts` by a change like any other.
 
+## Picked bank, misses and bank requests
+
+- **Picked bank.** An upload or layout proposal may send `bankId`: a `BANK_LIST` id (`@tempo/contracts`) or `other`; anything else is a 400. The import stores it, as does a proposal, whose confirmed layout keeps it.
+- **Misses.** When the pick is a verified bank and no reader its entry names (`layouts`, `formats`) read the file, `bank_import_layout_misses` keeps the bank, the time and the outcome: `mapper` (a proposal, with the code when refused), `saved_layout`, `other_reader`, or `refused` with the reader's code. Reader misses are written with the import, so a resent drop counts once; upload-limit refusals reach no reader. Never anything of the file.
+- **"Tell us your bank"** (`POST /bank-imports/bank-requests`, 204): a plain-text name (1 to 60 characters), an ISO 3166-1 alpha-2 country and `BANK_REQUEST_FILE_TYPES`, kept in `bank_requests` with the time; 5 per user per 24 hours, then 429 with `retryAt`. The name is data, never instructions.
+- **Promotion.** No route reads misses or requests; the owner queries them read-only. A bank gets a built-in layout once 3 or more accounts asked for it or confirmed a mapper layout under it, and a real file exists: a public sample, or a confirmed saved layout's column settings and header names, read by the owner as operator.
+
 ## Refusals
 
 Every refusal is a typed code (`src/app/modules/file-import/bank-import-refusal.exception.ts`, mirrored in `@tempo/contracts`) and the web has copy for each (`apps/web/src/features/file-import/utils/refusal-copy.ts`). The parse child can only reach the codes in `PARSE_REFUSAL_CODES`.
