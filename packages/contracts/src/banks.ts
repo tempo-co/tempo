@@ -44,11 +44,13 @@ export const BANK_LIST: readonly Bank[] = [
 		formats: ['mt940', 'camt053'],
 		exportSteps: {
 			steps: [
-				'Log in to Mijn ING and open your "Betaalrekening" (payment account).',
-				'Go to "Service" > "Af- en bijschrijvingen downloaden" (download debits and credits).',
-				'Choose the account and the period, then "Kommagescheiden" (comma-separated CSV), and download.',
+				'Log in to Mijn ING on a computer.',
+				'Click "Service", then "Overzichten en downloads" (overviews and downloads), then "Af- en bijschrijvingen downloaden" (download debits and credits).',
+				'Select the account and the period.',
+				'Choose a CSV "Bestandsformaat" (file format), not PDF, and click "Downloaden" (download).',
+				'In the ING app: open the payment account, tap "Instellingen" (the gear), then "Afschriften downloaden" (download statements).',
 			],
-			file: 'CSV ("Kommagescheiden")',
+			file: 'CSV',
 		},
 	},
 	{
@@ -60,8 +62,8 @@ export const BANK_LIST: readonly Bank[] = [
 		formats: [],
 		exportSteps: {
 			steps: [
-				'Log in to Rabo Internetbankieren on a computer; the download is not in the Rabo app.',
-				'Open "Maak een transactieoverzicht op maat" (make a custom transaction overview).',
+				'Log in to Rabo Online Bankieren.',
+				'Open "Maak een transactieoverzicht op maat" (make a custom transaction overview); in English, "Settings" > "Payment accounts" > "Download transactions".',
 				'Choose the account, the "Downloadformaat" (download format) and a "Specifieke datumreeks" (specific date range), then download.',
 				'For a Rabobank credit card, download its CSV the same way on a computer, up to 15 months back.',
 			],
@@ -144,10 +146,13 @@ export const BANK_LIST: readonly Bank[] = [
 		formats: ['abnAmroTxt', 'camt053'],
 		exportSteps: {
 			steps: [
-				'In "Internet Bankieren", go to "Zelf regelen" (self-service) > "Bij- en afschrijvingen downloaden" (download debits and credits).',
-				'Choose the account, the period (up to 18 months back) and the file type, then download.',
+				'In "Internet Bankieren", open "Bij- en afschrijvingen downloaden" (download debits and credits).',
+				'Choose the "Rekeninghouder" (account holder) and the "Bestandsformaat" (file format): camt.053 or txt.',
+				'Choose a start and end date (up to 18 months back).',
+				'Click the download symbol to the left of the account, and save the file.',
+				'In the ABN AMRO app: "Profiel" > "Rekeningen en betalen" > "Afschriften en jaaroverzicht", then "Soort overzicht" (kind of overview): "Bij- en afschrijvingen".',
 			],
-			file: 'TXT or CAMT.053 (not XLS)',
+			file: 'CAMT.053 or TXT (not XLS)',
 		},
 	},
 	{
