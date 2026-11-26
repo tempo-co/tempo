@@ -10,15 +10,16 @@ import {api} from '@/utils/api';
 import {merchantQueryKeys} from './merchant-query-keys';
 
 /**
- * Every merchant group with rows between two local dates (all time without them), most spent first, `limit` at a
- * time; `search` narrows by name.
+ * Every merchant group with rows between two local dates, most spent first, `limit` at a time; `search` narrows by
+ * name. Waits while `range` is null.
  */
 export const useGetMerchants = (
   search: string,
-  range?: {from: string; to: string},
+  range: {from: string; to: string} | null,
   limit = MERCHANT_LIST_DEFAULT_LIMIT,
 ) =>
   useInfiniteQuery({
+    enabled: range !== null,
     queryKey: merchantQueryKeys.list(search, range, limit),
     queryFn: ({pageParam}) => {
       const params = new URLSearchParams({

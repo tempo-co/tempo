@@ -70,11 +70,11 @@ Keep exact values and actions available through the chart's accessible table as 
 Pointer focus outlines on SVG marks are suppressed centrally, including Recharts z-index layers;
 ordinary controls and table links retain their keyboard focus indicators.
 
-HTML bars (the Insights cash flow) use `axisTicks` too, and a pair is a link only while it is a 44px target.
-
 Value axes take their ticks from `axisTicks` (`src/features/dashboard/utils/chart-axis.ts`): round steps from zero with
 about 6% headroom, passed as explicit `ticks` rather than `tickCount`. A Recharts `Bar` has no default fill: a `Cell`
 without `fill` takes the bar's, and with neither the bar renders black.
+
+HTML bars (the Insights cash flow) use `axisTicks` too, and a pair is a link only while it is a 44px target.
 
 ## Settings lists
 

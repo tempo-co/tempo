@@ -61,7 +61,7 @@ function AllMerchants({
   onSelect: (merchantId: string) => void;
 }) {
   const query = useGetMerchants(search, range);
-  const {data, isPending, error, refetch} = query;
+  const {data, isPending, isPlaceholderData, error, refetch} = query;
   const merchants = data?.pages.flatMap((page) => page.merchants) ?? [];
   const last = data?.pages[data.pages.length - 1];
   const currency = last?.baseCurrency ?? null;
@@ -75,13 +75,14 @@ function AllMerchants({
       className='grid grid-cols-1 gap-4'
       aria-label={search ? 'Search results' : 'All merchants'}
     >
-      {last && (
+      {last && !isPlaceholderData && (
         <p className='text-body-small text-muted-foreground'>
           {countLabel(last.total, search ? 'match' : 'merchant', search ? 'matches' : undefined)}
           {!search && ', most spent first'}
         </p>
       )}
-      {isPending || (last && !consistent) ? (
+      {/* Another search's or period's list never stands under this one's count. */}
+      {isPending || isPlaceholderData || (last && !consistent) ? (
         <Skeleton className='h-72' role='img' aria-label='Loading merchants' />
       ) : !last ? (
         <LoadErrorState

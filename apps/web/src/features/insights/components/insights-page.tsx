@@ -90,7 +90,7 @@ export function InsightsPage({
         {reportingCurrencyKnown(reporting) ? (
           <InsightsBody search={search} navigation={navigation} />
         ) : (
-          <h1 className='mb-5 text-page-title max-md:mb-4'>Insights</h1>
+          <PageTitle />
         )}
       </AppBodyLayout>
     </TooltipProvider>
@@ -106,7 +106,7 @@ function InsightsBody({
 }) {
   const {bankConnections, isError, error, refetch} = useGetAllBankConnections();
   const {data: reporting} = useReportingCurrency();
-  const title = <h1 className='mb-5 text-page-title max-md:mb-4'>Insights</h1>;
+  const title = <PageTitle />;
   if (isError)
     return (
       <>
@@ -230,7 +230,7 @@ function InsightsReport({
   const idleRail = (
     <>
       <TopMerchants
-        range={range}
+        range={overview ? range : null}
         onSelect={selectMerchant}
         onAll={() => navigation.setSearch({merchants: 'all'})}
       />
@@ -247,7 +247,7 @@ function InsightsReport({
   if (history.isError)
     return (
       <>
-        <h1 className='mb-5 text-page-title max-md:mb-4'>Insights</h1>
+        <PageTitle />
         <LoadErrorState
           title="Couldn't load your history"
           error={history.error}
@@ -258,7 +258,7 @@ function InsightsReport({
   if (overview?.months.length === 0)
     return (
       <>
-        <h1 className='mb-5 text-page-title max-md:mb-4'>Insights</h1>
+        <PageTitle />
         <StateMessage
           icon={History}
           title='No history yet'
@@ -299,7 +299,14 @@ function InsightsReport({
             />
           )}
           <Section title='Where the money went' loaded={flow !== undefined}>
-            {flow === undefined ? (
+            {flow === undefined && history.breakdownsError ? (
+              <LoadErrorState
+                size='section'
+                title="Couldn't load where the money went"
+                error={history.breakdownsError}
+                onRetry={history.refetchBreakdowns}
+              />
+            ) : flow === undefined ? (
               <div aria-hidden='true' className='h-60 animate-pulse rounded-md bg-muted' />
             ) : flow === null ? (
               <p className='text-body-small text-muted-foreground'>
@@ -364,6 +371,11 @@ function InsightsReport({
   );
 }
 
+/** The title over a state that stands in for the report. */
+function PageTitle() {
+  return <h1 className='mb-5 text-page-title max-md:mb-4'>Insights</h1>;
+}
+
 function Section({title, loaded, children}: {title: string; loaded: boolean; children: ReactNode}) {
   return (
     <Card
@@ -401,6 +413,9 @@ function PeriodTables({
       }
     : null;
   if (!sliced) return <YearTableSkeleton />;
+  const columnWidth = years
+    ? yearColumnWidth([...years.categories, ...years.sources], sliced.months, sliced.currency)
+    : '';
   return (
     <>
       <YearTable key={`${from}-${to}`} overview={sliced} />
@@ -412,11 +427,7 @@ function PeriodTables({
             months={sliced.months}
             currency={sliced.currency}
             kind='category'
-            columnWidth={yearColumnWidth(
-              [...years.categories, ...years.sources],
-              sliced.months,
-              sliced.currency,
-            )}
+            columnWidth={columnWidth}
           />
           <HeatTable
             title='Income by source'
@@ -424,11 +435,7 @@ function PeriodTables({
             months={sliced.months}
             currency={sliced.currency}
             kind='source'
-            columnWidth={yearColumnWidth(
-              [...years.categories, ...years.sources],
-              sliced.months,
-              sliced.currency,
-            )}
+            columnWidth={columnWidth}
           />
         </>
       ) : error ? (

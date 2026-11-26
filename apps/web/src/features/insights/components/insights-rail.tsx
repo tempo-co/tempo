@@ -35,20 +35,27 @@ function RailHeader({title, action}: {title: string; action?: ReactNode}) {
   );
 }
 
-/** The period's biggest merchants by what was spent with them; each opens its details. */
+/**
+ * The period's biggest merchants by what was spent with them; each opens its details. Without a `range` yet (the
+ * history that sets the period is still loading) it holds its place.
+ */
 export function TopMerchants({
   range,
   onSelect,
   onAll,
 }: {
-  range: {from: string; to: string};
+  range: {from: string; to: string} | null;
   onSelect: (merchantId: string) => void;
   onAll: () => void;
 }) {
-  const {data, isPending, error, refetch} = useGetMerchants('', range, TOP);
+  const {data, isPending, isPlaceholderData, error, refetch} = useGetMerchants('', range, TOP);
   const accepted = useFiguresCurrencyAccepted();
   const page = data?.pages[0];
-  const waiting = !!page && page.merchants.length > 0 && !accepted(page.baseCurrency);
+  // Another period's merchants, or ones in another currency, never stand under this period.
+  const waiting =
+    !range ||
+    isPlaceholderData ||
+    (!!page && page.merchants.length > 0 && !accepted(page.baseCurrency));
   // Most spent first; a group that only paid the owner, such as an employer, spent nothing.
   const merchants = page?.merchants.filter((merchant) => toCents(merchant.spent) > 0) ?? [];
   return (
