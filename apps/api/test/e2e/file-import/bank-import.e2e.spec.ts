@@ -42,9 +42,11 @@ import {BankingSyncService} from '@modules/banking/services/banking-sync.service
 import {EnableBankingClient} from '@modules/banking/services/enable-banking.client';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {BankImportUploadQueue} from '@modules/file-import/api/bank-import-upload-queue';
+import {BankCoverageDigestService} from '@modules/file-import/bank-coverage-digest.service';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
 import {BankImportLayoutMiss} from '@modules/file-import/bank-import-layout-miss.entity';
 import {BankImportLayoutProposal} from '@modules/file-import/bank-import-layout-proposal.entity';
+import {BankImportLayout} from '@modules/file-import/bank-import-layout.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
 import {BankImportService} from '@modules/file-import/bank-import.service';
 import {BankRequest} from '@modules/file-import/bank-request.entity';
@@ -59,12 +61,19 @@ import {
 	camt053,
 	createZip,
 } from '../../fixtures/statement-file.fixture';
-import {enableFileImportE2e, getApp, getSessionCookie} from '../../setup/e2e.setup';
+import {
+	OPERATOR_ALERT_E2E_EMAIL,
+	enableFileImportE2e,
+	enableOperatorAlertsE2e,
+	getApp,
+	getSessionCookie,
+} from '../../setup/e2e.setup';
 import {createVerifiedAccount, expectValidationMessage} from '../../utils/auth-utils';
-import {MAILPIT_API_URL} from '../../utils/email-utils';
+import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
 import {lockWaits, waitFor} from '../../utils/wait-utils';
 
 enableFileImportE2e();
+enableOperatorAlertsE2e();
 
 const ORIGIN = 'http://localhost:5173';
 const FIXTURES = join(__dirname, '../../fixtures/file-import');
@@ -4360,6 +4369,68 @@ describe('Bank imports', () => {
 		// A day later the oldest request leaves the window.
 		await bankRequests.update({id: stored.id}, {createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 - 1000)});
 		await ask({bankName: 'Example Bank', country: 'NL', fileTypes: ['other']}).expect(204);
+	});
+
+	it('emails the operator once a day about banks asked for or mapped for the first time, and verified banks that missed', async () => {
+		const now = new Date();
+		const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+		const yesterday = new Date(today - 12 * 60 * 60 * 1000);
+		const earlier = new Date(today - 3 * 24 * 60 * 60 * 1000);
+		const first = await createOwner();
+		const second = await createOwner();
+		const layouts = app.get(getRepositoryToken(BankImportLayout));
+		const asked = (owner: Account, bankName: string, country: string, createdAt: Date) =>
+			bankRequests.save({accountId: owner.id, bankName, country, fileTypes: ['csv'], createdAt});
+		await asked(first.owner, 'Example Digest Bank', 'DE', yesterday);
+		await asked(second.owner, ' example digest bank', 'DE', new Date(yesterday.getTime() + 60_000));
+		await asked(first.owner, 'Example Earlier Bank', 'FR', earlier);
+		await asked(second.owner, 'Example Earlier Bank', 'FR', yesterday);
+		await layouts.save({
+			accountId: first.owner.id,
+			layout: {} as never,
+			bankName: 'BoursoBank',
+			bankId: 'boursobank',
+			createdAt: yesterday,
+		});
+		await layouts.save({
+			accountId: second.owner.id,
+			layout: {} as never,
+			bankName: 'Example Mapped Bank',
+			bankId: OTHER_BANK_ID,
+			createdAt: yesterday,
+		});
+		await misses.save([
+			{accountId: first.owner.id, bankId: 'ing-nl', outcome: 'mapper', refusalCode: null, createdAt: yesterday},
+			{accountId: second.owner.id, bankId: 'ing-nl', outcome: 'refused', refusalCode: null, createdAt: yesterday},
+			{accountId: second.owner.id, bankId: 'abn-amro', outcome: 'mapper', refusalCode: null, createdAt: now},
+		]);
+		await EmailUtils.clearEmails(MAILPIT_API_URL);
+		const digest = app.get(BankCoverageDigestService);
+
+		await digest.send(now);
+
+		const email = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+		expect(email).toMatchObject({Subject: 'Tempo: banks to add'});
+		expect(email?.Text).toContain('Example Digest Bank (DE): 2 accounts, no saved layout yet');
+		expect(email?.Text).toContain('BoursoBank (FR): 1 account, a saved layout to build from');
+		expect(email?.Text).toContain('Example Mapped Bank: 1 account, a saved layout to build from');
+		expect(email?.Text).toContain('ING (ing-nl): 2 misses from 2 accounts');
+		expect(email?.Text).not.toContain('Example Earlier Bank');
+		expect(email?.Text).not.toContain('abn-amro');
+		for (const owner of [first.owner, second.owner]) {
+			expect(email?.Text).not.toContain(owner.id);
+			expect(email?.Text).not.toContain(owner.email);
+		}
+
+		// Another run that day, and a day with nothing new, send nothing more.
+		await digest.send(now);
+		await digest.send(new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000));
+		await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+		const response = await fetch(`${MAILPIT_API_URL}/api/v1/messages`);
+		const {messages} = (await response.json()) as {messages: {To: {Address: string}[]}[]};
+		expect(
+			messages.filter((message) => message.To.some((to) => to.Address === OPERATOR_ALERT_E2E_EMAIL)),
+		).toHaveLength(1);
 	});
 
 	it('refuses an upload from another site', async () => {

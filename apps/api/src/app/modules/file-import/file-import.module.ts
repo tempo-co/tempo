@@ -1,10 +1,15 @@
+import {BullModule} from '@nestjs/bullmq';
 import {Module} from '@nestjs/common';
 import {TypeOrmModule} from '@nestjs/typeorm';
 
+import {OperatorAlertModule} from '@core/operator-alert/operator-alert.module';
+import {BANK_COVERAGE_DIGEST_QUEUE} from '@core/queue/queue.constants';
 import {BankingModule} from '@modules/banking/banking.module';
 
 import {BankImportUploadQueue} from './api/bank-import-upload-queue';
 import {BankImportController} from './api/bank-import.controller';
+import {BankCoverageDigestProcessor} from './bank-coverage-digest.processor';
+import {BankCoverageDigestService} from './bank-coverage-digest.service';
 import {BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportLayoutMiss} from './bank-import-layout-miss.entity';
 import {BankImportLayoutProposal} from './bank-import-layout-proposal.entity';
@@ -29,7 +34,9 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 			BankImportLayoutProposal,
 			BankRequest,
 		]),
+		BullModule.registerQueue({name: BANK_COVERAGE_DIGEST_QUEUE}),
 		BankingModule,
+		OperatorAlertModule,
 	],
 	providers: [
 		BankImportService,
@@ -39,6 +46,8 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 		ParseRunnerService,
 		BankImportUploadQueue,
 		BankRequestService,
+		BankCoverageDigestService,
+		BankCoverageDigestProcessor,
 	],
 	controllers: [BankImportController],
 })
