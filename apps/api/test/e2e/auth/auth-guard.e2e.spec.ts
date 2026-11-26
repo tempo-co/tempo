@@ -44,6 +44,7 @@ const TOKEN_READABLE_PATHS = [
 	'/bank-connections',
 	'/bank-transactions',
 	'/bank-transactions/totals',
+	'/bank-transactions/day-totals',
 	'/bank-transactions/summary?month=2026-10&asOf=2026-10-18',
 	'/bank-transactions/cash-flow?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/balance-trend?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',

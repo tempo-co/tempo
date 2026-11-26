@@ -217,6 +217,7 @@ async function mockMerchantLogos(page: Page) {
   await mockEmptyRecurringLists(page);
   await mockMerchantRanking(page);
   await mockJson(page, '**/bank-transactions/review-counts', EMPTY_REVIEW_COUNTS);
+  await mockJson(page, '**/bank-transactions/day-totals?**', {baseCurrency: 'EUR', days: []});
   await mockJson(page, '**/reporting-currency', SETTLED_REPORTING_CURRENCY);
   await page.route('**/bank-transactions?**', (route) => {
     if (route.request().resourceType() === 'document') return route.continue();

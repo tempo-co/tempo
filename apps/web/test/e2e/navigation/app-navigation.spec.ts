@@ -16,14 +16,14 @@ test.describe('the Transactions badge away from Home', () => {
     {needsAttention: 3, text: '3'},
     {needsAttention: 120, text: '99+'},
   ]) {
-    test(`shows ${text} to review in a round badge`, async ({page}) => {
+    test(`shows ${text} to check in a round badge`, async ({page}) => {
       await mockSyntheticHome(page, {reviewCounts: {...HOME_REVIEW_COUNTS, needsAttention}});
       await mockJson(page, '**/bank-connections/aspsps', []);
       await page.goto('/accounts');
       const badge = page
         .getByRole('navigation', {name: 'Primary'})
         .first()
-        .getByRole('link', {name: `Transactions, ${needsAttention} to review`})
+        .getByRole('link', {name: `Transactions, ${needsAttention} to check`})
         .getByText(text, {exact: true});
       const box = await boxOf(badge);
       // Fully rounded ends: a circle for one digit, a pill for more.
@@ -68,7 +68,7 @@ test.describe('the Transactions badge away from Home', () => {
 
     await page.goto('/accounts');
     const nav = page.getByRole('navigation', {name: 'Primary'}).first();
-    await expect(nav.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
+    await expect(nav.getByRole('link', {name: 'Transactions, 3 to check'})).toBeVisible();
     await expect.poll(() => reads).toBe(1);
     await page.clock.runFor(4 * 60_000);
     expect(reads).toBe(1);
@@ -80,7 +80,7 @@ test.describe('the Transactions badge away from Home', () => {
     await page.getByRole('option', {name: 'Travel', exact: true}).click();
     await expect(page.getByRole('combobox', {name: 'Transaction category'})).toHaveText('Travel');
     await page.keyboard.press('Escape');
-    await expect(nav.getByRole('link', {name: 'Transactions, 2 to review'})).toBeVisible();
+    await expect(nav.getByRole('link', {name: 'Transactions, 2 to check'})).toBeVisible();
   });
 });
 

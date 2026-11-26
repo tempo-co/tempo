@@ -1,4 +1,4 @@
-import type {BankTransaction} from '@tempo/contracts';
+import type {BankTransaction, BankTransactionDayTotal} from '@tempo/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 import type {ReactNode} from 'react';
 
@@ -11,6 +11,7 @@ import {
   formatBankTransactionCategory,
   formatBankTransactionCompactDate,
   isPendingBankTransaction,
+  isToCheck,
   resolveBankTransactionAccountLabel,
   resolveBankTransactionDisplayTitle,
   toBankTransactionCategory,
@@ -25,6 +26,10 @@ type LedgerProps = {
   /** Shown in place of the rows when there are none. */
   empty: ReactNode;
   onTransactionSelect: (id: BankTransaction['id'], trigger: HTMLButtonElement) => void;
+  /** The row whose details are open beside the list. */
+  selectedId?: BankTransaction['id'];
+  /** Each day's totals by date, in the reporting currency; a day without one shows its label alone. */
+  dayTotals?: Map<string, BankTransactionDayTotal & {currency: string}>;
 };
 
 const dayOf = (transaction: BankTransaction) => transaction.date ?? '';
@@ -37,12 +42,29 @@ function formatLedgerDay(value: string) {
   return format(date, isThisYear(date) ? 'EEEE d MMMM' : 'EEEE d MMMM yyyy');
 }
 
-/** The Transactions page's rows: one card per day, every row the shared 60px row with its 36px tile. */
+/** What a day spent and earned, as its header shows it: "-€54.12", "+€2,000.00" in green, or both. */
+function DayTotal({day}: {day: BankTransactionDayTotal & {currency: string}}) {
+  const spent = Number(day.spending) !== 0;
+  const earned = Number(day.income) !== 0;
+  if (!spent && !earned) return null;
+  return (
+    <p className='shrink-0' data-testid='ledger-day-total'>
+      <span className='sr-only'>Day total </span>
+      {spent && <CurrencyAmount amount={-Number(day.spending)} currency={day.currency} />}
+      {spent && earned && ' · '}
+      {earned && <CurrencyAmount amount={Number(day.income)} currency={day.currency} />}
+    </p>
+  );
+}
+
+/** The Transactions page's rows: one card per day under its total, every row the shared 60px row with its 36px tile. */
 export function BankTransactionLedger({
   transactions,
   groupByDay,
   empty,
   onTransactionSelect,
+  selectedId,
+  dayTotals,
 }: LedgerProps) {
   const {accounts, needsAccountName} = useActiveBankAccounts();
   const showAccount = accounts.length > 1;
@@ -62,6 +84,7 @@ export function BankTransactionLedger({
         transaction={transaction}
         showDate={!groupByDay}
         account={accountLabel(transaction)}
+        selected={transaction.id === selectedId}
         onSelect={onTransactionSelect}
       />
     </li>
@@ -72,7 +95,7 @@ export function BankTransactionLedger({
       <ul
         aria-label='Transactions'
         data-testid='bank-transaction-ledger'
-        className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'
+        className='@container divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'
       >
         {transactions.map(row)}
       </ul>
@@ -86,12 +109,17 @@ export function BankTransactionLedger({
   }
 
   return (
-    <div className='grid gap-5' data-testid='bank-transaction-ledger'>
+    // The rows lay out by the list's own width, which the rail beside it narrows.
+    <div className='@container grid gap-5' data-testid='bank-transaction-ledger'>
       {[...days].map(([day, rows]) => {
         const label = formatLedgerDay(day);
+        const totals = dayTotals?.get(day);
         return (
           <section key={day} aria-label={label} className='grid gap-1.5'>
-            <h2 className='px-1 text-body-small font-medium text-muted-foreground'>{label}</h2>
+            <div className='flex items-baseline justify-between gap-3 px-1 text-body-small text-muted-foreground'>
+              <h2 className='min-w-0 truncate font-medium'>{label}</h2>
+              {totals && <DayTotal day={totals} />}
+            </div>
             <ul className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'>
               {rows.map(row)}
             </ul>
@@ -106,34 +134,44 @@ function LedgerRow({
   transaction,
   showDate,
   account,
+  selected,
   onSelect,
 }: {
   transaction: BankTransaction;
   showDate: boolean;
   account: string | null;
+  selected: boolean;
   onSelect: LedgerProps['onTransactionSelect'];
 }) {
   const title = resolveBankTransactionDisplayTitle(transaction);
   const activity = formatBankTransactionActivity(transaction);
   const isCategorizing =
     !transaction.category && ['PENDING', 'PROCESSING'].includes(transaction.categoryStatus);
-  const category =
-    activity ||
-    (isCategorizing ? 'Categorizing…' : formatBankTransactionCategory(transaction.category));
-  const needsOwner =
-    !activity &&
-    (transaction.categoryStatus === 'FAILED' || transaction.category === 'NEEDS_REVIEW');
+  // A row to check shows no category: there is no guess to show, and the owner picks one.
+  const toCheck = !activity && isToCheck(transaction);
+  const category = toCheck
+    ? 'To check'
+    : activity ||
+      (isCategorizing ? 'Categorizing…' : formatBankTransactionCategory(transaction.category));
   const date = formatBankTransactionCompactDate(dayOf(transaction) || null);
   const pending = isPendingBankTransaction(transaction);
   // Merchant logos fill most tiles, so the category keeps its own icon beside its name.
-  const categoryIcon = (className: string, iconClassName: string) => (
-    <BankTransactionCategoryIcon
-      category={toBankTransactionCategory(transaction.category)}
-      activity={Boolean(activity)}
-      className={cn('shrink-0', className)}
-      iconClassName={iconClassName}
-    />
-  );
+  const categoryIcon = (className: string, iconClassName: string) =>
+    toCheck ? (
+      <span
+        aria-hidden='true'
+        className={cn('inline-flex shrink-0 items-center justify-center', className)}
+      >
+        <span className='size-2 rounded-full bg-warning' />
+      </span>
+    ) : (
+      <BankTransactionCategoryIcon
+        category={toBankTransactionCategory(transaction.category)}
+        activity={Boolean(activity)}
+        className={cn('shrink-0', className)}
+        iconClassName={iconClassName}
+      />
+    );
   const counterparty = transaction.counterpartyName?.replace(/\s+/g, ' ').trim();
   const desktopSubline = [
     showDate ? date : null,
@@ -147,36 +185,37 @@ function LedgerRow({
     <button
       type='button'
       aria-label={`View ${title} transaction details`}
+      aria-current={selected || undefined}
       onClick={(event) => onSelect(transaction.id, event.currentTarget)}
       className={cn(
         // The row fills its card edge to edge, so hover and the click target do too; the card clips the corners and
         // the focus ring sits inside the row. One set of tracks for every list, so Category sits in the same place with or without accounts.
-        'grid min-h-15 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring lg:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
+        'grid min-h-15 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-current:bg-accent @3xl:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
       )}
     >
       <MerchantLogoTile transaction={transaction} />
       <div className='min-w-0'>
         <p className='truncate text-body'>{title}</p>
         <p
-          className='flex h-4 min-w-0 items-center gap-1 text-body-small text-muted-foreground lg:hidden'
+          className='flex h-4 min-w-0 items-center gap-1 text-body-small text-muted-foreground @3xl:hidden'
           data-testid='ledger-row-meta'
         >
           {showDate && <span className='shrink-0'>{date} ·</span>}
           {pending && <span className='shrink-0'>Pending ·</span>}
           {categoryIcon('h-4 w-4', 'h-2.5 w-2.5')}
-          <span className={cn('truncate', needsOwner && 'text-warning')}>{category}</span>
+          <span className={cn('truncate', toCheck && 'text-warning')}>{category}</span>
           {account && <span className='min-w-0 shrink-[2] truncate'>· {account}</span>}
         </p>
         {desktopSubline && (
-          <p className='hidden truncate text-body-small text-muted-foreground lg:block'>
+          <p className='hidden truncate text-body-small text-muted-foreground @3xl:block'>
             {desktopSubline}
           </p>
         )}
       </div>
       <p
         className={cn(
-          'hidden min-w-0 items-center gap-2 text-body-small text-muted-foreground lg:flex',
-          needsOwner && 'text-warning',
+          'hidden min-w-0 items-center gap-2 text-body-small text-muted-foreground @3xl:flex',
+          toCheck && 'text-warning',
         )}
         data-testid='ledger-row-category'
       >
@@ -185,13 +224,13 @@ function LedgerRow({
       </p>
       {account ? (
         <p
-          className='hidden truncate text-body-small text-muted-foreground lg:block'
+          className='hidden truncate text-body-small text-muted-foreground @3xl:block'
           data-testid='ledger-row-account'
         >
           {account}
         </p>
       ) : (
-        <span aria-hidden='true' className='hidden lg:block' />
+        <span aria-hidden='true' className='hidden @3xl:block' />
       )}
       <span className='text-right text-body whitespace-nowrap' data-testid='ledger-row-amount'>
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />

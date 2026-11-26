@@ -74,7 +74,7 @@ test('Home refreshes its history and the review badge every 30 seconds while vis
     .getByText('Kept', {exact: true})
     .locator('..');
   await expect(kept).toHaveText('Kept+€9,300');
-  await expect(page.getByRole('link', {name: 'Transactions, 3 to review'}).first()).toBeVisible();
+  await expect(page.getByRole('link', {name: 'Transactions, 3 to check'}).first()).toBeVisible();
   await expect.poll(() => state.reads).toEqual({flow: 1, categories: 1, review: 1});
 
   state.enriched = true;

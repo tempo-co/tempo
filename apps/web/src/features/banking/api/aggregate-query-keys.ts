@@ -13,6 +13,9 @@ export const dashboardQueryKeys = {
   /** Spending and income of every row the Transactions page's filters match; under this root so bank-derived invalidation refreshes it. */
   listTotals: (filters: BankTransactionFilterParams) =>
     ['bank-dashboard', 'list-totals', filters] as const,
+  /** Each day's totals over the days the Transactions page has loaded. */
+  dayTotals: (filters: BankTransactionFilterParams, span: {from: string; to: string} | null) =>
+    ['bank-dashboard', 'day-totals', filters, span] as const,
   /** One month's spending by category with each category's usual by the same day. */
   summary: (month: string, asOf: string) => ['bank-dashboard', 'summary', month, asOf] as const,
   reviewCounts: ['bank-dashboard', 'review-counts'] as const,

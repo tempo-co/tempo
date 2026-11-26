@@ -1,10 +1,4 @@
-import {
-  BANK_TRANSACTION_CATEGORIES,
-  BankTransaction,
-  BankTransactionCategory,
-  BankTransactionCategoryImpact,
-} from '@tempo/contracts';
-import {useState} from 'react';
+import {BankTransaction, BankTransactionCategory} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {
@@ -18,16 +12,20 @@ import {wasToasted} from '@/utils/api';
 
 import {usePreviewBankTransactionCategory} from '../api/use-preview-bank-transaction-category';
 import {useUpdateBankTransactionCategory} from '../api/use-update-bank-transaction-category';
-import {BANK_TRANSACTION_CATEGORY_META} from '../utils/bank-transaction-category-meta';
+import {
+  BANK_TRANSACTION_CATEGORY_META,
+  PICKABLE_CATEGORIES,
+} from '../utils/bank-transaction-category-meta';
 import {
   formatBankTransactionCategory,
   formatBankTransactionCategorySource,
   formatBankTransactionCategoryStatus,
   isBankTransactionCategory,
+  isToCheck,
   toBankTransactionCategory,
 } from '../utils/formatters';
+import {useStartCategoryDraft} from './bank-transaction-category-draft';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
-import {BankTransactionCategoryImpactDialog} from './bank-transaction-category-impact-dialog';
 
 type BankTransactionCategorySelectProps = {
   transaction: BankTransaction;
@@ -37,26 +35,24 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
   const {updateBankTransactionCategory, isPending} = useUpdateBankTransactionCategory();
   const {previewBankTransactionCategory, isPending: isChecking} =
     usePreviewBankTransactionCategory();
-  const [draft, setDraft] = useState<{
-    category: BankTransactionCategory;
-    impact: BankTransactionCategoryImpact;
-  } | null>(null);
+  const startDraft = useStartCategoryDraft();
+  // A row to check has no category to show: the owner checks it by picking one.
+  const toCheck = isToCheck(transaction);
   const selectId = `transaction-${transaction.id}-category`;
   const statusId = `transaction-${transaction.id}-category-status`;
-  const selectedCategory = toBankTransactionCategory(transaction.category) ?? '';
+  const selectedCategory = toCheck ? '' : (toBankTransactionCategory(transaction.category) ?? '');
   const statusLabel = formatBankTransactionCategoryStatus(transaction.categoryStatus);
   const sourceLabel = formatBankTransactionCategorySource(transaction.categorySource);
 
-  const save = async (category: BankTransactionCategory, applyToTransactionIds: string[]) => {
+  const save = async (category: BankTransactionCategory) => {
     try {
       await updateBankTransactionCategory({
         id: transaction.id,
         category,
-        applyToTransactionIds,
+        applyToTransactionIds: [],
       });
-      setDraft(null);
     } catch {
-      // The mutation toast reports the error; keep the preview and selection so the owner can retry.
+      // The mutation toast reports the error.
     }
   };
 
@@ -66,8 +62,8 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
       {id: transaction.id, category: value},
       {
         onSuccess: (impact) => {
-          if (impact.transactions.length > 0) setDraft({category: value, impact});
-          else void save(value, []);
+          if (impact.transactions.length > 0) startDraft({category: value, impact});
+          else void save(value);
         },
         onError: (error) => {
           if (!wasToasted(error)) {
@@ -95,16 +91,18 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
             ? 'Checking other transactions…'
             : isPending
               ? 'Saving…'
-              : transaction.categoryStatus === 'COMPLETED'
-                ? (sourceLabel ?? statusLabel)
-                : statusLabel}
+              : toCheck
+                ? 'To check'
+                : transaction.categoryStatus === 'COMPLETED'
+                  ? (sourceLabel ?? statusLabel)
+                  : statusLabel}
         </span>
       </dt>
       <dd className='mt-2'>
         <Select
           value={selectedCategory}
           onValueChange={handleValueChange}
-          disabled={isPending || isChecking || draft !== null}
+          disabled={isPending || isChecking}
         >
           <SelectTrigger
             id={selectId}
@@ -112,12 +110,16 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
             aria-describedby={statusId}
             className='h-14 w-full max-w-none border-0 bg-accent/50 px-3 text-body shadow-none hover:bg-accent'
           >
-            <SelectValue placeholder={formatBankTransactionCategory(transaction.category)}>
+            <SelectValue
+              placeholder={
+                toCheck ? 'Pick a category' : formatBankTransactionCategory(transaction.category)
+              }
+            >
               {selectedCategory && <BankTransactionCategoryOption category={selectedCategory} />}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {BANK_TRANSACTION_CATEGORIES.map((category) => (
+            {PICKABLE_CATEGORIES.map((category) => (
               <SelectItem key={category} value={category}>
                 <BankTransactionCategoryOption category={category} />
               </SelectItem>
@@ -125,21 +127,11 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
           </SelectContent>
         </Select>
       </dd>
-      {draft && (
-        <BankTransactionCategoryImpactDialog
-          transaction={transaction}
-          category={draft.category}
-          impact={draft.impact}
-          isPending={isPending}
-          onCancel={() => setDraft(null)}
-          onConfirm={(ids) => void save(draft.category, ids)}
-        />
-      )}
     </div>
   );
 }
 
-function BankTransactionCategoryOption({category}: {category: BankTransactionCategory}) {
+export function BankTransactionCategoryOption({category}: {category: BankTransactionCategory}) {
   return (
     <span className='inline-flex min-w-0 items-center gap-2'>
       <BankTransactionCategoryIcon category={category} />

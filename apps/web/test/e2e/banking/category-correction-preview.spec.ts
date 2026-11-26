@@ -104,8 +104,8 @@ async function mockCorrection(
 
 const PREVIEW_FAILED = 'Category changes could not be previewed. Nothing was saved. Try again.';
 const categorySelect = (page: Page) => page.getByRole('combobox', {name: 'Transaction category'});
-const impactDialog = (page: Page) =>
-  page.getByRole('dialog', {name: 'Move other Example Shop payments to Travel too?'});
+const impactStep = (page: Page) =>
+  page.getByRole('region', {name: 'Move other Example Shop payments to Travel too?'});
 
 async function chooseTravel(page: Page) {
   await categorySelect(page).click();
@@ -150,50 +150,50 @@ for (const viewport of [
     }, testInfo) => {
       const state = await mockCorrection(page);
       await chooseTravel(page);
-      const dialog = impactDialog(page);
-      await expect(dialog).toBeVisible();
+      const step = impactStep(page);
+      await expect(step).toBeVisible();
       expect(state.writes).toEqual([]);
-      await expect(dialog).toContainText('This payment moves');
-      await expect(dialog).toContainText('3 other Example Shop payments can follow:');
-      const shopping = dialog.getByRole('checkbox', {name: 'Shopping to Travel', exact: true});
-      const food = dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
+      await expect(step).toContainText('This payment moves');
+      await expect(step).toContainText('3 other Example Shop payments can follow:');
+      const shopping = step.getByRole('checkbox', {name: 'Shopping to Travel', exact: true});
+      const food = step.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
       await expect(shopping).toBeChecked();
       await expect(food).toBeChecked();
       // Each group's payments stay folded until its count is opened.
-      await expect(dialog.getByRole('checkbox')).toHaveCount(2);
-      await expect(dialog.getByRole('button', {name: 'Only this one', exact: true})).toBeVisible();
-      const moveAll = dialog.getByRole('button', {name: 'Move all 3 to Travel', exact: true});
+      await expect(step.getByRole('checkbox')).toHaveCount(2);
+      await expect(step.getByRole('button', {name: 'Only this one', exact: true})).toBeVisible();
+      const moveAll = step.getByRole('button', {name: 'Move all 3 to Travel', exact: true});
       await expect(moveAll).toBeVisible();
-      const shoppingRows = dialog.getByRole('button', {name: '2 Shopping payments', exact: true});
+      const shoppingRows = step.getByRole('button', {name: '2 Shopping payments', exact: true});
       await expect(shoppingRows).toHaveAttribute('aria-expanded', 'false');
       await shoppingRows.click();
-      await animationsSettled(dialog);
+      await animationsSettled(step);
       await expect(shoppingRows).toHaveAttribute('aria-expanded', 'true');
-      const first = dialog.getByRole('checkbox', {
+      const first = step.getByRole('checkbox', {
         name: 'Example Shop, Sep 9, 2026, -€12.00',
         exact: true,
       });
-      const third = dialog.getByRole('checkbox', {
+      const third = step.getByRole('checkbox', {
         name: 'Example Shop, Sep 7, 2026, -€12.00',
         exact: true,
       });
       await expect(first).toBeChecked();
       await expect(third).toBeChecked();
-      await expect(dialog).toContainText('€12.00');
-      for (const icon of await dialog.getByTestId('category-icon').all()) {
+      await expect(step).toContainText('€12.00');
+      for (const icon of await step.getByTestId('category-icon').all()) {
         const box = await icon.boundingBox();
         expect([box!.width, box!.height]).toEqual([20, 20]);
       }
       if (page.viewportSize()!.width < 768) {
         const primary = await moveAll.boundingBox();
-        const secondary = await dialog
+        const secondary = await step
           .getByRole('button', {name: 'Only this one', exact: true})
           .boundingBox();
         expect(primary!.y).toBeLessThan(secondary!.y);
       }
       const firstRow = await first.locator('xpath=ancestor::label[1]').boundingBox();
       expect(firstRow!.height).toBe(60);
-      const tile = await dialog.getByTestId('merchant-logo-tile').first().boundingBox();
+      const tile = await step.getByTestId('merchant-logo-tile').first().boundingBox();
       expect([tile!.width, tile!.height]).toEqual([36, 36]);
       await expectNoHorizontalOverflow(page);
       await testInfo.attach('category-impact', {
@@ -204,7 +204,7 @@ for (const viewport of [
       await expect(shopping).toHaveAttribute('aria-checked', 'mixed');
       await expect(shoppingRows).toHaveText('1 of 2 payments');
       await food.uncheck();
-      // Holds the refresh that follows the save, while the dialog shows its pending state.
+      // Holds the refresh that follows the save, while the step shows its pending state.
       let releaseRefresh!: () => void;
       const refreshHeld = new Promise<void>((resolve) => {
         releaseRefresh = resolve;
@@ -213,15 +213,18 @@ for (const viewport of [
         if (state.writes.length > 0) await refreshHeld;
         await route.fallback();
       });
-      await dialog.getByRole('button', {name: 'Move 1 to Travel', exact: true}).click();
+      await step.getByRole('button', {name: 'Move 1 to Travel', exact: true}).click();
       try {
-        await expect(dialog.getByRole('button', {name: 'Saving…'})).toBeVisible();
+        await expect(step.getByRole('button', {name: 'Saving…'})).toBeVisible();
+        // Escape while saving keeps the step and the details open.
+        await page.keyboard.press('Escape');
+        await expect(step.getByRole('button', {name: 'Saving…'})).toBeVisible();
         await expect.poll(() => state.writes.length).toBe(1);
-        await expect(dialog.getByText('Not categorized', {exact: true})).toBeVisible();
+        await expect(step.getByText('Not categorized', {exact: true})).toBeVisible();
       } finally {
         releaseRefresh();
       }
-      await expect(dialog).toBeHidden();
+      await expect(step).toBeHidden();
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: [FIRST_ID]}]);
       await expect(categorySelect(page)).toHaveText('Travel');
     });
@@ -232,19 +235,19 @@ for (const viewport of [
       }) => {
         const state = await mockCorrection(page);
         await chooseTravel(page);
-        const dialog = impactDialog(page);
-        await expect(dialog).toBeVisible();
+        const step = impactStep(page);
+        await expect(step).toBeVisible();
         if (dismissal === 'Cancel')
-          await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+          await step.getByRole('button', {name: 'Cancel', exact: true}).click();
         else await page.keyboard.press('Escape');
-        await expect(dialog).toBeHidden();
+        await expect(step).toBeHidden();
         await expect(page.getByTestId('bank-transaction-inspector')).toBeVisible();
         await expect(categorySelect(page)).toHaveText('Not categorized');
         expect(state.writes).toEqual([]);
         // A cancelled selection is not held locally: a fresh correction starts with all ticked again.
         await chooseTravel(page);
         await expect(
-          dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true}),
+          step.getByRole('checkbox', {name: 'Eating out to Travel', exact: true}),
         ).toBeChecked();
       });
     }
@@ -252,9 +255,9 @@ for (const viewport of [
     test('Only this one sends an empty selection', async ({page}) => {
       const state = await mockCorrection(page);
       await chooseTravel(page);
-      const dialog = impactDialog(page);
-      await dialog.getByRole('button', {name: 'Only this one', exact: true}).click();
-      await expect(dialog).toBeHidden();
+      const step = impactStep(page);
+      await step.getByRole('button', {name: 'Only this one', exact: true}).click();
+      await expect(step).toBeHidden();
       expect(state.writes).toEqual([{category: 'TRAVEL', applyToTransactionIds: []}]);
     });
 
@@ -273,7 +276,7 @@ for (const viewport of [
         await chooseTravel(page);
         await expect(status).toHaveText('Saving…');
         await expect(categorySelect(page)).toBeDisabled();
-        await expect(page.getByTestId('category-impact-dialog')).toHaveCount(0);
+        await expect(page.getByTestId('category-impact')).toHaveCount(0);
       } finally {
         releaseSave();
       }
@@ -299,19 +302,19 @@ for (const viewport of [
         total: 600,
       });
       await chooseTravel(page);
-      const dialog = page.getByRole('dialog', {
+      const step = page.getByRole('region', {
         name: 'Let AI re-check the newest 3 of 600 other Example Shop payments?',
       });
-      await expect(dialog).toContainText('Each can end up in a different category.');
-      await expect(dialog).toContainText('The 597 older payments stay as they are.');
+      await expect(step).toContainText('Each can end up in a different category.');
+      await expect(step).toContainText('The 597 older payments stay as they are.');
       await expect(
-        dialog.getByRole('checkbox', {name: 'Shopping to AI picks again', exact: true}),
+        step.getByRole('checkbox', {name: 'Shopping to AI picks again', exact: true}),
       ).toBeChecked();
-      await expect(dialog.getByText('AI picks again', {exact: true})).toHaveCount(2);
+      await expect(step.getByText('AI picks again', {exact: true})).toHaveCount(2);
       // The outcome is unknown, so only the corrected payment's own swap carries an arrow.
-      await expect(dialog.locator('svg.lucide-arrow-right')).toHaveCount(1);
-      await dialog.getByRole('button', {name: 'Re-check newest 3', exact: true}).click();
-      await expect(dialog).toBeHidden();
+      await expect(step.locator('svg.lucide-arrow-right')).toHaveCount(1);
+      await step.getByRole('button', {name: 'Re-check newest 3', exact: true}).click();
+      await expect(step).toBeHidden();
       expect(state.writes).toEqual([
         {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, SECOND_ID, THIRD_ID]},
       ]);
@@ -342,27 +345,27 @@ for (const viewport of [
         transactions: rows,
       });
       await chooseTravel(page);
-      const dialog = page.getByRole('dialog', {
+      const step = page.getByRole('region', {
         name: 'Move other matching payments to Taxes and government too?',
       });
-      await expect(dialog).toContainText('The newest 100 of 600 other payments can follow:');
+      await expect(step).toContainText('The newest 100 of 600 other payments can follow:');
       await expect(
-        dialog.getByRole('checkbox', {name: 'Shopping to Taxes and government', exact: true}),
+        step.getByRole('checkbox', {name: 'Shopping to Taxes and government', exact: true}),
       ).toBeChecked();
-      const move = dialog.getByRole('button', {
+      const move = step.getByRole('button', {
         name: 'Move newest 100 to Taxes and government',
         exact: true,
       });
-      await dialog.getByRole('button', {name: '100 Shopping payments', exact: true}).click();
-      await animationsSettled(dialog);
+      await step.getByRole('button', {name: '100 Shopping payments', exact: true}).click();
+      await animationsSettled(step);
       const isCut = (element: HTMLElement) =>
         element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
       expect(await move.evaluate(isCut)).toBe(false);
       // The widest amount leaves its row's date whole.
-      expect(await dialog.getByText('Sep 28, 2025', {exact: true}).evaluate(isCut)).toBe(false);
+      expect(await step.getByText('Sep 28, 2025', {exact: true}).evaluate(isCut)).toBe(false);
       // With the browser's text at 150%, the widest amount and a long category name still show whole.
       await page.addStyleTag({content: 'html { font-size: 150%; }'});
-      await dialog
+      await step
         .getByRole('checkbox', {
           name: 'Example Regional Department Store Terminal 202, Sep 9, 2026, -€12.00',
           exact: true,
@@ -374,27 +377,27 @@ for (const viewport of [
         return box.left >= row.left && box.right <= row.right;
       };
       for (const label of [
-        dialog.getByText('Taxes and government', {exact: true}).first(),
-        dialog.getByText(/IDR/).first(),
+        step.getByText('Taxes and government', {exact: true}).first(),
+        step.getByText(/IDR/).first(),
       ]) {
         expect(await label.evaluate(isCut)).toBe(false);
         expect(await label.evaluate(within)).toBe(true);
       }
       await page.addStyleTag({content: 'html { font-size: 100%; }'});
-      await dialog
+      await step
         .getByRole('checkbox', {
           name: 'Example Regional Department Store Terminal 202, Sep 9, 2026, -€12.00',
           exact: true,
         })
         .check();
       // A long name wraps in full: these rows don't open, and its end can tell two payments apart.
-      const longName = dialog.getByText('Example Regional Department Store Terminal 202', {
+      const longName = step.getByText('Example Regional Department Store Terminal 202', {
         exact: true,
       });
       expect(await longName.evaluate(isCut)).toBe(false);
       await expectNoHorizontalOverflow(page);
 
-      const viewport = dialog.locator('[data-radix-scroll-area-viewport]');
+      const viewport = step.locator('[data-radix-scroll-area-viewport]');
       const body = await viewport.boundingBox();
       const x = body!.x + body!.width / 2;
       // Touch gestures are sent with Chromium DevTools; WebKit scrolls with the wheel.
@@ -426,13 +429,13 @@ for (const viewport of [
       // On a short landscape phone the header scrolls away with the list; every action stays on screen.
       if (phone) await page.setViewportSize({width: 667, height: 300});
       for (const name of ['Cancel', 'Only this one']) {
-        const box = await dialog.getByRole('button', {name, exact: true}).boundingBox();
+        const box = await step.getByRole('button', {name, exact: true}).boundingBox();
         expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
       }
       const box = await move.boundingBox();
       expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
-      await expect(dialog).toBeHidden();
+      await expect(step).toBeHidden();
       expect(state.writes).toEqual([
         {category: 'TRAVEL', applyToTransactionIds: rows.map(({id}) => id)},
       ]);
@@ -529,17 +532,17 @@ for (const viewport of [
         const state = await mockCorrection(page);
         state.saveStatus = status;
         await chooseTravel(page);
-        const dialog = impactDialog(page);
-        const food = dialog.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
+        const step = impactStep(page);
+        const food = step.getByRole('checkbox', {name: 'Eating out to Travel', exact: true});
         await food.uncheck();
-        const move = dialog.getByRole('button', {name: 'Move 2 to Travel', exact: true});
+        const move = step.getByRole('button', {name: 'Move 2 to Travel', exact: true});
         await move.click();
         await expect(page.getByText(message, {exact: true})).toBeVisible();
         await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
         await expect(food).not.toBeChecked();
         state.saveStatus = 200;
         await move.click();
-        await expect(dialog).toBeHidden();
+        await expect(step).toBeHidden();
         expect(state.writes).toEqual([
           {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, THIRD_ID]},
           {category: 'TRAVEL', applyToTransactionIds: [FIRST_ID, THIRD_ID]},

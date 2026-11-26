@@ -34,7 +34,7 @@ const totalBalance = (page: Page) =>
     .getByRole('heading', {name: 'Total balance'})
     .locator('xpath=following-sibling::p[1]');
 const reviewBadge = (page: Page, count: number) =>
-  page.getByRole('link', {name: `Transactions, ${count} to review`}).first();
+  page.getByRole('link', {name: `Transactions, ${count} to check`}).first();
 const monthRows = (page: Page, title: string) =>
   page
     .getByRole('dialog', {name: title})

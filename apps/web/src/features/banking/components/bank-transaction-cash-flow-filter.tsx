@@ -20,7 +20,7 @@ type InternalKind = (typeof BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS)[number];
 const isInternalKind = (value: BankTransactionCashFlowFilterValue): value is InternalKind =>
   (BANK_TRANSACTION_INTERNAL_MOVEMENT_KINDS as readonly string[]).includes(value);
 
-/** The cash flow options for the Filters panel. */
+/** The cash flow options for "+ Add filter". */
 export function BankTransactionCashFlowFilter({filters}: {filters: BankTransactionFilterParams}) {
   const {selectedValues, setSelectedValues} = useBankTransactionArrayFilter(filters, 'cashFlows');
   const internalKinds = selectedValues.includes('INTERNAL')

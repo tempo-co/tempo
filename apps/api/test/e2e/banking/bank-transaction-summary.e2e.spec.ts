@@ -287,6 +287,52 @@ describe('BankTransactionSummary', () => {
 		await expectCategoriesReconcile(summary, from);
 	});
 
+	it('totals each day with filtered rows, newest first, adding up to the filter’s totals', async () => {
+		const october = {'filter[date][from]': '2026-10-01', 'filter[date][to]': '2026-10-09'};
+		const {body} = await ownerAgent.get('/bank-transactions/day-totals').query(october).expect(200);
+
+		// A refund counts against spending; own transfers and exchanges add nothing, but their day is still listed.
+		expect(body).toEqual({
+			baseCurrency: 'EUR',
+			days: [
+				{date: '2026-10-09', spending: '0.00', income: '0.00', net: '0.00'},
+				{date: '2026-10-08', spending: '0.00', income: '2000.00', net: '2000.00'},
+				{date: '2026-10-07', spending: '3.00', income: '0.00', net: '-3.00'},
+				{date: '2026-10-06', spending: '-5.00', income: '0.00', net: '5.00'},
+				{date: '2026-10-05', spending: '50.00', income: '0.00', net: '-50.00'},
+				{date: '2026-10-03', spending: '7.70', income: '0.00', net: '-7.70'},
+				{date: '2026-10-02', spending: '11.60', income: '0.00', net: '-11.60'},
+				{date: '2026-10-01', spending: '12.30', income: '0.00', net: '-12.30'},
+			],
+		});
+
+		for (const filter of [{'filter[categories][]': 'GROCERIES'}, {'filter[search]': 'Example filter'}, {}]) {
+			const query = {...filter, 'filter[date][from]': '2026-07-01', 'filter[date][to]': '2026-10-31'};
+			const [{body: days}, {body: totals}] = await Promise.all([
+				ownerAgent.get('/bank-transactions/day-totals').query(query).expect(200),
+				ownerAgent.get('/bank-transactions/totals').query(query).expect(200),
+			]);
+			const sum = (field: 'spending' | 'income') =>
+				formatCents(
+					(days.days as Array<Record<typeof field, string>>).reduce(
+						(total, day) => total + parseCents(day[field]),
+						0n,
+					),
+				);
+			expect({spending: sum('spending'), income: sum('income')}).toEqual({
+				spending: totals.spending,
+				income: totals.income,
+			});
+		}
+
+		const {body: other} = await otherAgent.get('/bank-transactions/day-totals').query(october).expect(200);
+		expect(other).toEqual({
+			baseCurrency: null,
+			days: [{date: '2026-10-02', spending: '999.00', income: '0.00', net: '-999.00'}],
+		});
+		await ownerAgent.get('/bank-transactions/day-totals').query({'filter[date][from]': '2026-02-30'}).expect(400);
+	});
+
 	it('keys review, refund debits and canonical indicators like the list on the first of a month', async () => {
 		const extra = await fixtures.createTransactions(ownerBankAccount, [
 			bookedRow('2026-11-01', '-4.00', {category: 'NEEDS_REVIEW'}),

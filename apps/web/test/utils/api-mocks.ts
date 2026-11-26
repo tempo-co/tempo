@@ -4,6 +4,7 @@ import {
   type BankConnection,
   type BankTransactionBreakdown,
   type BankTransactionCashFlow,
+  type BankTransactionDayTotals,
   type BankTransactionReviewCounts,
   type BankTransactionSummary,
   type BankTransactionTotals,
@@ -144,12 +145,6 @@ export const EMPTY_REVIEW_COUNTS: BankTransactionReviewCounts = {
   needsAttention: 0,
 };
 
-/**
- * Answers Home's requests, the totals the Transactions page asks for with a filter in force, and the
- * navigation's review counts, with empty data. Home requests its
- * history while the connections load, so a fully mocked spec that opens Home without banks still
- * sends them.
- */
 /** A reporting currency the owner chose long ago and whose totals are ready: nothing asks or waits. */
 export const SETTLED_REPORTING_CURRENCY: ReportingCurrency = {
   currency: 'EUR',
@@ -162,6 +157,11 @@ export const SETTLED_REPORTING_CURRENCY: ReportingCurrency = {
   recalculating: false,
 };
 
+/**
+ * Answers Home's requests, the Transactions page's totals and day totals, and the navigation's review counts,
+ * with empty data. Home requests its history while the connections load, so a fully mocked spec that opens Home
+ * without banks still sends them.
+ */
 export async function mockEmptyHome(page: Page) {
   // Registered by the fully mocked fixture before each spec's more specific routes.
   await mockJson(page, '**/reporting-currency', SETTLED_REPORTING_CURRENCY);
@@ -202,6 +202,10 @@ export async function mockEmptyHome(page: Page) {
     count: 0,
     excluded: {missingBaseAmount: 0},
   } satisfies BankTransactionTotals);
+  await mockJson(page, '**/bank-transactions/day-totals?**', {
+    baseCurrency: null,
+    days: [],
+  } satisfies BankTransactionDayTotals);
   await page.route('**/bank-transactions/summary?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     const month = params.get('month') ?? '';

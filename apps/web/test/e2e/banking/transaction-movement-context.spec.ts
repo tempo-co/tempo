@@ -50,7 +50,9 @@ function counterpart(transaction: BankTransaction): BankTransactionCounterpart {
   return {id, bankName, bankAccountName, bankAccountAlias, amount, currency, bookingDate};
 }
 
-for (const width of [1440, 390, 320]) {
+// The desktop rail and the phone sheet stack the two accounts; a tablet's full-width sheet sets them side by side.
+for (const width of [1440, 768, 390, 320]) {
+  const sideBySide = width === 768;
   for (const exchange of [false, true]) {
     test.describe(`${exchange ? 'exchange' : 'own transfer'} account context at ${width}px`, () => {
       test.use({storageState: {cookies: [], origins: []}, viewport: {width, height: 900}});
@@ -141,7 +143,8 @@ for (const width of [1440, 390, 320]) {
           boxOf(movement.getByText('From', {exact: true})),
           boxOf(movement.getByText('To', {exact: true})),
         ]);
-        if (width >= 640) expect(Math.abs(fromLabel.y - toLabel.y)).toBeLessThan(1);
+        if (sideBySide) expect(Math.abs(fromLabel.y - toLabel.y)).toBeLessThan(1);
+        else expect(toLabel.y).toBeGreaterThan(fromLabel.y + fromLabel.height);
         const from = movement.getByTestId('movement-own');
         const to = movement.getByTestId('movement-counterpart');
         await expect(from.getByTestId('bank-logo').locator('img')).toHaveJSProperty(
@@ -162,7 +165,7 @@ for (const width of [1440, 390, 320]) {
             boxOf(from.getByTestId(`movement-${row}`)),
             boxOf(to.getByTestId(`movement-${row}`)),
           ]);
-          if (width >= 640) expect(Math.abs(left.y - right.y)).toBeLessThan(1);
+          if (sideBySide) expect(Math.abs(left.y - right.y)).toBeLessThan(1);
         }
         await expect(from.getByTestId('movement-amount')).toHaveText('-€80.00');
         await expect(to).toContainText(exchange ? '$91.99' : '€80.00');

@@ -248,10 +248,10 @@ test.describe('saved app', () => {
       });
       await page.goto('/transactions');
       const filters = await openTransactionFilter(page, 'Bank accounts');
-      const tab = filters.getByRole('tab', {name: /^Bank accounts/});
+      const chip = page.getByRole('button', {name: /^Remove filter: .*Daily spending/});
       await filters.getByRole('option', {name: /Daily spending/}).click();
       await expect(page).toHaveURL(/bankAccountIds/);
-      await expect(tab).toContainText('Daily spending');
+      await expect(chip).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(filters).toBeHidden();
       const loadedRequests = connectionRequests;
@@ -260,7 +260,7 @@ test.describe('saved app', () => {
       await expect.poll(() => failedRequests).toContain('/bank-connections');
       await expect(savedStatus(page)).toBeVisible();
       await openTransactionFilter(page, 'Bank accounts');
-      await expect(tab).toContainText('Daily spending');
+      await expect(chip).toBeVisible();
       await expect(filters.getByRole('option', {name: /Secondary spending/})).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(filters).toBeHidden();
@@ -269,7 +269,7 @@ test.describe('saved app', () => {
       await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
       await expect.poll(() => connectionRequests).toBeGreaterThan(loadedRequests);
       await openTransactionFilter(page, 'Bank accounts');
-      await expect(tab).toContainText('Daily spending');
+      await expect(chip).toBeVisible();
       await expect(filters.getByRole('option', {name: /Secondary spending/})).toBeVisible();
     });
 
@@ -281,7 +281,7 @@ test.describe('saved app', () => {
       await expect(page.getByText('Coffee shop')).toBeVisible();
       await expect(savedStatus(page)).toBeVisible();
       const filters = await openTransactionFilter(page, 'Bank accounts');
-      const pane = filters.getByRole('tabpanel', {name: 'Bank accounts'});
+      const pane = filters.getByTestId('bank-transaction-filters-scroll-area');
       await expect(pane).toHaveText(
         /^(Loading bank accounts\.\.\.|Bank accounts are unavailable\.)$/,
       );
@@ -302,7 +302,7 @@ test.describe('saved app', () => {
       });
       await page.goto('/transactions');
       const filters = await openTransactionFilter(page, 'Bank accounts');
-      const pane = filters.getByRole('tabpanel', {name: 'Bank accounts'});
+      const pane = filters.getByTestId('bank-transaction-filters-scroll-area');
       await expect(pane.getByRole('option', {name: /Secondary spending/})).toBeVisible();
 
       failing = true;

@@ -61,9 +61,7 @@ test('a real category total in a month reconciles with its transaction drill', a
     ),
   ).toBe(spendingCents);
   const countLabel = `${list.total} ${list.total === 1 ? 'transaction' : 'transactions'}`;
-  await expect(page.getByRole('heading', {name: 'Bank transactions'}).locator('..')).toContainText(
-    countLabel,
-  );
+  await expect(page.getByTestId('bank-transactions-view-totals')).toContainText(countLabel);
 });
 
 test('a real income source reconciles with its drill, from its month and from its year', async ({
@@ -111,9 +109,9 @@ test('a real income source reconciles with its drill, from its month and from it
         0,
       ),
     ).toBe(Math.round(Number(part.amount) * 100));
-    await expect(
-      page.getByRole('heading', {name: 'Bank transactions'}).locator('..'),
-    ).toContainText(`${list.total} ${list.total === 1 ? 'transaction' : 'transactions'}`);
+    await expect(page.getByTestId('bank-transactions-view-totals')).toContainText(
+      `${list.total} ${list.total === 1 ? 'transaction' : 'transactions'}`,
+    );
   };
 
   const august = await sourceOf('month', '2026-08-01', '2026-08-31');

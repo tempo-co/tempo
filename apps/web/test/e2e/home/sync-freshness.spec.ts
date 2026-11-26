@@ -80,7 +80,7 @@ test('Home refreshes its history and the review badge when a polled sync complet
     .getByText('Kept', {exact: true})
     .locator('..');
   await expect(kept).toHaveText('Kept+€9,300');
-  await expect(page.getByRole('link', {name: 'Transactions, 3 to review'}).first()).toBeVisible();
+  await expect(page.getByRole('link', {name: 'Transactions, 3 to check'}).first()).toBeVisible();
   expect(reads).toEqual({flow: 1, review: 1});
 
   // Let timers continue while responses and derived-data invalidation finish. A request count
@@ -93,7 +93,7 @@ test('Home refreshes its history and the review badge when a polled sync complet
   current = {...current, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-11-05T12:00:30.000Z'};
   await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(3);
   await expect(kept).toHaveText('Kept+€8,900');
-  await expect(page.getByRole('link', {name: 'Transactions, 4 to review'}).first()).toBeVisible();
+  await expect(page.getByRole('link', {name: 'Transactions, 4 to check'}).first()).toBeVisible();
   await expect(page).toHaveURL('/');
 });
 

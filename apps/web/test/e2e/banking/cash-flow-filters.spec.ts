@@ -82,11 +82,11 @@ test('mobile pickers share combined drills, preserve category status and clear a
     .toEqual(['SPENDING', 'INCOME', 'INTERNAL']);
   expect(new URL(page.url()).searchParams.get('baseAmount')).toBe('MISSING');
   expect(JSON.parse(new URL(page.url()).searchParams.get('categoryStatuses')!)).toEqual(['FAILED']);
-  await drawer.getByRole('button', {name: 'Clear all', exact: true}).click();
+  await drawer.getByRole('button', {name: 'Done', exact: true}).click();
+  await page.getByRole('button', {name: 'Clear', exact: true}).click();
   await expect.poll(() => new URL(page.url()).searchParams.has('cashFlows')).toBe(false);
   expect(new URL(page.url()).searchParams.has('baseAmount')).toBe(false);
   expect(new URL(page.url()).searchParams.has('categoryStatuses')).toBe(false);
-  await drawer.getByRole('button', {name: 'Done', exact: true}).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
@@ -188,13 +188,10 @@ for (const mobile of [false, true]) {
     await expect
       .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
       .toEqual(['SPENDING', 'INTERNAL']);
-    // The desktop panel names each filter's values beside it.
-    if (!mobile)
-      await expect(
-        page
-          .getByTestId('bank-transaction-filters')
-          .getByRole('tab', {name: 'Cash flow Spending, Internal movements'}),
-      ).toBeVisible();
+    // The chips name the filter's values.
+    await expect(
+      page.getByRole('button', {name: 'Remove filter: Spending, Internal movements'}),
+    ).toBeAttached();
     await parent.click();
     await expect(exchange).toHaveAttribute('data-filter-selected', 'false');
     await expect(transfer).toHaveAttribute('data-filter-selected', 'false');

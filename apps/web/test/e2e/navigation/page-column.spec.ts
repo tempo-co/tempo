@@ -84,7 +84,7 @@ for (const width of [1440, 1280]) {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: /^Transactions/})
       .click();
-    await expect(page.getByRole('heading', {name: 'Bank transactions', exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Transactions', exact: true, level: 1})).toBeVisible();
     await expectLoaded(page);
     expect(await column(page)).toEqual(home);
     expect(await title(page)).toEqual(connections);
@@ -112,7 +112,7 @@ for (const [width, wraps] of [
     const home = await column(page);
     for (const [path, name] of [
       ['/accounts', 'Bank connections'],
-      ['/transactions', 'Bank transactions'],
+      ['/transactions', 'Transactions'],
       ['/settings/account', 'Settings'],
     ]) {
       await page.goto(path);

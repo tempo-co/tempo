@@ -58,7 +58,7 @@ export const useActiveBankAccounts = () => {
     return account.isActive ? ambiguousKeys.has(key) : activeKeys.has(key);
   };
 
-  // The Filters panel offers accounts unless the owner is known to have a single one.
+  // "+ Add filter" offers accounts unless the owner is known to have a single one.
   const showsAccountFilter = isPending || isError || accounts.length > 1;
 
   return {accounts, needsAccountName, showsAccountFilter, isPending, isError};
