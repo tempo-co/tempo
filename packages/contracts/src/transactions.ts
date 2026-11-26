@@ -264,5 +264,39 @@ export type BankTransactionCategoryUpdate = {
 	applyToTransactionIds?: string[];
 };
 
+/** `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. */
+export type BankTransactionBulkCategoryPreviewRequest = {
+	transactionIds: string[];
+	category: BankTransactionCategory;
+};
+
+/** One of the owner's other rows from the selected rows' payees that changing all of them would change. */
+export type BankTransactionBulkCategoryPreviewTransaction = BankTransactionCategoryImpactTransaction & {
+	/** `APPLY` sets `appliedCategory`; `RECHECK` sends the row back to AI categorization (its payee's choices disagree). */
+	action: ManualCategoryFollowUpAction;
+	/** The category `APPLY` sets; `null` for `RECHECK`. */
+	appliedCategory: BankTransactionCategory | null;
+};
+
+/** `POST /bank-transactions/bulk-category/preview`. */
+export type BankTransactionBulkCategoryPreview = {
+	/** The rows past the selection that `ALL` changes, newest first by transaction date (then booking date), capped at 500. */
+	transactions: BankTransactionBulkCategoryPreviewTransaction[];
+	/** Every such row, including any past the cap; `ALL` changes only the listed ones. */
+	total: number;
+};
+
+/** `SELECTED` changes only the selected rows; `ALL` also changes the rows the preview lists. */
+export const BANK_TRANSACTION_BULK_CATEGORY_SCOPES = ['SELECTED', 'ALL'] as const;
+export type BankTransactionBulkCategoryScope = (typeof BANK_TRANSACTION_BULK_CATEGORY_SCOPES)[number];
+
+/** `PATCH /bank-transactions/bulk-category` body. */
+export type BankTransactionBulkCategoryUpdate = BankTransactionBulkCategoryPreviewRequest & {
+	scope: BankTransactionBulkCategoryScope;
+};
+
+/** `PATCH /bank-transactions/bulk-category`: how many rows the write changed, the selection included. */
+export type BankTransactionBulkCategoryResult = {updated: number};
+
 /** `PATCH /bank-transactions/:id/own-transfer` body; `null` clears the owner's override. */
 export type BankTransactionOwnTransferUpdate = {override: OwnTransferOverride | null};

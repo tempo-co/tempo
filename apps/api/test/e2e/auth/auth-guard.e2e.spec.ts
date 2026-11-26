@@ -76,6 +76,8 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['get', '/personal-access-tokens'],
 	['post', '/personal-access-tokens'],
 	['delete', `/personal-access-tokens/${RESOURCE_ID}`],
+	['post', '/bank-transactions/bulk-category/preview'],
+	['patch', '/bank-transactions/bulk-category'],
 	['get', `/bank-transactions/${RESOURCE_ID}/category-impact?category=TRAVEL`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/category`],
 	['patch', `/bank-transactions/${RESOURCE_ID}/own-transfer`],

@@ -1,9 +1,23 @@
-import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query, Res, UseInterceptors} from '@nestjs/common';
+import {
+	Body,
+	Controller,
+	Get,
+	HttpCode,
+	Param,
+	ParseUUIDPipe,
+	Patch,
+	Post,
+	Query,
+	Res,
+	UseInterceptors,
+} from '@nestjs/common';
 import {Throttle} from '@nestjs/throttler';
 import type {
 	BankBalanceTrend,
 	BankTransaction,
 	BankTransactionBreakdown,
+	BankTransactionBulkCategoryPreview,
+	BankTransactionBulkCategoryResult,
 	BankTransactionCashFlow,
 	BankTransactionCategoryImpact,
 	BankTransactionDayTotals,
@@ -22,8 +36,13 @@ import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 import {BankTransactionHistoryService} from '../services/bank-transaction-history.service';
 import {BankTransactionSummaryService} from '../services/bank-transaction-summary.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
+import {BulkCategoryService} from '../services/bulk-category.service';
 import {BROWSING_THROTTLE} from './constants/throttle.constants';
 import {BankTransactionBreakdownQueryDto} from './dtos/bank-transaction-breakdown-query.dto';
+import {
+	BankTransactionBulkCategoryPreviewDto,
+	BankTransactionBulkCategoryUpdateDto,
+} from './dtos/bank-transaction-bulk-category.dto';
 import {BankBalanceTrendQueryDto, BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
@@ -40,6 +59,7 @@ export class BankTransactionController {
 		private readonly bankTransactionService: BankTransactionService,
 		private readonly bankTransactionSummaryService: BankTransactionSummaryService,
 		private readonly bankTransactionHistoryService: BankTransactionHistoryService,
+		private readonly bulkCategoryService: BulkCategoryService,
 	) {}
 
 	@Get()
@@ -141,6 +161,24 @@ export class BankTransactionController {
 		// Nest's default null response is empty; this read's wire contract is JSON null.
 		response.json(recurring);
 		return recurring;
+	}
+
+	/** Lists the other rows from the selected rows' payees that a bulk category could change too, without saving. */
+	@Post('bulk-category/preview')
+	@HttpCode(200)
+	previewBulkCategory(
+		@CurrentAccount() account: Account,
+		@Body() dto: BankTransactionBulkCategoryPreviewDto,
+	): Promise<BankTransactionBulkCategoryPreview> {
+		return this.bulkCategoryService.preview(account.id, dto.transactionIds, dto.category);
+	}
+
+	@Patch('bulk-category')
+	updateBulkCategory(
+		@CurrentAccount() account: Account,
+		@Body() dto: BankTransactionBulkCategoryUpdateDto,
+	): Promise<BankTransactionBulkCategoryResult> {
+		return this.bulkCategoryService.update(account.id, dto.transactionIds, dto.category, dto.scope);
 	}
 
 	/** Lists the owner's other rows a category correction would change, without saving anything. */
