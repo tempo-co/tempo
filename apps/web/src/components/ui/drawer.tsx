@@ -35,7 +35,7 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        'overlay-motion fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[calc(100dvh-1rem)] flex-col overflow-y-auto overscroll-contain rounded-t-card border bg-background after:hidden',
+        'overlay-motion fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[calc(100dvh-1rem)] flex-col overflow-y-auto overscroll-contain rounded-t-lg border bg-background after:hidden',
         className,
       )}
       {...props}
@@ -77,7 +77,7 @@ const DrawerDescription = React.forwardRef<
 >(({className, ...props}, ref) => (
   <DrawerPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('text-body-small text-muted-foreground', className)}
     {...props}
   />
 ));

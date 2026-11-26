@@ -57,12 +57,12 @@ export function StateMessage({
         <Title
           className={cn(
             'text-balance',
-            size === 'page' ? 'text-card-title' : 'text-sm leading-snug font-medium',
+            size === 'page' ? 'text-card-title' : 'text-body leading-snug font-medium',
           )}
         >
           {title}
         </Title>
-        <p className='mt-1 max-w-[60ch] text-sm text-pretty break-words text-muted-foreground'>
+        <p className='mt-1 max-w-[60ch] text-body-small text-pretty break-words text-muted-foreground'>
           {description}
         </p>
         {detail ? (
@@ -75,7 +75,7 @@ export function StateMessage({
 
   if (size === 'section') return <div className={cn('py-2', className)}>{body}</div>;
   return (
-    <Card className={cn('overflow-hidden p-5 sm:p-6', previewRows && 'pb-0 sm:pb-0', className)}>
+    <Card className={cn('overflow-hidden p-4', previewRows && 'pb-0', className)}>
       {body}
       {previewRows ? <PreviewRows /> : null}
     </Card>
@@ -90,10 +90,7 @@ function PreviewRows() {
       className='-mx-5 mt-6 border-t [mask-image:linear-gradient(to_bottom,black_30%,transparent)] sm:-mx-6'
     >
       {[62, 48, 55].map((width) => (
-        <div
-          key={width}
-          className='flex h-[60px] items-center gap-3 border-b px-5 last:border-b-0 sm:px-6'
-        >
+        <div key={width} className='flex h-15 items-center gap-3 border-b px-4 last:border-b-0'>
           <span className='size-9 shrink-0 rounded-full border border-dashed border-muted-foreground/40' />
           <span className='grid flex-1 gap-1.5'>
             <span className='h-2.5 rounded-full bg-muted' style={{width: `${width * 0.6}%`}} />

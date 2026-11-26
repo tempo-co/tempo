@@ -110,7 +110,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
             id={selectId}
             aria-label='Transaction category'
             aria-describedby={statusId}
-            className='h-14 w-full max-w-none border-0 bg-accent/50 px-3 text-base shadow-none hover:bg-accent'
+            className='h-14 w-full max-w-none border-0 bg-accent/50 px-3 text-body shadow-none hover:bg-accent'
           >
             <SelectValue placeholder={formatBankTransactionCategory(transaction.category)}>
               {selectedCategory && <BankTransactionCategoryOption category={selectedCategory} />}

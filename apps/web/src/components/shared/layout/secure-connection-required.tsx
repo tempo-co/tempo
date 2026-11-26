@@ -6,7 +6,7 @@ export function SecureConnectionRequired() {
     <div className='flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center'>
       <Logo className='h-16 w-16 text-primary' />
       <h1 className='text-page-title'>Tempo needs a secure connection</h1>
-      <p className='max-w-sm text-sm text-muted-foreground'>
+      <p className='max-w-sm text-body-small text-muted-foreground'>
         This browser cannot coordinate sign-out between tabs here. Open Tempo over HTTPS.
       </p>
     </div>

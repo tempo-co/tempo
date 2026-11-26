@@ -99,10 +99,10 @@ for (const width of [1440, 1280]) {
   });
 }
 
-// At 390px the Connect button wraps under its title; at 430px it sits beside it.
+// At 320px the Connect button wraps under its title; at 390px it sits beside it.
 for (const [width, wraps] of [
-  [390, true],
-  [430, false],
+  [320, true],
+  [390, false],
 ] as const) {
   test(`starts every page title where Home starts its content on a ${width}px phone`, async ({
     page,

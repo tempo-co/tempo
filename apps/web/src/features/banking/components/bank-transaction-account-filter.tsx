@@ -26,7 +26,7 @@ export function BankTransactionAccountFilter({filters}: {filters: BankTransactio
 
   if (isPending || isError || accounts.length === 0) {
     return (
-      <p className='text-sm text-muted-foreground'>
+      <p className='text-body-small text-muted-foreground'>
         {isPending ? 'Loading bank accounts...' : 'Bank accounts are unavailable.'}
       </p>
     );

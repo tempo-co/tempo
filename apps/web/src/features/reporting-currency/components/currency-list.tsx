@@ -9,7 +9,7 @@ import {cn} from '@/utils/cn';
 import {currencyLabel, matchesCurrency} from '../utils/currency-names';
 
 const ROW =
-  'grid min-h-12 w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60';
+  'grid min-h-12 w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-3 rounded-md px-2 py-2 text-left text-body hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60';
 
 type CurrencyListProps = {
   settings: Pick<ReportingCurrency, 'options' | 'connectedCurrencies'>;
@@ -49,7 +49,7 @@ export function CurrencyList({settings, value, onSelect, disabled}: CurrencyList
       </label>
       <ScrollArea type='auto' className='-mx-2 min-h-0 flex-1'>
         {groups.length === 0 ? (
-          <p className='px-4 py-8 text-center text-sm text-muted-foreground'>
+          <p className='px-4 py-8 text-center text-body-small text-muted-foreground'>
             No currency called “{query}”
           </p>
         ) : (

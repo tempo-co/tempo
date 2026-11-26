@@ -97,7 +97,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
         <dl className='grid grid-cols-1 gap-4'>
           {range && (
             <DetailRow icon={CalendarRange} label='Period'>
-              <span className='text-sm'>{range}</span>
+              <span className='text-body'>{range}</span>
             </DetailRow>
           )}
           {summary.accounts.length > 0 && (
@@ -116,14 +116,14 @@ function Counts({counts, muted}: {counts: Count[]; muted?: boolean}) {
   return (
     <dl
       className={cn(
-        'divide-y overflow-hidden rounded-card border bg-card',
+        'divide-y overflow-hidden rounded-lg border bg-card',
         muted && 'text-muted-foreground',
       )}
     >
       {counts.map(({label, value, attention}) => (
         <div key={label} className='flex min-h-11 items-center justify-between gap-4 px-4 py-2.5'>
-          <dt className='text-sm'>{label}</dt>
-          <dd className={cn('numeric text-sm', attention && 'text-warning')}>
+          <dt className='text-body'>{label}</dt>
+          <dd className={cn('numeric text-body', attention && 'text-warning')}>
             {formatCount(value)}
           </dd>
         </div>
@@ -229,7 +229,7 @@ function ImportAccounts({
           <li key={account.id} className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3'>
             <AccountTile match={match} logos={logos} />
             <span className='min-w-0'>
-              <span className='block text-sm wrap-anywhere'>{name}</span>
+              <span className='block text-body wrap-anywhere'>{name}</span>
               <span className='block text-xs wrap-anywhere text-muted-foreground'>{detail}</span>
             </span>
           </li>

@@ -31,7 +31,7 @@ export function RecurringDialog({
       >
         <ResponsiveDialogCornerClose label='Close recurring payments' />
         <ResponsiveDialogHeader className='shrink-0 border-b px-5 pt-5 pr-16 pb-4 text-left sm:px-6'>
-          <ResponsiveDialogTitle className='text-xl leading-tight sm:text-2xl sm:leading-8'>
+          <ResponsiveDialogTitle className='text-page-title'>
             Recurring payments
           </ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='mt-1 md:mt-0'>

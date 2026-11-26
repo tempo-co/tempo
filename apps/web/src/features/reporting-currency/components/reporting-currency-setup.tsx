@@ -75,14 +75,14 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
   return (
     <section
       aria-labelledby={headingId}
-      className={cn('grid gap-4 rounded-card border bg-card p-5 sm:p-6', className)}
+      className={cn('grid gap-4 rounded-lg border bg-card p-4', className)}
       data-testid='reporting-currency-setup'
     >
       <div className='grid gap-1'>
         <h2 id={headingId} className='text-card-title text-balance'>
           Which currency should Tempo use for totals?
         </h2>
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           {settings.currencyUnavailable && settings.currency
             ? `Tempo can't convert amounts into ${settings.currency}, because the European Central Bank doesn't publish its exchange rates. Choose another currency for totals; each account and transaction keeps its own.`
             : `Your accounts are in ${codeList(settings.connectedCurrencies)}. Totals and charts add them up in one currency; each account and transaction keeps its own.`}
@@ -142,7 +142,7 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
           </Button>
         </div>
         {hint && (
-          <p id={hintId} className='text-sm text-muted-foreground'>
+          <p id={hintId} className='text-body-small text-muted-foreground'>
             {hint}
           </p>
         )}

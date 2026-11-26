@@ -171,7 +171,7 @@ export function BankTransactionFilters({
                     aria-selected={selected}
                     onClick={() => setActive(facet.key)}
                     className={cn(
-                      'grid min-h-11 content-center rounded-sm px-3 py-1.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                      'grid min-h-11 content-center rounded-sm px-3 py-1.5 text-left text-body hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
                       selected && 'bg-accent',
                     )}
                   >
@@ -241,8 +241,8 @@ export function BankTransactionFilters({
                     onClick={() => setActive(facet.key)}
                     className='flex min-h-14 w-full items-center gap-3 px-2 text-left'
                   >
-                    <span className='flex-1 text-sm'>{facet.label}</span>
-                    <span className='max-w-[55%] truncate text-sm text-primary'>
+                    <span className='flex-1 text-body'>{facet.label}</span>
+                    <span className='max-w-[55%] truncate text-body text-primary'>
                       {facet.summary ?? <span className='text-muted-foreground'>Any</span>}
                     </span>
                     <ChevronRight aria-hidden='true' className='size-4 text-muted-foreground' />

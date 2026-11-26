@@ -116,15 +116,15 @@ export function FileChoice({
           <span aria-hidden='true' className={IMPORT_TILE}>
             <FileUp strokeWidth={2} />
           </span>
-          <p className='text-sm font-medium'>Drop statement files here</p>
-          <p className='text-sm text-muted-foreground'>or</p>
+          <p className='text-body font-medium'>Drop statement files here</p>
+          <p className='text-body-small text-muted-foreground'>or</p>
           {chooseButton}
         </div>
       ) : (
         chooseButton
       )}
       <div className='flex flex-wrap items-center justify-between gap-x-3'>
-        <p className='text-sm text-pretty text-muted-foreground'>
+        <p className='text-body-small text-pretty text-muted-foreground'>
           Statement files from your bank, several at once or in a zip.
         </p>
         <SupportedFiles />
@@ -142,7 +142,7 @@ export function FileList({files}: {files: readonly File[]}) {
         return (
           <li
             key={`${index}:${file.name}`}
-            className='flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm'
+            className='flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-body'
           >
             <span title={file.name} className='flex min-w-0'>
               <span className='truncate'>{head}</span>

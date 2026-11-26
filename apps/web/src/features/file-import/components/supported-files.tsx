@@ -42,7 +42,7 @@ export function SupportedFiles() {
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <div className='grid grid-cols-1 gap-4 pb-4 text-sm md:pb-0'>
+          <div className='grid grid-cols-1 gap-4 pb-4 text-body md:pb-0'>
             <section aria-labelledby='supported-files-standard' className='grid grid-cols-1 gap-1'>
               <h3 id='supported-files-standard' className='font-medium'>
                 Standard formats

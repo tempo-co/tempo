@@ -6,7 +6,8 @@ import {useTheme} from '@/hooks/use-theme';
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 // Sized like a small Button, with its 44px target on phones and coarse pointers.
-const TOAST_BUTTON = 'h-9! rounded-md! px-3! text-sm! max-sm:min-h-11 pointer-coarse:min-h-11';
+const TOAST_BUTTON =
+  'h-8! rounded-md! px-3! text-body-small! max-sm:min-h-11 pointer-coarse:min-h-11';
 
 const Toaster = ({...props}: ToasterProps) => {
   // The in-app choice; 'system' lets Sonner follow the device, as the app does.
@@ -20,7 +21,7 @@ const Toaster = ({...props}: ToasterProps) => {
       // Sonner's own variables; inline so they outrank its injected [data-sonner-toaster] defaults.
       style={
         {
-          '--border-radius': 'var(--radius-card)',
+          '--border-radius': 'var(--radius-lg)',
           fontFamily: 'var(--font-sans)',
         } as React.CSSProperties
       }
@@ -29,7 +30,7 @@ const Toaster = ({...props}: ToasterProps) => {
           // Utilities are layered in Tailwind v4, so sonner's injected (unlayered) defaults win unless
           // these are !important; type-specific classes add data-[type] so they outrank the base toast.
           toast:
-            'group toast group-[.toaster]:bg-popover! group-[.toaster]:text-popover-foreground! group-[.toaster]:border-border! group-[.toaster]:shadow-lg! text-sm!',
+            'group toast group-[.toaster]:bg-popover! group-[.toaster]:text-popover-foreground! group-[.toaster]:border-border! group-[.toaster]:shadow-lg! text-body!',
           description: 'group-[.toast]:text-muted-foreground!',
           // An outlined action in the toast's own colour fits every tint; a primary fill clashes on green.
           actionButton: `${TOAST_BUTTON} group-[.toast]:bg-transparent! group-[.toast]:text-current! group-[.toast]:border! group-[.toast]:border-current/40! hover:group-[.toast]:bg-current/10!`,

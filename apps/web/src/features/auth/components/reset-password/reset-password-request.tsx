@@ -48,7 +48,9 @@ export function ResetPasswordRequest() {
         viewKey={isSuccess ? 'success-view-fade' : 'reset-form-view-fade'}
         role={isSuccess ? 'status' : undefined}
         aria-live={isSuccess ? 'polite' : undefined}
-        className={isSuccess ? 'flex w-full flex-col gap-4 text-sm' : 'flex w-full flex-col gap-4'}
+        className={
+          isSuccess ? 'flex w-full flex-col gap-4 text-body' : 'flex w-full flex-col gap-4'
+        }
       >
         {isSuccess ? (
           <>
@@ -96,7 +98,7 @@ export function ResetPasswordRequest() {
                 Use a different email
               </Button>
             </div>
-            <p className='text-center text-sm text-muted-foreground'>
+            <p className='text-center text-body-small text-muted-foreground'>
               <Button variant='link' asChild className='h-auto p-0 text-foreground'>
                 <Link to='/login' data-testid='return-to-login-link'>
                   Log in
@@ -106,7 +108,7 @@ export function ResetPasswordRequest() {
           </>
         ) : (
           <>
-            <p className='text-sm leading-6 text-muted-foreground'>
+            <p className='text-body-small leading-6 text-muted-foreground'>
               Enter your account&apos;s email address, and we&apos;ll send you a link to reset your
               password.
             </p>
@@ -146,7 +148,7 @@ export function ResetPasswordRequest() {
                 </Button>
               </form>
             </Form>
-            <p className='pt-0 text-center text-sm text-muted-foreground'>
+            <p className='pt-0 text-center text-body-small text-muted-foreground'>
               <Button variant='link' asChild className='h-auto p-0 text-foreground'>
                 <Link to='/login' data-testid='return-to-login-link'>
                   Log in

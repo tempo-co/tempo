@@ -72,7 +72,7 @@ export function BankTransactionLedger({
       <ul
         aria-label='Transactions'
         data-testid='bank-transaction-ledger'
-        className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'
+        className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'
       >
         {transactions.map(row)}
       </ul>
@@ -92,7 +92,7 @@ export function BankTransactionLedger({
         return (
           <section key={day} aria-label={label} className='grid gap-1.5'>
             <h2 className='px-1 text-xs font-medium text-muted-foreground'>{label}</h2>
-            <ul className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'>
+            <ul className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'>
               {rows.map(row)}
             </ul>
           </section>
@@ -151,12 +151,12 @@ function LedgerRow({
       className={cn(
         // The row fills its card edge to edge, so hover and the click target do too; the card clips the corners and
         // the focus ring sits inside the row. One set of tracks for every list, so Category sits in the same place with or without accounts.
-        'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring lg:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
+        'grid min-h-15 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring lg:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
       )}
     >
       <MerchantLogoTile transaction={transaction} />
       <div className='min-w-0'>
-        <p className='truncate text-sm'>{title}</p>
+        <p className='truncate text-body'>{title}</p>
         <p
           className='flex h-4 min-w-0 items-center gap-1 text-xs text-muted-foreground lg:hidden'
           data-testid='ledger-row-meta'
@@ -173,7 +173,7 @@ function LedgerRow({
       </div>
       <p
         className={cn(
-          'hidden min-w-0 items-center gap-2 text-sm text-muted-foreground lg:flex',
+          'hidden min-w-0 items-center gap-2 text-body-small text-muted-foreground lg:flex',
           needsOwner && 'text-warning',
         )}
         data-testid='ledger-row-category'
@@ -183,7 +183,7 @@ function LedgerRow({
       </p>
       {account ? (
         <p
-          className='hidden truncate text-sm text-muted-foreground lg:block'
+          className='hidden truncate text-body-small text-muted-foreground lg:block'
           data-testid='ledger-row-account'
         >
           {account}
@@ -191,7 +191,7 @@ function LedgerRow({
       ) : (
         <span aria-hidden='true' className='hidden lg:block' />
       )}
-      <span className='text-right text-sm whitespace-nowrap' data-testid='ledger-row-amount'>
+      <span className='text-right text-body whitespace-nowrap' data-testid='ledger-row-amount'>
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
       </span>
     </button>

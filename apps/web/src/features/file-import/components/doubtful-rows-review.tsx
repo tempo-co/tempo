@@ -170,7 +170,7 @@ export function DoubtfulRowsReview({
 
   return (
     <div className='grid grid-cols-1 gap-4'>
-      <div className='grid grid-cols-1 gap-1 text-sm text-muted-foreground'>
+      <div className='grid grid-cols-1 gap-1 text-body-small text-muted-foreground'>
         <p>Choose what each one is, then save. You can change a choice until you save it.</p>
         {synced && (
           <p>
@@ -271,7 +271,7 @@ function DoubtfulRowBlock({
       className='grid grid-cols-1 overflow-hidden rounded-md border'
       data-testid='bank-import-doubtful-row'
     >
-      <div className={cn(ROW, 'py-3')}>
+      <div className={cn(ROW, 'min-h-15 py-2')}>
         <span aria-hidden='true' className={IMPORT_TILE}>
           <FileQuestion strokeWidth={2} />
         </span>
@@ -282,7 +282,7 @@ function DoubtfulRowBlock({
         <Amount amount={fileRow.amount} currency={fileRow.currency} />
       </div>
       {saved ? (
-        <p role='status' className='border-t px-3 py-2 text-sm text-muted-foreground'>
+        <p role='status' className='border-t px-3 py-2 text-body-small text-muted-foreground'>
           {saved.decision === 'new'
             ? inTempo
               ? 'Kept both'
@@ -330,7 +330,7 @@ function DoubtfulRowBlock({
             onChange={() => onPick({decision: 'new'})}
             divided={row.candidates.length > 0}
           >
-            <span className='flex min-w-0 items-center gap-2 text-sm'>
+            <span className='flex min-w-0 items-center gap-2 text-body'>
               {inTempo ? (
                 <Files aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
               ) : (
@@ -405,7 +405,7 @@ function Choice({
 function Title({title, detail}: {title: string; detail: string}) {
   return (
     <span className='min-w-0'>
-      <span className='block text-sm wrap-anywhere'>{title}</span>
+      <span className='block text-body wrap-anywhere'>{title}</span>
       <span className='block truncate text-xs text-muted-foreground'>{detail}</span>
     </span>
   );
@@ -413,7 +413,7 @@ function Title({title, detail}: {title: string; detail: string}) {
 
 function Amount({amount, currency}: {amount: string; currency: string}) {
   return (
-    <span className='text-right text-sm'>
+    <span className='text-right text-body'>
       <CurrencyAmount amount={Number(amount)} currency={currency} />
     </span>
   );

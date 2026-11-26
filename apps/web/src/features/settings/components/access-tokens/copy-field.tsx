@@ -44,7 +44,7 @@ export function CopyField({id, label, value, copyLabel, errorMessage}: CopyField
           spellCheck={false}
           autoComplete='off'
           onFocus={(event) => event.currentTarget.select()}
-          className='min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-ellipsis text-foreground outline-none selection:bg-primary selection:text-primary-foreground'
+          className='min-w-0 flex-1 bg-transparent px-3 font-mono text-body text-ellipsis text-foreground outline-none selection:bg-primary selection:text-primary-foreground'
         />
         <Button
           variant='ghost'
@@ -60,7 +60,7 @@ export function CopyField({id, label, value, copyLabel, errorMessage}: CopyField
         </Button>
       </div>
       {copyError && (
-        <p role='alert' className='text-sm text-destructive'>
+        <p role='alert' className='text-body text-destructive'>
           {errorMessage}
         </p>
       )}

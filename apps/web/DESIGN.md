@@ -174,56 +174,61 @@ Inter is the product typeface, self-hosted as a variable font at weights 100–9
 and money use Inter; the system monospace stack is only for identifiers such as IP addresses and
 error codes.
 
-The named styles are Tailwind utilities defined in `src/index.css` (`text-page-title`,
-`text-section-title`, `text-card-title`, `text-label`, `text-caption`, `numeric`), so a change there
-reaches every use. Use them instead of rebuilding a style from size and weight classes, and don't
-introduce sizes outside this scale.
+The named styles are utilities in `src/index.css`, so a change there reaches every use; the page is
+set in body. Use them rather than size and weight classes, and add no sizes outside this scale.
 
-- **Page title** (`text-page-title`: `600`, `1.5rem`, `2rem`, `-0.025em`): one per page, including
-  error and auth pages.
-- **Section title** (`text-section-title`: `600`, `1.125rem`, `1.35`): dialog and drawer titles,
-  detail views.
-- **Card title** (`text-card-title`: `600`, `1rem`, `1.5`): card and settings-group headings, empty
-  and error states.
-- **Body** (`400`, `1rem`, `1.5`): primary copy.
-- **Body small** (`text-sm`: `400`, `0.875rem`, `1.5`): supporting descriptions, table content,
-  status rows.
-- **Label** (`text-label`: `500`, `0.75rem`, `1.333`): metadata, field labels, compact status.
-- **Caption** (`text-caption`: `0.6875rem`, `1`): bottom tab labels and chart axis ticks only, where
-  space is fixed.
-- **Numeric** (`numeric`: Inter with tabular figures): currency amounts and rates, so digits line up
-  in columns and look the same on every device.
+| Style | Utility | Value | Use |
+| --- | --- | --- | --- |
+| Page title | `text-page-title` | 700, 22px/1.2, -0.02em | One per page (error and auth pages too), and a dialog that stands in for a page |
+| Section title | `text-section-title` | 600, 16px/1.35 | Dialog and drawer titles, detail views |
+| Card title | `text-card-title` | 600, 13px/1.4 | Card and group headings, empty and error states |
+| Body | `text-body` | 400, 14px/1.5 | Primary copy: row titles and amounts, menu items, navigation, field values |
+| Body small | `text-body-small` | 400, 13px/1.5 | Muted descriptions, button and segment labels, tooltips |
+| Label | `text-label` | 500, 12px/1.33 | Metadata, field labels, table headings, compact status |
+| Caption | `text-caption` | 11px/1 | Bottom tab labels and chart axis ticks only |
+| Numeric | `numeric` | Tabular figures | Amounts and rates, so digits line up |
+
+Typed text is 16px below `md` (`text-base md:text-body`), because iOS zooms into smaller fields.
+Headline figures (a balance, a transaction's amount) are `numeric` display sizes set where drawn.
 
 ### Spacing and layout
+
+Spacing is Tailwind's 4px scale: card padding 16px (`p-4`), cards on a page 12px apart (`gap-3`),
+columns inside a card 16px apart (`gap-4`).
 
 The authenticated shell is a sticky `48px` header aligned to the ~`80rem` content column; below `md`,
 navigation moves to a fixed bottom tab bar. Settings uses a ~`40rem` reading column. From `md` up,
 the page reserves the scrollbar's gutter, so the column stays put between short and long pages and
 when a dialog locks scrolling. Every page title starts at the top of that column (Home, which has
 none, starts its content there), and an action beside a title overhangs the title's row instead of
-making it taller, so titles and the content under them don't move between pages. Spacing follows a
-4px rhythm: `8px` compact controls, `12px` control padding, `16px` related content, `24px` between
-groups, `32–48px` section breaks. Responsive behaviour is structural, not scaled: navigation becomes
-a tab bar, tables scroll horizontally (or, when a phone needs only their latest column, become rows
-that open in place into the rest), rows stay understandable without hover. Phone and coarse-pointer
-targets are at least 44px.
+making it taller, so titles and the content under them don't move between pages. Responsive
+behaviour is structural, not scaled: navigation becomes a tab bar, tables scroll horizontally (or,
+when a phone needs only their latest column, become rows that open in place into the rest), rows
+stay understandable without hover.
+
+Controls are 32px tall; phone and coarse-pointer targets are at least 44px
+(`max-sm:min-h-11 pointer-coarse:min-h-11`, with `min-w-11` where they can be narrow).
 
 The financial record is the subject: no decorative headers, tile mosaics or hero space.
 
 ### Shape
 
-Corners are soft: `--radius` is `8px` and `--card-radius` is `12px`. Controls (buttons, inputs,
-selects, toggles, menus, tooltips) use `rounded-md` (6px), items inside a menu or popover
-`rounded-sm` (4px), and surfaces (cards, dialogs, the top of phone drawers) `rounded-card` (12px). A
-joined segmented control rounds its outer group and clips square segments inside it. Pills remain
-reserved for badges, compact statuses and avatars. Use 1px borders where a boundary improves
-scanning. Keep corners consistent within a component family.
+Corners are small: `--radius` is `8px`.
+
+| Utility | Radius | Use |
+| --- | --- | --- |
+| `rounded-lg` | 8px | Cards, grouped lists, dialogs, drawer tops, toasts |
+| `rounded-md` | 6px | Controls, menus, popovers, tooltips, alerts |
+| `rounded-sm` | 4px | Segments, menu items, checkboxes |
+| `rounded-full` | | Badges, avatars, leading tiles |
+
+Borders are 1px hairlines (`border`); a control's boundary uses `input`.
 
 ### Elevation
 
-Flat tonal layering: page, surfaces, sunk areas, borders. Cards keep `shadow-xs`; overlays may
-lift. Modal backdrops use `scrim` (60% light, 85% dark), never pure black. No glow, glass, backdrop
-blur or nested shadows.
+Flat tonal layering: page, surfaces, sunk areas, hairlines. Cards have no shadow; overlays and
+chart tips may lift (`shadow-sm` to `shadow-lg`). Modal backdrops use `scrim` (60% light, 85% dark).
+No glow, glass, backdrop blur or nested shadows.
 
 ### Motion
 
@@ -238,58 +243,98 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
 
 ## Components
 
-Shared parts are shadcn parts in `src/components/ui`, restyled only through the utilities above. Own
-components exist only for domain parts.
-
-### Buttons
-
-Compact and action-oriented; default ~40px tall (36 small / 44 large), 16px icons with an 8px gap,
-specific labels ("Connect a bank", "Re-authorize"). Primary is Midnight with a white label on light,
-and light Midnight with a `#14161A` label on dark. Outline uses the `input` edge; ghost uses the
-`accent` fill only on hover, focus and active. Destructive buttons keep `destructive-foreground` on
-the fill; never override the label colour. Disabled and pending states keep the label's meaning and
-pair motion with text ("Connecting...").
+Shared parts are shadcn parts in `src/components/ui`, restyled only through the utilities and sizes
+above; own components exist only for domain parts. A part has only the variants listed here.
 
 **Focus.** Every interactive control shows the same focus indicator on `:focus-visible`: a solid 2px
 outline in `ring`, offset 2px (`outline-2 outline-offset-2 outline-ring`). Where the control fills
-its container (nav tabs, rows), the outline sits inside instead (`-outline-offset-2`). Use outlines,
-not box-shadow rings, for focus; they survive forced-colours mode. A box-shadow ring in `primary`
-marks a selected value (the theme picker), never focus.
+its container (nav tabs, rows, joined segments), the outline sits inside instead
+(`-outline-offset-2`). Use outlines, not box-shadow rings, for focus; they survive forced-colours
+mode. A box-shadow ring in `primary` marks a selected value (the theme picker), never focus.
+
+### Buttons
+
+`Button`: `text-body-small` medium labels, control radius, 16px icons with an 8px gap, specific
+labels ("Connect a bank", "Re-authorize"). Every size grows to 44px on phones and coarse pointers.
+
+| Size | Height | Use |
+| --- | --- | --- |
+| `default` | 32px, 12px sides | Actions in forms, dialogs, cards and page headers |
+| `sm` | 28px, 10px sides | Row actions, small actions inside a section, text actions |
+| `icon` | 32px square | An icon-only action, always with an `aria-label` |
+
+| Variant | Use |
+| --- | --- |
+| `default` | The view's one primary action, in Midnight |
+| `outline` | Secondary, row and empty-state actions; the `input` edge |
+| `secondary` | A quiet filled action beside a primary one |
+| `ghost` | Toolbar and dismiss actions; `accent` only on hover, focus and active |
+| `link` | An inline action inside text |
+| `destructive` | Confirming a destructive action; never override its label colour |
+
+`TextAction` (`src/components/shared/text-action.tsx`) is the `sm` ghost button in `primary` text
+for "All", "Show fewer" and "Open in Transactions". Pending states pair motion with text
+("Connecting...").
+
+### Toggles and segmented controls
+
+`ToggleGroup` and `Toggle`, `text-body-small` labels; sizes `default` 32px and `sm` 28px (44px on
+phones and coarse pointers); variants `default` and `outline`. Separate segments (interval, bills or
+income) are `outline` `sm` with segment corners and `secondary` on the chosen one. A joined control
+(the span switch) rounds its outer group and clips square segments, the chosen one in `foreground`.
 
 ### Cards and grouped surfaces
 
-Cards group information that belongs together; a bank connection or a transaction detail reads as
-one record. `Card` gives `rounded-card`, `bg-card`, a hairline and `shadow-xs` but no padding; card
-content uses `p-5 sm:p-6`, with a `text-card-title` heading. Avoid statistic-tile collections.
+`Card` gives `rounded-lg`, `bg-card` and a hairline, no shadow and no padding; content uses `p-4`
+with a `text-card-title` heading, and a card holding a table insets its header and first column
+16px instead. Grouped lists (settings, bank accounts, a day's transactions) are one `rounded-lg`
+bordered list of `divide-y` rows. A card is one record; never nest cards or build statistic-tile
+collections.
 
 ### Inputs and fields
 
-~40px high, page background, a 1px `input` edge, control radius, `8px 12px` padding. Focus uses the
-shared outline; errors pair the destructive colour with a plain-language message on the field.
+`Input` and `SelectTrigger` match the control height (32px, 44px on phones and coarse pointers):
+page background, an `input` edge, control radius, 12px sides. `Label` is `text-label`. Errors pair
+the destructive colour with a plain-language message on the field (`FormMessage`). `Checkbox` is
+16px with segment corners.
 
 ### Tables and transaction rows
 
-Quiet headers, dividers only for row scanning, right-aligned `numeric` amounts. Long descriptions
-truncate where the row opens a view that shows them in full; a selection row in a dialog wraps its
-description instead, so similar names can be told apart. Rows that navigate show a keyboard-visible focus state.
+Quiet `text-label` headers, dividers only for row scanning, right-aligned `numeric` amounts. Long
+descriptions truncate where the row opens a view that shows them in full; a selection row in a
+dialog wraps its description instead, so similar names can be told apart. Rows that navigate show a
+keyboard-visible focus state.
 
 Every transaction and recurring row starts with a round `36px` leading tile (`transaction-tile`:
 the sunk field, a muted icon and a hairline edge): the merchant's monochrome alpha logo when
 available, otherwise the category glyph (the activity glyph for own transfers and currency
-exchanges). Account rows, import surfaces and empty states lead with the same tile. Rows stay `60px`
-tall, plus any `1px` divider; a wrapping selection row grows only for its description. The
-transaction inspector keeps its `40px` tile. Logo loading, tinting and fallbacks:
-`docs/frontend-conventions.md`. There are no per-merchant exceptions. Logos are display only: names,
-identification and sourcing stay unchanged.
+exchanges). Account rows, import surfaces and empty states lead with the same tile. The row is the
+shared `60px` row (`min-h-15`, `px-3 py-2`): a `text-body` title over a muted `text-xs` line, plus
+any `1px` divider; a wrapping selection row grows only for its description. The transaction
+inspector keeps its `40px` tile. Logo loading, tinting and fallbacks: `docs/frontend-conventions.md`.
+There are no per-merchant exceptions. Logos are display only: names, identification and sourcing
+stay unchanged.
 
 Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate in both themes.
+
+### Overlays
+
+`ResponsiveDialog` is a `Dialog` on desktop and a bottom `Drawer` on phones: `rounded-lg` on the
+page background, a `text-section-title` title over a muted `text-body-small` description.
+`DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
+radius; items are `text-body` with segment corners, tooltips `text-body-small`.
+
+### Badges
+
+`Badge`: a `text-xs` semibold pill beside a name. `secondary` for neutral facts (a price range),
+`outline` tinted with a status colour for attention (late), `default` and `destructive` filled.
 
 ### Alerts
 
 An inline message about the thing it sits in (a refused import, a bank to re-authorize, a failed
 save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text: 1px
-border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-sm` medium title, a muted
-`text-sm` description, actions under the text on phones and to the right from `sm` up.
+border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-body` medium title, a muted
+`text-body-small` description, actions under the text on phones and to the right from `sm` up.
 
 - **Variants.** `default` (surface field, muted glyph) explains or offers a next step; `warning`
   (warning edge at 40%, field at 5%, warning glyph) is attention that is not a failure;
@@ -303,10 +348,14 @@ border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-sm` m
 
 ### Toasts
 
-Sonner, following the in-app theme. A `popover` surface in `text-sm` with a medium title, a muted
-description and the card radius; status toasts take that status's `-muted` field and colour. Action
-and cancel buttons are `rounded-md` `text-sm` medium, 36px tall with the 44px phone target; actions
-are outlined in the toast's own colour.
+Sonner, following the in-app theme: a `popover` surface in `text-body` with a medium title, a muted
+description and `rounded-lg`; status toasts take that status's `-muted` field and colour. Action and
+cancel buttons are `text-body-small` medium, 32px tall (44px on phones), actions outlined in the
+toast's colour.
+
+### Skeletons
+
+`Skeleton`: a `muted` block with the control radius, sized as what it stands in for (Patterns).
 
 ## Patterns
 
@@ -332,8 +381,9 @@ optional detail line and the next action. Never centre the state or float a larg
   names the state (`CloudOff` for a server failure, `WifiOff` offline, `SearchX` no match,
   `FileQuestion` not found, the feature's own glyph for nothing yet), never the action; the rotate
   glyph belongs on Try again.
-- **Sizes.** `page` replaces a list or page and is its own card, with a `text-card-title` heading.
-  `section` sits inside a card or dialog without a second frame, with a `text-sm` medium title and
+- **Sizes.** `page` replaces a list or page and is its own card (16px padding), with a
+  `text-card-title` heading.
+  `section` sits inside a card or dialog without a second frame, with a `text-body` medium title and
   small buttons, and keeps the section's loaded height. A one-line gap inside a list ("No recurring
   bills found yet.") stays plain muted text with no tile.
 - **Detail.** A failed load adds one monospace `text-label` line with the status code (or "No
@@ -350,22 +400,24 @@ optional detail line and the next action. Never centre the state or float a larg
 ### Navigation
 
 Navigation is a quiet index with no breadcrumbs; the page title and the active item say where you
-are. From `md` up the header carries the logo, Home, Connections and Transactions with a `primary`
-underline on the active item, and an initials account menu (name, email, Settings, Log out) on the
+are. From `md` up the header carries the logo, Home, Connections and Transactions in `text-body`
+with a `primary` underline on the active item, and an initials account menu (name, email, Settings, Log out) on the
 right. Below `md` a four-tab bottom bar (Home, Connections, Transactions, Settings) keeps every
 destination one tap away: icon over label, active tab in `primary` with a top rule and heavier
 label, padded for the safe area. Toasts sit above it.
 
 Settings is one page titled "Settings" with text section tabs (Account, Security, Integrations,
 Appearance) on a bottom rule inside the `40rem` column: all four fit narrow phones, sharing the full
-width with 48px targets; desktop tabs stay content-sized. The active section gets the same `primary`
+width with 48px targets in `text-body` (`text-body-small` below 360px); desktop tabs stay
+content-sized. The active section gets the same `primary`
 underline as the header; no icons, no side column, no segmented control.
 
 ### Settings lists and forms
 
-Under the tabs, settings are grouped rows: a small group heading, then one bordered list of
-`divide-y` rows (label, muted value, small outline action of a shared minimum width), the same
-pattern as bank account lists. Row actions stay visible without hover. Edits open a responsive
+Under the tabs, settings are grouped rows: a `text-card-title` group heading, then one bordered
+list of `divide-y` rows at least 64px tall with 16px sides (a `text-body` medium label over a muted
+`text-body-small` value, and a small outline action of a shared minimum width), the same pattern as
+bank account lists. Groups sit 12px apart. Row actions stay visible without hover. Edits open a responsive
 overlay with an explicit Save: a bottom drawer on phones and a dialog on desktop. Session and
 access-token details use the same responsive presentation. Account deletion is its own one-row group
 with an outline button; destructive actions use the shared destructive variant. Selected values (the

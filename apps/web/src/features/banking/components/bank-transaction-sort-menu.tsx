@@ -88,7 +88,7 @@ export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransacti
                   select(id);
                   setOpen(false);
                 }}
-                className='flex min-h-14 w-full items-center justify-between px-2 text-left text-sm'
+                className='flex min-h-14 w-full items-center justify-between px-2 text-left text-body'
               >
                 {SORTS[id].label}
                 {id === current && <Check aria-hidden='true' className='size-4 text-primary' />}

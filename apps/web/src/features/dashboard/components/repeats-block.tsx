@@ -29,7 +29,7 @@ const ROWS = 4;
 const RESERVE = '@[60rem]:min-h-[21.8125rem]';
 
 const ROW =
-  'grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-1.5 text-left text-sm';
+  'grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-1.5 text-left text-body';
 
 /**
  * What repeats beside the history: bills and income a month, how far this month's bills are paid, late or

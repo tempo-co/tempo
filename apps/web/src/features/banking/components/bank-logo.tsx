@@ -46,7 +46,7 @@ export function BankLogo({bank, className, imageClassName, testId = 'bank-logo'}
     <span
       ref={slot}
       className={cn(
-        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-bank-logo-plate-border bg-bank-logo-plate text-sm font-semibold text-bank-logo-plate-foreground',
+        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-bank-logo-plate-border bg-bank-logo-plate text-body font-semibold text-bank-logo-plate-foreground',
         className,
       )}
       aria-hidden='true'

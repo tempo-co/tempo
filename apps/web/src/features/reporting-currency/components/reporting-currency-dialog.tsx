@@ -84,7 +84,7 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
             onSelect={setSelected}
             disabled={isPending}
           />
-          <p className='text-sm text-muted-foreground not-empty:pt-3' aria-live='polite'>
+          <p className='text-body-small text-muted-foreground not-empty:pt-3' aria-live='polite'>
             {selected === null
               ? 'Choose a currency before saving.'
               : changes

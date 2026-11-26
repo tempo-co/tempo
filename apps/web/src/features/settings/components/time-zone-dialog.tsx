@@ -20,7 +20,7 @@ import {useUpdateTimeZone} from '../api/use-patch-account';
 import {matchesTimeZone, timeZoneOptions} from '../utils/time-zones';
 
 const ROW =
-  'grid min-h-12 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60';
+  'grid min-h-12 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-2 text-left text-body hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60';
 
 type TimeZoneDialogProps = {
   currentTimeZone: Account['timeZone'];
@@ -110,7 +110,7 @@ export function TimeZoneDialog({currentTimeZone}: TimeZoneDialogProps) {
           </label>
           <ScrollArea type='auto' className='-mx-2 min-h-0 flex-1'>
             {shown.length === 0 ? (
-              <p className='px-4 py-8 text-center text-sm text-muted-foreground'>
+              <p className='px-4 py-8 text-center text-body-small text-muted-foreground'>
                 No time zone called “{query}”
               </p>
             ) : (

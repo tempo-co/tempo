@@ -69,7 +69,7 @@ export function RecurringSeriesDetail({
         <SeriesTile series={series} className='h-10 w-10' />
         <div className='min-w-0 flex-1'>
           <h3 className='text-section-title break-words'>{series.name}</h3>
-          <p className='mt-0.5 text-sm text-muted-foreground'>
+          <p className='mt-0.5 text-body-small text-muted-foreground'>
             {RECURRING_CADENCE_LABELS[series.cadence]}
             {series.hidden && ' · hidden'}
             {series.status === 'ENDED' && ' · ended'}
@@ -88,7 +88,7 @@ export function RecurringSeriesDetail({
 
       <Badges series={series} />
 
-      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
+      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4'>
         <Fact
           label={
             isPast(series)
@@ -131,7 +131,7 @@ export function RecurringSeriesDetail({
       <PaymentHistory series={series} />
 
       {continuation && (
-        <p className='flex items-start gap-2 text-sm text-muted-foreground'>
+        <p className='flex items-start gap-2 text-body-small text-muted-foreground'>
           {continuation.linked ? (
             <Link2 aria-hidden className='mt-0.5 size-4 shrink-0' />
           ) : (
@@ -217,7 +217,7 @@ function Fact({label, value, numeric = false}: {label: string; value: string; nu
   return (
     <div data-testid='recurring-fact' className='min-w-0 bg-card px-3 py-2.5'>
       <dt className='truncate text-xs text-muted-foreground'>{label}</dt>
-      <dd className={cn('mt-0.5 truncate text-sm font-medium', numeric && 'numeric')}>{value}</dd>
+      <dd className={cn('mt-0.5 truncate text-body font-medium', numeric && 'numeric')}>{value}</dd>
     </div>
   );
 }

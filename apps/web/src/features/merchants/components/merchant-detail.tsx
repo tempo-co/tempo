@@ -52,7 +52,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
         <div className='min-w-0'>
           <h3 className='text-section-title wrap-anywhere'>{merchant.name}</h3>
           {merchant.variants.length > 1 && (
-            <p className='mt-0.5 text-sm text-muted-foreground'>
+            <p className='mt-0.5 text-body-small text-muted-foreground'>
               {merchant.variants.length} names grouped by brand
             </p>
           )}
@@ -82,7 +82,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
             </div>
           )}
         </dl>
-        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
+        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4'>
           <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} numeric />
           <Fact
             label='Average payment'
@@ -129,7 +129,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
             {merchant.variants.map((variant) => (
               <li
                 key={variant.key}
-                className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-sm'
+                className='grid min-h-15 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-body'
               >
                 <span className='min-w-0'>
                   <span className='block wrap-anywhere'>{variant.name}</span>
@@ -156,7 +156,7 @@ function Fact({label, value, numeric = false}: {label: string; value: string; nu
   return (
     <div data-testid='merchant-fact' className='min-w-0 bg-card px-3 py-2.5'>
       <dt className='truncate text-xs text-muted-foreground'>{label}</dt>
-      <dd className={cn('mt-0.5 truncate text-sm font-medium', numeric && 'numeric')}>{value}</dd>
+      <dd className={cn('mt-0.5 truncate text-body font-medium', numeric && 'numeric')}>{value}</dd>
     </div>
   );
 }
@@ -199,7 +199,7 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
       ) : isPending || !loaded ? (
         <Skeleton className='h-56' role='img' aria-label='Loading spending over time' />
       ) : !hasActivity ? (
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           Nothing in the last {shown.length} {interval}s.
         </p>
       ) : (
@@ -338,7 +338,7 @@ function PeriodsChart({
       <div className='sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:max-w-full focus-within:overflow-x-auto'>
         <table
           aria-label={`Spending per ${interval}`}
-          className='w-full text-right text-sm [&_td]:px-2 [&_td]:py-1 [&_td]:numeric [&_th]:px-2 [&_th]:py-2'
+          className='w-full text-right text-body [&_td]:px-2 [&_td]:py-1 [&_td]:numeric [&_th]:px-2 [&_th]:py-2'
         >
           <thead>
             <tr>

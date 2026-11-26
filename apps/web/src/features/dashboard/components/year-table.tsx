@@ -56,7 +56,7 @@ export function YearTable({overview}: {overview: Overview}) {
           as wide as all the figures together. Narrower than that, it scrolls.
         */}
         <table
-          className='w-full min-w-(--narrow) table-fixed text-sm min-[34rem]:min-w-(--wide)'
+          className='w-full min-w-(--narrow) table-fixed text-body min-[34rem]:min-w-(--wide)'
           style={
             {
               '--narrow': `calc(${YEAR_MIN} + ${widths.kept} + ${widths.balance})`,
@@ -126,7 +126,7 @@ export function YearTableSkeleton() {
       className='min-w-0 overflow-hidden'
     >
       <LoadingLabel>Loading year by year</LoadingLabel>
-      <table className='w-full table-fixed text-sm'>
+      <table className='w-full table-fixed text-body'>
         <YearTableHead />
         <tbody aria-hidden='true'>
           {year}
@@ -169,7 +169,7 @@ function YearTableHead({widths}: {widths?: {kept: string; balance: string}}) {
           Kept
         </th>
         <th
-          className={cn('pr-4 pl-2 text-right sm:pr-5 sm:pl-3', figure)}
+          className={cn('pr-4 pl-2 text-right sm:pl-3', figure)}
           style={fitStyle(widths?.balance)}
         >
           Balance
@@ -339,7 +339,7 @@ function YearLine({
           </span>
         )}
       </td>
-      <td className='py-2 pr-4 pl-2 text-right sm:pr-5 sm:pl-3'>
+      <td className='py-2 pr-4 pl-2 text-right sm:pl-3'>
         <span className='block numeric whitespace-nowrap'>{wholeCents(row.end, currency)}</span>
         {change !== null && (
           <span

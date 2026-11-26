@@ -39,7 +39,7 @@ function SignUp() {
             </Button>
           </p>
         </div>
-        <p className='pt-1 text-center text-sm text-muted-foreground'>
+        <p className='pt-1 text-center text-body-small text-muted-foreground'>
           Already have an account?{' '}
           <Button variant='link' asChild className='h-fit px-1 py-0'>
             <Link to='/login' className='text-foreground' data-testid='login-link'>

@@ -512,7 +512,7 @@ test.describe('bank connections', () => {
       boxOf(connectionCard),
       boxOf(accountRow),
     ]);
-    expect(headingBox.height).toBe(32);
+    expect(headingBox.height).toBe(26);
     expect(connectButtonBox.x + connectButtonBox.width).toBeLessThanOrEqual(393 - 16);
     expect(cardBox.x).toBe(16);
     expect(cardBox.x + cardBox.width).toBe(393 - 16);

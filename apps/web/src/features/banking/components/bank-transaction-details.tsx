@@ -56,7 +56,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
               {resolveBankTransactionAccountLabel(transaction)}
             </p>
           </div>
-          <p className='max-w-[45%] text-right text-sm wrap-anywhere text-muted-foreground'>
+          <p className='max-w-[45%] text-right text-body-small wrap-anywhere text-muted-foreground'>
             {transaction.bankName}
           </p>
         </section>
@@ -81,7 +81,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
           <div id={bankDetailsId} className='space-y-5 pt-3 pb-4'>
             <div>
               <p className='text-label text-muted-foreground'>Original description</p>
-              <p className='mt-2 text-sm leading-relaxed wrap-anywhere'>
+              <p className='mt-2 text-body leading-relaxed wrap-anywhere'>
                 {transaction.description || 'Not provided by your bank'}
               </p>
             </div>
@@ -153,7 +153,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
               />
             </dl>
             {transaction.ownTransfer && (
-              <p className='text-sm text-muted-foreground'>
+              <p className='text-body-small text-muted-foreground'>
                 {formatOwnTransferEvidence(transaction.ownTransfer.evidence)}
               </p>
             )}
@@ -170,7 +170,7 @@ function Detail({label, value}: {label: string; value: string | null}) {
   return (
     <div className='min-w-0'>
       <dt className='text-label text-muted-foreground'>{label}</dt>
-      <dd className='mt-1 text-sm wrap-anywhere'>{value}</dd>
+      <dd className='mt-1 text-body wrap-anywhere'>{value}</dd>
     </div>
   );
 }
@@ -225,7 +225,7 @@ function Movement({
       />
     </Link>
   ) : (
-    <div className='min-w-0 py-3 text-sm text-muted-foreground sm:row-span-4'>
+    <div className='min-w-0 py-3 text-body-small text-muted-foreground sm:row-span-4'>
       {isExchange ? 'Other side not matched' : 'Other side not in your connected accounts'}
     </div>
   );
@@ -244,11 +244,11 @@ function Movement({
         {incoming ? own : other}
       </div>
       {isExchange && (
-        <p className='mt-2 text-sm text-muted-foreground'>
+        <p className='mt-2 text-body-small text-muted-foreground'>
           {formatBankTransactionExchangeRate(transaction) ?? 'Exchange rate unavailable'}
         </p>
       )}
-      <p className='mt-4 flex items-start gap-2 text-sm text-muted-foreground'>
+      <p className='mt-4 flex items-start gap-2 text-body-small text-muted-foreground'>
         <Check className='mt-0.5 size-4 shrink-0' aria-hidden='true' />
         {transaction.cashFlowTreatment === 'INTERNAL'
           ? 'Excluded from income and spending'
@@ -298,14 +298,14 @@ function MovementAccount({
       {bank !== name && (
         <p
           data-testid='movement-bank'
-          className='col-start-2 row-start-3 text-sm wrap-anywhere text-muted-foreground'
+          className='col-start-2 row-start-3 text-body-small wrap-anywhere text-muted-foreground'
         >
           {bank}
         </p>
       )}
       <p
         data-testid='movement-amount'
-        className='col-start-2 row-start-4 min-w-0 numeric text-sm font-medium wrap-anywhere [&>span]:whitespace-normal'
+        className='col-start-2 row-start-4 min-w-0 numeric text-body font-medium wrap-anywhere [&>span]:whitespace-normal'
       >
         <CurrencyAmount amount={Number(account.amount)} currency={account.currency} />
       </p>
@@ -320,7 +320,7 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
   const historyId = `recurring-history-${transaction.id}`;
   if (isError)
     return (
-      <div className='flex items-center gap-2 py-2 text-sm text-muted-foreground'>
+      <div className='flex items-center gap-2 py-2 text-body-small text-muted-foreground'>
         <span>Recurring details unavailable.</span>
         <Button variant='ghost' size='sm' onClick={() => void refetch()}>
           Try again
@@ -344,7 +344,7 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
         />
         Recurring payment
       </Button>
-      <p data-testid='recurring-summary' className='mb-2 text-sm text-muted-foreground'>
+      <p data-testid='recurring-summary' className='mb-2 text-body-small text-muted-foreground'>
         {RECURRING_CADENCE_LABELS[recurring.cadence]} ·{' '}
         {recurring.status === 'ENDED'
           ? 'Ended'
@@ -359,7 +359,7 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
               const content = (
                 <>
                   <MerchantLogoTile transaction={transaction} className='size-9' />
-                  <span className='min-w-0 flex-1 text-sm'>
+                  <span className='min-w-0 flex-1 text-body'>
                     <span className='block'>
                       {formatBankTransactionDate(payment.transactionDate || payment.bookingDate)}
                     </span>
@@ -369,13 +369,13 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
                       </span>
                     )}
                   </span>
-                  <span className='numeric text-sm'>
+                  <span className='numeric text-body'>
                     <CurrencyAmount amount={Number(payment.amount)} currency={payment.currency} />
                   </span>
                 </>
               );
               // Dividers stay at the content edge; a link's hover fill reaches past it like the Recurring dialog's payments.
-              const rowClassName = 'flex h-[60px] items-center gap-3';
+              const rowClassName = 'flex h-15 items-center gap-3';
               return (
                 <li key={payment.id} className='border-t'>
                   {current ? (
@@ -441,7 +441,7 @@ function TransferSetting({transaction}: {transaction: BankTransaction}) {
       </Button>
       {expanded && (
         <div id={`transfer-settings-${transaction.id}`} className='space-y-3 pt-3 pb-2'>
-          <p className='text-sm text-muted-foreground'>
+          <p className='text-body-small text-muted-foreground'>
             {own
               ? 'This payment is recognised as movement between your own accounts.'
               : 'Mark this as an own transfer to exclude it from income and spending.'}

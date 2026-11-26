@@ -34,9 +34,9 @@ export function AccessTokenCard({token}: {token: PersonalAccessToken}) {
               data-testid='access-token-icon'
             />
             <span className='min-w-0 flex-1'>
-              <span className='block truncate text-sm font-medium'>{token.name}</span>
+              <span className='block truncate text-body font-medium'>{token.name}</span>
               <span
-                className='mt-0.5 block truncate text-sm text-muted-foreground'
+                className='mt-0.5 block truncate text-body-small text-muted-foreground'
                 data-testid='access-token-usage'
               >
                 {token.lastUsedAt ? `Last used ${lastUsed(token.lastUsedAt)}` : 'Never used'}
@@ -51,7 +51,7 @@ export function AccessTokenCard({token}: {token: PersonalAccessToken}) {
           <ResponsiveDialogTitle className='wrap-anywhere'>{token.name}</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <dl className='divide-y text-sm'>
+          <dl className='divide-y text-body'>
             <TokenDetail label='Token prefix'>
               <span className='font-mono'>{token.prefix}…</span>
             </TokenDetail>

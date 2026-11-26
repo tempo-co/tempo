@@ -76,7 +76,7 @@ export function HeatTable({
       <div className='overflow-x-auto pb-2 max-sm:hidden'>
         {/* Fixed columns, so the two tables' years line up one above the other. */}
         <table
-          className='w-full table-fixed text-sm'
+          className='w-full table-fixed text-body'
           style={{minWidth: `calc(16.5rem + ${years.length} * ${columnWidth})`}}
         >
           <colgroup>
@@ -89,7 +89,7 @@ export function HeatTable({
           <thead>
             {/* Each header has its column's padding, so headings and figures share one edge. */}
             <tr className='text-label text-muted-foreground'>
-              <th className='sticky left-0 z-[1] bg-card pr-2 pb-2 pl-5 text-left align-top font-medium'>
+              <th className='sticky left-0 z-[1] bg-card pr-2 pb-2 pl-4 text-left align-top font-medium'>
                 {nameHeading(kind)}
               </th>
               <th className='pr-3 pb-2 pl-2 text-right align-top font-normal'>
@@ -117,7 +117,7 @@ export function HeatTable({
                 key={row.key}
                 className={cn(row.role === 'total' && 'border-t text-muted-foreground')}
               >
-                <th scope='row' className='sticky left-0 z-[1] bg-card pl-5 text-left font-normal'>
+                <th scope='row' className='sticky left-0 z-[1] bg-card pl-4 text-left font-normal'>
                   {row.role === 'more' ? (
                     <span className='flex min-h-10 items-center'>
                       <TextAction onClick={() => setAll(true)} className='-ml-2'>
@@ -144,7 +144,7 @@ export function HeatTable({
             ))}
             {fewer && (
               <tr>
-                <td colSpan={2} className='sticky left-0 z-[1] bg-card pl-5'>
+                <td colSpan={2} className='sticky left-0 z-[1] bg-card pl-4'>
                   {fewer}
                 </td>
               </tr>
@@ -169,9 +169,9 @@ const nameHeading = (kind: 'category' | 'source') => (kind === 'category' ? 'Cat
 /** A table's title and what its figures are, loaded or loading. */
 function HeatTableHeader({title}: {title: string}) {
   return (
-    <header className='px-5 pt-5 pb-3'>
+    <header className='px-4 pt-4 pb-3'>
       <h2 className='text-card-title'>{title}</h2>
-      <p className='text-sm text-muted-foreground'>A month, on average, in each year</p>
+      <p className='text-body-small text-muted-foreground'>A month, on average, in each year</p>
     </header>
   );
 }
@@ -186,13 +186,13 @@ export function HeatTableSkeleton({title, kind}: {title: string; kind: 'category
       <LoadingLabel>{`Loading ${title.toLowerCase()}`}</LoadingLabel>
       <HeatTableHeader title={title} />
       <div aria-hidden='true' className='pb-2'>
-        <p className='border-b pr-4 pb-2 pl-5 text-label font-medium text-muted-foreground'>
+        <p className='border-b pr-4 pb-2 pl-4 text-label font-medium text-muted-foreground'>
           {nameHeading(kind)}
         </p>
         {Array.from({length: SKELETON_ROWS}, (_, index) => (
           <div
             key={index}
-            className='flex min-h-11 items-center gap-2 border-b border-border/60 pr-4 pl-5 text-sm last:border-b-0'
+            className='flex min-h-11 items-center gap-2 border-b border-border/60 pr-4 pl-4 text-body last:border-b-0'
           >
             <Bone className='size-5' />
             <TextBone className='w-[8em]' />
@@ -362,7 +362,7 @@ function PhoneRows({
               <li
                 key={row.key}
                 style={columns}
-                className={cn(line, 'border-b border-border/60 py-1.5 pr-4 pl-8 text-sm')}
+                className={cn(line, 'border-b border-border/60 py-1.5 pr-4 pl-8 text-body')}
               >
                 <span className='flex min-w-0 items-center gap-2'>
                   <CategoryIconSpacer />
@@ -388,7 +388,7 @@ function PhoneRows({
                 style={columns}
                 className={cn(
                   line,
-                  'relative min-h-11 w-full py-1.5 pr-4 pl-8 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                  'relative min-h-11 w-full py-1.5 pr-4 pl-8 text-left text-body focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
                   expanded && 'bg-accent/40',
                 )}
               >
@@ -431,7 +431,7 @@ function PhoneRows({
                             <YearLabel column={years[index]} />
                           </span>
                         }
-                        className='flex min-h-11 justify-between gap-2 px-2 text-sm'
+                        className='flex min-h-11 justify-between gap-2 px-2 text-body'
                       />
                     </li>
                   ))}

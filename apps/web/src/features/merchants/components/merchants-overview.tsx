@@ -61,7 +61,7 @@ export function MerchantsOverview({
         maxLength={MERCHANT_SEARCH_MAX_LENGTH}
         placeholder='Search merchants and people'
         aria-label='Search merchants and people'
-        className='h-12 text-base sm:h-9 sm:text-sm'
+        className='h-12 text-base sm:h-8 sm:text-body'
       />
       {search ? (
         <AllMerchants search={search} onSelect={onSelect} />
@@ -133,7 +133,7 @@ function Ranking({
       ) : isPending || !loaded ? (
         <Skeleton className='h-72' role='img' aria-label='Loading top merchants' />
       ) : loaded.merchants.length === 0 ? (
-        <p className='text-sm text-muted-foreground'>No spending this {interval}.</p>
+        <p className='text-body-small text-muted-foreground'>No spending this {interval}.</p>
       ) : (
         <ol className='-mx-3 divide-y divide-border/60'>
           {loaded.merchants.map((merchant) => {
@@ -215,7 +215,7 @@ function AllMerchants({
           onRetry={refetch}
         />
       ) : merchants.length === 0 ? (
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           {search ? 'No merchant or person matches that name.' : 'No merchants yet.'}
         </p>
       ) : (

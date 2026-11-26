@@ -86,7 +86,7 @@ function Badge({badge, className}: {badge: NavBadge; className?: string}) {
     <span
       aria-hidden='true'
       className={cn(
-        'grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-primary px-1 numeric text-[0.6875rem] leading-none font-semibold text-primary-foreground',
+        'grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground',
         className,
       )}
     >
@@ -122,7 +122,7 @@ export function AppTopNav() {
             aria-current={active ? 'page' : undefined}
             aria-label={badge ? `${item.label}, ${badge.label}` : undefined}
             className={cn(
-              'relative flex h-12 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+              'relative flex h-12 items-center gap-2 px-3 text-body text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               active &&
                 'font-medium text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary',
             )}
@@ -212,7 +212,7 @@ export function AccountMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' sideOffset={8} className='w-60 max-w-[calc(100vw-2rem)]'>
         <DropdownMenuLabel className='grid font-normal'>
-          <span className='truncate text-sm font-semibold'>{currentAccount.name}</span>
+          <span className='truncate text-body font-semibold'>{currentAccount.name}</span>
           <span className='truncate text-xs text-muted-foreground'>{currentAccount.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

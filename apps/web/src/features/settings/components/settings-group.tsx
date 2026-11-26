@@ -20,7 +20,7 @@ export function SettingsGroup({id, title, description, action, children}: Settin
           </h2>
           {action && <div className='shrink-0'>{action}</div>}
         </div>
-        {description && <p className='mt-1 text-sm text-muted-foreground'>{description}</p>}
+        {description && <p className='mt-1 text-body-small text-muted-foreground'>{description}</p>}
       </div>
       {children}
     </section>
@@ -29,7 +29,7 @@ export function SettingsGroup({id, title, description, action, children}: Settin
 
 /** Rows of one group share a single bordered surface, the same pattern as bank account lists. */
 export function SettingsList({children}: {children: ReactNode}) {
-  return <div className='divide-y overflow-hidden rounded-card border bg-card'>{children}</div>;
+  return <div className='divide-y overflow-hidden rounded-lg border bg-card'>{children}</div>;
 }
 
 type SettingsRowProps = {
@@ -42,8 +42,10 @@ export function SettingsRow({label, value, action}: SettingsRowProps) {
   return (
     <div className='flex min-h-16 items-center justify-between gap-4 px-4 py-3'>
       <div className='min-w-0'>
-        <p className='text-sm font-medium'>{label}</p>
-        {value && <p className='mt-0.5 text-sm wrap-break-word text-muted-foreground'>{value}</p>}
+        <p className='text-body font-medium'>{label}</p>
+        {value && (
+          <p className='mt-0.5 text-body-small wrap-break-word text-muted-foreground'>{value}</p>
+        )}
       </div>
       {action && <div className='shrink-0'>{action}</div>}
     </div>

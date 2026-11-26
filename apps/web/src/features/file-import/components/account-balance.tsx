@@ -112,7 +112,7 @@ function BalanceForm({
       />
       <span
         id={`${id}-currency`}
-        className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground peer-disabled:opacity-50'
+        className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-body-small text-muted-foreground peer-disabled:opacity-50'
       >
         {currency}
       </span>
@@ -121,7 +121,7 @@ function BalanceForm({
   const fields = (
     <div className='grid grid-cols-1 gap-2'>
       <div className='grid grid-cols-1 gap-0.5'>
-        <label htmlFor={`${id}-amount`} className='text-sm font-medium wrap-anywhere'>
+        <label htmlFor={`${id}-amount`} className='text-body font-medium wrap-anywhere'>
           {label}
         </label>
         <p id={`${id}-help`} className='text-xs text-muted-foreground'>
@@ -213,8 +213,8 @@ export function ImportBalancePrompts({summary}: {summary: BankImportSummary}) {
           />
         ) : (
           <div key={account.id} className='grid grid-cols-1 gap-1'>
-            <p className='text-sm font-medium wrap-anywhere'>{balanceLabel(name)}</p>
-            <p role='status' className='flex items-center gap-2 text-sm'>
+            <p className='text-body font-medium wrap-anywhere'>{balanceLabel(name)}</p>
+            <p role='status' className='flex items-center gap-2 text-body'>
               <span className='numeric'>{formatCurrency(Number(balance), account.currency)}</span>
               <span className='flex items-center gap-1 text-xs text-muted-foreground'>
                 <Check aria-hidden='true' className='size-3.5' />

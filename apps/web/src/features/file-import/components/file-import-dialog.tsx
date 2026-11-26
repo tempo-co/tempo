@@ -102,7 +102,10 @@ export function FileImportDialog({
             body={
               <div className='grid grid-cols-1 gap-4'>
                 {/* A flex row keeps the spinner on the text's line. */}
-                <p role='status' className='flex items-center text-sm text-muted-foreground'>
+                <p
+                  role='status'
+                  className='flex items-center text-body-small text-muted-foreground'
+                >
                   <PendingLabel>Working out the columns…</PendingLabel>
                 </p>
                 <FileList files={[step.files[step.file - 1]]} />

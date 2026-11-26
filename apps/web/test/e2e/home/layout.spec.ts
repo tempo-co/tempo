@@ -103,6 +103,45 @@ const smallTargets = (page: Page, selector: string) =>
     selector,
   );
 
+/**
+ * Home's cards in page order: each a 1px hairline with 8px corners and no shadow, 12px below the card above, and its
+ * heading, when it has one, 16px in from the edge.
+ */
+const homeCards = (page: Page) =>
+  page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('main [role="region"]')).filter(
+      (card) => !card.parentElement?.closest('[role="region"]'),
+    );
+    return cards.map((card, index) => {
+      const css = getComputedStyle(card);
+      const box = card.getBoundingClientRect();
+      const heading = card.querySelector('h2');
+      const above = cards[index - 1]?.getBoundingClientRect();
+      const headingCss = heading && getComputedStyle(heading);
+      return {
+        card: card.getAttribute('aria-label'),
+        border: css.borderTopWidth,
+        radius: css.borderRadius,
+        shadow: css.boxShadow,
+        inset: heading
+          ? Math.round(heading.getBoundingClientRect().left - box.left - card.clientLeft)
+          : null,
+        gap: above ? Math.round(box.top - above.bottom) : null,
+        heading: headingCss && `${headingCss.fontSize} ${headingCss.fontWeight}`,
+      };
+    });
+  });
+
+const card = (name: string, gap: number | null, heading: string | null = '13px 600') => ({
+  card: name,
+  border: '1px',
+  radius: '8px',
+  shadow: 'none',
+  inset: heading ? 16 : null,
+  gap,
+  heading,
+});
+
 for (const [name, history] of [
   ['demo', homeHistory],
   ['worst-case', worstCase],
@@ -131,6 +170,15 @@ for (const [name, history] of [
       };
       await capture('home');
       await expectNoHorizontalOverflow(page);
+      // Where you stand leads with its total's label rather than a card title; Year by year is a table with no title.
+      expect
+        .soft(await homeCards(page))
+        .toEqual([
+          card('Where you stand', null, '12px 500'),
+          card('Year by year', 12, null),
+          card('Spending by category', 12),
+          card('Income by source', 12),
+        ]);
       expect.soft(await brokenAmounts(page)).toEqual([]);
       // Every control is a full tap target on a phone.
       if (width < 640) {
@@ -156,6 +204,13 @@ for (const [name, history] of [
       await expectLoaded(dialog);
       await capture('month');
       expect.soft(await brokenAmounts(page)).toEqual([]);
+      // Every transaction row has the shared row height, past its divider.
+      const rowHeights = await dialog
+        .getByRole('region', {name: 'Transactions'})
+        .getByRole('listitem')
+        .evaluateAll((rows) => rows.map((row) => row.clientHeight));
+      expect(rowHeights.length).toBeGreaterThan(0);
+      expect.soft([...new Set(rowHeights)]).toEqual([60]);
       if (width < 640) expect.soft(await smallTargets(page, '[role="dialog"]')).toEqual([]);
       const sections = await dialog.evaluate((element) =>
         Array.from(element.querySelectorAll('section'))
@@ -341,7 +396,7 @@ test('Home’s text actions and Load more buttons share one style with the month
     ),
   );
 
-  expect(styles[0].height).toBe(36);
+  expect(styles[0]).toMatchObject({font: '13px 400', height: 28});
   for (const item of styles) expect(item).toEqual(styles[0]);
   for (const item of loadMores) expect(item).toEqual(loadMores[0]);
   for (const item of headings) expect(item).toEqual(headings[0]);

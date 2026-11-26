@@ -78,7 +78,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 /** The shared transaction row: 36px round tile, two lines, amount; 60px tall. */
 const ROW =
-  'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+  'grid min-h-15 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
 
 export function BankConnectionList({
   bankConnections,
@@ -139,16 +139,16 @@ export function BankConnectionList({
       data-testid='bank-connections-list'
     >
       {fileImport?.drop}
-      {/* The padding keeps the cards 16px below the overhanging button; the 18px row gap leaves 12px between the
+      {/* The padding keeps the cards 16px below the overhanging button; the 21px row gap leaves 12px between the
           title and a button wrapped under it. */}
-      <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-4.5 max-md:pb-1.5 md:pointer-coarse:pb-0.5'>
+      <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-5.25 max-md:pb-2.25 md:pointer-coarse:pb-1.25'>
         <h1 className='text-page-title'>Bank connections</h1>
         {/* Always there: loading, retrying or failing to load the list never closes an open sheet.
-            It overhangs the title's row (44px tall on phones and touch screens, 40px otherwise), so the title and
-            the cards start where other pages' do. */}
+            It overhangs the title's 26px row (44px tall on phones and touch screens, 32px otherwise), so the title
+            and the cards start where other pages' do. */}
         {fileImport ? (
           // On phones the two share the row under the title, equal width.
-          <div className='-my-1.5 flex gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 md:-my-1 md:pointer-coarse:-my-1.5'>
+          <div className='-my-2.25 flex gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 md:-my-1 md:pointer-coarse:-my-2.25'>
             {fileImport.action}
             <BankConnectionPicker onBankSelect={connectBank} isStarting={isStarting} />
           </div>
@@ -156,14 +156,14 @@ export function BankConnectionList({
           <BankConnectionPicker
             onBankSelect={connectBank}
             isStarting={isStarting}
-            className='-my-1.5 md:-my-1 md:pointer-coarse:-my-1.5'
+            className='-my-2.25 md:-my-1 md:pointer-coarse:-my-2.25'
           />
         )}
       </header>
       {notice}
       {isPending ? (
         <div
-          className='grid grid-cols-1 items-start gap-6 max-md:gap-4 @[60rem]:grid-cols-2'
+          className='grid grid-cols-1 items-start gap-3 @[60rem]:grid-cols-2'
           role='status'
           aria-label='Loading bank connections'
           data-testid='bank-connections-loading'
@@ -195,7 +195,7 @@ export function BankConnectionList({
         )
       ) : (
         // Two columns that each flow top to bottom, so a short card leaves neither a gap below it nor empty room inside it.
-        <div className='grid grid-cols-1 gap-6 max-md:gap-4 @[60rem]:block @[60rem]:columns-2 @[60rem]:[&>*]:mb-6 @[60rem]:[&>*]:break-inside-avoid'>
+        <div className='grid grid-cols-1 gap-3 @[60rem]:block @[60rem]:columns-2 @[60rem]:[&>*]:mb-3 @[60rem]:[&>*]:break-inside-avoid'>
           {sortByAttention(bankConnections).map((connection) => (
             <BankCard
               key={connection.id}
@@ -313,7 +313,7 @@ function BankCard({
       role='region'
       aria-labelledby={headingId}
       data-testid={`bank-connection-${connection.id}`}
-      className='grid grid-cols-1 content-start gap-4 p-5 sm:p-6'
+      className='grid grid-cols-1 content-start gap-4 p-4'
     >
       <header className='flex items-center gap-3'>
         <ConnectionTile connection={connection} artwork={artwork} testId='bank-connection-logo' />
@@ -373,7 +373,7 @@ function BankCard({
           {accounts.length > 1 && total && (
             <li
               data-testid='bank-connection-total'
-              className='mx-3 flex items-baseline justify-between gap-3 border-t pt-3 text-sm text-muted-foreground'
+              className='mx-3 flex items-baseline justify-between gap-3 border-t pt-3 text-body-small text-muted-foreground'
             >
               <span>Total</span>
               <span className='numeric'>{formatCurrency(total.amount, total.currency)}</span>
@@ -415,7 +415,7 @@ function ConnectionTile({
 /** A bank card while the list loads: the loaded card's header and two account rows, so any list fills in in place. */
 function BankCardSkeleton() {
   return (
-    <Card aria-hidden='true' className='grid grid-cols-1 content-start gap-4 p-5 sm:p-6'>
+    <Card aria-hidden='true' className='grid grid-cols-1 content-start gap-4 p-4'>
       <header className='flex items-center gap-3'>
         <Bone className='size-9 rounded-md' />
         <div className='min-w-0 flex-1'>
@@ -457,7 +457,7 @@ function AccountRow({
   const amounts = (
     <>
       {balance && (
-        <span className='block numeric text-sm whitespace-nowrap'>
+        <span className='block numeric text-body whitespace-nowrap'>
           {formatCurrency(balance.amount, balance.currency)}
         </span>
       )}
@@ -486,7 +486,7 @@ function AccountRow({
             to='/bank-transactions'
             search={{bankAccountIds: [account.id]}}
             aria-label={`${name} transactions`}
-            className='block truncate text-sm outline-none after:absolute after:inset-0'
+            className='block truncate text-body outline-none after:absolute after:inset-0'
           >
             {name}
           </Link>
@@ -512,7 +512,7 @@ function AccountRow({
         <AccountTypeIcon type={account.cashAccountType} />
       </span>
       <span className='min-w-0'>
-        <span className='block truncate text-sm'>{name}</span>
+        <span className='block truncate text-body'>{name}</span>
         <span className='block truncate text-xs text-muted-foreground'>
           {subline || account.currency}
         </span>
@@ -788,8 +788,10 @@ function RemoveStep({
                         {checked && <span className='size-2 rounded-full bg-primary' />}
                       </span>
                       <span className='min-w-0'>
-                        <span className='block text-sm font-medium'>{choice.title}</span>
-                        <span className='block text-sm text-muted-foreground'>{choice.detail}</span>
+                        <span className='block text-body font-medium'>{choice.title}</span>
+                        <span className='block text-body-small text-muted-foreground'>
+                          {choice.detail}
+                        </span>
                       </span>
                     </label>
                   );
@@ -798,7 +800,7 @@ function RemoveStep({
             </fieldset>
           )}
           {blocked && !isPending && (
-            <p role='status' className='text-sm text-muted-foreground'>
+            <p role='status' className='text-body-small text-muted-foreground'>
               {SYNC_IN_PROGRESS_REMOVAL}
             </p>
           )}
