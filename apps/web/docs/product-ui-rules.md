@@ -50,4 +50,5 @@ First load shows skeleton rows shaped like the real list. A refetch keeps the ol
 
 - A managed list comes first and one-time setup steps below it; setup copy never refers to where the list sits.
 - Setup steps are terse, with only key terms in medium weight.
-- Settings sections each have one address (`/settings/<section>`). A changed Settings page lists them as a section list: on the left on desktop, a tap-in list with a way back on phones, in place of today's tabs. Sections whose feature has not shipped are not listed; announced ones show as disabled "later" rows.
+- Settings sections each have one address (`/settings/<section>`), listed on the left on desktop and as a tap-in list with a way back on phones. Sections whose feature has not shipped are not listed; announced ones show as disabled "later" rows.
+- Settings › Categories lists every category with how many transactions the yearly spending breakdown counts in it over the whole history, so its counts match Insights; rows without a category follow while there are any.

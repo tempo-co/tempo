@@ -148,7 +148,7 @@ test.describe('fully mocked', () => {
     await expect(setup.getByText('Suggested from your recent transactions.')).toBeVisible();
 
     // Settings shows the currency in use, but its dialog starts with nothing chosen.
-    await page.goto('/settings/account');
+    await page.goto('/settings/profile');
     await expect(page.getByTestId('account-reporting-currency')).toHaveText('RUB');
     await page.getByRole('button', {name: 'Edit reporting currency'}).click();
     const dialog = page.getByRole('dialog', {name: 'Reporting currency'});
@@ -636,7 +636,7 @@ test.describe('against the API', () => {
       const otherPage = await other.newPage();
       await new LoginPage(otherPage).login(freshAccount.email, freshAccount.password);
       await new HomePage(otherPage).expectToBeOnPage();
-      await otherPage.goto('/settings/account');
+      await otherPage.goto('/settings/profile');
       await expect(otherPage.getByTestId('account-reporting-currency')).toHaveText('GBP');
     } finally {
       await other.close();

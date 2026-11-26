@@ -137,6 +137,8 @@ export type BankTransactionBreakdownPart = {
 	label: string;
 	/** Spending is positive; a part that only holds refunds is negative. */
 	amount: string;
+	/** The transactions counted into `amount`. */
+	count: number;
 	/** Sources only: the logo of the merchant of the source's latest income, null without a trusted one. */
 	merchantLogoUrl?: string | null;
 	/** Sources only: the latest income's category, the icon shown without a logo. */

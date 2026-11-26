@@ -35,7 +35,7 @@ function VerifyEmailChangeIndex() {
     hasStarted.current = true;
 
     verifyEmailChange({token, email});
-    void navigate({to: '/settings/account', replace: true});
+    void navigate({to: '/settings/profile', replace: true});
   }, [email, navigate, token, verifyEmailChange]);
 
   return null;

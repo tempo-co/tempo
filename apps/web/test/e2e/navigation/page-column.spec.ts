@@ -90,7 +90,7 @@ for (const width of [1440, 1280]) {
     expect(await title(page)).toEqual(connections);
 
     // Settings narrows its own content, inside the same column.
-    await page.goto('/settings/account');
+    await page.goto('/settings/profile');
     await expect(page.getByRole('heading', {name: 'Settings', exact: true})).toBeVisible();
     expect(await column(page)).toEqual(home);
     expect((await title(page)).y).toBe(home.top);
@@ -113,7 +113,7 @@ for (const [width, wraps] of [
     for (const [path, name] of [
       ['/accounts', 'Bank connections'],
       ['/transactions', 'Bank transactions'],
-      ['/settings/account', 'Settings'],
+      ['/settings', 'Settings'],
     ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', {name, exact: true})).toBeVisible();

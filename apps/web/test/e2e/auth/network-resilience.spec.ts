@@ -586,7 +586,7 @@ test('an account save finishing after logout in another tab does not restore sav
   homePage,
 }) => {
   await context.clock.install();
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await page.getByTestId('edit-name-button').click();
   const name = page.getByTestId('name-input');
   await expect(name).toHaveValue(freshAccount.name);
@@ -627,7 +627,7 @@ test('a save finishing after logout and a new login does not sign out the new ac
   loginPage,
 }) => {
   const next = await createVerifiedAccount(request);
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await page.getByTestId('edit-name-button').click();
   const name = page.getByTestId('name-input');
   await expect(name).toHaveValue(freshAccount.name);
@@ -758,7 +758,7 @@ test('does not queue an offline account change for replay after reconnect', asyn
   freshAccount,
 }) => {
   test.setTimeout(20000);
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await expect(page.getByTestId('edit-name-button')).toBeVisible();
   let writes = 0;
   page.on('request', (request) => {

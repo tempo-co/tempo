@@ -53,8 +53,14 @@ export class AccountSettingsPage {
     this.timeZoneSearch = page.getByTestId('time-zone-search');
   }
 
+  /** Profile: name, email, time zone and reporting currency. */
   async navigate() {
-    await this.page.goto('/settings/account');
+    await this.page.goto('/settings/profile');
+  }
+
+  /** Your data, where the account is deleted. */
+  async navigateToYourData() {
+    await this.page.goto('/settings/data');
   }
 
   async changeName(newName: string) {
@@ -79,6 +85,6 @@ export class AccountSettingsPage {
   }
 
   async expectToBeOnPage() {
-    await this.page.waitForURL('/settings/account');
+    await this.page.waitForURL('/settings/profile');
   }
 }

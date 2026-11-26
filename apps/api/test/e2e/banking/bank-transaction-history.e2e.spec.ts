@@ -77,6 +77,7 @@ describe('Bank transaction history', () => {
 				// A person paying the owner back.
 				named('2026-02-10', '150.00', 'Jane Example', {category: 'TRANSFER_IN'}),
 				named('2026-03-02', '-20.00', 'Corner Shop', {category: 'GROCERIES'}),
+				named('2026-03-05', '-15.00', 'Corner Shop', {category: 'GROCERIES'}),
 			]);
 			await fixtures.createTransactions(other.bankAccount, [
 				named('2026-01-05', '-7777.00', 'Corner Shop', {category: 'GROCERIES'}),
@@ -84,7 +85,7 @@ describe('Bank transaction history', () => {
 			]);
 		});
 
-		it('splits each month’s spending by category, net of refunds, with cash flow’s totals', async () => {
+		it('splits each month’s spending by category, net of refunds, with cash flow’s totals and the rows counted', async () => {
 			const query = {interval: 'month', from: '2025-10-01', to: ASOF, asOf: ASOF};
 			const [{body}, {body: flow}] = await Promise.all([
 				agent
@@ -94,7 +95,7 @@ describe('Bank transaction history', () => {
 				agent.get(CASH_FLOW).query(query).expect(200),
 			]);
 
-			const part = (key: string, amount: string) => ({key, label: key, amount});
+			const part = (key: string, amount: string, count = 1) => ({key, label: key, amount, count});
 			expect(body).toEqual({
 				baseCurrency: 'EUR',
 				interval: 'month',
@@ -133,8 +134,8 @@ describe('Bank transaction history', () => {
 						start: '2026-03-01',
 						end: ASOF,
 						complete: false,
-						total: '20.00',
-						parts: [part('GROCERIES', '20.00')],
+						total: '35.00',
+						parts: [part('GROCERIES', '35.00', 2)],
 					},
 				],
 			});
@@ -208,8 +209,8 @@ describe('Bank transaction history', () => {
 							complete: false,
 							total: '2025.00',
 							parts: [
-								{...employer, amount: '2000.00'},
-								{...stall, amount: '25.00'},
+								{...employer, amount: '2000.00', count: 2},
+								{...stall, amount: '25.00', count: 1},
 							],
 						},
 						{
@@ -218,8 +219,8 @@ describe('Bank transaction history', () => {
 							complete: false,
 							total: '1150.00',
 							parts: [
-								{...employer, amount: '1000.00'},
-								{...person, amount: '150.00'},
+								{...employer, amount: '1000.00', count: 1},
+								{...person, amount: '150.00', count: 1},
 							],
 						},
 					],
@@ -263,7 +264,7 @@ describe('Bank transaction history', () => {
 					end: ASOF,
 					complete: false,
 					total: '7777.00',
-					parts: [{key: 'GROCERIES', label: 'GROCERIES', amount: '7777.00'}],
+					parts: [{key: 'GROCERIES', label: 'GROCERIES', amount: '7777.00', count: 1}],
 				},
 			]);
 		});

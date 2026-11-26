@@ -28,7 +28,7 @@ import {
 
 const CATEGORY_KEY = `COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`;
 
-type PartRow = {start: string; key: string; amount: string};
+type PartRow = {start: string; key: string; amount: string; count: number};
 type SourceRow = {key: string; label: string; latestId: string};
 
 /** Where the owner's money went and came from over the years, on the summary's definitions. */
@@ -71,6 +71,7 @@ export class BankTransactionHistoryService {
 				.select(SQL_PERIOD_START, 'start')
 				.addSelect(key, 'key')
 				.addSelect(`ROUND(SUM(${SQL_BASE_AMOUNT}), 2)::text`, 'amount')
+				.addSelect('COUNT(*)::int', 'count')
 				.groupBy('1')
 				.addGroupBy('2')
 				.getRawMany<PartRow>(),
@@ -101,7 +102,7 @@ export class BankTransactionHistoryService {
 		const periods = periodWindows(interval, starts, to, asOf, firstTransactionDate).map(
 			(window): BankTransactionBreakdownPeriod => {
 				const periodParts = (partsByStart.get(window.start) ?? [])
-					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount)}))
+					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount), count: row.count}))
 					.filter((part) => part.cents !== 0n)
 					.sort((left, right) =>
 						left.cents !== right.cents
@@ -119,6 +120,7 @@ export class BankTransactionHistoryService {
 						key: part.key,
 						label: labelByKey.get(part.key) ?? part.key,
 						amount: formatCents(part.cents),
+						count: part.count,
 						...looks.get(part.key),
 					})),
 				};

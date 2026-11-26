@@ -107,8 +107,8 @@ export function NotificationSettings() {
   const {publicKey, preferences} = settings;
   return (
     <SettingsGroup
-      id='notifications-heading'
-      title='Notifications'
+      id='alerts-heading'
+      title='Alerts'
       description='Tempo only interrupts you when something needs you and can’t wait until you next open it.'
     >
       <SettingsList>
