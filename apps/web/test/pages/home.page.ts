@@ -56,9 +56,13 @@ export class HomePage {
     await expect(this.accountEmail).toBeVisible();
   }
 
-  /** Log out lives in Settings, reached from the sidebar's gear or the phone header's. */
+  /** Log out lives in Settings › Security, reached from the sidebar's gear or the phone header's. */
   async logOut() {
     await this.settingsLink.click();
+    await this.page
+      .getByRole('navigation', {name: 'Settings sections'})
+      .getByRole('link', {name: /^Security/})
+      .click();
     await this.logOutButton.click();
   }
 }

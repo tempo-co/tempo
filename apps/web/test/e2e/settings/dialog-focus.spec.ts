@@ -30,9 +30,9 @@ test.beforeEach(async ({page}) => {
 });
 
 const drawers = [
-  {path: '/settings/account', trigger: 'edit-name-button'},
-  {path: '/settings/account', trigger: 'change-email-button'},
-  {path: '/settings/account', trigger: 'delete-account-button'},
+  {path: '/settings/profile', trigger: 'edit-name-button'},
+  {path: '/settings/profile', trigger: 'change-email-button'},
+  {path: '/settings/data', trigger: 'delete-account-button'},
   {path: '/settings/security', trigger: 'change-password-button'},
   {path: '/settings/security', trigger: 'revoke-all-sessions-button'},
   {path: '/settings/security', trigger: 'revoke-session-button'},
@@ -102,7 +102,7 @@ for (const width of [390, 1024]) {
   test(`settings dialogs respect reduced motion at ${width}px`, async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     await page.setViewportSize({width, height: 850});
-    await page.goto('/settings/account');
+    await page.goto('/settings/profile');
     const trigger = page.getByTestId('edit-name-button');
     await trigger.click();
     const dialog = page.getByRole('dialog');

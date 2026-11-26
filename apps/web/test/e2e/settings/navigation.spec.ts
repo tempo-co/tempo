@@ -3,7 +3,6 @@ import type {Locator, Page} from '@playwright/test';
 import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';
 import {mockBankConnections, mockBankRefresh, mockEmptyHome} from '../../utils/api-mocks';
-import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 // The service worker would serve route code from its cache, past the delays below.
 test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
@@ -22,6 +21,41 @@ test.beforeEach(async ({page}) => {
   await page.route('**/personal-access-tokens', (route) => route.fulfill({json: []}));
 });
 
+/** Each section by its address and its name, with something only it shows. */
+const SECTIONS = [
+  {path: 'profile', label: 'Profile', shows: (page: Page) => page.getByTestId('edit-name-button')},
+  {
+    path: 'security',
+    label: 'Security',
+    shows: (page: Page) => page.getByTestId('change-password-button'),
+  },
+  {
+    path: 'notifications',
+    label: 'Notifications',
+    shows: (page: Page) => page.getByRole('region', {name: 'Alerts', exact: true}),
+  },
+  {
+    path: 'categories',
+    label: 'Categories',
+    shows: (page: Page) => page.getByRole('list', {name: 'All categories'}),
+  },
+  {
+    path: 'data',
+    label: 'Your data',
+    shows: (page: Page) => page.getByTestId('delete-account-button'),
+  },
+  {
+    path: 'appearance',
+    label: 'Appearance',
+    shows: (page: Page) => page.getByRole('radio', {name: 'Dark'}),
+  },
+  {
+    path: 'integrations',
+    label: 'Integrations',
+    shows: (page: Page) => page.getByRole('heading', {name: 'Access tokens', exact: true}),
+  },
+] as const;
+
 /** Holds back lazily loaded route code, keeping the next navigation pending for a moment. */
 async function delayRouteCode(page: Page) {
   await page.route(/\/assets\/.+\.js$/, async (route) => {
@@ -37,82 +71,95 @@ function currentLabels(nav: Locator) {
     .evaluateAll((links) => links.map((link) => link.textContent?.trim()));
 }
 
+/** The announced sections that have not shipped: listed, marked later, and not links. */
+async function expectLaterRows(nav: Locator) {
+  for (const label of ['Billing', 'Members']) {
+    const row = nav.getByText(label, {exact: true});
+    await expect(row).toBeVisible();
+    await expect(nav.getByRole('link', {name: new RegExp(label)})).toHaveCount(0);
+  }
+  await expect(nav.getByText('later', {exact: true})).toHaveCount(2);
+  await expect(nav.getByText('Tags')).toHaveCount(0);
+}
+
 test.describe('Settings navigation', () => {
-  test('keeps the section navigation aligned with the active page', async ({page}) => {
-    const routes = [
-      {path: 'account', label: 'Account'},
-      {path: 'security', label: 'Security'},
-      {path: 'integrations', label: 'Integrations'},
-      {path: 'appearance', label: 'Appearance'},
-    ];
+  test('on desktop, Settings opens Profile and every section is at its address and in the list', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.goto('/settings');
+    await expect(page).toHaveURL(/\/settings\/profile$/);
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('Settings');
 
-    for (const route of routes) {
-      await page.goto(`/settings/${route.path}`);
-      await expect(page.getByRole('heading', {level: 1})).toHaveText('Settings');
+    const nav = page.getByRole('navigation', {name: 'Settings sections'});
+    await expect(nav.getByRole('link')).toHaveText(SECTIONS.map((section) => section.label));
+    await expectLaterRows(nav);
 
-      const sections = page.getByRole('navigation', {name: 'Settings sections'});
-      await expect(sections).toHaveCount(1);
-      await expect(sections.getByRole('link')).toHaveText(routes.map((route) => route.label));
-      const active = sections.locator('a[aria-current="page"]');
-      await expect(active).toHaveCount(1);
-      await expect(active).toHaveText(route.label);
-      await expect(active).toHaveAttribute('href', `/settings/${route.path}`);
+    for (const section of SECTIONS) {
+      await page.goto(`/settings/${section.path}`);
+      await expect.poll(() => currentLabels(nav)).toEqual([section.label]);
+      await expect(
+        page.getByRole('heading', {level: 2, name: section.label, exact: true}),
+      ).toBeVisible();
+      await expect(section.shows(page)).toBeVisible();
     }
+
+    for (const section of [...SECTIONS].reverse()) {
+      await nav.getByRole('link', {name: section.label, exact: true}).click();
+      await expect(page).toHaveURL(new RegExp(`/settings/${section.path}$`));
+      await expect(section.shows(page)).toBeVisible();
+      expect(await currentLabels(nav)).toEqual([section.label]);
+    }
+
+    // Account's earlier address opens Profile.
+    await page.goto('/settings/account');
+    await expect(page).toHaveURL(/\/settings\/profile$/);
   });
 
-  for (const {width, fontSize} of [
-    {width: 320, fontSize: 13},
-    {width: 359, fontSize: 13},
-    {width: 390, fontSize: 14},
-  ]) {
-    test(`spreads the section tabs across a ${width}px phone`, async ({page}) => {
-      await page.setViewportSize({width, height: 700});
-      await page.goto('/settings/security');
+  test('on a phone, Settings is a list to tap into, with a way back', async ({page}) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto('/settings');
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('Settings');
+    const list = page.getByRole('navigation', {name: 'Settings sections'});
+    await expect(list.getByRole('link')).toHaveText(
+      SECTIONS.map((section) => new RegExp(`^${section.label}`)),
+    );
+    await expectLaterRows(list);
+    for (const link of await list.getByRole('link').all())
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
-      const sections = page.getByRole('navigation', {name: 'Settings sections'});
-      const tabs = sections.getByRole('link');
-      const nav = await boxOf(sections);
-      const boxes = await Promise.all((await tabs.all()).map(boxOf));
-      expect(Math.abs(boxes[0].x - nav.x)).toBeLessThan(1);
-      const last = boxes[boxes.length - 1];
-      expect(Math.abs(last.x + last.width - (nav.x + nav.width))).toBeLessThan(1);
-      for (const box of boxes) expect(box.height).toBeGreaterThanOrEqual(48);
-      const labels = await tabs.evaluateAll((links) =>
-        links.map((link) => {
-          const range = document.createRange();
-          range.selectNodeContents(link);
-          const text = range.getBoundingClientRect();
-          const box = link.getBoundingClientRect();
-          return {
-            fontSize: parseFloat(getComputedStyle(link).fontSize),
-            inside: text.left >= box.left && text.right <= box.right,
-            centreOffset: text.left + text.width / 2 - (box.left + box.width / 2),
-          };
-        }),
-      );
-      for (const label of labels) {
-        expect(label.fontSize).toBe(fontSize);
-        expect(label.inside).toBe(true);
-        expect(Math.abs(label.centreOffset)).toBeLessThan(1);
-      }
-      const underline = await sections
-        .locator('a[aria-current="page"]')
-        .evaluate((link) => [
-          parseFloat(getComputedStyle(link, '::after').width),
-          link.getBoundingClientRect().width,
-        ]);
-      expect(Math.abs(underline[0] - underline[1])).toBeLessThan(1);
-      await expectNoHorizontalOverflow(page);
+    for (const section of SECTIONS) {
+      await list.getByRole('link', {name: new RegExp(`^${section.label}`)}).click();
+      await expect(page).toHaveURL(new RegExp(`/settings/${section.path}$`));
+      await expect(page.getByRole('heading', {level: 1})).toHaveText(section.label);
+      await expect(section.shows(page)).toBeVisible();
+      await page.getByRole('main').getByRole('link', {name: 'Settings', exact: true}).click();
+      await expect(page).toHaveURL(/\/settings$/);
+      await expect(list).toBeVisible();
+    }
 
-      // While the next section's code loads, only the tab being opened is current.
-      await delayRouteCode(page);
-      await tabs.filter({hasText: 'Integrations'}).click();
-      await expect(page).toHaveURL(/\/settings\/integrations$/);
-      expect(await currentLabels(sections)).toEqual(['Integrations']);
-      await expect(page.getByRole('heading', {name: 'Access tokens', exact: true})).toBeVisible();
-      expect(await currentLabels(sections)).toEqual(['Integrations']);
-    });
-  }
+    // A section's address opens it directly, and back still leads to the list.
+    await page.goto('/settings/integrations');
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('Integrations');
+    await expect(page.getByRole('navigation', {name: 'Settings sections'})).toHaveCount(0);
+    await page.getByRole('main').getByRole('link', {name: 'Settings', exact: true}).click();
+    await expect(page).toHaveURL(/\/settings$/);
+  });
+
+  test('only the section being opened is current while its code loads', async ({page}) => {
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.goto('/settings/security');
+    const nav = page.getByRole('navigation', {name: 'Settings sections'});
+    await expect(page.getByTestId('change-password-button')).toBeVisible();
+
+    await delayRouteCode(page);
+    await nav.getByRole('link', {name: 'Integrations'}).click();
+    await expect(page).toHaveURL(/\/settings\/integrations$/);
+    expect(await currentLabels(nav)).toEqual(['Integrations']);
+    await expect(page.getByRole('heading', {name: 'Access tokens', exact: true})).toBeVisible();
+    expect(await currentLabels(nav)).toEqual(['Integrations']);
+  });
 
   test('moves the phone tab bar marker as soon as another page opens', async ({page}) => {
     await mockEmptyHome(page);
@@ -128,21 +175,5 @@ test.describe('Settings navigation', () => {
     await tabBar.getByRole('link', {name: 'Home'}).click();
     await expect(page).toHaveURL(/^https?:\/\/[^/]+\/(?:\?|$)/);
     expect(await currentLabels(tabBar)).toEqual(['Home']);
-  });
-
-  test('aligns the first section label with the title on desktop', async ({page}) => {
-    await page.setViewportSize({width: 1440, height: 900});
-    await page.goto('/settings/security');
-
-    const sections = page.getByRole('navigation', {name: 'Settings sections'});
-    const [title, firstLabel] = await Promise.all([
-      boxOf(page.getByRole('heading', {level: 1})),
-      sections.getByRole('link', {name: 'Account'}).evaluate((link) => {
-        const range = document.createRange();
-        range.selectNodeContents(link);
-        return range.getBoundingClientRect().x;
-      }),
-    ]);
-    expect(Math.abs(firstLabel - title.x)).toBeLessThan(1);
   });
 });
