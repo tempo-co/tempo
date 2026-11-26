@@ -1,9 +1,8 @@
-import {Injectable, Logger, NotFoundException} from '@nestjs/common';
+import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {BankTransactionCategory} from '@tempo/contracts';
 import {EntityManager, Raw, Repository} from 'typeorm';
 
-import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
 import {createBankTransactionCategorizationInputHash} from './bank-transaction-categorization-input';
@@ -176,8 +175,7 @@ export class ManualCategoryService {
 				{id: transaction.id, bankAccountId: ownedBankAccountId(accountId)},
 				manualCategoryValues(followUps.category, createBankTransactionCategorizationInputHash(transaction)),
 			);
-			if (result.affected === 0) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
-			updated += 1;
+			updated += result.affected ?? 0;
 		}
 		if (followUpIds.length === 0) return {updated, recheckIds: []};
 
