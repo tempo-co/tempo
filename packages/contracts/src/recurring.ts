@@ -99,6 +99,25 @@ export type RecurringSeries = {
 	category: BankTransactionCategory | null;
 	/** Path of the latest payment's merchant logo on the API; null when no trusted logo exists. */
 	merchantLogoUrl: string | null;
+	/** What a counted series paid and still owes in `asOf`'s calendar month; null for a hidden or ended series. */
+	thisMonth: RecurringSeriesThisMonth | null;
+};
+
+/** A payment made this month: its booking date and amount in the base currency, null until converted. */
+export type RecurringPaidPayment = {date: string; amount: string | null};
+
+/**
+ * A payment still expected this month: its expected date and the usual amount in the base currency (null when not
+ * known yet). `late` once the date has passed; a late payment from last month stays due this month.
+ */
+export type RecurringDuePayment = {date: string; amount: string | null; late: boolean};
+
+/** One series' calendar month: the list's `thisMonth.paid` and `remaining` add these amounts up. */
+export type RecurringSeriesThisMonth = {
+	/** Oldest first; empty when nothing was paid yet. */
+	paid: RecurringPaidPayment[];
+	/** Oldest first, late ones first; empty when nothing more is expected before the month ends. */
+	due: RecurringDuePayment[];
 };
 
 /**

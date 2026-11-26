@@ -1,9 +1,14 @@
-import {createFileRoute, useNavigate, useSearch} from '@tanstack/react-router';
+import {createFileRoute, useNavigate} from '@tanstack/react-router';
+import {zodValidator} from '@tanstack/zod-adapter';
 import {useCallback} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {TooltipProvider} from '@/components/ui/tooltip';
-import {RecurringSeriesOverview} from '@/features/banking/components/recurring-series-overview';
+import {RecurringPage} from '@/features/banking/components/recurring-page';
+import {
+  type RecurringSearch,
+  recurringSearchSchema,
+} from '@/features/banking/types/recurring-search';
 import {
   moneyFiguresReady,
   useReportingCurrency,
@@ -11,28 +16,25 @@ import {
 import {useLocalDate} from '@/hooks/use-local-date';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
-/** Every recurring bill and income stream, as a page; the open series is the `series` key in the URL. */
+/** This month's bills and the whole catalogue; the tab, the view and the open series are in the URL. */
 export const Route = createFileRoute('/recurring/')({
   component: Recurring,
+  validateSearch: zodValidator(recurringSearchSchema),
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);
   },
 });
 
 function Recurring() {
-  const {series} = useSearch({from: '__root__'});
-  const navigate = useNavigate();
+  const search = Route.useSearch();
+  const navigate = useNavigate({from: '/recurring/'});
   const asOf = useLocalDate();
-  // The list waits while the owner still has to choose a currency or its amounts are converted.
+  // The page waits while the owner still has to choose a currency or its amounts are converted.
   const ready = moneyFiguresReady(useReportingCurrency());
-  // Replace rather than push, so Back leaves the page instead of stepping through series.
-  const select = useCallback(
-    (key: string | null) =>
-      void navigate({
-        to: '.',
-        replace: true,
-        search: (prev) => ({...prev, series: key ?? undefined}),
-      }),
+  // Replace rather than push, so Back leaves the page instead of stepping through series and tabs.
+  const change = useCallback(
+    (next: Partial<RecurringSearch>) =>
+      void navigate({replace: true, search: (prev) => ({...prev, ...next})}),
     [navigate],
   );
 
@@ -40,9 +42,7 @@ function Recurring() {
     <TooltipProvider delayDuration={300}>
       <AppBodyLayout>
         <h1 className='mb-5 text-page-title max-md:mb-4'>Recurring</h1>
-        {ready && (
-          <RecurringSeriesOverview asOf={asOf} selectedKey={series ?? null} onSelect={select} />
-        )}
+        {ready && <RecurringPage asOf={asOf} search={search} onChange={change} />}
       </AppBodyLayout>
     </TooltipProvider>
   );

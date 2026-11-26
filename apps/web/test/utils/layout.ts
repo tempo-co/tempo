@@ -93,3 +93,31 @@ export async function expectNoHorizontalOverflow(page: Page) {
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
 }
+
+/** Visible amounts that are cut short, run out of their box or break across lines. */
+export const brokenAmounts = (page: Page) =>
+  page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('main .numeric, [role="dialog"] .numeric'))
+      .filter((element) => element.offsetParent !== null && element.children.length === 0)
+      .filter((element) => !element.closest('svg'))
+      .filter((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        // Text on more than one line has client rects at more than one height.
+        const lines = new Set(
+          Array.from(range.getClientRects()).map((rect) => Math.round(rect.bottom)),
+        );
+        if (lines.size > 1) return true;
+        // The text stays inside every box around it, up to the one that scrolls or clips.
+        const text = range.getBoundingClientRect();
+        for (let box: HTMLElement | null = element; box; box = box.parentElement) {
+          const overflow = getComputedStyle(box).overflowX;
+          if (overflow === 'auto' || overflow === 'scroll') return false;
+          const rect = box.getBoundingClientRect();
+          if (text.left < rect.left - 1 || text.right > rect.right + 1) return true;
+          if (overflow !== 'visible') return false;
+        }
+        return false;
+      })
+      .map((element) => element.textContent),
+  );

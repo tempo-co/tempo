@@ -24,7 +24,7 @@ Paths are relative to `apps/web` unless they start at the repository root.
 
 ## Code conventions not enforced by tooling
 
-- Specs that open a page import `test` and `expect` from `test/fixtures.ts`; pure-module specs in `test/unit` use `@playwright/test`. Tests that change account data use `freshAccount`, not a seeded account.
+- Specs that open a page import `test` and `expect` from `test/fixtures.ts`; pure-module specs in `test/unit` use `@playwright/test`. Tests that change account data use `freshAccount`, not a seeded account, unless the flow needs stored bank data the API cannot create; then it signs in as an owner seeded for it alone and puts back what it changes.
 - Filenames are kebab-case; hooks export `useX` from `use-x.ts`. DTO files in feature `types` directories define a Zod schema and infer the exported type from it.
 - API request and response types and the fixed value lists they use come from `@tempo/contracts` (root `packages/contracts`); pass them to `api.get<T>()` and check request bodies with `satisfies`. Labels and other UI copy for those values stay in the feature's `types` or `utils`.
 - JSON API hooks use the `api` wrapper in `src/utils/api.ts` with TanStack Query; it owns the shared auth/network toasts and redirects. Mutations never retry or queue for replay (`src/query-client.ts`).

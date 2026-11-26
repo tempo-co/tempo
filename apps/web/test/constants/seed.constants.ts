@@ -19,3 +19,5 @@ export const AFTER_SEEDED_TRANSACTION_YEAR_NOW = new Date('2027-01-15T12:00:00.0
 
 export const BULK_CATEGORY_ACCOUNT_EMAIL = 'bulk-category@test.com';
 export const BULK_CATEGORY_ACCOUNT_PASSWORD = 'bulk-category';
+export const RECURRING_ACCOUNT_EMAIL = 'recurring@test.com';
+export const RECURRING_ACCOUNT_PASSWORD = 'recurring';
