@@ -2,6 +2,7 @@ import type {
   BankTransactionBulkCategoryPreview,
   BankTransactionBulkCategoryScope,
   BankTransactionCategory,
+  BankTransactionFilter,
 } from '@tempo/contracts';
 import {CircleAlert} from 'lucide-react';
 import {useEffect, useId, useRef, useState} from 'react';
@@ -18,9 +19,12 @@ import {useUpdateBulkCategory} from '../api/use-bulk-category';
 import {formatBankTransactionCategory, formatBankTransactionCompactDate} from '../utils/formatters';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
+/** The picked rows: by id, or every row the list's filters match. */
+export type BulkCategorySelection = {transactionIds: string[]} | {filter: BankTransactionFilter};
+
 /** A category picked for the selected rows, with the other rows from their payees that could follow. */
 export type BulkCategoryDraft = {
-  transactionIds: string[];
+  selection: BulkCategorySelection;
   category: BankTransactionCategory;
   preview: BankTransactionBulkCategoryPreview;
 };
@@ -39,7 +43,7 @@ function payeesOf(rows: PreviewRow[]) {
  * Escape cancels it.
  */
 export function BulkCategoryStep({
-  draft: {transactionIds, category, preview},
+  draft: {selection, category, preview},
   onDone,
   onCancel,
 }: {
@@ -67,7 +71,7 @@ export function BulkCategoryStep({
   }, [isPending, onCancel]);
 
   const label = formatBankTransactionCategory(category);
-  const selected = transactionIds.length;
+  const selected = preview.selected;
   const rows = preview.transactions;
   const all = selected + rows.length;
   const older = preview.total - rows.length;
@@ -76,7 +80,7 @@ export function BulkCategoryStep({
     setFailed(false);
     setSaving(scope);
     try {
-      const {updated} = await updateBulkCategory({transactionIds, category, scope});
+      const {updated} = await updateBulkCategory({...selection, category, scope});
       toast.success(`Changed ${updated} to ${label}`);
       onDone();
     } catch (error) {

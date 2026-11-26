@@ -252,6 +252,8 @@ async function mockLedger(
         appliedCategory: other.category === 'TRANSFER_OUT' ? null : 'HOUSING_AND_UTILITIES',
       })),
       total: bulkOthers.length,
+      selected: (route.request().postDataJSON() as {transactionIds: string[]}).transactionIds
+        .length,
     } satisfies BankTransactionBulkCategoryPreview),
   );
   await page.route(/\/bank-transactions\/[\da-f-]{36}\/category$/, (route) => {

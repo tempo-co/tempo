@@ -3,6 +3,7 @@ import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 import type {ReactNode} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import type {RowSelection} from '@/hooks/use-row-selection';
 import {cn} from '@/utils/cn';
@@ -40,6 +41,8 @@ type LedgerSelection = {
   rows: RowSelection;
   /** A press on a row picks it instead of opening it: in Select mode, or while any row is picked. */
   picking: boolean;
+  /** How many rows the list's filters match; more than are loaded offers to select every one. */
+  matching: number;
 };
 
 const dayOf = (transaction: BankTransaction) => transaction.date ?? '';
@@ -102,7 +105,11 @@ export function BankTransactionLedger({
     </li>
   );
   const header = selection && (
-    <SelectAllRow selection={selection.rows} count={transactions.length} />
+    <SelectAllRow
+      selection={selection.rows}
+      count={transactions.length}
+      matching={selection.matching}
+    />
   );
 
   if (!groupByDay) {
@@ -149,21 +156,50 @@ export function BankTransactionLedger({
 }
 
 /** "Select all 27", or "3 of 27 selected", over the list: its box picks every loaded row or none. */
-function SelectAllRow({selection, count}: {selection: RowSelection; count: number}) {
+/**
+ * "Select all 50" picks the loaded rows; once they are all picked and the filters match more, "Select all 1240
+ * matching" picks every one of those too.
+ */
+function SelectAllRow({
+  selection,
+  count,
+  matching,
+}: {
+  selection: RowSelection;
+  count: number;
+  matching: number;
+}) {
   const picked = selection.selectedIds.length;
-  const label = picked > 0 ? `${picked} of ${count} selected` : `Select all ${count}`;
+  const label = selection.allMatching
+    ? `All ${matching} selected`
+    : picked > 0
+      ? `${picked} of ${count} selected`
+      : `Select all ${count}`;
   return (
-    <label className='flex min-h-8 w-fit cursor-pointer items-center gap-3 px-3 text-body-small text-muted-foreground max-sm:min-h-11'>
-      <Checkbox
-        checked={selection.allSelected ? true : picked > 0 ? 'indeterminate' : false}
-        onCheckedChange={() => selection.toggleAll()}
-        aria-label={selection.allSelected ? 'Clear the selection' : `Select all ${count}`}
-        className='border-input'
-      />
-      <span className='numeric' data-testid='ledger-selection-count'>
-        {label}
-      </span>
-    </label>
+    <div className='flex flex-wrap items-center gap-x-4 px-3 text-body-small text-muted-foreground'>
+      <label className='flex min-h-8 cursor-pointer items-center gap-3 max-sm:min-h-11'>
+        <Checkbox
+          checked={selection.allSelected ? true : picked > 0 ? 'indeterminate' : false}
+          onCheckedChange={() => selection.toggleAll()}
+          aria-label={selection.allSelected ? 'Clear the selection' : `Select all ${count}`}
+          className='border-input'
+        />
+        <span className='numeric' data-testid='ledger-selection-count'>
+          {label}
+        </span>
+      </label>
+      {selection.allSelected && !selection.allMatching && matching > count && (
+        <Button
+          variant='link'
+          onClick={selection.selectAllMatching}
+          className='h-auto min-h-8 p-0 text-body-small text-foreground max-sm:min-h-11'
+        >
+          <span>
+            Select all <span className='numeric'>{matching}</span> matching
+          </span>
+        </Button>
+      )}
+    </div>
   );
 }
 

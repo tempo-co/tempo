@@ -1,6 +1,10 @@
 import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
-import {BANK_TRANSACTION_SEARCH_MAX_LENGTH, BankTransactionCategory} from '@tempo/contracts';
+import {
+  BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS,
+  BANK_TRANSACTION_SEARCH_MAX_LENGTH,
+  BankTransactionCategory,
+} from '@tempo/contracts';
 import {CircleCheck, Layers, ListChecks} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
@@ -13,6 +17,7 @@ import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {Sheet, SheetContent, SheetDescription, SheetTitle} from '@/components/ui/sheet';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
+import {toBankTransactionFilter} from '@/features/banking/api/bank-transaction-filter-params';
 import {useBankTransactionLedger} from '@/features/banking/api/use-bank-transaction-ledger';
 import {usePreviewBulkCategory} from '@/features/banking/api/use-bulk-category';
 import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
@@ -22,6 +27,7 @@ import {
 } from '@/features/banking/components/bank-transaction-bulk-bar';
 import {
   type BulkCategoryDraft,
+  type BulkCategorySelection,
   BulkCategoryStep,
 } from '@/features/banking/components/bank-transaction-bulk-category-step';
 import {BankTransactionDetailsPanel} from '@/features/banking/components/bank-transaction-details-panel';
@@ -93,7 +99,8 @@ function TransactionsPage() {
     transactions.map(({id}) => id),
     JSON.stringify({filters, sort}),
   );
-  const picked = selection.selectedIds.length;
+  const picked = selection.allMatching ? total : selection.selectedIds.length;
+  const tooMany = !selection.allMatching && picked > BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS;
   // Phones show checkboxes only in Select mode; desktop always does.
   const [selectMode, setSelectMode] = useState(false);
   const showCheckboxes = hasRail || selectMode;
@@ -105,11 +112,14 @@ function TransactionsPage() {
     setBulkDraft(null);
   };
   const pickBulkCategory = (category: BankTransactionCategory) => {
-    const transactionIds = selection.selectedIds;
+    // Every matching row goes as the list's filters, which the server matches again when it writes.
+    const picks: BulkCategorySelection = selection.allMatching
+      ? {filter: toBankTransactionFilter(filters)}
+      : {transactionIds: selection.selectedIds};
     previewBulkCategory(
-      {transactionIds, category},
+      {...picks, category},
       {
-        onSuccess: (preview) => setBulkDraft({transactionIds, category, preview}),
+        onSuccess: (preview) => setBulkDraft({selection: picks, category, preview}),
         onError: (error) => {
           if (!wasToasted(error)) {
             toast.error('Other transactions could not be checked. Nothing was saved. Try again.');
@@ -119,12 +129,13 @@ function TransactionsPage() {
     );
   };
   // The step stands for the rows it was asked for: picking or dropping a row, or another view, ends it.
-  const activeDraft =
-    bulkDraft &&
-    bulkDraft.transactionIds.length === picked &&
-    bulkDraft.transactionIds.every((id) => selection.isSelected(id))
-      ? bulkDraft
-      : null;
+  const isDraftSelection = (draft: BulkCategoryDraft) =>
+    'filter' in draft.selection
+      ? selection.allMatching
+      : !selection.allMatching &&
+        draft.selection.transactionIds.length === picked &&
+        draft.selection.transactionIds.every((id) => selection.isSelected(id));
+  const activeDraft = bulkDraft && isDraftSelection(bulkDraft) ? bulkDraft : null;
   if (bulkDraft && !activeDraft) setBulkDraft(null);
   const bulkStep = activeDraft && (
     <BulkCategoryStep
@@ -177,7 +188,9 @@ function TransactionsPage() {
         selectedId={transactionId}
         dayTotals={dayTotals}
         selection={
-          showCheckboxes ? {rows: selection, picking: selectMode || picked > 0} : undefined
+          showCheckboxes
+            ? {rows: selection, picking: selectMode || picked > 0, matching: total}
+            : undefined
         }
         empty={
           onlyTab ? (
@@ -197,9 +210,10 @@ function TransactionsPage() {
       {/* Rows kept from the previous filters can't be continued. */}
       {!pages.isPlaceholderData && <LoadMore query={pages} />}
       {picked > 0 && (
-        <BankTransactionBulkBar count={picked} onClear={endSelection}>
+        <BankTransactionBulkBar count={picked} tooMany={tooMany} onClear={endSelection}>
           <BulkCategoryAction
             count={picked}
+            tooMany={tooMany}
             sheet={!hasRail}
             isChecking={isCheckingBulk}
             onPick={pickBulkCategory}

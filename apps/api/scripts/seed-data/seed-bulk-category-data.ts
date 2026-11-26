@@ -19,6 +19,9 @@ export const SEEDED_BULK_CATEGORY_IDS = {
 	cafeShoppingOlder: '00000000-0000-4000-8000-000000000307',
 } as const;
 
+/** More Example Bookshop rows than the Transactions list loads at once, all older than the rows above. */
+export const SEEDED_BULK_CATEGORY_BOOKSHOP_COUNT = 55;
+
 const EXAMPLE_CAFE = {description: 'Example Cafe', counterpartyName: 'Example Cafe'};
 const TO_CHECK = {category: 'NEEDS_REVIEW'};
 
@@ -29,7 +32,8 @@ function row(id: string, bookingDate: string, amount: string, overrides: DeepPar
 
 /**
  * Seeds an owner for the bulk category flow: three Example Cafe rows to check on the newest days, two more Example
- * Cafe rows in Shopping, one Example Bakery row to check and one Example Market row in Groceries.
+ * Cafe rows in Shopping, one Example Bakery row to check, one Example Market row in Groceries, and older Example
+ * Bookshop rows in Shopping, more than the list's first page holds.
  */
 export async function seedBulkCategoryData(app: INestApplicationContext) {
 	const account = await app
@@ -61,5 +65,13 @@ export async function seedBulkCategoryData(app: INestApplicationContext) {
 		}),
 		row(ids.cafeShoppingNewer, '2026-09-12', '-6.00', {...EXAMPLE_CAFE, category: 'SHOPPING'}),
 		row(ids.cafeShoppingOlder, '2026-09-08', '-4.00', {...EXAMPLE_CAFE, category: 'SHOPPING'}),
+		...Array.from({length: SEEDED_BULK_CATEGORY_BOOKSHOP_COUNT}, (_, index) =>
+			row(
+				`00000000-0000-4000-8000-000000000${400 + index}`,
+				new Date(Date.UTC(2026, 7, 31 - index)).toISOString().slice(0, 10),
+				'-12.00',
+				{description: 'Example Bookshop', counterpartyName: 'Example Bookshop', category: 'SHOPPING'},
+			),
+		),
 	]);
 }

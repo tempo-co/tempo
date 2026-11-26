@@ -456,7 +456,9 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/accounts');
       const row = accountRow(page, CHECKING.id);
-      await expect(row.getByRole('button', {name: 'Reconnect Mock ASPSP', exact: true})).toBeVisible();
+      await expect(
+        row.getByRole('button', {name: 'Reconnect Mock ASPSP', exact: true}),
+      ).toBeVisible();
       await expect(row.getByTestId('account-freshness')).toContainText('Access expired');
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     });

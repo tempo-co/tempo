@@ -32,15 +32,17 @@ import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
  */
 export function BankTransactionBulkBar({
   count,
+  tooMany,
   onClear,
   children,
 }: {
   count: number;
+  /** More rows are picked one by one than an action takes; every row matching the filters has no limit. */
+  tooMany: boolean;
   onClear: () => void;
   /** The bulk actions, each a button in the bar. */
   children: ReactNode;
 }) {
-  const tooMany = count > BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS;
   return (
     <div
       role='toolbar'
@@ -81,11 +83,13 @@ export function BankTransactionBulkBar({
  */
 export function BulkCategoryAction({
   count,
+  tooMany,
   sheet,
   isChecking,
   onPick,
 }: {
   count: number;
+  tooMany: boolean;
   /** Phones pick from a bottom sheet. */
   sheet: boolean;
   /** The pick's preview is loading. */
@@ -93,7 +97,7 @@ export function BulkCategoryAction({
   onPick: (category: BankTransactionCategory) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const disabled = isChecking || count > BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS;
+  const disabled = isChecking || tooMany;
   const trigger = (
     <Button
       variant='ghost'
