@@ -612,14 +612,24 @@ function isSameAmount(rows: readonly RecurringCandidate[]): boolean {
 }
 
 /**
- * Two similar payments a year apart at a payee paid often in between are a coincidence, not a yearly bill.
+ * Similar payments a year apart are a coincidence, not a yearly bill, when the payee is paid often in between, or
+ * when a pair's exact amount is paid again between its two payments outside a yearly pair of its own.
  */
 function isBusyPayee(rows: readonly RecurringCandidate[], chain: readonly RecurringCandidate[]): boolean {
 	const first = chain[0].date;
 	const last = chain[chain.length - 1].date;
 	const inChain = new Set(chain.map(({id}) => id));
-	const between = rows.filter(({id, date}) => !inChain.has(id) && date >= first && date <= last).length;
-	return between > MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN;
+	const others = rows.filter(({id}) => !inChain.has(id));
+	const between = others.filter(({date}) => date >= first && date <= last);
+	const [minGap, maxGap] = CADENCE_RULES.find(({cadence}) => cadence === 'YEARLY')!.medianGap;
+	const ownYearlyPair = (row: RecurringCandidate) =>
+		others.some((other) => {
+			const gap = Math.abs(toDayNumber(other.date) - toDayNumber(row.date));
+			return other.amountCents === row.amountCents && gap >= minGap && gap <= maxGap;
+		});
+	const repeatsPair =
+		chain.length === 2 && between.some((row) => row.amountCents === chain[0].amountCents && !ownYearlyPair(row));
+	return repeatsPair || between.length > MAX_OTHER_PAYMENTS_IN_YEARLY_SPAN;
 }
 
 /** Splits date-ordered rows into chains of similar amounts; a price step continues its chain. */
