@@ -17,8 +17,8 @@ Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 - A flow that can fail asserts its failure message appears exactly once.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
-- Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either. While a side sheet (`ResponsiveDialog` with `side`, as Add data) is open, toasts move to the left edge so they never cover its footer (`data-side-sheet` and the rule at the end of `src/index.css`).
-- A stepped sheet builds each step from `StepFrame` (`src/components/shared/step-frame.tsx`); the Add data sheet's state lives in `AddDataProvider` in the signed-in shell, so an import keeps running across pages and while the sheet is closed.
+- Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either. While a side sheet is open, toasts move to the left edge, clear of its footer (`data-side-sheet`, end of `src/index.css`).
+- Stepped sheets build steps from `StepFrame` (`src/components/shared/step-frame.tsx`). The shell's entry bundle holds only `AddDataProvider`; `src/features/add-data/components/add-data-sheet.tsx` loads on the first ask, which waits for it, then stays mounted so an import outlives its page.
 - When a hook changes which `sonner` methods it calls, update the `sonner` stub in hook-harness specs (see `docs/e2e-helpers.md`).
 
 ## Colour and theme

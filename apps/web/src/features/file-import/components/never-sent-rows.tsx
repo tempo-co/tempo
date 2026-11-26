@@ -21,6 +21,7 @@ import {
   useRefreshNeverSentRows,
 } from '../api/use-bank-import-never-sent-rows';
 import {formatCount, plural} from '../utils/import-format';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {
   NEVER_SENT_COPY,
   type NeverSentGroup,
@@ -28,7 +29,6 @@ import {
   neverSentGroups,
   neverSentRowTitle,
 } from '../utils/never-sent-rows';
-import {IMPORT_TILE} from './file-choice';
 
 /** How many groups show at first, and how many more each Show more adds; and the rows a group shows before Show all. */
 const GROUPS_PAGE = 50;

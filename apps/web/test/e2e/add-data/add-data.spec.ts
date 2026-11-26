@@ -23,6 +23,15 @@ const STATEMENT = [
   '</Stmt></BkToCstmrStmt></Document>',
 ].join('');
 
+/** Opens `path` and waits for the import list, which says file import is on and so turns the page drop on. */
+async function openWithImportOn(page: Page, path: string) {
+  const importList = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/bank-imports' && response.ok(),
+  );
+  await page.goto(path);
+  await importList;
+}
+
 /** Drags `file` over the page column and drops it there, as a file dragged in from the desktop. */
 async function dropOnPage(page: Page, file: {name: string; content: string}) {
   const transfer = await page.evaluateHandle(({name, content}) => {
@@ -38,18 +47,31 @@ async function dropOnPage(page: Page, file: {name: string; content: string}) {
 }
 
 test.describe('Add data', () => {
-  test.use({timezoneId: 'Europe/Amsterdam'});
+  // The offline shell's worker would serve the sheet's chunk past page.route, which holds it back.
+  test.use({timezoneId: 'Europe/Amsterdam', serviceWorkers: 'block'});
 
   test('a statement dropped on Transactions imports in the Add data sheet and its account shows on Accounts', async ({
     page,
     freshAccount: _account,
   }) => {
     await page.setViewportSize({width: 1440, height: 900});
-    await page.goto('/transactions');
+    await openWithImportOn(page, '/transactions');
     await expect(page.getByRole('heading', {name: 'Transactions', level: 1})).toBeVisible();
+    // The sheet loads on first use. Held back, the drop lands before it has arrived and waits for it.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let sheetAsked = false;
+    await page.route('**/assets/add-data-sheet-*.js', async (route) => {
+      sheetAsked = true;
+      await held;
+      await route.continue();
+    });
 
     await dropOnPage(page, {name: 'example-statement.xml', content: STATEMENT});
+    await expect.poll(() => sheetAsked).toBe(true);
     const sheet = page.getByTestId('add-data-sheet');
+    await expect(sheet).toHaveCount(0);
+    release();
     await expect(sheet.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     // A side sheet over the page, not a centred dialog: it runs the window's full height.
     const box = (await sheet.boundingBox())!;
@@ -73,7 +95,7 @@ test.describe('Add data', () => {
     freshAccount: _account,
   }) => {
     await page.setViewportSize({width: 1440, height: 900});
-    await page.goto('/insights');
+    await openWithImportOn(page, '/insights');
     await dropOnPage(page, {name: 'holiday-photo.heic', content: 'not a statement'});
 
     const sheet = page.getByTestId('add-data-sheet');

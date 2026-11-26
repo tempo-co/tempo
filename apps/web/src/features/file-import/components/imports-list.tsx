@@ -15,7 +15,7 @@ import {
   importHeadline,
   needALook,
 } from '../utils/import-format';
-import {IMPORT_TILE} from './file-choice';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {importAccountName, useKnownAccounts} from './use-known-accounts';
 import {UNDO_FAILED, useUndoImport} from './use-undo-import';
 

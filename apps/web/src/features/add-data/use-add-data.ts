@@ -1,14 +1,22 @@
 import {createContext, useContext} from 'react';
 
-import type {
-  FileImportController,
-  ImportStep,
-} from '@/features/file-import/components/use-file-import';
+import type {ConnectingBank} from '@/features/banking/components/connect-bank-steps';
+import type {ImportStep} from '@/features/file-import/components/use-file-import';
 
 export type ConnectResult = 'connected' | 'cancelled' | 'error';
 
 /** The click that opens the sheet: focus goes back to its button when the sheet closes. */
 export type Opener = {currentTarget: EventTarget | null};
+
+/** What the shell asks of the Add data sheet, which loads only once it is first asked. */
+export type AddDataAsk =
+  | {kind: 'menu'}
+  | {kind: 'import'}
+  | {kind: 'connect'}
+  | {kind: 'show'; step: ImportStep}
+  /** Files dropped on the page, handed to the sheet's import as it loads. */
+  | {kind: 'drop'; files: File[]}
+  | {kind: 'returned'; result: 'cancelled' | 'error'; bank: ConnectingBank | null};
 
 export type AddData = {
   /** Add data in the sidebar or the phone header: the ways in, or straight to the one there is. */
@@ -23,10 +31,12 @@ export type AddData = {
   connectReturned: (result: ConnectResult) => void;
   /** Whether this deployment imports files; false until the import list says so. */
   importOn: boolean;
-  /** The import's state, for pages that show what it is doing. */
-  fileImport: FileImportController;
   /** A hand-off to a bank is starting. */
   isStarting: boolean;
+  /** Whether a drop on the page imports now: the sheet is closed and no import is running. */
+  dropEnabled: boolean;
+  /** Files dropped on the page: the sheet opens at the import and imports them. */
+  importDropped: (files: File[]) => void;
 };
 
 export const AddDataContext = createContext<AddData | null>(null);

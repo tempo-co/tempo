@@ -6,8 +6,8 @@ import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
 import {droppedFiles, folderNotRead} from '../utils/dropped-files';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
-import {IMPORT_TILE} from './file-choice';
 
 /** The page's Import a file button: an outline button beside Connect a bank. */
 export function ImportFileButton({
