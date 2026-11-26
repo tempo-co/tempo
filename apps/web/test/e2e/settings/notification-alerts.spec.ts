@@ -78,7 +78,7 @@ test.describe('Alerts from the service worker', () => {
       data: JSON.stringify({
         title: 'Tempo',
         body: 'A bank has stopped syncing',
-        url: `${origin}/bank-connections`,
+        url: `${origin}/accounts`,
         tag: 'bank-connections',
         badge: 4,
       }),
@@ -105,7 +105,7 @@ test.describe('Alerts from the service worker', () => {
         title: 'Tempo',
         body: 'A bank has stopped syncing',
         tag: 'bank-connections',
-        data: {url: `${origin}/bank-connections`},
+        data: {url: `${origin}/accounts`},
       },
     ]);
 
@@ -115,7 +115,7 @@ test.describe('Alerts from the service worker', () => {
       const [notification] = await scope.registration.getNotifications();
       scope.dispatchEvent(new scope.NotificationEvent('notificationclick', {notification}));
     });
-    await expect(page).toHaveURL(`${origin}/bank-connections`);
+    await expect(page).toHaveURL(`${origin}/accounts`);
   });
 
   test('opens only Tempo pages from a notification', async ({page, context, baseURL}) => {

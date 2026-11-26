@@ -132,7 +132,7 @@ describe('Bank connection email alerts', () => {
 		expect(weekWarning.Subject).toBe(`Your ${BANK_NAME} connection to Tempo ends soon`);
 		expect(weekWarning.Text).toContain(BANK_NAME);
 		expect(oneLine(weekWarning.Text)).toContain(`ends on ${ownerTime(consentValidUntil)}.`);
-		expect(weekWarning.HTML).toContain(`href="${webBaseUrl}/bank-connections"`);
+		expect(weekWarning.HTML).toContain(`href="${webBaseUrl}/accounts"`);
 
 		// The consent date moves into the last day without reauthorization.
 		await clearMailbox();
@@ -458,7 +458,7 @@ describe('Bank connection email alerts', () => {
 			.get('/bank-connections/callback')
 			.query({state, code: 'alert-reauthorization-code'})
 			.expect(302)
-			.expect('Location', `${webBaseUrl}/bank-connections?result=connected`);
+			.expect('Location', `${webBaseUrl}/accounts?result=connected`);
 	}
 
 	/** Runs one scan and waits until the email worker has handed every queued email to Mailpit. */

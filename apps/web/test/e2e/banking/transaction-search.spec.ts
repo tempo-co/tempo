@@ -23,7 +23,7 @@ test('searches with a long description and restores it from the URL', async ({pa
     searches.push(new URL(route.request().url()).searchParams.get('filter[search]'));
     return fulfillJson(route, {transactions: [], total: 0});
   });
-  await page.goto('/bank-transactions?search=initial&pageIndex=2');
+  await page.goto('/transactions?search=initial&pageIndex=2');
   const search = page.getByRole('searchbox', {name: 'Search transactions'});
   await search.fill(description);
   await expect.poll(() => searches[searches.length - 1]).toBe(description);
@@ -45,7 +45,7 @@ test('searches with a long description and restores it from the URL', async ({pa
 
   // Another filter keeps the toolbar on screen once the search is gone. The button clears a filled field and leaves
   // the cursor in it.
-  await page.goto('/bank-transactions?needsAttention=true&search=bakery');
+  await page.goto('/transactions?needsAttention=true&search=bakery');
   const clear = page.getByRole('button', {name: 'Clear search'});
   await clear.click();
   await expect(search).toHaveValue('');
@@ -76,7 +76,7 @@ test('a search within dates that matches nothing widens to all dates', async ({p
       : route.continue(),
   );
   const october = encodeURIComponent(JSON.stringify({from: '2026-10-01', to: '2026-10-31'}));
-  await page.goto(`/bank-transactions?search=bakery&date=${october}`);
+  await page.goto(`/transactions?search=bakery&date=${october}`);
 
   await expect(page.getByRole('heading', {name: 'No matching transactions'})).toBeVisible();
   await expect(page.getByText('Nothing matches “bakery” with these filters.')).toBeVisible();

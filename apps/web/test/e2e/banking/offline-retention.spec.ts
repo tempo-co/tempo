@@ -56,7 +56,7 @@ test.describe('offline retention', () => {
   }) => {
     test.setTimeout(40000);
     await padTransactionPages(page);
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     await search(page, 'Coffee', 'Coffee shop');
@@ -77,13 +77,13 @@ test.describe('offline retention', () => {
       ['Extra', 'Extra transaction 1'],
     ]) {
       const previousSave = await savedAt(page);
-      await page.goto(`/bank-transactions?search=${text}`);
+      await page.goto(`/transactions?search=${text}`);
       await expect(page.getByText(row, {exact: true}).first()).toBeVisible();
       // The reopened app saves before the next reload.
       await expect.poll(() => savedAt(page)).not.toBe(previousSave);
     }
     expect(await savedSearches(page)).toEqual(['Extra', 'Provider', 'Salary']);
-    await page.goto('/bank-transactions?search=Coffee');
+    await page.goto('/transactions?search=Coffee');
     await expect(page.getByRole('heading', {name: "You're offline"})).toBeVisible();
     await expect(page.getByText('This loads once the device is back online.')).toBeVisible();
     await expect(page.getByText('Coffee shop', {exact: true})).not.toBeVisible();
@@ -99,10 +99,8 @@ test.describe('offline retention', () => {
 
     await expect.poll(() => savedSearches(page)).toEqual(['Coffee', 'Extra', 'Provider']);
     // A page without transaction views saves within the same budget, not every view still loaded.
-    await page.getByRole('link', {name: 'Connections'}).click();
-    await expect(
-      page.getByTestId('bank-connections-list').getByRole('region').first(),
-    ).toBeVisible();
+    await page.getByRole('link', {name: 'Accounts'}).click();
+    await expect(page.getByTestId('accounts-overview').getByRole('region').first()).toBeVisible();
     await expect.poll(() => savedSearches(page)).toEqual(['Coffee', 'Extra']);
   });
 
@@ -125,7 +123,7 @@ test.describe('offline retention', () => {
       };
     }, CACHE_KEY);
     await padTransactionPages(page);
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     await search(page, 'Coffee', 'Coffee shop');
@@ -140,7 +138,7 @@ test.describe('offline retention', () => {
     await expect(saveFailedToast(page)).toBeVisible();
     expect(await savedSearches(page)).toEqual(['Coffee', 'Salary']);
     await expect(new HomePage(page).accountName).toBeVisible();
-    await expect(page).toHaveURL(/\/bank-transactions/);
+    await expect(page).toHaveURL(/\/transactions/);
 
     await page.evaluate(() => Reflect.deleteProperty(window, 'tempoStorageFull'));
     await search(page, 'Extra', 'Extra transaction 1');

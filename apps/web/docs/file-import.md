@@ -1,8 +1,8 @@
 # File import screens
 
-The statement file import's screens on Connections. The design rules they follow are in `DESIGN.md` (File import, Alerts); the API behind them is `apps/api/docs/file-import.md`.
+The statement file import's screens on Accounts. The design rules they follow are in `DESIGN.md` (File import, Alerts); the API behind them is `apps/api/docs/file-import.md`.
 
-Statement file import lives on Connections, and only while the deployment has it on: the import
+Statement file import lives on Accounts, and only while the deployment has it on: the import
 list answering is the switch, and until it does the page shows nothing of it. Bank sync stays
 the page's primary action. **Import a file** is the outline button beside **Connect a bank**
 (the two share the row under the title on phones, equal width), and the empty page offers both.
@@ -12,7 +12,7 @@ No copy calls import a fallback or assumes a bank is connected.
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
   screens get the button alone, full width. The picker accepts any extension, since banks name
-  their exports oddly. Files dragged anywhere over Connections show a full-column overlay (dashed
+  their exports oddly. Files dragged anywhere over Accounts show a full-column overlay (dashed
   2px ring rule, page-field wash, "Drop to import"); it is the only drop target outside the dialog.
 - **One dialog.** Choosing, importing, the summary, the account question, the rows to check and
   the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
@@ -28,7 +28,7 @@ No copy calls import a fallback or assumes a bank is connected.
 - **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
   look in `warning`), then Period and Went to, each a small muted label with its glyph
   (`CalendarRange`, `ArrowDownToLine`) over its value. Each account it went to shows as on
-  Connections: its bank's logo (imported files: the `Files` leading tile) with the account-type tile
+  Accounts: its bank's logo (imported files: the `Files` leading tile) with the account-type tile
   on its corner, its name, and its details and bank under it. A drop that added nothing shows
   the `CheckCheck` state instead of the counts. Skipped days get a `warning` Alert (`FileWarning`, "Some days are missing")
   under the counts: each gap's days, the account under them when the drop went to several, and
@@ -51,8 +51,8 @@ No copy calls import a fallback or assumes a bank is connected.
   imported" in the past tense.
 - **Account question.** Native radio rows, so arrow keys move between them; nothing is
   preselected, and Import stays disabled until every question has an answer. Each row starts
-  with its bank's logo as on its Connections card (imported files: the `Files` leading tile) and a
-  small round account-type tile on its corner as on its Connections row; a new account gets the
+  with its bank's logo as on its Accounts card (imported files: the `Files` leading tile) and a
+  small round account-type tile on its corner as on its Accounts row; a new account gets the
   `Plus` leading tile in the same square.
 - **Balances.** The amount field shows its currency inside at the far right, over padding the
   value scrolls short of. Save sits under the field: in the summary on its own row, in the
@@ -68,11 +68,11 @@ No copy calls import a fallback or assumes a bank is connected.
   more** (as Load more) under them; it focuses the first row it adds, and choices on every shown
   row count toward Save. When every row is on a synced account, a second muted line under the
   intro says they are almost always in Tempo already and leaving them open loses nothing.
-- **Imports list.** Under the connection cards once an import exists: a small heading, then one
+- **Imports list.** On Accounts' Imports tab, and on an account page for the imports that wrote to it: a small heading, then one
   bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
   new" over the day, the accounts and any rows still to check (attention tone), with an
-  always-visible outline Undo named with its date. An undone import stays listed, muted, without
-  the button. Undo confirms with the destructive variant and says what goes and what stays.
+  always-visible outline Undo named with its date, after Review while rows are still to check. An
+  undone import stays listed, muted, without the buttons. Undo confirms with the destructive variant and says what goes and what stays.
 - **Column preview.** The bank a layout is saved under is a `Select` labelled Bank: the owner's own banks
   (`GET /bank-imports/layout-proposals/:proposalId/banks`: their connected or once-connected banks, the
   banks their imported-files accounts record by name and their saved layouts' banks; only names this
@@ -84,6 +84,6 @@ No copy calls import a fallback or assumes a bank is connected.
   Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
   the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API
   refuses says why under the control.
-- **Imported files.** The imported-files connection uses the bank card with the `Files` leading tile
-  and "From statement files". It never shows consent, sync or re-authorization states, and its
-  Details hold the accounts and Remove only.
+- **Imported files.** An imported-files account has the `Files` leading tile and "statement files"
+  as its source, and its freshness line runs up to its newest import's last day. It never shows
+  consent, sync or reconnecting; its page offers Import a newer file and Remove imported files.

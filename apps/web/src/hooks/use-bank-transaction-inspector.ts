@@ -9,7 +9,7 @@ declare module '@tanstack/react-router' {
 }
 
 export function useBankTransactionInspector() {
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const router = useRouter();
   const pendingCloseRef = useRef<(() => void) | null>(null);
   const transactionTriggerRef = useRef<HTMLButtonElement | null>(null);

@@ -2,7 +2,10 @@ import type {Locator, Page} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 
+import {createAccount} from '../../data/account.data';
 import {
+  HOME_CONNECTION,
+  HOME_REVIEW_COUNTS,
   MARKET_ID,
   RENT_KEY,
   USUAL_SPENDING,
@@ -11,7 +14,7 @@ import {
   monthTransactions,
 } from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {fulfillJson} from '../../utils/api-mocks';
+import {fulfillJson, mockJson} from '../../utils/api-mocks';
 import {boxOf, expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const layouts = [
@@ -240,8 +243,9 @@ async function columnGap(page: Page) {
   return Math.abs(right.y + right.height - (chart.y + chart.height));
 }
 
-// 1010px is just past the side-by-side breakpoint: a 60rem column plus the page padding and scrollbar gutter.
-for (const width of [1010, 1024, 1440]) {
+// 1250px is just past the side-by-side breakpoint: the 240px sidebar, then a 60rem column plus the page padding and
+// scrollbar gutter.
+for (const width of [1250, 1280, 1440]) {
   test(`the chart and the span details end level at ${width}px, at every span`, async ({
     page,
     homePage,
@@ -401,3 +405,122 @@ test('Home’s text actions and Load more buttons share one style with the month
   for (const item of loadMores) expect(item).toEqual(loadMores[0]);
   for (const item of headings) expect(item).toEqual(headings[0]);
 });
+
+/**
+ * The shell's data: who is signed in and what the badges count. The worst case is a long hyphenated name with
+ * diacritics, an email at a long company domain, more transactions to review than the badge shows, and two banks
+ * that need attention, all synthetic.
+ */
+const shellData = {
+  demo: {
+    account: createAccount({email: 'owner@example.com'}),
+    needsAttention: 3,
+    connections: [HOME_CONNECTION],
+    bankProblem: false,
+  },
+  'worst-case': {
+    account: createAccount({
+      name: 'Aleksandra Wiśniewska-Kowalczyk von Hohenberg-Ostrowska',
+      email: 'bartholomew.fitzgerald@northwind-industries-holdings.example.com',
+    }),
+    needsAttention: 1284,
+    bankProblem: true,
+    connections: [
+      {...HOME_CONNECTION, status: 'EXPIRED' as const, syncStatus: 'EXPIRED' as const},
+      {
+        ...HOME_CONNECTION,
+        id: '00000000-0000-4000-8000-0000000000e2',
+        status: 'EXPIRED' as const,
+        syncStatus: 'EXPIRED' as const,
+      },
+    ],
+  },
+};
+
+/** Elements inside `root` whose box runs past `root`'s, by their label or text. */
+const outside = (root: Locator, selector: string) =>
+  root.evaluate((element, inner) => {
+    const box = element.getBoundingClientRect();
+    return Array.from(element.querySelectorAll<HTMLElement>(inner))
+      .filter((child) => child.getClientRects().length > 0)
+      .filter((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left < box.left - 0.5 || rect.right > box.right + 0.5;
+      })
+      .map((child) => child.getAttribute('aria-label') ?? child.textContent?.trim());
+  }, selector);
+
+for (const [name, data] of Object.entries(shellData)) {
+  for (const {width, theme} of [
+    {width: 1440, theme: 'light'},
+    {width: 1440, theme: 'dark'},
+    {width: 390, theme: 'light'},
+    {width: 390, theme: 'dark'},
+    {width: 320, theme: 'light'},
+    {width: 320, theme: 'dark'},
+  ] as const) {
+    test(`the shell fits ${name} data at ${width}px in ${theme}`, async ({page}) => {
+      await page.setViewportSize({width, height: 900});
+      await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
+      await mockSyntheticHome(page, {
+        connections: data.connections,
+        reviewCounts: {...HOME_REVIEW_COUNTS, needsAttention: data.needsAttention},
+      });
+      await mockJson(page, '**/accounts/me', data.account);
+      await page.goto('/insights');
+      await expect(page.getByRole('heading', {name: 'Insights', level: 1})).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      if (process.env.HOME_POLISH_CAPTURE_DIR) {
+        await mkdir(process.env.HOME_POLISH_CAPTURE_DIR, {recursive: true});
+        await page.screenshot({
+          path: join(process.env.HOME_POLISH_CAPTURE_DIR, `shell-${name}-${theme}-${width}.png`),
+        });
+      }
+      const badgeText = data.needsAttention > 99 ? '99+' : String(data.needsAttention);
+      await expect(page.getByText(badgeText, {exact: true}).locator('visible=true')).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      const title = await boxOf(page.getByRole('heading', {level: 1}));
+
+      if (width >= 768) {
+        const sidebar = page.locator('[data-sidebar="sidebar"]');
+        // The sidebar, with its hairline, runs the window's height from its left edge; the column starts 16px past it.
+        const edge = await boxOf(sidebar.locator('xpath=..'));
+        expect({x: edge.x, height: edge.height}).toEqual({x: 0, height: 900});
+        expect(title.x).toBe(edge.x + edge.width + 16);
+        // A long name and email truncate inside the sidebar, and the gear stays whole beside them.
+        expect.soft(await outside(sidebar, 'a, button, span')).toEqual([]);
+        const gear = await boxOf(sidebar.getByRole('link', {name: 'Settings'}));
+        expect(gear).toMatchObject({width: 36, height: 36});
+        for (const id of ['current-account-name', 'current-account-email']) {
+          const text = await boxOf(page.getByTestId(id));
+          expect.soft(text.x + text.width, id).toBeLessThanOrEqual(gear.x);
+          expect.soft(text.height, id).toBe(20);
+        }
+        // The count stays a one-line pill inside its row, after the label.
+        const transactions = sidebar.getByRole('link', {name: /^Transactions, /});
+        const badge = await boxOf(transactions.getByText(badgeText, {exact: true}));
+        const row = await boxOf(transactions);
+        expect.soft(badge.height).toBe(18);
+        expect.soft(badge.x + badge.width).toBeLessThanOrEqual(row.x + row.width);
+        if (data.bankProblem)
+          await expect(sidebar.getByRole('link', {name: /^Accounts, /}).locator('i')).toBeVisible();
+      } else {
+        const header = await boxOf(page.getByTestId('app-phone-header'));
+        const tabs = page.getByTestId('app-tab-bar');
+        const bar = await boxOf(tabs);
+        expect({x: header.x, width: header.width}).toEqual({x: 0, width});
+        expect({x: bar.x, width: bar.width}).toEqual({x: 0, width});
+        // The page title starts 16px in, and every header action and tab is a full tap target.
+        expect(title.x).toBe(16);
+        expect.soft(await smallTargets(page, '[data-testid="app-phone-header"]')).toEqual([]);
+        expect.soft(await smallTargets(page, '[data-testid="app-tab-bar"]')).toEqual([]);
+        // Each badge stays inside its own tab, on one line.
+        for (const label of [/^Transactions, /, ...(data.bankProblem ? [/^Accounts, /] : [])]) {
+          const tab = tabs.getByRole('link', {name: label});
+          expect.soft(await outside(tab, 'span, i'), String(label)).toEqual([]);
+        }
+        expect.soft((await boxOf(tabs.getByText(badgeText, {exact: true}))).height).toBe(18);
+      }
+    });
+  }
+}

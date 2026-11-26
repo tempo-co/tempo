@@ -1,3 +1,4 @@
+import {bankGroupOf} from '../bank-group';
 import {BATCH_WRITE_CHUNK_SIZE, buildPostgresValuesList, chunkArray} from '../banking.utils';
 import {verifyIbanAgainstIdentificationHash} from './iban';
 import {OwnTransferAccount, OwnTransferTransaction, compareIds, detectOwnTransfers} from './own-transfer-detection';
@@ -20,7 +21,12 @@ export type OwnTransferRecomputeResult = {
  */
 export type OwnTransferRecomputeScope = {transactionIds: readonly string[]};
 
-type AccountRow = OwnTransferAccount & {identificationHash: string};
+type AccountRow = Omit<OwnTransferAccount, 'bankGroup'> & {
+	identificationHash: string;
+	connectionId: string;
+	provider: string;
+	bankIdentity: string | null;
+};
 type TransactionRow = OwnTransferTransaction & {
 	ownTransferEvidence: string | null;
 	ownTransferCounterpartId: string | null;
@@ -77,13 +83,19 @@ export async function recomputeOwnTransfers(
 	executor: OwnTransferSqlExecutor,
 	ownerId: string,
 	scope?: OwnTransferRecomputeScope,
+	/**
+	 * Whether `bank_accounts.bankIdentity` exists yet. Only a migration that runs before it (`AddOwnTransferRecognition`)
+	 * says no; imported-files accounts, the only ones grouped by it, did not exist then either.
+	 */
+	{bankIdentityColumn = true}: {bankIdentityColumn?: boolean} = {},
 ): Promise<OwnTransferRecomputeResult> {
 	if (scope?.transactionIds.length === 0) return {accountIbansAdded: 0, transactionsChanged: 0, changedIds: []};
 	await lockOwnTransfers(executor, ownerId);
 
 	const accounts = (await executor.query(
 		`SELECT account."id", account."currency", account."iban", account."name" AS "holderName",
-			account."identificationHash"
+			account."identificationHash", account."bankConnectionId" AS "connectionId", connection."provider",
+			${bankIdentityColumn ? 'account."bankIdentity"' : 'NULL::varchar AS "bankIdentity"'}
 		FROM "bank_accounts" account
 		JOIN "bank_connections" connection ON connection."id" = account."bankConnectionId"
 		WHERE connection."accountId" = $1`,
@@ -104,7 +116,10 @@ export async function recomputeOwnTransfers(
 	) as TransactionRow[];
 
 	const accountIbansAdded = await addVerifiedAccountIbans(executor, accounts, transactions);
-	const results = detectOwnTransfers({accounts, transactions});
+	const results = detectOwnTransfers({
+		accounts: accounts.map((account) => ({...account, bankGroup: bankGroupOf(account)})),
+		transactions,
+	});
 
 	const changes = transactions.flatMap((transaction) => {
 		const result = results.get(transaction.id);

@@ -1799,7 +1799,7 @@ describe('BankConnectionController', () => {
 		await holder;
 		const [response] = await Promise.all([authorized, deletion]);
 
-		expect(response.headers.location).toBe('http://localhost:5173/bank-connections?result=connected');
+		expect(response.headers.location).toBe('http://localhost:5173/accounts?result=connected');
 		expect(await dataSource.getRepository(Account).countBy({id: owner.id})).toBe(0);
 		expect(await bankConnectionRepository.countBy({accountId: owner.id})).toBe(0);
 	});
@@ -4004,7 +4004,7 @@ describe('BankConnectionController', () => {
 			.get('/bank-connections/callback')
 			.query(query)
 			.expect(302)
-			.expect('Location', `http://localhost:5173/bank-connections?result=${result}`);
+			.expect('Location', `http://localhost:5173/accounts?result=${result}`);
 	}
 
 	function createIncompleteConnection(status: string) {

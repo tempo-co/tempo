@@ -57,7 +57,7 @@ export type BankTransactionFinancialEventSource = (typeof BANK_TRANSACTION_FINAN
 export const BANK_TRANSACTION_CASH_FLOW_TREATMENTS = ['INCOME', 'EXPENSE', 'INTERNAL'] as const;
 export type BankTransactionCashFlowTreatment = (typeof BANK_TRANSACTION_CASH_FLOW_TREATMENTS)[number];
 
-export const OWN_TRANSFER_EVIDENCE = ['IBAN', 'NAME', 'MANUAL'] as const;
+export const OWN_TRANSFER_EVIDENCE = ['IBAN', 'NAME', 'DESCRIPTION', 'MANUAL'] as const;
 export type OwnTransferEvidence = (typeof OWN_TRANSFER_EVIDENCE)[number];
 
 export const OWN_TRANSFER_OVERRIDES = ['MARKED', 'UNMARKED'] as const;

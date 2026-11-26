@@ -25,24 +25,34 @@ const SHOWN = 5;
 const ROW = 'grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2';
 
 /**
- * The owner's imports, newest first, under the connection cards: shown once there is one. An undone import stays
- * listed. A row opens its summary; Undo asks first.
+ * The owner's imports, newest first: shown once there is one. An undone import stays listed. A row opens its summary;
+ * Review opens the rows still to check; Undo asks first. With `accountId`, only the imports that wrote to that account.
  */
 export function ImportsList({
   query,
   onOpen,
+  onReview,
+  accountId,
+  title = 'Imports',
 }: {
   query: ReturnType<typeof useBankImports>;
   onOpen: (summary: BankImportSummary) => void;
+  onReview: (summary: BankImportSummary) => void;
+  accountId?: string;
+  title?: string;
 }) {
-  const {data: imports, error, isError, isFetching, refetch} = query;
+  const {data: all, error, isError, isFetching, refetch} = query;
   const [showAll, setShowAll] = useState(false);
+  const imports =
+    accountId && all
+      ? all.filter((summary) => summary.accounts.some(({id}) => id === accountId))
+      : all;
 
   if (!imports) {
     // Import is on but the list failed: the cards above stay; this section says so and retries.
     if (!isError && !isFetching) return null;
     return (
-      <ImportsSection>
+      <ImportsSection title={title}>
         {isFetching ? (
           <ul
             role='status'
@@ -67,13 +77,18 @@ export function ImportsList({
   const shown = showAll ? imports : imports.slice(0, SHOWN);
 
   return (
-    <ImportsSection>
+    <ImportsSection title={title}>
       <ul
         className='divide-y overflow-hidden rounded-lg border bg-card'
         data-testid='bank-imports-list'
       >
         {shown.map((summary) => (
-          <ImportRow key={summary.id} summary={summary} onOpen={() => onOpen(summary)} />
+          <ImportRow
+            key={summary.id}
+            summary={summary}
+            onOpen={() => onOpen(summary)}
+            onReview={() => onReview(summary)}
+          />
         ))}
       </ul>
       {!showAll && imports.length > SHOWN && (
@@ -89,18 +104,26 @@ export function ImportsList({
   );
 }
 
-function ImportsSection({children}: {children: React.ReactNode}) {
+function ImportsSection({title, children}: {title: string; children: React.ReactNode}) {
   return (
     <section aria-labelledby='bank-imports-heading' className='grid grid-cols-1'>
       <h2 id='bank-imports-heading' className='mb-3 text-card-title'>
-        Imports
+        {title}
       </h2>
       {children}
     </section>
   );
 }
 
-function ImportRow({summary, onOpen}: {summary: BankImportSummary; onOpen: () => void}) {
+function ImportRow({
+  summary,
+  onOpen,
+  onReview,
+}: {
+  summary: BankImportSummary;
+  onOpen: () => void;
+  onReview: () => void;
+}) {
   const known = useKnownAccounts();
   const {undoOrThrow, describe, isPending} = useUndoImport();
   const undone = !!summary.undoneAt;
@@ -141,27 +164,40 @@ function ImportRow({summary, onOpen}: {summary: BankImportSummary; onOpen: () =>
           </span>
         </span>
         {!undone && (
-          <ConfirmActionDialog
-            trigger={
+          <span className='flex gap-2'>
+            {summary.rowsDoubtful > 0 && (
               <Button
                 variant='outline'
                 size='sm'
-                aria-label={`Undo import from ${day}`}
+                onClick={onReview}
+                aria-label={`Review import from ${day}`}
                 className='relative max-sm:h-11'
               >
-                Undo
+                Review
               </Button>
-            }
-            title='Undo this import?'
-            description={describe(summary)}
-            confirmLabel='Undo import'
-            pendingLabel='Undoing…'
-            confirmVariant='destructive'
-            confirmTestId={`bank-import-undo-confirm-${summary.id}`}
-            isPending={isPending}
-            onConfirm={() => undoOrThrow(summary)}
-            failureMessage={`${UNDO_FAILED}. Try again in a moment.`}
-          />
+            )}
+            <ConfirmActionDialog
+              trigger={
+                <Button
+                  variant='outline'
+                  size='sm'
+                  aria-label={`Undo import from ${day}`}
+                  className='relative max-sm:h-11'
+                >
+                  Undo
+                </Button>
+              }
+              title='Undo this import?'
+              description={describe(summary)}
+              confirmLabel='Undo import'
+              pendingLabel='Undoing…'
+              confirmVariant='destructive'
+              confirmTestId={`bank-import-undo-confirm-${summary.id}`}
+              isPending={isPending}
+              onConfirm={() => undoOrThrow(summary)}
+              failureMessage={`${UNDO_FAILED}. Try again in a moment.`}
+            />
+          </span>
         )}
       </div>
     </li>

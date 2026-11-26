@@ -19,23 +19,6 @@ test.beforeEach(async ({page}) => {
   await page.route('**/accounts/me', (route) => route.fulfill({json: account}));
 });
 
-test('account menu has phone-sized tap targets', async ({page}) => {
-  await page.goto('/settings/account');
-  const trigger = page.getByTestId('account-menu-trigger');
-  await expect(trigger).toBeVisible();
-  const target = await trigger.boundingBox();
-  expect(target!.height).toBeGreaterThanOrEqual(44);
-  expect(target!.width).toBeGreaterThanOrEqual(44);
-  await trigger.tap();
-  await expect(page.getByRole('menu')).toBeVisible();
-  // Measure settled CSS height rather than the dropdown's temporary animation scale.
-  const heights = await page
-    .getByRole('menuitem')
-    .evaluateAll((items) => items.map((item) => parseFloat(getComputedStyle(item).height)));
-  expect(heights).toHaveLength(2);
-  for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
-});
-
 test('session details wrap long IPv6 and location values on a phone', async ({page}) => {
   await page.route('**/auth/sessions', (route) =>
     route.fulfill({

@@ -112,7 +112,7 @@ export function BankTransactionFilters({
     setOpen(next);
     if (!next) setActive(null);
   };
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   // Each filter's Reset sits in the fixed footer, so a long list never hides it at its end.
   const resetButton = (facet: Facet | undefined, className?: string) =>
     facet?.isSet && (

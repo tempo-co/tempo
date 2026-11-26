@@ -16,12 +16,18 @@ const BANK_EUR = 'aaaaaaaa-0000-4000-8000-000000000001';
 const WALLET_EUR = 'aaaaaaaa-0000-4000-8000-000000000002';
 const WALLET_GBP = 'aaaaaaaa-0000-4000-8000-000000000003';
 const OTHER_GBP = 'aaaaaaaa-0000-4000-8000-000000000004';
+const POCKET_EUR = 'aaaaaaaa-0000-4000-8000-000000000005';
+const UNKNOWN_BANK_EUR = 'aaaaaaaa-0000-4000-8000-000000000006';
+const OTHER_UNKNOWN_BANK_EUR = 'aaaaaaaa-0000-4000-8000-000000000007';
 
 const accounts: OwnTransferAccount[] = [
-	{id: BANK_EUR, currency: 'EUR', iban: BANK_IBAN, holderName: 'J M EXAMPLE'},
-	{id: WALLET_EUR, currency: 'EUR', iban: WALLET_IBAN, holderName: 'Jane-Marie Example'},
-	{id: WALLET_GBP, currency: 'GBP', iban: WALLET_IBAN, holderName: 'Jane-Marie Example'},
-	{id: OTHER_GBP, currency: 'GBP', iban: null, holderName: 'Jane-Marie Example'},
+	{id: BANK_EUR, currency: 'EUR', iban: BANK_IBAN, holderName: 'J M EXAMPLE', bankGroup: 'bank'},
+	{id: WALLET_EUR, currency: 'EUR', iban: WALLET_IBAN, holderName: 'Jane-Marie Example', bankGroup: 'wallet'},
+	{id: WALLET_GBP, currency: 'GBP', iban: WALLET_IBAN, holderName: 'Jane-Marie Example', bankGroup: 'wallet'},
+	{id: OTHER_GBP, currency: 'GBP', iban: null, holderName: 'Jane-Marie Example', bankGroup: 'other'},
+	{id: POCKET_EUR, currency: 'EUR', iban: null, holderName: 'Jane-Marie Example', bankGroup: 'wallet'},
+	{id: UNKNOWN_BANK_EUR, currency: 'EUR', iban: null, holderName: 'Jane-Marie Example', bankGroup: null},
+	{id: OTHER_UNKNOWN_BANK_EUR, currency: 'EUR', iban: null, holderName: 'Jane-Marie Example', bankGroup: null},
 ];
 
 let sequence = 0;
@@ -121,6 +127,47 @@ describe('detectOwnTransfers', () => {
 			[named.id]: {evidence: OWN_TRANSFER_EVIDENCE.NAME, counterpartId: null},
 		});
 	});
+
+	it('pairs two legs of one bank booked the same day with the same description', () => {
+		const outgoing = tx({bankAccountId: WALLET_EUR, amount: '-100', description: 'To EUR Pocket'});
+		const incoming = tx({bankAccountId: POCKET_EUR, amount: '100.00', description: ' to eur  POCKET '});
+
+		expect(detect([outgoing, incoming])).toEqual({
+			[outgoing.id]: {evidence: OWN_TRANSFER_EVIDENCE.DESCRIPTION, counterpartId: incoming.id},
+			[incoming.id]: {evidence: OWN_TRANSFER_EVIDENCE.DESCRIPTION, counterpartId: outgoing.id},
+		});
+	});
+
+	it.each([
+		{name: 'at two banks', incoming: {bankAccountId: BANK_EUR}},
+		{name: 'on different days', incoming: {date: '2026-01-11'}},
+		{name: 'with different descriptions', incoming: {description: 'To EUR Savings'}},
+		{name: 'without a description', outgoing: {description: ' '}, incoming: {description: ' '}},
+		{
+			name: 'when neither account records its bank',
+			outgoing: {bankAccountId: UNKNOWN_BANK_EUR},
+			incoming: {bankAccountId: OTHER_UNKNOWN_BANK_EUR},
+		},
+		{name: 'while one leg is pending', incoming: {transactionStatus: 'PDNG'}},
+		{name: 'when one leg is a card payment', outgoing: {transactionType: 'CARD_PAYMENT'}},
+		{name: 'when one leg names an account that is not theirs', outgoing: {counterpartyIban: STRANGER_IBAN}},
+		{name: 'when one leg names another person', incoming: {counterpartyName: 'John Sample'}},
+		{name: 'when one leg was unmarked', incoming: {override: OWN_TRANSFER_OVERRIDES.UNMARKED}},
+	])(
+		'leaves same-amount legs unpaired $name',
+		({
+			outgoing,
+			incoming,
+		}: {
+			outgoing?: Partial<OwnTransferTransaction>;
+			incoming?: Partial<OwnTransferTransaction>;
+		}) => {
+			const debit = tx({bankAccountId: WALLET_EUR, amount: '-100', description: 'To EUR Pocket', ...outgoing});
+			const credit = tx({bankAccountId: POCKET_EUR, amount: '100', description: 'To EUR Pocket', ...incoming});
+
+			expect(detect([debit, credit])).toEqual({});
+		},
+	);
 
 	it('ignores card payments that carry the holder name', () => {
 		const card = tx({

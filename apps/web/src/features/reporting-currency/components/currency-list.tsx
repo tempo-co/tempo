@@ -4,12 +4,12 @@ import {useState} from 'react';
 
 import {Input} from '@/components/ui/input';
 import {ScrollArea} from '@/components/ui/scroll-area';
-import {cn} from '@/utils/cn';
+import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 
 import {currencyLabel, matchesCurrency} from '../utils/currency-names';
 
 const ROW =
-  'grid min-h-12 w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-3 rounded-md px-2 py-2 text-left text-body hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-60';
+  'grid h-auto min-h-12 w-full grid-cols-[1rem_minmax(0,1fr)] items-center justify-start gap-3 rounded-md px-2 py-2 text-left text-body font-normal hover:bg-accent/60 hover:text-foreground focus-visible:-outline-offset-2 disabled:opacity-60 data-[state=on]:bg-accent/60 data-[state=on]:text-foreground';
 
 type CurrencyListProps = {
   settings: Pick<ReportingCurrency, 'options' | 'connectedCurrencies'>;
@@ -60,27 +60,27 @@ export function CurrencyList({settings, value, onSelect, disabled}: CurrencyList
                 <h3 className='px-2 pb-1 text-body-small font-medium text-muted-foreground'>
                   {group.label}
                 </h3>
-                <ul className='grid'>
-                  {group.codes.map((code) => {
-                    const isSelected = code === value;
-                    return (
-                      <li key={code}>
-                        <button
-                          type='button'
-                          className={cn(ROW, isSelected && 'bg-accent/60')}
-                          aria-pressed={isSelected}
-                          disabled={disabled}
-                          onClick={() => onSelect(code)}
-                        >
-                          <span aria-hidden='true'>
-                            {isSelected && <Check className='size-4' />}
-                          </span>
-                          <span className='min-w-0 truncate'>{currencyLabel(code)}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <ToggleGroup
+                  type='single'
+                  orientation='vertical'
+                  aria-label={group.label}
+                  value={value ?? ''}
+                  disabled={disabled}
+                  // Choosing the current currency again keeps it.
+                  onValueChange={(code) => {
+                    if (code) onSelect(code);
+                  }}
+                  className='grid gap-0'
+                >
+                  {group.codes.map((code) => (
+                    <ToggleGroupItem key={code} value={code} className={ROW}>
+                      <span aria-hidden='true'>
+                        {code === value && <Check className='size-4' />}
+                      </span>
+                      <span className='min-w-0 truncate'>{currencyLabel(code)}</span>
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
               </section>
             ))}
           </div>

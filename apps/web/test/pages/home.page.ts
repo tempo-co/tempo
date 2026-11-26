@@ -4,7 +4,7 @@ export class HomePage {
   readonly page: Page;
   readonly accountName: Locator;
   readonly accountEmail: Locator;
-  readonly accountMenuTrigger: Locator;
+  readonly settingsLink: Locator;
   readonly logOutButton: Locator;
   readonly welcomeToastTitle: Locator;
   readonly welcomeToastDescription: Locator;
@@ -19,7 +19,7 @@ export class HomePage {
     this.page = page;
     this.accountName = page.getByTestId('current-account-name');
     this.accountEmail = page.getByTestId('current-account-email');
-    this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
+    this.settingsLink = page.getByRole('link', {name: 'Settings', exact: true});
     this.logOutButton = page.getByTestId('log-out-button');
     this.welcomeToastTitle = page.getByText('Welcome to Tempo!');
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
@@ -56,8 +56,9 @@ export class HomePage {
     await expect(this.accountEmail).toBeVisible();
   }
 
+  /** Log out lives in Settings, reached from the sidebar's gear or the phone header's. */
   async logOut() {
-    await this.accountMenuTrigger.click();
+    await this.settingsLink.click();
     await this.logOutButton.click();
   }
 }

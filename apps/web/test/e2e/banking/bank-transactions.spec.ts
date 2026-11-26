@@ -25,7 +25,7 @@ test.describe('bank transactions', () => {
   test('renders, searches, and opens the transaction detail inspector', async ({page}) => {
     await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
     await page.setViewportSize({width: 1280, height: 720});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const firstTransactionRow = page
       .getByTestId(/^bank-transaction-row-/)
@@ -53,7 +53,7 @@ test.describe('bank transactions', () => {
 
     await firstTransactionRow.click({position: {x: 8, y: 8}});
     const inspector = page.getByTestId('bank-transaction-inspector');
-    await expect(page).toHaveURL(/\/bank-transactions(?:\?.*)?$/);
+    await expect(page).toHaveURL(/\/transactions(?:\?.*)?$/);
     const openedUrl = new URL(page.url());
     expect(openedUrl.searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
     await expect(inspector).toBeVisible();
@@ -163,7 +163,7 @@ test.describe('bank transactions', () => {
       });
     });
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const exchangeRow = page
       .getByTestId(/^bank-transaction-row-/)
@@ -196,7 +196,7 @@ test.describe('bank transactions', () => {
     await expect(filters.getByRole('tab', {name: 'Cash flow Currency exchange'})).toBeVisible();
     await page.keyboard.press('Escape');
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await openTransactionFilter(page, 'Cash flow');
     await page.getByRole('option', {name: 'Currency exchange', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
@@ -208,7 +208,7 @@ test.describe('bank transactions', () => {
     ).toBeVisible();
 
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     const sheet = await openTransactionFilter(page, 'Cash flow');
     await sheet.getByRole('option', {name: 'Currency exchange', exact: true}).click();
     await expect(page.getByTestId(/^bank-transaction-row-/)).toHaveCount(1);
@@ -216,7 +216,7 @@ test.describe('bank transactions', () => {
   });
 
   test('does not show the bank account filter when there is one account', async ({page}) => {
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     const filters = await openTransactionFilter(page, 'Categories');
 
     await expect(filters.getByRole('tab', {name: /^Cash flow/})).toBeVisible();
@@ -233,7 +233,7 @@ test.describe('bank transactions', () => {
       })),
     );
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     const filters = await openTransactionFilter(page, 'Categories');
 
     await expect(filters.getByRole('tab', {name: /^Cash flow/})).toBeVisible();
@@ -245,7 +245,7 @@ test.describe('bank transactions', () => {
     test.slow();
     await mockJson(page, '**/bank-connections', {message: 'bank connections unavailable'}, 500);
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     const filters = await openTransactionFilter(page, 'Bank accounts');
     await expect(filters.getByRole('tabpanel', {name: 'Bank accounts'})).toHaveText(
       'Bank accounts are unavailable.',
@@ -341,7 +341,7 @@ test.describe('bank transactions', () => {
       });
     });
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const rows = page.getByTestId(/^bank-transaction-row-/);
     await expect(rows.nth(0).getByText('Synthetic Market,PAS998', {exact: true})).toBeVisible();
@@ -382,7 +382,7 @@ test.describe('bank transactions', () => {
   });
 
   test('reopens a transaction inspector from the list and its shareable URL', async ({page}) => {
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const transactionTrigger = page
       .getByTestId(/^bank-transaction-row-/)
@@ -411,7 +411,7 @@ test.describe('bank transactions', () => {
       await route.fulfill({response, json: {...body, displayDescription: serverTitle}});
     });
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await transactionTrigger.click();
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(inspector.getByRole('heading', {name: 'Corner bakery'})).toBeVisible();
@@ -432,7 +432,7 @@ test.describe('bank transactions', () => {
       {width: 320, height: 852},
     ]) {
       await page.setViewportSize(viewport);
-      await page.goto('/bank-transactions');
+      await page.goto('/transactions');
 
       const firstTransactionRow = page
         .getByTestId(/^bank-transaction-row-/)
@@ -511,7 +511,7 @@ test.describe('bank transactions', () => {
       {message: 'Synthetic detail failure'},
       500,
     );
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const transactionRow = page
       .getByTestId(/^bank-transaction-row-/)
@@ -533,7 +533,7 @@ test.describe('bank transactions', () => {
       {message: 'Transaction not found'},
       404,
     );
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const transactionRow = page
       .getByTestId(/^bank-transaction-row-/)
@@ -560,7 +560,7 @@ test.describe('bank transactions', () => {
       ];
       return connections;
     });
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     await openTransactionFilter(page, 'Bank accounts');
     await expect(page.getByRole('option', {name: /Daily spending/})).toBeVisible();
@@ -583,20 +583,17 @@ test.describe('bank transactions', () => {
 
   test('picks booking dates from quick ranges and the month and year dropdowns', async ({page}) => {
     await page.setViewportSize({width: 1280, height: 720});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const trigger = page.getByRole('button', {name: /^Date/}).first();
     await trigger.click();
-    const quickRanges = page.getByRole('group', {name: 'Quick ranges'});
-    await quickRanges.getByRole('button', {name: 'Last year'}).click();
+    const quickRanges = page.getByRole('radiogroup', {name: 'Quick ranges'});
+    await quickRanges.getByRole('radio', {name: 'Last year'}).click();
 
     const lastYear = new Date().getFullYear() - 1;
     await expect(page).toHaveURL(/[?&]date=/);
     await expect(trigger).toHaveAccessibleName(`Date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`);
-    await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(quickRanges.getByRole('radio', {name: 'Last year'})).toBeChecked();
     await expect(page.getByRole('combobox', {name: 'Year:'})).toHaveValue(String(lastYear));
 
     const targetYear = lastYear - 2;
@@ -609,10 +606,7 @@ test.describe('bank transactions', () => {
     await expect(trigger).toHaveAccessibleName(
       `Date: Mar 10, ${targetYear} - Mar 20, ${targetYear}`,
     );
-    await expect(quickRanges.getByRole('button', {name: 'Last year'})).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    await expect(quickRanges.getByRole('radio', {name: 'Last year'})).not.toBeChecked();
   });
 
   test('filters transactions by one or multiple categories', async ({page}) => {
@@ -672,7 +666,7 @@ test.describe('bank transactions', () => {
         },
       });
     });
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const filters = await openTransactionFilter(page, 'Categories');
     await expect(filters.getByRole('option')).toHaveCount(24);
@@ -774,7 +768,7 @@ test.describe('bank transactions', () => {
     page,
   }) => {
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     await page.getByTestId('bank-transaction-filters-trigger').click();
     const sheet = page.getByTestId('bank-transaction-filters');
@@ -839,7 +833,7 @@ test.describe('bank transactions', () => {
 
     // The booking date lives in the sheet on phones; its Reset is the footer's too.
     await openTransactionFilter(page, 'Date');
-    await sheet.getByRole('button', {name: 'This month', exact: true}).click();
+    await sheet.getByRole('radio', {name: 'This month', exact: true}).click();
     await expect(page).toHaveURL(/[?&]date=/);
     await sheet.getByRole('button', {name: 'Reset Date', exact: true}).click();
     await expect(page).not.toHaveURL(/[?&]date=/);
@@ -856,7 +850,7 @@ test.describe('bank transactions', () => {
   test('reflows transaction records for a phone viewport', async ({page}) => {
     await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const firstTransactionRow = page
       .getByTestId(/^bank-transaction-row-/)
@@ -932,7 +926,7 @@ test.describe('bank transactions', () => {
 
   test('keeps a selected booking date range within a phone viewport', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const sheet = await openTransactionFilter(page, 'Date');
     let dayButtons = sheet.locator('button[name="day"]:not([disabled]):not(.day-outside)');
@@ -957,7 +951,7 @@ test.describe('bank transactions', () => {
   test('orders by date in day groups and by amount in one flat list', async ({page}) => {
     await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
     await page.setViewportSize({width: 1280, height: 720});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(page.getByText('Coffee shop', {exact: true})).toBeVisible();
 
     const rows = page.getByTestId(/^bank-transaction-row-/);
@@ -1012,7 +1006,7 @@ test.describe('bank transactions', () => {
 
     // A link ordered by a field the page no longer offers opens in the default order.
     await page.goto(
-      `/bank-transactions?sort=${encodeURIComponent(JSON.stringify({by: 'category', order: 'ASC'}))}`,
+      `/transactions?sort=${encodeURIComponent(JSON.stringify({by: 'category', order: 'ASC'}))}`,
     );
     await expect(order('Newest first')).toBeVisible();
     await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
@@ -1068,14 +1062,14 @@ test.describe('bank transactions', () => {
       });
     });
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await page.getByRole('button', {name: 'Order: Newest first'}).click();
     await page.getByRole('menuitemradio', {name: 'Largest in first'}).click();
 
     const rows = page.getByTestId(/^bank-transaction-row-/);
     await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText('Synthetic EUR purchase');
-    await expect(rows.nth(0).getByTestId('ledger-row-amount')).toHaveText('€30.00');
+    await expect(rows.nth(0).getByTestId('ledger-row-amount')).toHaveText('+€30.00');
     await expect(rows.nth(1)).toContainText('Synthetic RON purchase');
     await expect(rows.nth(1).getByTestId('ledger-row-amount')).toContainText('RON');
     await expect(rows.nth(1).getByTestId('ledger-row-amount')).toContainText('100.00');
@@ -1170,7 +1164,7 @@ test.describe('bank transactions', () => {
       {width: 320, height: 852},
     ]) {
       await page.setViewportSize(viewport);
-      await page.goto('/bank-transactions');
+      await page.goto('/transactions');
       await expect(rows).toHaveCount(4);
       await expect(page.getByTestId('bank-transactions-summary')).toHaveText('1,284 transactions');
       await expect(rows.nth(0)).toContainText('-€12,345,678.90');
@@ -1246,7 +1240,7 @@ test.describe('bank transactions', () => {
     await expect(zeroInspector.getByTestId('bank-transaction-detail-direction')).toHaveCount(0);
 
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await rows
       .nth(2)
       .getByRole('button', {name: /^View .* transaction details$/})
@@ -1264,7 +1258,7 @@ test.describe('bank transactions without synced data', () => {
     page,
     freshAccount,
   }) => {
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
     await expect(page.getByRole('heading', {name: 'No transactions yet'})).toBeVisible();
@@ -1272,7 +1266,7 @@ test.describe('bank transactions without synced data', () => {
       page.getByText('Connect a bank and its transactions appear here after the first sync.'),
     ).toBeVisible();
     await page.getByRole('link', {name: 'Connect a bank'}).click();
-    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect(page).toHaveURL(/\/accounts$/);
   });
 });
 
@@ -1310,7 +1304,7 @@ test.describe('bank transaction inspector on a fresh account', () => {
       return fulfillJson(route, saved);
     });
 
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
     const transactionRow = page

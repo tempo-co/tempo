@@ -7,6 +7,7 @@ import {createAccount} from '../../data/account.data';
 import {MOCK_CONNECTION, REFRESH_RESULT, TARGET_ASPSP} from '../../data/bank-connection.data';
 import {mockHistoryEndpoints} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
+import {mockAccountsApi} from '../../utils/accounts';
 import {
   EMPTY_REVIEW_COUNTS,
   fulfillJson,
@@ -17,12 +18,17 @@ import {
   routeBankConnectionsApi,
 } from '../../utils/api-mocks';
 import {
+  accountRow,
   chooseDeleteEverything,
-  openDetails,
+  openAccount,
   openRemoval,
   routeMockedBankApp,
 } from '../../utils/bank-connections';
 import {createHookHarness} from '../../utils/hook-harness';
+
+const CHECKING = MOCK_CONNECTION.bankAccounts[0];
+const FIRST_ACCOUNT_ID = '00000000-0000-4000-8000-000000000a91';
+const NEXT_ACCOUNT_ID = '00000000-0000-4000-8000-000000000a93';
 
 test.describe('mocked Enable Banking bank connection', () => {
   test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
@@ -62,7 +68,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         readsAtRefresh = reads;
         return fulfillJson(route, {message}, status);
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       // The settled refresh re-reads the saved connections; by then any toast would have shown.
       await expect.poll(() => reads > readsAtRefresh).toBe(true);
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
@@ -86,7 +92,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       unreachable = true;
       return route.abort('failed');
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect.poll(() => requests).toBe(1);
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
     await expect(page.locator('[data-sonner-toast]')).toContainText('Cannot reach Tempo.');
@@ -102,7 +108,11 @@ test.describe('mocked Enable Banking bank connection', () => {
   test('handles pending and completed connection removal during foreground refresh', async ({
     page,
   }) => {
-    const first = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000091'};
+    const first = {
+      ...MOCK_CONNECTION,
+      id: '00000000-0000-4000-8000-000000000091',
+      bankAccounts: [{...CHECKING, id: FIRST_ACCOUNT_ID}],
+    };
     const requests: string[] = [];
     let reads = 0;
     let includeFirst = false;
@@ -115,6 +125,8 @@ test.describe('mocked Enable Banking bank connection', () => {
     let releaseSecondRemoval!: () => void;
     const secondRemovalHeld = new Promise<void>((resolve) => (releaseSecondRemoval = resolve));
     await page.emulateMedia({reducedMotion: 'reduce'});
+    // The account page's own reads; the connections answer below.
+    await mockAccountsApi(page, () => ({connections: []}));
     await mockBankConnections(page, () => {
       reads++;
       return [...(includeFirst ? [first] : []), ...(removed ? [] : [MOCK_CONNECTION])];
@@ -141,12 +153,15 @@ test.describe('mocked Enable Banking bank connection', () => {
         await route.fulfill({status: 204, body: ''});
       }
     });
-    await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await page.goto('/accounts');
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
-    let dialog = await openRemoval(page, card);
+    let dialog = await openRemoval(page, CHECKING.id);
     await chooseDeleteEverything(dialog);
     await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+    const reopenRemoval = async () => {
+      await page.getByRole('button', {name: 'Remove connection'}).click();
+      return page.getByRole('dialog');
+    };
     try {
       await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
       await page.keyboard.press('Escape');
@@ -160,7 +175,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await expect.poll(() => reads).toBeGreaterThan(before);
       // Reopened while the removal is still running, the dialog shows it rather than a second one.
-      dialog = await openRemoval(page, card);
+      dialog = await reopenRemoval();
       await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
       expect(requests).toEqual([MOCK_CONNECTION.id]);
       await page.keyboard.press('Escape');
@@ -176,29 +191,31 @@ test.describe('mocked Enable Banking bank connection', () => {
         window.dispatchEvent(new Event('visibilitychange'));
       }
     });
-    const firstCard = page.getByTestId(`bank-connection-${first.id}`);
     let readsBeforeSettle = Number.POSITIVE_INFINITY;
     try {
       await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, first.id]);
-      dialog = await openRemoval(page, card);
+      dialog = await reopenRemoval();
       await chooseDeleteEverything(dialog);
       await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
       await expect(dialog.getByRole('button', {name: 'Removing...'})).toBeDisabled();
-      // Another bank opened meanwhile stays open when this removal completes.
+      // Another bank's account opened meanwhile stays open when this removal completes.
       await page.keyboard.press('Escape');
       await expect(dialog).toBeHidden();
-      const firstDetails = await openDetails(page, firstCard);
+      await page
+        .getByRole('navigation', {name: 'Primary'})
+        .getByRole('link', {name: 'Accounts', exact: true})
+        .click();
+      await openAccount(page, FIRST_ACCOUNT_ID);
       releaseSecondRemoval();
       await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
-      await expect(card).toHaveCount(0);
+      await expect.poll(() => removed).toBe(true);
       await page.evaluate(
         () =>
           new Promise<void>((resolve) =>
             requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
           ),
       );
-      await expect(firstDetails).toHaveAttribute('data-state', 'open');
-      await page.keyboard.press('Escape');
+      await expect(page).toHaveURL(new RegExp(`/accounts/${FIRST_ACCOUNT_ID}$`));
       // A settled refresh re-reads the saved connections.
       readsBeforeSettle = reads;
     } finally {
@@ -206,7 +223,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       releaseRefresh();
     }
     await expect.poll(() => reads).toBeGreaterThan(readsBeforeSettle);
-    await expect(firstCard).toBeVisible();
+    await expect(page.getByTestId('account-connection')).toBeVisible();
     await page.evaluate(
       () =>
         new Promise<void>((resolve) =>
@@ -235,7 +252,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         }),
       }),
     );
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
     await expect(page.locator('[data-sonner-toast]')).toContainText(
@@ -279,7 +296,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await page.route(`**/bank-connections/${MOCK_CONNECTION.id}/refresh`, (route) =>
         route.fulfill({status: 429, headers, contentType: 'application/json', body}),
       );
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
       await expect(page.locator('[data-sonner-toast]')).toContainText(guidance);
@@ -336,7 +353,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await logoutHeld;
       await fulfillJson(route, {});
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     try {
       await expect(page.locator('html')).toHaveAttribute('data-refresh-body', 'pending');
       await homePage.logOut();
@@ -366,8 +383,8 @@ test.describe('mocked Enable Banking bank connection', () => {
       requests++;
       return fulfillJson(route, REFRESH_RESULT);
     });
-    await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await page.goto('/accounts');
+    const card = accountRow(page, CHECKING.id);
     await expect.poll(() => requests).toBe(1);
     await expect(card).toBeVisible();
     await page.clock.runFor(1100);
@@ -437,10 +454,10 @@ test.describe('mocked Enable Banking bank connection', () => {
               transactionsAdded: outcome === 'PARTIAL' ? 1 : 0,
             });
       });
-      await page.goto('/bank-connections');
-      const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-      await expect(card.getByRole('button', {name: 'Re-authorize', exact: true})).toBeVisible();
-      await expect(card.getByTestId('bank-connection-problem')).toContainText('Consent expired');
+      await page.goto('/accounts');
+      const row = accountRow(page, CHECKING.id);
+      await expect(row.getByRole('button', {name: 'Reconnect Mock ASPSP', exact: true})).toBeVisible();
+      await expect(row.getByTestId('account-freshness')).toContainText('Access expired');
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     });
   }
@@ -469,7 +486,7 @@ test.describe('mocked Enable Banking bank connection', () => {
           errorMessage: 'Example bank request limit reached.',
         });
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await expect.poll(() => reads > readsAtRefresh).toBe(true);
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
       await page.clock.runFor(180_000);
@@ -482,7 +499,11 @@ test.describe('mocked Enable Banking bank connection', () => {
     homePage,
     loginPage,
   }) => {
-    const next = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000093'};
+    const next = {
+      ...MOCK_CONNECTION,
+      id: '00000000-0000-4000-8000-000000000093',
+      bankAccounts: [{...CHECKING, id: NEXT_ACCOUNT_ID}],
+    };
     const tail = {...MOCK_CONNECTION, id: '00000000-0000-4000-8000-000000000092'};
     let nextSession = false;
     const requests: string[] = [];
@@ -523,7 +544,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         }),
       );
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
     try {
       await homePage.logOut();
@@ -531,13 +552,13 @@ test.describe('mocked Enable Banking bank connection', () => {
       await loginPage.emailInput.fill('next@example.test');
       await loginPage.passwordInput.fill('synthetic-test-password');
       await loginPage.submitButton.click();
-      await expect(page.getByTestId('account-menu-trigger')).toContainText('NE');
+      await expect(page.getByTestId('current-account-email')).toHaveText('next@example.test');
       await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id, next.id]);
       await page
         .getByRole('navigation', {name: 'Primary'})
-        .getByRole('link', {name: 'Connections', exact: true})
+        .getByRole('link', {name: 'Accounts', exact: true})
         .click();
-      await expect(page.getByTestId(`bank-connection-${next.id}`)).toBeVisible();
+      await expect(accountRow(page, NEXT_ACCOUNT_ID)).toBeVisible();
     } finally {
       release();
     }
@@ -678,7 +699,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       if (id === MOCK_CONNECTION.id) await held;
       await fulfillJson(route, REFRESH_RESULT);
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
     try {
       await page.evaluate(() => {
@@ -733,8 +754,8 @@ test.describe('mocked Enable Banking bank connection', () => {
           : REFRESH_RESULT,
       );
     });
-    await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await page.goto('/accounts');
+    const card = accountRow(page, CHECKING.id);
     await expect.poll(() => reads > readsAtRefresh).toBe(true);
     expect(requests).toBe(1);
     await page.evaluate(() => {
@@ -742,9 +763,8 @@ test.describe('mocked Enable Banking bank connection', () => {
       window.dispatchEvent(new Event('online'));
       window.dispatchEvent(new Event('visibilitychange'));
     });
-    await page.getByTestId('account-menu-trigger').click();
-    await page.getByRole('menuitem', {name: 'Settings'}).click();
-    await page.getByRole('link', {name: 'Connections', exact: true}).click();
+    await page.getByRole('link', {name: 'Settings', exact: true}).click();
+    await page.getByRole('link', {name: 'Accounts', exact: true}).click();
     await expect(card).toBeVisible();
     expect(requests).toBe(1);
     await page.evaluate(() => {
@@ -769,12 +789,11 @@ test.describe('mocked Enable Banking bank connection', () => {
       readsAtSkip = reads;
       return route.fulfill({status: 204, body: ''});
     });
-    await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
+    await page.goto('/accounts');
     await expect.poll(() => requests).toBe(1);
     // The settled refresh re-reads the saved connections; by then any toast would have shown.
     await expect.poll(() => reads).toBeGreaterThan(readsAtSkip);
-    await expect(card.getByTestId('bank-connection-total')).toBeVisible();
+    await expect(page.getByTestId('accounts-total')).toBeVisible();
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 
@@ -798,9 +817,8 @@ test.describe('mocked Enable Banking bank connection', () => {
         errorMessage: 'Example account is unavailable.',
       });
     });
-    await page.goto('/bank-connections');
-    const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
-    await expect(card.getByTestId('bank-connection-total')).toContainText('2,000.00');
+    await page.goto('/accounts');
+    await expect(page.getByTestId('accounts-total')).toContainText('2,000.00');
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 });

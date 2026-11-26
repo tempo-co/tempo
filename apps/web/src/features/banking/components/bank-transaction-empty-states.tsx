@@ -29,7 +29,7 @@ export function NoTransactionsYet() {
     >
       {needsBank && (
         <Button asChild>
-          <Link to='/bank-connections'>Connect a bank</Link>
+          <Link to='/accounts'>Connect a bank</Link>
         </Button>
       )}
     </StateMessage>
@@ -44,7 +44,7 @@ export function NoMatchingTransactions({
   filters: BankTransactionFilterParams;
   onClearFilters: () => void;
 }) {
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const filterCount = countActiveFilters(filters);
   const search = filters.search?.trim();
   // A long search is cut short; the search box above still holds all of it.

@@ -384,7 +384,6 @@ test.describe('Notification settings', () => {
           await expect.poll(async () => (await pushState(page)).held).toBe(1);
 
           if (interruption === 'logging out') {
-            await page.getByTestId('account-menu-trigger').click();
             await page.getByTestId('log-out-button').click();
             // The attempt goes on while Tempo confirms the logout.
             await expect.poll(() => held.length).toBe(1);
@@ -542,7 +541,7 @@ test.describe('Notification settings', () => {
     // An already subscribed browser is registered with this session.
     expect(requests).toEqual([{method: 'PUT', body: {endpoint: ENDPOINT, keys: KEYS}}]);
 
-    await page.getByTestId('account-menu-trigger').click();
+    await page.getByRole('link', {name: 'Settings', exact: true}).click();
     await page.getByTestId('log-out-button').click();
     await expect(page).toHaveURL(/\/login/);
     await expect.poll(async () => (await pushState(page)).badges.slice(-1)[0]).toBe(0);
