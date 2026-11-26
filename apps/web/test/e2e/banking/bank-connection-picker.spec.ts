@@ -449,7 +449,7 @@ test.describe('Connect a bank', () => {
     await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
     await refreshed;
     // By text: the open sheet hides the page from the accessibility tree.
-    await expect(page.getByText("Couldn't load bank connections")).toBeVisible();
+    await expect(page.getByText("Couldn't load accounts")).toBeVisible();
     await expect(picker.getByRole('heading', {name: 'Connect Demo Pankki'})).toBeVisible();
 
     await page.keyboard.press('Escape');
