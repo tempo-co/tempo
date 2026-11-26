@@ -104,7 +104,7 @@ export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransacti
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
-        <DropdownMenuLabel className='text-xs font-normal text-muted-foreground'>
+        <DropdownMenuLabel className='text-body-small font-normal text-muted-foreground'>
           Order
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup value={current} onValueChange={(id) => select(id as SortId)}>

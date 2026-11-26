@@ -148,11 +148,11 @@ export function LayoutPreview({
               </>
             )}
             {bankError ? (
-              <p id={bankHint} role='alert' className='text-xs text-destructive'>
+              <p id={bankHint} role='alert' className='text-body-small text-destructive'>
                 {bankError}
               </p>
             ) : (
-              <p id={bankHint} className='text-xs text-muted-foreground'>
+              <p id={bankHint} className='text-body-small text-muted-foreground'>
                 Files of this layout are listed under this name.
               </p>
             )}
@@ -175,7 +175,7 @@ export function LayoutPreview({
                   ))}
               </SelectContent>
             </Select>
-            <p className='text-xs text-muted-foreground'>The file doesn&apos;t say.</p>
+            <p className='text-body-small text-muted-foreground'>The file doesn&apos;t say.</p>
           </div>
         )}
       </div>
@@ -211,7 +211,7 @@ export function PreviewRows({
           <PreviewRow key={`first-${index}`} row={row} currency={rowCurrency(row)} />
         ))}
         {hiddenRows > 0 && (
-          <li className='py-2 text-center text-xs text-muted-foreground'>
+          <li className='py-2 text-center text-body-small text-muted-foreground'>
             {formatCount(hiddenRows)} more
           </li>
         )}
@@ -253,7 +253,7 @@ function PreviewRow({row, currency}: {row: BankImportLayoutPreviewRow; currency:
       </span>
       <span className='min-w-0'>
         <span className='block truncate text-body'>{previewRowTitle(row)}</span>
-        <span className='block truncate text-xs text-muted-foreground'>
+        <span className='block truncate text-body-small text-muted-foreground'>
           {[
             formatBankTransactionCompactDate(row.date),
             row.description && row.counterparty,

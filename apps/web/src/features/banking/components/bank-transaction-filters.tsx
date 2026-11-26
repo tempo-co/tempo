@@ -177,7 +177,7 @@ export function BankTransactionFilters({
                   >
                     <span className={cn(selected && 'font-medium')}>{facet.label}</span>
                     {facet.summary && (
-                      <span className='truncate text-xs text-primary'>{facet.summary}</span>
+                      <span className='truncate text-body-small text-primary'>{facet.summary}</span>
                     )}
                   </button>
                 );

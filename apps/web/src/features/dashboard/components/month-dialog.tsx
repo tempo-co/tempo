@@ -417,7 +417,7 @@ function Figure({
       >
         {value ?? <TextBone className='w-[4.5em]' />}
       </p>
-      {sub && <p className='numeric text-xs text-muted-foreground'>{sub}</p>}
+      {sub && <p className='numeric text-body-small text-muted-foreground'>{sub}</p>}
     </div>
   );
 }
@@ -452,7 +452,7 @@ function WhereItWent({
         <h2 className='text-card-title'>Where it went</h2>
         {hasUsual && (
           // The bars and their ticks are hidden on a phone, where each row reads "on usual" instead.
-          <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden'>
+          <span className='inline-flex items-center gap-1.5 text-body-small text-muted-foreground max-sm:hidden'>
             <i aria-hidden='true' className='h-5 w-0.5 bg-foreground' /> {usualLabel}
           </span>
         )}
@@ -488,12 +488,14 @@ function WhereItWent({
                 <span className='min-w-24 text-right numeric'>
                   {wholeCents(value, currency)}
                   {usual !== null && usual > 0 && (
-                    <span className='block text-xs text-muted-foreground'>
+                    <span className='block text-body-small text-muted-foreground'>
                       {signedPct((value - usual) / usual)} on usual
                     </span>
                   )}
                   {usual === 0 && (
-                    <span className='block text-xs text-muted-foreground'>none usually</span>
+                    <span className='block text-body-small text-muted-foreground'>
+                      none usually
+                    </span>
                   )}
                 </span>
               </Link>
@@ -609,7 +611,7 @@ function WhereItCameFrom({
         ))}
       </ul>
       {rest > 0 && (
-        <p className='flex justify-between numeric text-xs text-muted-foreground'>
+        <p className='flex justify-between numeric text-body-small text-muted-foreground'>
           <span>{parts.length - limit} more</span>
           <span>{wholeCents(rest, currency)}</span>
         </p>

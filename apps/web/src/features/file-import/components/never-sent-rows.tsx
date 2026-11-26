@@ -222,7 +222,7 @@ function Group({
         </span>
         <span className='min-w-0'>
           <span className='block text-body wrap-anywhere'>{group.label}</span>
-          <span className='block truncate text-xs text-muted-foreground'>
+          <span className='block truncate text-body-small text-muted-foreground'>
             {plural(group.rows.length, 'row')}
           </span>
         </span>
@@ -303,7 +303,7 @@ function Row({
       <span className='min-w-0'>
         <span className='block text-body wrap-anywhere'>{sameAsGroup ? date : title}</span>
         {!sameAsGroup && (
-          <span className='block truncate text-xs text-muted-foreground'>{date}</span>
+          <span className='block truncate text-body-small text-muted-foreground'>{date}</span>
         )}
       </span>
       <span className='text-right text-body'>

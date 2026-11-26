@@ -197,7 +197,7 @@ export function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className='flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-accent data-[state=open]:ring-2 data-[state=open]:ring-border max-sm:size-11 pointer-coarse:size-11'
+        className='flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full bg-secondary text-body-small font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-accent data-[state=open]:ring-2 data-[state=open]:ring-border max-sm:size-11 pointer-coarse:size-11'
         aria-label={`Account menu, ${currentAccount.name} (${currentAccount.email})`}
         data-testid='account-menu-trigger'
       >
@@ -217,7 +217,9 @@ export function AccountMenu() {
       >
         <DropdownMenuLabel className='grid font-normal'>
           <span className='truncate text-body font-semibold'>{currentAccount.name}</span>
-          <span className='truncate text-xs text-muted-foreground'>{currentAccount.email}</span>
+          <span className='truncate text-body-small text-muted-foreground'>
+            {currentAccount.email}
+          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

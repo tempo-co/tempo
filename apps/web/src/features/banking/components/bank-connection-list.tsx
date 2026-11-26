@@ -321,7 +321,12 @@ function BankCard({
           <h2 id={headingId} className='text-card-title wrap-break-word'>
             {connectionName(connection)}
           </h2>
-          <p className={cn('truncate text-xs text-muted-foreground', stale && 'text-warning')}>
+          <p
+            className={cn(
+              'truncate text-body-small text-muted-foreground',
+              stale && 'text-warning',
+            )}
+          >
             {files
               ? 'From statement files'
               : stale
@@ -405,7 +410,7 @@ function ConnectionTile({
   return (
     <BankLogo
       bank={{name: connection.aspspName, ...artwork}}
-      className='size-9 rounded-md text-xs shadow-none'
+      className='size-9 rounded-md text-body-small shadow-none'
       imageClassName='p-1'
       testId={testId}
     />
@@ -422,7 +427,7 @@ function BankCardSkeleton() {
           <p className='text-card-title'>
             <TextBone className='w-[8em]' />
           </p>
-          <p className='text-xs'>
+          <p className='text-body-small'>
             <TextBone className='w-[5em]' />
           </p>
         </div>
@@ -462,7 +467,7 @@ function AccountRow({
         </span>
       )}
       {converted && (
-        <span className='block numeric text-xs whitespace-nowrap text-muted-foreground'>
+        <span className='block numeric text-body-small whitespace-nowrap text-muted-foreground'>
           ≈ {converted}
         </span>
       )}
@@ -490,7 +495,7 @@ function AccountRow({
           >
             {name}
           </Link>
-          <span className='block truncate text-xs text-muted-foreground'>
+          <span className='block truncate text-body-small text-muted-foreground'>
             {subline || account.currency}
           </span>
         </span>
@@ -513,7 +518,7 @@ function AccountRow({
       </span>
       <span className='min-w-0'>
         <span className='block truncate text-body'>{name}</span>
-        <span className='block truncate text-xs text-muted-foreground'>
+        <span className='block truncate text-body-small text-muted-foreground'>
           {subline || account.currency}
         </span>
       </span>

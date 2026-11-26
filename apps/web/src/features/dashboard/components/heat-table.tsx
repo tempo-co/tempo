@@ -210,7 +210,9 @@ function YearLabel({column}: {column: HeatYear}) {
     <span className='numeric'>
       {column.year}
       {column.note && (
-        <span className='block text-xs font-normal text-muted-foreground'>{column.note}</span>
+        <span className='block text-body-small font-normal text-muted-foreground'>
+          {column.note}
+        </span>
       )}
     </span>
   );

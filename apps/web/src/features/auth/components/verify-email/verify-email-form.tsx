@@ -34,7 +34,7 @@ export function VerifyEmailForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='mt-4 flex flex-col gap-3'>
-        <p className='text-center text-xs leading-5 text-muted-foreground'>
+        <p className='text-center text-body-small leading-5 text-muted-foreground'>
           Enter the 6-digit code from the email.
         </p>
         <FormField

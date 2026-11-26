@@ -91,7 +91,7 @@ export function BankTransactionLedger({
         const label = formatLedgerDay(day);
         return (
           <section key={day} aria-label={label} className='grid gap-1.5'>
-            <h2 className='px-1 text-xs font-medium text-muted-foreground'>{label}</h2>
+            <h2 className='px-1 text-body-small font-medium text-muted-foreground'>{label}</h2>
             <ul className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'>
               {rows.map(row)}
             </ul>
@@ -158,7 +158,7 @@ function LedgerRow({
       <div className='min-w-0'>
         <p className='truncate text-body'>{title}</p>
         <p
-          className='flex h-4 min-w-0 items-center gap-1 text-xs text-muted-foreground lg:hidden'
+          className='flex h-4 min-w-0 items-center gap-1 text-body-small text-muted-foreground lg:hidden'
           data-testid='ledger-row-meta'
         >
           {showDate && <span className='shrink-0'>{date} ·</span>}
@@ -168,7 +168,9 @@ function LedgerRow({
           {account && <span className='min-w-0 shrink-[2] truncate'>· {account}</span>}
         </p>
         {desktopSubline && (
-          <p className='hidden truncate text-xs text-muted-foreground lg:block'>{desktopSubline}</p>
+          <p className='hidden truncate text-body-small text-muted-foreground lg:block'>
+            {desktopSubline}
+          </p>
         )}
       </div>
       <p

@@ -96,7 +96,7 @@ export function BankTransactionDateFilter({
             aria-pressed={isActive}
             className={cn(
               'font-normal',
-              variant === 'pane' ? 'h-10 px-2 text-xs' : 'h-8 justify-start px-2',
+              variant === 'pane' ? 'h-10 px-2 text-body-small' : 'h-8 justify-start px-2',
             )}
             onClick={() => handlePresetSelect(range)}
           >
@@ -115,7 +115,7 @@ export function BankTransactionDateFilter({
           ? {
               month: 'w-full space-y-4',
               head_row: 'flex w-full',
-              head_cell: 'text-muted-foreground rounded-md flex-1 font-normal text-xs',
+              head_cell: 'text-muted-foreground rounded-md flex-1 font-normal text-body-small',
               row: 'flex w-full mt-2',
               cell: 'h-11 min-w-0 flex-1 text-center text-body p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 has-aria-[selected]:bg-accent first:has-aria-[selected]:rounded-l-md last:has-aria-[selected]:rounded-r-md focus-within:relative focus-within:z-20',
               day: cn(

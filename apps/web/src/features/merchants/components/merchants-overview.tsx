@@ -116,7 +116,7 @@ function Ranking({
         toggleLabel='Rank merchants by'
       >
         {loaded && loaded.baselinePeriods.length > 0 && (
-          <p className='col-span-2 text-xs text-muted-foreground'>
+          <p className='col-span-2 text-body-small text-muted-foreground'>
             {running
               ? `Compared with the last ${loaded.baselinePeriods.length} ${interval}s by this point.`
               : `Compared with the ${loaded.baselinePeriods.length} ${interval}s before.`}
@@ -157,7 +157,7 @@ function Ranking({
         </ol>
       )}
       {loaded && loaded.total > loaded.merchants.length && (
-        <p className='text-xs text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           Top {loaded.merchants.length} of {loaded.total.toLocaleString()} merchants.
         </p>
       )}
@@ -199,7 +199,7 @@ function AllMerchants({
       <header className='flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1'>
         <h2 className='text-card-title'>{search ? 'Results' : 'All merchants'}</h2>
         {last && (
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-body-small text-muted-foreground'>
             {countLabel(last.total, search ? 'match' : 'merchant', search ? 'matches' : undefined)}
             {!search && ', most spent first'}
           </p>

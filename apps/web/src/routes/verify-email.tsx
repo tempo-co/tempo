@@ -250,7 +250,7 @@ function VerifyEmailIndex() {
           <p className='mt-1 font-medium wrap-break-word text-foreground'>
             {currentAccount?.email ?? 'your email address'}
           </p>
-          <p className='mt-3 text-xs leading-5'>
+          <p className='mt-3 text-body-small leading-5'>
             Click the link in the email, or enter the 6-digit code manually.
           </p>
         </div>

@@ -62,7 +62,7 @@ function CandidateTile({
       ) : (
         <BankLogo
           bank={{name: candidate.bankName, ...artwork}}
-          className='size-9 rounded-md text-xs shadow-none'
+          className='size-9 rounded-md text-body-small shadow-none'
           imageClassName='p-1'
         />
       )}
@@ -174,7 +174,7 @@ export function AccountQuestions({
                     {option.tile}
                     <span className='min-w-0'>
                       <span className='block text-body wrap-anywhere'>{option.title}</span>
-                      <span className='block text-xs wrap-anywhere text-muted-foreground'>
+                      <span className='block text-body-small wrap-anywhere text-muted-foreground'>
                         {option.detail}
                       </span>
                     </span>

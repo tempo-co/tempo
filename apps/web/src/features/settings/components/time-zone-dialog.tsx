@@ -129,7 +129,7 @@ export function TimeZoneDialog({currentTimeZone}: TimeZoneDialogProps) {
                       >
                         <span aria-hidden='true'>{isCurrent && <Check className='size-4' />}</span>
                         <span className='min-w-0 truncate'>{option.label}</span>
-                        <span className='numeric text-xs text-muted-foreground'>
+                        <span className='numeric text-body-small text-muted-foreground'>
                           {saving === option.value ? (
                             <PendingLabel>Saving…</PendingLabel>
                           ) : (

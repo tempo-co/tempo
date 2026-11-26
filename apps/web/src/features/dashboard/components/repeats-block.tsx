@@ -91,7 +91,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
         </dl>
         <div className='grid gap-1.5'>
           <Bone className='h-1.5' />
-          <p className='numeric text-xs'>
+          <p className='numeric text-body-small'>
             <TextBone className='w-[16em]' />
           </p>
         </div>
@@ -103,7 +103,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
                 <span className='block'>
                   <TextBone className='w-[8em]' />
                 </span>
-                <span className='block text-xs'>
+                <span className='block text-body-small'>
                   <TextBone className='w-[9em]' />
                 </span>
               </span>
@@ -141,7 +141,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
           <dt className='text-label text-muted-foreground'>Bills a month</dt>
           <dd className='numeric text-lg font-semibold'>{wholeCents(bills, currency)}</dd>
           {summary.expenseUnconvertedCount > 0 && (
-            <dd className='text-xs text-muted-foreground'>
+            <dd className='text-body-small text-muted-foreground'>
               {summary.expenseUnconvertedCount} not converted yet
             </dd>
           )}
@@ -161,7 +161,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
               style={{width: `${(paid / (paid + left)) * 100}%`}}
             />
           </span>
-          <p className='numeric text-xs text-muted-foreground'>
+          <p className='numeric text-body-small text-muted-foreground'>
             {left === 0
               ? `All of ${monthName}'s bills paid`
               : `${monthName}: ${wholeCents(paid, currency)} paid · ${wholeCents(left, currency)} to go`}
@@ -177,7 +177,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
                 <SeriesTile series={item} className='size-7' />
                 <span className='min-w-0'>
                   <span className='block truncate'>{item.name}</span>
-                  <span className='block text-xs text-warning'>
+                  <span className='block text-body-small text-warning'>
                     {item.flags.includes('LATE') ? 'Not paid yet' : 'Higher than usual'}
                   </span>
                 </span>
@@ -191,7 +191,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
                 <SeriesTile series={payment} className='size-7' />
                 <span className='min-w-0'>
                   <span className='block truncate'>{payment.name}</span>
-                  <span className='block text-xs text-muted-foreground'>
+                  <span className='block text-body-small text-muted-foreground'>
                     {format(parseCalendarDate(payment.nextExpectedDate), 'd MMM')} ·{' '}
                     {formatRelativeDays(payment.nextExpectedDate, today)}
                   </span>

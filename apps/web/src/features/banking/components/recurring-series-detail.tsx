@@ -81,7 +81,7 @@ export function RecurringSeriesDetail({
             {formatAmount(series)}
           </span>
           {monthly && (
-            <span className='block numeric text-xs text-muted-foreground'>{monthly}</span>
+            <span className='block numeric text-body-small text-muted-foreground'>{monthly}</span>
           )}
         </p>
       </header>
@@ -215,8 +215,8 @@ function Badges({series}: {series: RecurringSeries}) {
 /** A label over one value; both stay on one line each, however narrow the cell. */
 function Fact({label, value, numeric = false}: {label: string; value: string; numeric?: boolean}) {
   return (
-    <div data-testid='recurring-fact' className='min-w-0 bg-card px-3 py-2.5'>
-      <dt className='truncate text-xs text-muted-foreground'>{label}</dt>
+    <div data-testid='recurring-fact' className='min-w-0 bg-card px-3 py-2.5 max-[22rem]:px-2'>
+      <dt className='truncate text-body-small text-muted-foreground'>{label}</dt>
       <dd className={cn('mt-0.5 truncate text-body font-medium', numeric && 'numeric')}>{value}</dd>
     </div>
   );
@@ -325,7 +325,9 @@ function PaymentChart({
 
   return (
     <section aria-label='Payment history' className='grid grid-cols-1 gap-2'>
-      <h4 className='text-xs font-medium text-muted-foreground'>Last {points.length} payments</h4>
+      <h4 className='text-body-small font-medium text-muted-foreground'>
+        Last {points.length} payments
+      </h4>
       <ChartContainer
         className='aspect-auto h-32 w-full'
         config={{amount: {color: 'var(--color-chart-primary)'}}}
@@ -353,7 +355,7 @@ function PaymentChart({
               const point = payload?.[0]?.payload as (typeof points)[number] | undefined;
               if (!active || !point) return null;
               return (
-                <div className='grid gap-0.5 rounded-md border bg-card p-2 text-xs shadow-sm'>
+                <div className='grid gap-0.5 rounded-md border bg-card p-2 text-body-small shadow-sm'>
                   <span className='text-muted-foreground'>
                     {formatBankTransactionCompactDate(point.date)}
                   </span>

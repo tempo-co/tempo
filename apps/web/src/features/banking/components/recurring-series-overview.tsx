@@ -258,7 +258,7 @@ function MonthHeader({
         </div>
       )}
       {data.unconvertedCount > 0 && (
-        <p className='text-xs text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           {data.unconvertedCount} not converted yet, left out of the totals.
         </p>
       )}
@@ -366,7 +366,7 @@ function SeriesRow({
       <SeriesTile series={series} />
       <span className='min-w-0 flex-1'>
         <span className='block truncate text-body font-medium'>{series.name}</span>
-        <span className='block truncate text-xs text-muted-foreground'>
+        <span className='block truncate text-body-small text-muted-foreground'>
           {RECURRING_CADENCE_LABELS[series.cadence]} · {when}
         </span>
       </span>

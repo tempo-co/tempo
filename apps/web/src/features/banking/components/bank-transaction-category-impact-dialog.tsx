@@ -234,7 +234,7 @@ function SwapGroup({
                       <CurrencyAmount amount={Number(row.amount)} currency={row.currency} />
                     </span>
                   </span>
-                  <span className='block text-xs whitespace-nowrap text-muted-foreground'>
+                  <span className='block text-body-small whitespace-nowrap text-muted-foreground'>
                     {rowDate(row)}
                   </span>
                 </span>

@@ -164,7 +164,7 @@ function StatementGaps({
                 <span className='min-w-0'>
                   <span className='block'>{formatDateRange(gap.from, gap.to)}</span>
                   {named && account && (
-                    <span className='block text-xs wrap-anywhere text-muted-foreground'>
+                    <span className='block text-body-small wrap-anywhere text-muted-foreground'>
                       {importAccountName(account, known)}
                     </span>
                   )}
@@ -230,7 +230,9 @@ function ImportAccounts({
             <AccountTile match={match} logos={logos} />
             <span className='min-w-0'>
               <span className='block text-body wrap-anywhere'>{name}</span>
-              <span className='block text-xs wrap-anywhere text-muted-foreground'>{detail}</span>
+              <span className='block text-body-small wrap-anywhere text-muted-foreground'>
+                {detail}
+              </span>
             </span>
           </li>
         );
@@ -259,7 +261,7 @@ function AccountTile({match, logos}: {match?: KnownAccount; logos: BankLogos}) {
             name: connection.aspspName,
             ...logos[bankLogoKey(connection.aspspName, connection.aspspCountry)],
           }}
-          className='size-9 rounded-md text-xs shadow-none'
+          className='size-9 rounded-md text-body-small shadow-none'
           imageClassName='p-1'
         />
       ) : (

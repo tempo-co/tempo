@@ -148,7 +148,7 @@ export function FileList({files}: {files: readonly File[]}) {
               <span className='truncate'>{head}</span>
               <span className='shrink-0 whitespace-pre'>{tail}</span>
             </span>
-            <span className='shrink-0 numeric text-xs text-muted-foreground'>
+            <span className='shrink-0 numeric text-body-small text-muted-foreground'>
               {formatFileSize(file.size)}
             </span>
           </li>

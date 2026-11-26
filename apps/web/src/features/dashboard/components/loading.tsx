@@ -39,7 +39,7 @@ export function TileRowsSkeleton({count}: {count: number}) {
         <span className='block text-body'>
           <TextBone className='w-[9em]' />
         </span>
-        <span className='block text-xs'>
+        <span className='block text-body-small'>
           <TextBone className='w-[6em]' />
         </span>
       </span>

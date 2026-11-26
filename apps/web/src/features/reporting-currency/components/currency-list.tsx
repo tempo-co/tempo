@@ -57,7 +57,7 @@ export function CurrencyList({settings, value, onSelect, disabled}: CurrencyList
           <div className='grid gap-3 pr-5 pl-2'>
             {groups.map((group) => (
               <section key={group.label} aria-label={group.label}>
-                <h3 className='px-2 pb-1 text-xs font-medium text-muted-foreground'>
+                <h3 className='px-2 pb-1 text-body-small font-medium text-muted-foreground'>
                   {group.label}
                 </h3>
                 <ul className='grid'>

@@ -80,7 +80,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
 
   return (
     <div className='col-span-2 min-w-0' data-testid='bank-transaction-category-control'>
-      <dt className='flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground'>
+      <dt className='flex items-center justify-between gap-3 text-body-small font-medium text-muted-foreground'>
         <label htmlFor={selectId} className='shrink-0'>
           Transaction category
         </label>

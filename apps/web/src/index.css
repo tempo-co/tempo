@@ -42,7 +42,8 @@
   --text-body: 0.875rem;
   --text-body--line-height: 1.5;
   --text-body-small: 0.8125rem;
-  --text-body-small--line-height: 1.5;
+  /* 20px, the nearest whole pixel to 1.5, so second lines and rows stay on whole pixels. */
+  --text-body-small--line-height: 1.25rem;
   --text-label: 0.75rem;
   --text-label--line-height: 1.333;
   --text-label--font-weight: 500;

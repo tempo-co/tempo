@@ -26,7 +26,7 @@ export function TransactionListRow({
       <MerchantLogoTile transaction={transaction} />
       <div className='min-w-0'>
         <p className='truncate text-body'>{resolveBankTransactionDisplayTitle(transaction)}</p>
-        <p className='truncate text-xs text-muted-foreground'>
+        <p className='truncate text-body-small text-muted-foreground'>
           {formatBankTransactionCompactDate(transaction.date)}
           {isPendingBankTransaction(transaction) && ' · Pending'}
         </p>

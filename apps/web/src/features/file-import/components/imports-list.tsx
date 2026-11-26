@@ -130,7 +130,7 @@ function ImportRow({summary, onOpen}: {summary: BankImportSummary; onOpen: () =>
           >
             {importHeadline(summary)}
           </button>
-          <span className='block truncate text-xs text-muted-foreground'>
+          <span className='block truncate text-body-small text-muted-foreground'>
             {details.join(' · ')}
             {!undone && summary.rowsDoubtful > 0 && (
               <>
@@ -177,7 +177,7 @@ function ImportRowSkeleton() {
         <span className='block text-body'>
           <TextBone className='w-[9em]' />
         </span>
-        <span className='block text-xs'>
+        <span className='block text-body-small'>
           <TextBone className='w-[14em]' />
         </span>
       </span>

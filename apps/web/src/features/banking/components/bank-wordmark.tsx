@@ -18,7 +18,7 @@ export function BankWordmark({
     <BankLogo
       bank={bank}
       testId='bank-wordmark'
-      className={cn(size === 'lg' ? 'h-14 w-48 text-lg' : 'h-9 w-28 text-xs', className)}
+      className={cn(size === 'lg' ? 'h-14 w-48 text-lg' : 'h-9 w-28 text-body-small', className)}
       imageClassName={cn(
         'w-auto max-w-full object-center',
         size === 'lg' ? 'px-3 py-2.5' : 'px-2 py-1.5',

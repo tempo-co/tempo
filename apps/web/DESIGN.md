@@ -179,11 +179,11 @@ set in body. Use them rather than size and weight classes, and add no sizes outs
 
 | Style | Utility | Value | Use |
 | --- | --- | --- | --- |
-| Page title | `text-page-title` | 700, 22px/1.2, -0.02em | One per page (error and auth pages too), and a dialog that stands in for a page |
+| Page title | `text-page-title` | 700, 22px/26px, -0.02em | One per page (error and auth pages too), and a dialog that stands in for a page |
 | Section title | `text-section-title` | 600, 16px/1.35 | Dialog and drawer titles, detail views |
 | Card title | `text-card-title` | 600, 13px/1.4 | Card and group headings, empty and error states |
 | Body | `text-body` | 400, 14px/1.5 | Primary copy: row titles and amounts, menu items, navigation, field values |
-| Body small | `text-body-small` | 400, 13px/1.5 | Muted descriptions, button and segment labels, tooltips |
+| Body small | `text-body-small` | 400, 13px/20px | Muted descriptions and second lines, badges, button and segment labels, tooltips |
 | Label | `text-label` | 500, 12px/1.33 | Metadata, field labels, table headings, compact status |
 | Caption | `text-caption` | 11px/1 | Fixed-space labels: tabs, axis ticks, flag codes |
 | Numeric | `numeric` | Tabular figures | Amounts and rates, so digits line up |
@@ -323,7 +323,7 @@ Every transaction and recurring row starts with a round `36px` leading tile (`tr
 the sunk field, a muted icon and a hairline edge): the merchant's monochrome alpha logo when
 available, otherwise the category glyph (the activity glyph for own transfers and currency
 exchanges). Account rows, import surfaces and empty states lead with the same tile. The row is the
-shared `60px` row (`min-h-15`, `px-3 py-2`): a `text-body` title over a muted `text-xs` line, plus
+shared `60px` row (`min-h-15`, `px-3 py-2`): a `text-body` title over a muted `text-body-small` line, plus
 any `1px` divider; a wrapping selection row grows only for its description. The transaction
 inspector keeps its `40px` tile. Logo loading, tinting and fallbacks: `docs/frontend-conventions.md`.
 There are no per-merchant exceptions. Logos are display only: names, identification and sourcing
@@ -340,7 +340,7 @@ radius; items are `text-body` with segment corners, tooltips `text-body-small`.
 
 ### Badges
 
-`Badge`: a `text-xs` semibold pill beside a name. `secondary` for neutral facts (a price range),
+`Badge`: a `text-body-small` semibold pill beside a name. `secondary` for neutral facts (a price range),
 `outline` tinted with a status colour for attention (late), `default` and `destructive` filled.
 
 ### Alerts

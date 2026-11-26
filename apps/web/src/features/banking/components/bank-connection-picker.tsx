@@ -310,7 +310,7 @@ function CountryStep({
             >
               <CountryTile code={country.code} />
               <span className='min-w-0 truncate text-body'>{country.label}</span>
-              <span className='numeric text-xs text-muted-foreground'>
+              <span className='numeric text-body-small text-muted-foreground'>
                 {countOf(country.bankCount, 'bank', 'banks')}
               </span>
             </button>
@@ -351,7 +351,7 @@ function ConfirmStep({
             `Continue to ${bank.name}`
           )}
         </Button>
-        <p className='text-center text-xs wrap-anywhere text-muted-foreground'>
+        <p className='text-center text-body-small wrap-anywhere text-muted-foreground'>
           You approve access at {bank.name}, then come back here.
         </p>
       </div>

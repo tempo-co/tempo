@@ -28,7 +28,7 @@ export function MerchantRow({
       <span className='min-w-0'>
         {/* Names wrap to two lines and details wrap fully: the comparison is what the row is for. */}
         <span className='line-clamp-2 wrap-anywhere'>{merchant.name}</span>
-        <span className='block text-xs text-muted-foreground'>{detail}</span>
+        <span className='block text-body-small text-muted-foreground'>{detail}</span>
       </span>
       <span className={cn('numeric whitespace-nowrap', amountClassName)}>{amount}</span>
     </button>

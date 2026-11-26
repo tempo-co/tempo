@@ -314,7 +314,9 @@ function YearLine({
             <span className='numeric'>
               {row.year}
               {!row.complete && (
-                <span className='block text-xs font-normal text-muted-foreground'>so far</span>
+                <span className='block text-body-small font-normal text-muted-foreground'>
+                  so far
+                </span>
               )}
             </span>
           </button>
@@ -333,7 +335,7 @@ function YearLine({
           {signed(row.kept, currency)}
         </span>
         {share !== null && (
-          <span className='block numeric text-xs whitespace-nowrap text-muted-foreground'>
+          <span className='block numeric text-body-small whitespace-nowrap text-muted-foreground'>
             {pct(share)}
             <span className='max-[25rem]:hidden'> of in</span>
           </span>
@@ -344,7 +346,7 @@ function YearLine({
         {change !== null && (
           <span
             className={cn(
-              'block numeric text-xs whitespace-nowrap',
+              'block numeric text-body-small whitespace-nowrap',
               change >= 0 ? 'text-success' : 'text-warning',
             )}
           >

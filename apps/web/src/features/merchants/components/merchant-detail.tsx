@@ -62,12 +62,12 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
       <section aria-label='All-time totals' className='grid grid-cols-1 gap-5'>
         <dl className='flex flex-wrap justify-between gap-x-8 gap-y-4'>
           <div className='min-w-0'>
-            <dt className='text-xs text-muted-foreground'>Spent all time</dt>
+            <dt className='text-body-small text-muted-foreground'>Spent all time</dt>
             <dd className='numeric text-3xl font-semibold tracking-tight'>
               {formatMoney(merchant.spent, currency)}
             </dd>
             {toCents(merchant.refunded) > 0 && (
-              <dd className='text-xs text-muted-foreground'>
+              <dd className='text-body-small text-muted-foreground'>
                 <span className='numeric'>{formatMoney(merchant.paid, currency)}</span> paid,{' '}
                 <span className='numeric'>{formatMoney(merchant.refunded, currency)}</span> refunded
               </dd>
@@ -75,7 +75,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
           </div>
           {hasIncome && (
             <div className='min-w-0 sm:text-right'>
-              <dt className='text-xs text-muted-foreground'>Received</dt>
+              <dt className='text-body-small text-muted-foreground'>Received</dt>
               <dd className='numeric text-3xl font-semibold tracking-tight text-success'>
                 +{formatMoney(merchant.received, currency)}
               </dd>
@@ -108,7 +108,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
           <Fact label='How often' value={frequency ?? '—'} />
         </dl>
         {excluded > 0 && (
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-body-small text-muted-foreground'>
             {countLabel(excluded, 'transaction')} without a converted amount{' '}
             {excluded === 1 ? 'is' : 'are'} not counted.
           </p>
@@ -121,7 +121,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
         <section className='grid grid-cols-1 gap-3' aria-label='Grouped names'>
           <div>
             <h2 className='text-card-title'>Grouped names</h2>
-            <p className='mt-1 text-xs text-muted-foreground'>
+            <p className='mt-1 text-body-small text-muted-foreground'>
               These appear under one brand, so their totals add up above.
             </p>
           </div>
@@ -133,7 +133,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
               >
                 <span className='min-w-0'>
                   <span className='block wrap-anywhere'>{variant.name}</span>
-                  <span className='block text-xs text-muted-foreground'>
+                  <span className='block text-body-small text-muted-foreground'>
                     {countLabel(variant.count, 'transaction')}
                   </span>
                 </span>
@@ -155,7 +155,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
 function Fact({label, value, numeric = false}: {label: string; value: string; numeric?: boolean}) {
   return (
     <div data-testid='merchant-fact' className='min-w-0 bg-card px-3 py-2.5'>
-      <dt className='truncate text-xs text-muted-foreground'>{label}</dt>
+      <dt className='truncate text-body-small text-muted-foreground'>{label}</dt>
       <dd className={cn('mt-0.5 truncate text-body font-medium', numeric && 'numeric')}>{value}</dd>
     </div>
   );
@@ -294,7 +294,7 @@ function PeriodsChart({
               const period = shown.find((item) => item.start === label);
               if (!active || !period) return null;
               return (
-                <div className='grid min-w-40 gap-1 rounded-md border bg-card p-2.5 text-xs shadow-sm'>
+                <div className='grid min-w-40 gap-1 rounded-md border bg-card p-2.5 text-body-small shadow-sm'>
                   <p className='font-semibold'>
                     {periodLabel(period, interval)}
                     {!period.complete && (

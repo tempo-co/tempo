@@ -60,7 +60,10 @@ export function SeriesIssue({
 function Hint({children, className}: {children: React.ReactNode; className?: string}) {
   return (
     <span
-      className={cn('block numeric text-xs whitespace-nowrap text-muted-foreground', className)}
+      className={cn(
+        'block numeric text-body-small whitespace-nowrap text-muted-foreground',
+        className,
+      )}
     >
       {children}
     </span>

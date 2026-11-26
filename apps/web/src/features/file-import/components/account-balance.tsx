@@ -124,13 +124,13 @@ function BalanceForm({
         <label htmlFor={`${id}-amount`} className='text-body font-medium wrap-anywhere'>
           {label}
         </label>
-        <p id={`${id}-help`} className='text-xs text-muted-foreground'>
+        <p id={`${id}-help`} className='text-body-small text-muted-foreground'>
           {BALANCE_HELP}
         </p>
       </div>
       {amountField}
       {invalid && (
-        <p id={`${id}-error`} role='alert' className='text-xs text-destructive'>
+        <p id={`${id}-error`} role='alert' className='text-body-small text-destructive'>
           {INVALID_BALANCE.title}. {INVALID_BALANCE.description}
         </p>
       )}
@@ -216,7 +216,7 @@ export function ImportBalancePrompts({summary}: {summary: BankImportSummary}) {
             <p className='text-body font-medium wrap-anywhere'>{balanceLabel(name)}</p>
             <p role='status' className='flex items-center gap-2 text-body'>
               <span className='numeric'>{formatCurrency(Number(balance), account.currency)}</span>
-              <span className='flex items-center gap-1 text-xs text-muted-foreground'>
+              <span className='flex items-center gap-1 text-body-small text-muted-foreground'>
                 <Check aria-hidden='true' className='size-3.5' />
                 Saved
               </span>
@@ -254,7 +254,7 @@ export function AccountBalanceAction({
       <TextAction
         onClick={() => setOpen(true)}
         aria-label={source ? `Edit balance of ${name}` : `${ADD_BALANCE} of ${name}`}
-        className={source ? '-mr-2 h-auto py-0 text-xs text-muted-foreground' : '-mr-2'}
+        className={source ? '-mr-2 h-auto py-0 text-body-small text-muted-foreground' : '-mr-2'}
       >
         {source ? 'Edit' : ADD_BALANCE}
       </TextAction>

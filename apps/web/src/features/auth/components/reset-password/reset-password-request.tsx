@@ -74,7 +74,7 @@ export function ResetPasswordRequest() {
                   </>
                 )}
               </p>
-              <p className='text-xs leading-5 text-muted-foreground'>
+              <p className='text-body-small leading-5 text-muted-foreground'>
                 It can take a few minutes. Check your spam folder if it doesn&apos;t arrive.
               </p>
             </div>

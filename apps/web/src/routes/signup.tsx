@@ -23,7 +23,7 @@ function SignUp() {
         className='flex w-full flex-col'
       >
         <SignUpForm />
-        <div className='px-2 pt-2 text-center text-xs leading-5 text-muted-foreground'>
+        <div className='px-2 pt-2 text-center text-body-small leading-5 text-muted-foreground'>
           <p>
             By signing up, you agree to our{' '}
             <Button variant='link' asChild className='h-fit px-1 py-0'>
