@@ -34,16 +34,15 @@ const ROW =
 
 /**
  * What repeats beside the history: bills and income a month, how far this month's bills are paid, late or
- * higher-than-usual bills, then the next payments. Each row opens its series in the recurring dialog.
+ * higher-than-usual bills, then the next payments. Each row opens its series on the Recurring page.
  */
 export function RepeatsBlock({today, className}: {today: string; className?: string}) {
   const totals = useGetRecurringSummary(today);
   // Totals in another currency than the reporting one, or none while it is converted, wait for their refetch.
   const accepted = useFiguresCurrencyAccepted();
   const summary = accepted(totals.summary?.baseCurrency) ? totals.summary : undefined;
-  const navigate = useNavigate({from: '/'});
-  const open = (key?: string) =>
-    void navigate({search: (prev) => ({...prev, recurring: 'open', series: key})});
+  const navigate = useNavigate();
+  const open = (key?: string) => void navigate({to: '/recurring', search: {series: key}});
   const header = (
     <header className='-my-2.5 flex items-center justify-between gap-2'>
       <h2 className='text-card-title'>Repeats</h2>

@@ -244,6 +244,31 @@ export function expectedDatesThrough(entry: UndatedRecurringSeries, until: strin
 }
 
 /**
+ * The month (`YYYY-MM`) a payment counts in. A calendar rhythm's payment within the rhythm's tolerance of one of its
+ * slots (the anchor day, every `months` months from the next expected date) counts in that slot's month, so one paid a
+ * few days early or late across a month boundary pays the month it was due in; any other payment counts in the month
+ * it was made.
+ */
+export function paymentMonth(
+	entry: Pick<UndatedRecurringSeries, 'cadence' | 'anchorDay' | 'nextExpectedDate'>,
+	date: string,
+): string {
+	const {anchorDay} = entry;
+	if (anchorDay === null) return date.slice(0, 7);
+	const rule = CADENCE_RULES.find(({cadence}) => cadence === entry.cadence)!;
+	const monthIndex = (day: string) => Number(day.slice(0, 4)) * 12 + Number(day.slice(5, 7)) - 1;
+	const slotMonths = monthIndex(entry.nextExpectedDate) % rule.months;
+	const paid = monthIndex(date);
+	const distance = (slot: string) => Math.abs(toDayNumber(slot) - toDayNumber(date));
+	const slots = [paid - 1, paid, paid + 1]
+		.filter((index) => (((index - slotMonths) % rule.months) + rule.months) % rule.months === 0)
+		.map((index) => anchorDate(Math.floor(index / 12), index % 12, anchorDay))
+		.filter((slot) => distance(slot) <= rule.toleranceDays)
+		.sort((a, b) => distance(a) - distance(b));
+	return (slots[0] ?? date).slice(0, 7);
+}
+
+/**
  * Finds recurring payments in one owner's history. Deterministic and side-effect free: the same rows and `today`
  * always give the same series. Results are stored per owner, so a change to these rules must bump
  * `RECURRING_DETECTION_RULES_VERSION` in the recurring series service.
