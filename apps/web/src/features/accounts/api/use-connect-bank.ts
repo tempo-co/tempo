@@ -1,10 +1,9 @@
-import type {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnection} from '@tempo/contracts';
 import {toast} from 'sonner';
 
 import {useStartBankConnection} from '@/features/banking/api/use-start-bank-connection';
+import type {ConnectingBank as Bank} from '@/features/banking/components/connect-bank-steps';
 import {wasToasted} from '@/utils/api';
-
-type Bank = Pick<BankConnectionAspsp, 'name' | 'country'>;
 
 /** The bank this tab last left for, so its return can offer to try it again. */
 const CONNECTING_KEY = 'wisp-connecting-bank';

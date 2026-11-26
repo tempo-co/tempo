@@ -1,5 +1,5 @@
 import {FileUp} from 'lucide-react';
-import {type Ref, useEffect, useRef, useState} from 'react';
+import {type MouseEvent, type Ref, useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import {Button} from '@/components/ui/button';
@@ -16,7 +16,7 @@ export function ImportFileButton({
   className,
 }: {
   ref?: Ref<HTMLButtonElement>;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLElement>) => void;
   className?: string;
 }) {
   return (

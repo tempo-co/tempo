@@ -66,9 +66,12 @@ function AccountRoute() {
                   query={imports}
                   accountId={account.id}
                   title='Imports for this account'
-                  onOpen={(summary) => addData.showImport({kind: 'summary', summary})}
-                  onReview={(summary) =>
-                    addData.showImport({kind: 'review', summary, count: summary.rowsDoubtful})
+                  onOpen={(summary, event) => addData.showImport({kind: 'summary', summary}, event)}
+                  onReview={(summary, event) =>
+                    addData.showImport(
+                      {kind: 'review', summary, count: summary.rowsDoubtful},
+                      event,
+                    )
                   }
                 />
               ) : undefined

@@ -1,7 +1,7 @@
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import type {BankConnectionAspsp} from '@tempo/contracts';
 import {ChevronRight, CircleAlert, CircleX, Loader, Plus, Search} from 'lucide-react';
-import {useMemo, useState} from 'react';
+import {type MouseEvent, useMemo, useState} from 'react';
 
 import {PendingLabel} from '@/components/shared/pending-label';
 import {StepFrame} from '@/components/shared/step-frame';
@@ -172,7 +172,7 @@ export function ConnectBankButton({
   isStarting,
   className,
 }: {
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLElement>) => void;
   isStarting: boolean;
   className?: string;
 }) {

@@ -7,15 +7,18 @@ import type {
 
 export type ConnectResult = 'connected' | 'cancelled' | 'error';
 
+/** The click that opens the sheet: focus goes back to its button when the sheet closes. */
+export type Opener = {currentTarget: EventTarget | null};
+
 export type AddData = {
   /** Add data in the sidebar or the phone header: the ways in, or straight to the one there is. */
-  openMenu: () => void;
+  openMenu: (opener?: Opener) => void;
   /** Import a file: the import's steps, fresh unless an import is unsettled. */
-  openImport: () => void;
+  openImport: (opener?: Opener) => void;
   /** Connect a bank: its bank list. */
-  openConnect: () => void;
+  openConnect: (opener?: Opener) => void;
   /** An import's summary or rows to check, as from the Imports list. */
-  showImport: (step: ImportStep) => void;
+  showImport: (step: ImportStep, opener?: Opener) => void;
   /** The bank's return to Accounts: a toast when it connected, else the sheet says what happened. */
   connectReturned: (result: ConnectResult) => void;
   /** Whether this deployment imports files; false until the import list says so. */

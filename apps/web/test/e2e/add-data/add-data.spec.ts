@@ -1,7 +1,7 @@
 import type {Page} from '@playwright/test';
 
 import {expect, test} from '../../fixtures';
-import {expectNoHorizontalOverflow} from '../../utils/layout';
+import {animationsSettled, expectNoHorizontalOverflow} from '../../utils/layout';
 
 /** A synthetic CAMT.053 statement for a published example IBAN: three booked payments in March 2026. */
 const STATEMENT = [
@@ -96,9 +96,7 @@ test.describe('Add data', () => {
     await page.getByRole('button', {name: 'Add data'}).click();
     const sheet = page.getByTestId('add-data-sheet');
     await expect(sheet.getByRole('heading', {name: 'Add data'})).toBeVisible();
-    await sheet.evaluate(async (element) => {
-      await Promise.all(element.getAnimations().map((animation) => animation.finished));
-    });
+    await animationsSettled(sheet);
     const box = (await sheet.boundingBox())!;
     expect(Math.round(box.y + box.height)).toBe(640);
     expect(Math.round(box.width)).toBe(320);

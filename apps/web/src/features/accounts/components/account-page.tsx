@@ -2,7 +2,7 @@ import {Link, useNavigate, useRouter} from '@tanstack/react-router';
 import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
 import {addMonths, endOfMonth, format, isSameYear, parseISO} from 'date-fns';
 import {FileQuestion, FileUp, RefreshCw, Trash2, Unlink} from 'lucide-react';
-import {type ReactNode, useState} from 'react';
+import {type MouseEvent, type ReactNode, useState} from 'react';
 
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
@@ -56,7 +56,7 @@ export function AccountPage({
   /** This account's imports, with Review and Undo; absent while file import is off. */
   importsList?: ReactNode;
   /** Starts an import; absent while file import is off. */
-  onImport?: () => void;
+  onImport?: (event: MouseEvent<HTMLElement>) => void;
   /** An imported-files account's Add balance or Edit; absent while file import is off. */
   balanceAction?: ReactNode;
   today: string;
@@ -286,7 +286,7 @@ function AboutCard({
 }: {
   account: BankAccount;
   connection: BankConnection;
-  onImport?: () => void;
+  onImport?: (event: MouseEvent<HTMLElement>) => void;
   onRemove?: () => void;
 }) {
   const files = isFileConnection(connection);

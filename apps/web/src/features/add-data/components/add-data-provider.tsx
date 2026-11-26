@@ -20,7 +20,7 @@ import {takeConnectingBank, useConnectBank} from '@/features/accounts/api/use-co
 import {
   ConnectBankSteps,
   type ConnectStep,
-} from '@/features/banking/components/bank-connection-picker';
+} from '@/features/banking/components/connect-bank-steps';
 import {useBankImports} from '@/features/file-import/api/use-bank-imports';
 import {IMPORT_TILE} from '@/features/file-import/components/file-choice';
 import {FileImportSteps} from '@/features/file-import/components/file-import-steps';
@@ -34,7 +34,13 @@ import {
 } from '@/features/file-import/components/use-file-import';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 
-import {type AddData, AddDataContext, type ConnectResult, useAddData} from '../use-add-data';
+import {
+  type AddData,
+  AddDataContext,
+  type ConnectResult,
+  type Opener,
+  useAddData,
+} from '../use-add-data';
 
 type View = 'menu' | 'import' | 'connect';
 
@@ -55,13 +61,18 @@ export function AddDataProvider({children}: {children: ReactNode}) {
     setView('import');
     setFromMenu(false);
   }, []);
-  const fileImport = useFileImport({onShow: showImportSteps});
+  // Where focus goes back to when the sheet closes, since it opens from many places.
+  const opener = useRef<HTMLElement | null>(null);
+  // A drop or a toast's View opens the import with no button to go back to.
+  const onShow = useCallback(() => {
+    opener.current = null;
+    showImportSteps();
+  }, [showImportSteps]);
+  const fileImport = useFileImport({onShow});
   const {connect, isStarting} = useConnectBank();
   const [connectStep, setConnectStep] = useState<ConnectStep>(BANK_LIST);
   // The country the owner chose stays while the sheet closes and opens again.
   const [countryCode, setCountryCode] = useState<string>();
-  // Where focus goes back to when the sheet closes, since it opens from many places.
-  const opener = useRef<HTMLElement | null>(null);
   const {setOpen, openNew, show} = fileImport;
   // Read when Add data opens, so the actions stay the same from render to render.
   const latest = useRef({step: fileImport.step, importOn});
@@ -70,39 +81,40 @@ export function AddDataProvider({children}: {children: ReactNode}) {
   });
 
   const actions = useMemo(() => {
-    const remember = () => {
-      opener.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // From the click, not the focused element: Safari on iPhone does not focus a tapped button.
+    const remember = (event?: Opener) => {
+      opener.current = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     };
-    const openImport = () => {
-      remember();
+    const openImport = (event?: Opener) => {
       showImportSteps();
       openNew();
+      remember(event);
     };
-    const openConnect = () => {
-      remember();
+    const openConnect = (event?: Opener) => {
+      remember(event);
       setView('connect');
       setFromMenu(false);
       setConnectStep(BANK_LIST);
       setOpen(true);
     };
     return {
-      openMenu: () => {
+      openMenu: (event?: Opener) => {
         // With import off there is one way in; an unsettled import is where the sheet was left.
-        if (!latest.current.importOn) return openConnect();
-        if (isUnsettled(latest.current.step)) return openImport();
-        remember();
+        if (!latest.current.importOn) return openConnect(event);
+        if (isUnsettled(latest.current.step)) return openImport(event);
+        remember(event);
         setView('menu');
         setFromMenu(true);
         setOpen(true);
       },
       openImport,
       openConnect,
-      showImport: (next: ImportStep) => {
-        remember();
+      showImport: (next: ImportStep, event?: Opener) => {
         show(next);
+        remember(event);
       },
       connectReturned: (result: ConnectResult) => {
+        opener.current = null;
         const bank = takeConnectingBank();
         if (result === 'connected') {
           toast.success('Bank connection added', {id: 'bank-connection-success'});

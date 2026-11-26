@@ -11,7 +11,7 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {AccountsOverview} from '@/features/accounts/components/accounts-overview';
 import {useAddData} from '@/features/add-data/use-add-data';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
-import {ConnectBankButton} from '@/features/banking/components/bank-connection-picker';
+import {ConnectBankButton} from '@/features/banking/components/connect-bank-steps';
 import {useBankImports} from '@/features/file-import/api/use-bank-imports';
 import {AccountBalanceAction} from '@/features/file-import/components/account-balance';
 import {ImportsList} from '@/features/file-import/components/imports-list';
@@ -140,9 +140,12 @@ function AccountsIndex() {
                 <ImportsList
                   query={imports}
                   title='Import history'
-                  onOpen={(summary) => addData.showImport({kind: 'summary', summary})}
-                  onReview={(summary) =>
-                    addData.showImport({kind: 'review', summary, count: summary.rowsDoubtful})
+                  onOpen={(summary, event) => addData.showImport({kind: 'summary', summary}, event)}
+                  onReview={(summary, event) =>
+                    addData.showImport(
+                      {kind: 'review', summary, count: summary.rowsDoubtful},
+                      event,
+                    )
                   }
                 />
                 {imports.data?.length === 0 && (

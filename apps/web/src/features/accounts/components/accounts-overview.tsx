@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
 import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
 import {ChevronRight, Landmark, Trash2} from 'lucide-react';
-import {type ReactNode, useState} from 'react';
+import {type MouseEvent, type ReactNode, useState} from 'react';
 
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
@@ -54,7 +54,7 @@ export function AccountsOverview({
   /** The import list once it answers; undefined while file import is off or unknown. */
   imports?: BankImportSummary[];
   /** Starts an import; absent while file import is off. */
-  onImport?: () => void;
+  onImport?: (event: MouseEvent<HTMLElement>) => void;
   /** An imported-files account's Add balance or Edit; absent while file import is off. */
   balanceAction?: (account: BankAccount) => ReactNode;
   /** The empty page's ways to add data. */
@@ -187,7 +187,7 @@ function AccountRow({
   entry: AccountEntry;
   bankLogos: BankLogos;
   imports?: BankImportSummary[];
-  onImport?: () => void;
+  onImport?: (event: MouseEvent<HTMLElement>) => void;
   onReconnect: () => void;
   isStarting: boolean;
   balanceAction?: (account: BankAccount) => ReactNode;
