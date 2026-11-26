@@ -36,7 +36,7 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
   const focusSelected = (event: Event) => {
     event.preventDefault();
     const content = event.currentTarget as HTMLElement;
-    const current = content.querySelector<HTMLElement>('[aria-pressed="true"]');
+    const current = content.querySelector<HTMLElement>('[data-state="on"]');
     (current ?? content).focus({preventScroll: true});
     current?.scrollIntoView({block: 'center'});
   };

@@ -100,8 +100,8 @@ export function mockBankRefresh(page: Page) {
 }
 
 /**
- * Intercepts the API's `GET /bank-connections` request. Page navigations to `/bank-connections`
- * share the URL pattern, so they are passed through.
+ * Intercepts the API's `GET /bank-connections` request. Navigations to the old `/bank-connections`
+ * page address share the URL pattern, so they are passed through.
  */
 export function routeBankConnectionsApi(page: Page, handler: (route: Route) => Promise<void>) {
   return page.route('**/bank-connections', async (route) => {

@@ -7,6 +7,7 @@ import {DateRange} from 'react-day-picker';
 import {Button, buttonVariants} from '@/components/ui/button';
 import {Calendar} from '@/components/ui/calendar';
 import {Separator} from '@/components/ui/separator';
+import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {cn} from '@/utils/cn';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
@@ -28,7 +29,7 @@ export function BankTransactionDateFilter({
   variant = 'popover',
   className,
 }: BankTransactionDateFilterProps) {
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const today = startOfDay(new Date());
   const [month, setMonth] = useState(() => filters.date?.from ?? today);
 
@@ -71,40 +72,47 @@ export function BankTransactionDateFilter({
       }`
     : undefined;
 
+  const activePreset = DATE_FILTER_PRESETS.find((preset) => {
+    const range = preset.getRange(today);
+    return (
+      filters.date?.from !== undefined &&
+      filters.date.to !== undefined &&
+      isSameDay(filters.date.from, range.from) &&
+      isSameDay(filters.date.to, range.to)
+    );
+  });
+
   const presets = (
-    <div
-      role='group'
+    <ToggleGroup
+      type='single'
+      size='sm'
       aria-label='Quick ranges'
+      orientation={variant === 'pane' ? 'horizontal' : 'vertical'}
+      value={activePreset?.label ?? ''}
+      // Choosing the range already in force again keeps it.
+      onValueChange={(label) => {
+        const preset = DATE_FILTER_PRESETS.find((candidate) => candidate.label === label);
+        if (preset) void handlePresetSelect(preset.getRange(today));
+      }}
       className={
         variant === 'pane'
           ? 'grid grid-cols-2 gap-1 border-b p-2 min-[360px]:grid-cols-3'
-          : 'flex w-36 flex-col gap-0.5 border-r p-2'
+          : 'flex w-36 flex-col items-stretch gap-0.5 border-r p-2'
       }
     >
-      {DATE_FILTER_PRESETS.map((preset) => {
-        const range = preset.getRange(today);
-        const isActive =
-          filters.date?.from !== undefined &&
-          filters.date.to !== undefined &&
-          isSameDay(filters.date.from, range.from) &&
-          isSameDay(filters.date.to, range.to);
-        return (
-          <Button
-            key={preset.label}
-            variant={isActive ? 'secondary' : 'ghost'}
-            size='sm'
-            aria-pressed={isActive}
-            className={cn(
-              'font-normal',
-              variant === 'pane' ? 'h-10 px-2 text-body-small' : 'h-8 justify-start px-2',
-            )}
-            onClick={() => handlePresetSelect(range)}
-          >
-            {preset.label}
-          </Button>
-        );
-      })}
-    </div>
+      {DATE_FILTER_PRESETS.map((preset) => (
+        <ToggleGroupItem
+          key={preset.label}
+          value={preset.label}
+          className={cn(
+            'font-normal data-[state=on]:bg-secondary data-[state=on]:text-secondary-foreground',
+            variant === 'pane' ? 'h-10 px-2' : 'justify-start px-2',
+          )}
+        >
+          {preset.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 
   const calendar = (

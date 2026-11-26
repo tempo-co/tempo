@@ -9,7 +9,7 @@ export function useBankTransactionArrayFilter<K extends ArrayFilterKey>(
   key: K,
 ) {
   type Value = NonNullable<BankTransactionFilterParams[K]>[number];
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const selectedValues: Value[] = filters[key] ?? [];
 
   const setSelectedValues = (values: Value[]) =>

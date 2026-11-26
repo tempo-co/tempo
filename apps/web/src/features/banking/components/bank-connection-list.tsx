@@ -488,7 +488,7 @@ function AccountRow({
         </span>
         <span className='min-w-0'>
           <Link
-            to='/bank-transactions'
+            to='/transactions'
             search={{bankAccountIds: [account.id]}}
             aria-label={`${name} transactions`}
             className='block truncate text-body outline-none after:absolute after:inset-0'
@@ -508,7 +508,7 @@ function AccountRow({
 
   return (
     <Link
-      to='/bank-transactions'
+      to='/transactions'
       search={{bankAccountIds: [account.id]}}
       aria-label={`${name} transactions`}
       className={ROW}

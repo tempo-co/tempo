@@ -97,7 +97,7 @@ async function mockCorrection(
     };
     return fulfillJson(route, state.saved);
   });
-  await page.goto(`/bank-transactions?transactionId=${ID}`);
+  await page.goto(`/transactions?transactionId=${ID}`);
   await expect(page.getByTestId('bank-transaction-inspector')).toBeVisible();
   return state;
 }

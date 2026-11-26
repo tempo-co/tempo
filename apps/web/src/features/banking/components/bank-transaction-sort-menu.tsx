@@ -38,7 +38,7 @@ const sortIdOf = (sort: NonNullable<BankTransactionSortParams>): SortId =>
 
 /** The list's order: by date (grouped by day) or by amount (flat, dates on the rows). A sheet on phones. */
 export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransactionSortParams>}) {
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(false);
   const current = sortIdOf(sort);

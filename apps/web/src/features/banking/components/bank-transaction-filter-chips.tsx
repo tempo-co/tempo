@@ -16,7 +16,7 @@ import type {BankTransactionFilterParams} from '../types/bank-transaction';
  * the row starts with the "To review" toggle, which sits in the toolbar on larger screens.
  */
 export function BankTransactionFilterChips({filters}: {filters: BankTransactionFilterParams}) {
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const toReview = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention ?? 0;
   // The toggle shows its own state, so "To review" never doubles as a chip.
   const chips = useBankTransactionFilterLabels(filters).filter(
@@ -70,7 +70,7 @@ export function BankTransactionReviewToggle({
   filters: BankTransactionFilterParams;
   className?: string;
 }) {
-  const navigate = useNavigate({from: '/bank-transactions/'});
+  const navigate = useNavigate({from: '/transactions/'});
   const toReview = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention ?? 0;
   const on = Boolean(filters.needsAttention);
   if (!on && toReview === 0) return null;

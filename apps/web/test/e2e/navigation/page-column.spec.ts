@@ -18,10 +18,14 @@ const scrolls = (page: Page) =>
 
 // CSS locators: an open menu or dialog hides the page from the accessibility tree.
 const column = async (page: Page) => {
-  const header = await boxOf(page.locator('header a[href="/"]').first());
+  // The sidebar's edge from `md` up; the phone header's logo below it.
+  const sidebar = await page.locator('[data-sidebar="sidebar"]').boundingBox();
+  const shellX = sidebar
+    ? sidebar.x + sidebar.width
+    : (await boxOf(page.locator('header a[href="/"]'))).x;
   // The column holding the page's heading, not the loading bar that lingers beside it after a load.
   const content = await boxOf(page.locator('main > div').filter({has: page.locator('h1, h2')}));
-  return {headerX: header.x, contentX: content.x, contentWidth: content.width, top: content.y};
+  return {shellX, contentX: content.x, contentWidth: content.width, top: content.y};
 };
 
 /** Where the page title starts, and where the content below its row starts. */
@@ -44,27 +48,21 @@ const mockPages = async (page: Page) => {
 };
 
 for (const width of [1440, 1280]) {
-  test(`keeps the header and content in place across long and short pages at ${width}px`, async ({
+  test(`keeps the sidebar and content in place across long and short pages at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({width, height: 800});
     await mockPages(page);
 
-    // Home is longer than the window; Connections, with one bank, is not.
+    // Home is longer than the window; Accounts, with one bank, is not.
     await page.goto('/');
     await expect(page.getByText('Total balance')).toBeVisible();
     expect(await scrolls(page)).toBe(true);
     const home = await column(page);
 
-    // A menu locks scrolling while open; the page behind it stays put.
-    await page.getByTestId('account-menu-trigger').click();
-    await expect(page.getByRole('menu')).toBeVisible();
-    expect(await column(page)).toEqual(home);
-    await page.keyboard.press('Escape');
-
     await page
       .getByRole('navigation', {name: 'Primary'})
-      .getByRole('link', {name: 'Connections'})
+      .getByRole('link', {name: 'Accounts'})
       .click();
     await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
     expect(await scrolls(page)).toBe(false);
@@ -113,8 +111,8 @@ for (const [width, wraps] of [
     await expect(page.getByText('Total balance')).toBeVisible();
     const home = await column(page);
     for (const [path, name] of [
-      ['/bank-connections', 'Bank connections'],
-      ['/bank-transactions', 'Bank transactions'],
+      ['/accounts', 'Bank connections'],
+      ['/transactions', 'Bank transactions'],
       ['/settings/account', 'Settings'],
     ]) {
       await page.goto(path);
@@ -123,7 +121,7 @@ for (const [width, wraps] of [
     }
     // Wrapped, the Connect button keeps 12px under the title; beside it, it centres on the title's row.
     // Either way the cards start 16px below it.
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
     const [heading, button] = await Promise.all([
       boxOf(page.getByRole('heading', {name: 'Bank connections', exact: true})),

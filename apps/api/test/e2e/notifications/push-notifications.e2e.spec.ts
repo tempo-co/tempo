@@ -270,7 +270,7 @@ describe('Push notifications', () => {
 					payload: {
 						title: 'Tempo',
 						body: 'A bank has stopped syncing',
-						url: `${webBaseUrl}/bank-connections`,
+						url: `${webBaseUrl}/accounts`,
 						tag: 'bank-connections',
 						badge: 1,
 					},

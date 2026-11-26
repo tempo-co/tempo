@@ -28,7 +28,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
     const picker = page.getByTestId('bank-connection-picker');
     await expect(picker).toBeVisible();

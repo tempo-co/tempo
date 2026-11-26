@@ -1,8 +1,8 @@
 # File import screens
 
-The statement file import's screens on Connections. The design rules they follow are in `DESIGN.md` (File import, Alerts); the API behind them is `apps/api/docs/file-import.md`.
+The statement file import's screens on Accounts. The design rules they follow are in `DESIGN.md` (File import, Alerts); the API behind them is `apps/api/docs/file-import.md`.
 
-Statement file import lives on Connections, and only while the deployment has it on: the import
+Statement file import lives on Accounts, and only while the deployment has it on: the import
 list answering is the switch, and until it does the page shows nothing of it. Bank sync stays
 the page's primary action. **Import a file** is the outline button beside **Connect a bank**
 (the two share the row under the title on phones, equal width), and the empty page offers both.
@@ -12,7 +12,7 @@ No copy calls import a fallback or assumes a bank is connected.
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
   screens get the button alone, full width. The picker accepts any extension, since banks name
-  their exports oddly. Files dragged anywhere over Connections show a full-column overlay (dashed
+  their exports oddly. Files dragged anywhere over Accounts show a full-column overlay (dashed
   2px ring rule, page-field wash, "Drop to import"); it is the only drop target outside the dialog.
 - **One dialog.** Choosing, importing, the summary, the account question, the rows to check and
   the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
@@ -28,7 +28,7 @@ No copy calls import a fallback or assumes a bank is connected.
 - **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
   look in `warning`), then Period and Went to, each a small muted label with its glyph
   (`CalendarRange`, `ArrowDownToLine`) over its value. Each account it went to shows as on
-  Connections: its bank's logo (imported files: the `Files` leading tile) with the account-type tile
+  Accounts: its bank's logo (imported files: the `Files` leading tile) with the account-type tile
   on its corner, its name, and its details and bank under it. A drop that added nothing shows
   the `CheckCheck` state instead of the counts. Skipped days get a `warning` Alert (`FileWarning`, "Some days are missing")
   under the counts: each gap's days, the account under them when the drop went to several, and
@@ -51,8 +51,8 @@ No copy calls import a fallback or assumes a bank is connected.
   imported" in the past tense.
 - **Account question.** Native radio rows, so arrow keys move between them; nothing is
   preselected, and Import stays disabled until every question has an answer. Each row starts
-  with its bank's logo as on its Connections card (imported files: the `Files` leading tile) and a
-  small round account-type tile on its corner as on its Connections row; a new account gets the
+  with its bank's logo as on its Accounts card (imported files: the `Files` leading tile) and a
+  small round account-type tile on its corner as on its Accounts row; a new account gets the
   `Plus` leading tile in the same square.
 - **Balances.** The amount field shows its currency inside at the far right, over padding the
   value scrolls short of. Save sits under the field: in the summary on its own row, in the

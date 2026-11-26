@@ -12,11 +12,12 @@ import {api} from '@/utils/api';
  */
 const AWAY_REFRESH_INTERVAL_MS = 5 * 60_000;
 
-/** Home and Transactions, where the counts sit next to what they count. */
+/** Home, Insights (which shows Home's reports) and Transactions, where the counts sit next to what they count. */
 const isReviewPage = (pathname: string) =>
   pathname === '/' ||
-  pathname === '/bank-transactions' ||
-  pathname.startsWith('/bank-transactions/');
+  ['/insights', '/transactions'].some(
+    (page) => pathname === page || pathname.startsWith(`${page}/`),
+  );
 
 /** Transactions across all months that still need the owner's attention. */
 export const useGetBankTransactionReviewCounts = () => {

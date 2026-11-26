@@ -13,13 +13,14 @@ type MerchantLogoTileProps = {
   iconClassName?: string;
 };
 
-const TILE_CLASS_NAME =
-  'h-9 w-9 shrink-0 rounded-full border border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground';
+const TILE_SHAPE = 'h-9 w-9 shrink-0 rounded-full';
+const NEUTRAL_TILE =
+  'border border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground';
 
 /**
- * The round tile before a transaction's name: the merchant's logo when the API has one, otherwise
- * the category icon. Own transfers and currency exchanges (internal movements) show the activity
- * icon. Both the alpha logo and fallback glyph use the leading tile's colours.
+ * The round tile before a transaction's name: the merchant's logo when the API has one, in the
+ * leading tile's colours; otherwise the category icon, tinted with the category's colour. Own
+ * transfers and currency exchanges (internal movements) and uncategorised rows show a neutral icon.
  */
 export function MerchantLogoTile({
   transaction,
@@ -34,13 +35,14 @@ export function MerchantLogoTile({
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   if (!src || src === failedSrc) {
-    const {category} = transaction;
+    const category = toBankTransactionCategory(transaction.category);
+    const activity = transaction.cashFlowTreatment === 'INTERNAL';
     return (
       <BankTransactionCategoryIcon
-        category={toBankTransactionCategory(category)}
-        activity={transaction.cashFlowTreatment === 'INTERNAL'}
+        category={category}
+        activity={activity}
         data-testid='merchant-logo-tile'
-        className={cn(TILE_CLASS_NAME, className)}
+        className={cn(TILE_SHAPE, (activity || !category) && NEUTRAL_TILE, className)}
         iconClassName={iconClassName}
       />
     );
@@ -50,7 +52,7 @@ export function MerchantLogoTile({
     <span
       aria-hidden='true'
       data-testid='merchant-logo-tile'
-      className={cn('relative inline-flex overflow-hidden', TILE_CLASS_NAME, className)}
+      className={cn('relative inline-flex overflow-hidden', TILE_SHAPE, NEUTRAL_TILE, className)}
     >
       {/* Keep ordinary authenticated image loading; cross-origin CSS masks omit API cookies. */}
       <svg aria-hidden='true' className='absolute h-0 w-0 overflow-hidden'>

@@ -116,7 +116,7 @@ test.describe('saved Home', () => {
     // whole bank list.
     await page
       .getByRole('navigation', {name: 'Primary'})
-      .getByRole('link', {name: 'Connections', exact: true})
+      .getByRole('link', {name: 'Accounts', exact: true})
       .click();
     await expect(page.getByTestId('bank-connection-logo').locator('img:visible')).toHaveAttribute(
       'src',
@@ -163,7 +163,7 @@ test.describe('saved Home', () => {
     // The connected bank's logo is saved, so it shows offline too.
     await page
       .getByRole('navigation', {name: 'Primary'})
-      .getByRole('link', {name: 'Connections', exact: true})
+      .getByRole('link', {name: 'Accounts', exact: true})
       .click();
     await expect(page.getByTestId('bank-connection-logo').locator('img:visible')).toHaveAttribute(
       'src',
@@ -209,7 +209,7 @@ test.describe('saved Home', () => {
     await expect(page.getByRole('heading', {name: 'No transactions yet'})).toBeVisible();
     await page.clock.runFor(1100);
     await expect.poll(savedMonths).toEqual(['2026-08', '2026-09']);
-    await page.getByRole('link', {name: 'Connections', exact: true}).first().click();
+    await page.getByRole('link', {name: 'Accounts', exact: true}).first().click();
     await expect(
       page.getByTestId('bank-connections-list').getByRole('region').first(),
     ).toBeVisible();

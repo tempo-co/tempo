@@ -6,7 +6,6 @@ test.describe('Account Settings: Time zone', () => {
     test.use({timezoneId: 'Europe/Lisbon'});
 
     test("starts in the browser's time zone", async ({
-      page,
       signupPage,
       verifyEmailPage,
       homePage,
@@ -20,8 +19,7 @@ test.describe('Account Settings: Time zone', () => {
       await homePage.expectToBeOnPage();
       await homePage.expectUserLoggedIn();
 
-      await page.getByTestId('account-menu-trigger').click();
-      await page.getByRole('menuitem', {name: 'Settings'}).click();
+      await homePage.settingsLink.click();
       await expect(accountSettingsPage.timeZone).toHaveText('Europe/Lisbon');
     });
   });

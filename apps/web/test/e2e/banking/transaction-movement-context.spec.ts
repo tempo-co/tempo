@@ -124,7 +124,7 @@ for (const width of [1440, 390, 320]) {
           transactions: [source, destination],
           total: 2,
         });
-        await page.goto(`/bank-transactions?transactionId=${OUT}`);
+        await page.goto(`/transactions?transactionId=${OUT}`);
         const inspector = page.getByTestId('bank-transaction-inspector');
         const movement = inspector.getByRole('region', {name: 'Money movement'});
         await expect(movement).toBeVisible();

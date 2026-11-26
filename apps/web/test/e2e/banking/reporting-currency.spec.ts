@@ -80,7 +80,7 @@ test.describe('fully mocked', () => {
     ]);
     const api = await mockReportingCurrency(page, ASKING);
     await page.setViewportSize({width: 1440, height: 900});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toContainText('Your accounts are in EUR and GBP.');
@@ -99,13 +99,13 @@ test.describe('fully mocked', () => {
 
     await picker.click();
     const dialog = page.getByRole('dialog', {name: 'Currency for totals'});
-    await expect(
-      dialog.getByRole('region', {name: 'Your accounts'}).getByRole('button'),
-    ).toHaveText(['EUR — Euro', 'GBP — British Pound']);
+    await expect(dialog.getByRole('region', {name: 'Your accounts'}).getByRole('radio')).toHaveText(
+      ['EUR — Euro', 'GBP — British Pound'],
+    );
     await dialog.getByTestId('currency-search').fill('yen');
-    await expect(dialog.getByRole('button', {name: 'JPY — Japanese Yen'})).toBeVisible();
+    await expect(dialog.getByRole('radio', {name: 'JPY — Japanese Yen'})).toBeVisible();
     await dialog.getByTestId('currency-search').fill('');
-    await dialog.getByRole('button', {name: 'EUR — Euro'}).click();
+    await dialog.getByRole('radio', {name: 'EUR — Euro'}).click();
     await expect(dialog).toBeHidden();
     await expect(picker).toHaveText('EUR — Euro');
     await expect(save).toHaveText('Use EUR');
@@ -138,7 +138,7 @@ test.describe('fully mocked', () => {
       connectedCurrencies: ['EUR'],
       options: [...REPORTING_CURRENCIES],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toContainText(
@@ -155,7 +155,7 @@ test.describe('fully mocked', () => {
     await expect(dialog.getByText('Choose a currency before saving.')).toBeVisible();
     await expect(dialog.getByTestId('save-reporting-currency-button')).toBeDisabled();
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await setup.getByRole('button', {name: 'Use EUR'}).click();
     await expect(setup).toBeHidden();
     expect(api.saved).toEqual(['EUR']);
@@ -188,7 +188,7 @@ test.describe('fully mocked', () => {
     await expect(homePage.whereYouStand).toBeHidden();
     await expect(month).toBeHidden();
     await setup.getByRole('button', {name: 'Save'}).click();
-    await page.getByRole('dialog').getByRole('button', {name: 'GBP — British Pound'}).click();
+    await page.getByRole('dialog').getByRole('radio', {name: 'GBP — British Pound'}).click();
     await setup.getByRole('button', {name: 'Use GBP'}).click();
 
     await expect(page.getByRole('heading', {name: 'Recalculating totals in GBP'})).toBeVisible();
@@ -260,7 +260,7 @@ test.describe('fully mocked', () => {
     });
     const setup = page.getByRole('region', {name: QUESTION});
     await setup.getByTestId('reporting-currency-picker').click();
-    await page.getByRole('dialog').getByRole('button', {name: 'GBP — British Pound'}).click();
+    await page.getByRole('dialog').getByRole('radio', {name: 'GBP — British Pound'}).click();
     await setup.getByRole('button', {name: 'Use GBP'}).click();
     await expect.poll(() => api.saved).toEqual(['GBP']);
     try {
@@ -336,7 +336,7 @@ test.describe('fully mocked', () => {
     racing = true;
     const setup = page.getByRole('region', {name: QUESTION});
     await setup.getByTestId('reporting-currency-picker').click();
-    await page.getByRole('dialog').getByRole('button', {name: 'GBP — British Pound'}).click();
+    await page.getByRole('dialog').getByRole('radio', {name: 'GBP — British Pound'}).click();
     await setup.getByRole('button', {name: 'Use GBP'}).click();
     await expect.poll(() => api.saved).toEqual(['GBP']);
 
@@ -374,7 +374,7 @@ test.describe('fully mocked', () => {
       };
       return route.fulfill({status: 204, body: ''});
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toBeVisible();
 
@@ -430,7 +430,7 @@ test.describe('fully mocked', () => {
     const reads = api.reads;
     await page
       .getByRole('navigation', {name: 'Primary'})
-      .getByRole('link', {name: 'Connections', exact: true})
+      .getByRole('link', {name: 'Accounts', exact: true})
       .click();
     await expect(page.getByRole('heading', {name: 'Bank connections', level: 1})).toBeVisible();
     await expect.poll(() => api.reads).toBeGreaterThan(reads);
@@ -576,7 +576,7 @@ test.describe('fully mocked', () => {
         ],
         suggestion: 'CZK',
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
 
       const setup = page.getByRole('region', {name: QUESTION});
       await expect(setup.getByTestId('reporting-currency-picker')).toHaveText('CZK — Czech Koruna');
@@ -607,7 +607,7 @@ test.describe('against the API', () => {
     await expect(dialog.getByText('Choose a currency before saving.')).toBeVisible();
     await expect(dialog.getByTestId('currency-search')).not.toBeFocused();
     await dialog.getByTestId('currency-search').fill('pound');
-    await dialog.getByRole('button', {name: 'GBP — British Pound'}).click();
+    await dialog.getByRole('radio', {name: 'GBP — British Pound'}).click();
     await expect(dialog.getByText('Totals are recalculated in the new currency')).toBeVisible();
     // Cancelling saves nothing.
     await dialog.getByRole('button', {name: 'Cancel'}).click();
@@ -617,7 +617,7 @@ test.describe('against the API', () => {
 
     await edit.click();
     await dialog.getByTestId('currency-search').fill('pound');
-    await dialog.getByRole('button', {name: 'GBP — British Pound'}).click();
+    await dialog.getByRole('radio', {name: 'GBP — British Pound'}).click();
     await save.click();
     await expect(dialog).toBeHidden();
     await expect(value).toHaveText('GBP');
@@ -627,7 +627,7 @@ test.describe('against the API', () => {
     await expect(value).toHaveText('GBP');
     // Reopening lands on the saved currency, not the search.
     await edit.click();
-    await expect(dialog.getByRole('button', {name: 'GBP — British Pound'})).toBeFocused();
+    await expect(dialog.getByRole('radio', {name: 'GBP — British Pound'})).toBeFocused();
     await expect(dialog.getByTestId('currency-search')).not.toBeFocused();
     await dialog.getByRole('button', {name: 'Cancel'}).click();
 
