@@ -61,6 +61,8 @@ export async function routeMockedBankApp(page: Page, baseURL: string | undefined
         publicKey: null,
         preferences: {bankConnections: true},
       });
+    // Log out sits in Settings › Security, beside the session list.
+    if (url.origin === API_URL && url.pathname === '/auth/sessions') return fulfillJson(route, []);
     await route.abort('blockedbyclient');
     throw new Error(`Unmocked request: ${route.request().method()} ${url}`);
   });
