@@ -29,6 +29,8 @@
 		"db:schema": "ts-node -r tsconfig-paths/register ./scripts/schema.ts",
 		"contract:input": "ts-node -r tsconfig-paths/register ./scripts/contract-input.ts",
 		"contracts:build": "tsc -p ../../packages/contracts",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"pretypecheck": "npm run contracts:build",
 		"prebuild": "npm run contracts:build",
 		"prestart": "npm run contracts:build",
 		"prestart:dev": "npm run contracts:build",
