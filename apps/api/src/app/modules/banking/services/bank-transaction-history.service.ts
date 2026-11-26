@@ -21,6 +21,7 @@ import {
 	SQL_BASE_AMOUNT,
 	SQL_INCOME_SOURCE,
 	SQL_PERIOD_START,
+	SQL_UNCATEGORIZED,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
 	findFirstTransactionDate,
@@ -60,7 +61,7 @@ export class BankTransactionHistoryService {
 			if (by === 'allCategories') {
 				// Every row the list's category filter matches: a category, else uncategorized unless a financial event.
 				applyBankTransactionFilters(query, {date: {from: starts[0], to}});
-				query.andWhere('("transaction"."category" IS NOT NULL OR "transaction"."financialEventType" IS NULL)');
+				query.andWhere(`("transaction"."category" IS NOT NULL OR ${SQL_UNCATEGORIZED})`);
 			} else
 				applyBankTransactionFilters(query, {
 					date: {from: starts[0], to},

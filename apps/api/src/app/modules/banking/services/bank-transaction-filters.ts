@@ -57,6 +57,8 @@ const CASH_FLOW_SQL: Record<BankTransactionCashFlowFilterValue, string> = {
 };
 
 export const SQL_CATEGORIZATION_FAILED = `("transaction"."categoryStatus" = '${FAILED}' AND "transaction"."category" IS NULL)`;
+/** A row the list's category filter lists as uncategorized: no category, and not a financial event, which takes none. */
+export const SQL_UNCATEGORIZED = `("transaction"."category" IS NULL AND "transaction"."financialEventType" IS NULL)`;
 export const SQL_CATEGORIZING = `("transaction"."categoryStatus" IN ('${PENDING}', '${PROCESSING}') AND "transaction"."category" IS NULL AND "transaction"."financialEventType" IS NULL)`;
 
 const CATEGORY_STATUS_SQL: Record<BankTransactionCategoryStatusFilterValue, string> = {
@@ -124,10 +126,8 @@ export function applyBankTransactionFilters(
 				if (includesUncategorized) {
 					// The summary keys spending rows with a null category as UNCATEGORIZED. They match this condition
 					// because every financial event type is internal, so spending rows never carry one.
-					const uncategorizedCondition =
-						'transaction.category IS NULL AND transaction.financialEventType IS NULL';
-					if (categorizedCategories.length > 0) categoryQuery.orWhere(uncategorizedCondition);
-					else categoryQuery.where(uncategorizedCondition);
+					if (categorizedCategories.length > 0) categoryQuery.orWhere(SQL_UNCATEGORIZED);
+					else categoryQuery.where(SQL_UNCATEGORIZED);
 				}
 			}),
 		);

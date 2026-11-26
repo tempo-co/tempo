@@ -158,7 +158,7 @@ export type BankTransactionBreakdownPeriod = {
 	end: string;
 	/** False when the period is cut at `to` or starts before the first booked transaction. */
 	complete: boolean;
-	/** The period's spending or income, equal to cash flow's for the same period. */
+	/** The period's spending or income, equal to cash flow's for the same period; under `allCategories`, its parts' net. */
 	total: string;
 	/** Largest first; parts that net to zero are left out, except under `allCategories`, which keeps every row. */
 	parts: BankTransactionBreakdownPart[];
