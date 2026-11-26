@@ -86,12 +86,14 @@ export function formatBankTransactionActivity(transaction: {
   );
 }
 
-export function formatOwnTransferEvidence(value: OwnTransferEvidence) {
+export function formatOwnTransferEvidence(value: OwnTransferEvidence): string {
   switch (value) {
     case 'IBAN':
       return 'Matched by IBAN';
     case 'NAME':
       return 'Matched by account holder name';
+    case 'DESCRIPTION':
+      return 'Matched by the same description on both accounts';
     case 'MANUAL':
       return 'Marked by you';
   }
