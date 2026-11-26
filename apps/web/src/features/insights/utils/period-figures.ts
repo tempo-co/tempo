@@ -82,7 +82,8 @@ export function yearPeriods(
     const parts = sumParts(months, `${year}-01`, `${year}-12`);
     const total = months.reduce((sum, period) => sum + toCents(period.total), 0);
     return {
-      start: months[0].start,
+      // From 1 January like the yearly breakdown, so a year the period cuts short says where it starts.
+      start: `${year}-01-01`,
       end: months[months.length - 1].end,
       complete: months.length === 12 && months.every((period) => period.complete),
       total: (total / 100).toFixed(2),

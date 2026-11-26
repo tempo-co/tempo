@@ -117,7 +117,10 @@ test('every figure follows the period picker, kept in the address, and Table sho
   await view.getByRole('tab', {name: 'Table'}).click();
   await expect(page).toHaveURL(/\/insights\?view=table$/);
   await expect(page.getByRole('region', {name: 'Year by year'})).toBeVisible();
-  await expect(page.getByRole('region', {name: 'Spending by category'})).toBeVisible();
+  // The tables cover the period too: 2025 only from December, 2026 so far.
+  const spending = page.getByRole('region', {name: 'Spending by category'});
+  await expect(spending.getByRole('columnheader', {name: /^2025/})).toHaveText(/from Dec/);
+  await expect(spending.getByRole('columnheader', {name: /^2026/})).toHaveText(/so far/);
   await expect(page.getByRole('region', {name: 'Income by source'})).toBeVisible();
   await view.getByRole('tab', {name: 'Chart'}).click();
   await expect(page).toHaveURL(/\/insights$/);
