@@ -253,6 +253,57 @@ describe('Bank transaction history', () => {
 			}
 		});
 
+		it('counts every category’s transactions in either direction, matching the list filtered by that category', async () => {
+			const counted = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await fixtures.createTransactions(counted.bankAccount, [
+				named('2026-01-05', '2500.00', 'Example Employer', {category: 'INCOME'}),
+				// A ticket bought and sold on: the category nets to zero but holds two transactions.
+				named('2026-01-10', '-30.00', 'Example Venue', {category: 'ENTERTAINMENT'}),
+				named('2026-01-12', '30.00', 'Example Venue', {category: 'ENTERTAINMENT'}),
+				named('2026-01-15', '-40.00', 'Example Store', {category: 'SHOPPING', amountInBaseCurrency: null}),
+				named('2026-02-01', '-500.00', 'Own Savings', {category: 'TRANSFER_OUT', ownTransferEvidence: 'IBAN'}),
+				named('2026-02-02', '-12.00', 'Unknown Place', {category: null}),
+				// A currency exchange takes no category, so no row of the list holds it either.
+				named('2026-02-03', '-100.00', 'Exchange', {
+					category: null,
+					categoryStatus: 'NOT_APPLICABLE',
+					...CURRENCY_EXCHANGE_EVENT,
+				}),
+			]);
+			const query = {interval: 'year', by: 'allCategories', from: '2026-01-01', to: ASOF, asOf: ASOF};
+
+			const {body} = await counted.agent.get(BREAKDOWN).query(query).expect(200);
+
+			const part = (key: string, amount: string, count: number) => ({key, label: key, amount, count});
+			expect(body).toEqual({
+				baseCurrency: 'EUR',
+				interval: 'year',
+				by: 'allCategories',
+				periods: [
+					{
+						start: '2026-01-01',
+						end: ASOF,
+						complete: false,
+						total: '1988.00',
+						parts: [
+							part('INCOME', '2500.00', 1),
+							part('ENTERTAINMENT', '0.00', 2),
+							part('SHOPPING', '0.00', 1),
+							part('UNCATEGORIZED', '-12.00', 1),
+							part('TRANSFER_OUT', '-500.00', 1),
+						],
+					},
+				],
+			});
+			for (const {key, count} of (body as {periods: BankTransactionBreakdownPeriod[]}).periods[0].parts) {
+				const {body: list} = await counted.agent
+					.get('/bank-transactions')
+					.query({'filter[date][from]': '2026-01-01', 'filter[date][to]': ASOF, 'filter[categories][]': key})
+					.expect(200);
+				expect([key, (list as BankTransactionsResponse).total]).toEqual([key, count]);
+			}
+		});
+
 		it('leaves out another owner’s rows', async () => {
 			const {body} = await otherAgent
 				.get(BREAKDOWN)

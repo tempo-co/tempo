@@ -43,7 +43,8 @@ export class BankTransactionHistoryService {
 	/**
 	 * Spending by category or income by source per month or year. Each period's total equals cash flow's for it:
 	 * spending is net of refunds (a refund-only `REFUND` part is negative), own transfers and currency exchanges are
-	 * left out, and rows without a base-currency amount are not counted.
+	 * left out, and rows without a base-currency amount are not counted. `allCategories` instead counts every row the
+	 * list's category filter matches, in either direction, with its net base-currency amount.
 	 */
 	async getBreakdown(
 		owner: ReportingOwner,
@@ -53,15 +54,19 @@ export class BankTransactionHistoryService {
 		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_BREAKDOWN_RANGE);
-		const flow = by === 'category' ? 'SPENDING' : 'INCOME';
-		const key = by === 'category' ? CATEGORY_KEY : SQL_INCOME_SOURCE;
+		const key = by === 'source' ? SQL_INCOME_SOURCE : CATEGORY_KEY;
 		const flowQuery = () => {
 			const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
-			applyBankTransactionFilters(query, {
-				date: {from: starts[0], to},
-				baseAmount: 'PRESENT',
-				cashFlows: [flow],
-			});
+			if (by === 'allCategories') {
+				// Every row the list's category filter matches: a category, else uncategorized unless a financial event.
+				applyBankTransactionFilters(query, {date: {from: starts[0], to}});
+				query.andWhere('("transaction"."category" IS NOT NULL OR "transaction"."financialEventType" IS NULL)');
+			} else
+				applyBankTransactionFilters(query, {
+					date: {from: starts[0], to},
+					baseAmount: 'PRESENT',
+					cashFlows: [by === 'category' ? 'SPENDING' : 'INCOME'],
+				});
 			return query.setParameter('interval', interval);
 		};
 
@@ -70,7 +75,7 @@ export class BankTransactionHistoryService {
 			flowQuery()
 				.select(SQL_PERIOD_START, 'start')
 				.addSelect(key, 'key')
-				.addSelect(`ROUND(SUM(${SQL_BASE_AMOUNT}), 2)::text`, 'amount')
+				.addSelect(`ROUND(COALESCE(SUM(${SQL_BASE_AMOUNT}), 0), 2)::text`, 'amount')
 				.addSelect('COUNT(*)::int', 'count')
 				.groupBy('1')
 				.addGroupBy('2')
@@ -103,7 +108,7 @@ export class BankTransactionHistoryService {
 			(window): BankTransactionBreakdownPeriod => {
 				const periodParts = (partsByStart.get(window.start) ?? [])
 					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount), count: row.count}))
-					.filter((part) => part.cents !== 0n)
+					.filter((part) => part.cents !== 0n || by === 'allCategories')
 					.sort((left, right) =>
 						left.cents !== right.cents
 							? left.cents > right.cents

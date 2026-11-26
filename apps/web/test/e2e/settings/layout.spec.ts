@@ -32,6 +32,8 @@ const data = {
     }),
     years: Array.from({length: 20}, (_, year): Counts => ({
       GROCERIES: 6420 + year,
+      INCOME: 26,
+      TRANSFER_IN: 52,
       HOUSING_AND_UTILITIES: 480,
       TAXES_AND_GOVERNMENT: 120,
       GIFTS_AND_DONATIONS: 75,
@@ -49,7 +51,7 @@ function breakdown(years: Counts[], today: string): BankTransactionBreakdown {
   return {
     baseCurrency: 'EUR',
     interval: 'year',
-    by: 'category',
+    by: 'allCategories',
     periods: years.map((counts, index) => {
       const parts: BankTransactionBreakdownPart[] = Object.entries(counts).map(([key, count]) => ({
         key,

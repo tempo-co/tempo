@@ -9,12 +9,12 @@ import {useLocalDate} from '@/hooks/use-local-date';
 
 import {SettingsGroup} from './settings-group';
 
-/** Transactions per category over the whole history, read from the yearly spending breakdown Home also reads. */
+/** Transactions per category over the whole history, in either direction, from the yearly breakdown. */
 function useCategoryCounts() {
   const today = useLocalDate();
   const {breakdown, isError, error, refetch} = useGetBankTransactionBreakdown(
     'year',
-    'category',
+    'allCategories',
     historyFrom(today),
     today,
     today,
@@ -35,7 +35,7 @@ export function CategoryCounts() {
     <SettingsGroup
       id='categories-heading'
       title='All categories'
-      description='Each category with how many of your spending and refund transactions it holds, as Insights counts them. Income is counted by source, so it isn’t counted here.'
+      description='The categories your transactions are sorted into, with how many each holds.'
     >
       {isError ? (
         <LoadErrorState title="Couldn't load the category counts" error={error} onRetry={refetch} />
