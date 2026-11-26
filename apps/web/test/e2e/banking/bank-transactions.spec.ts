@@ -451,9 +451,8 @@ test.describe('bank transactions', () => {
       const inspector = page.getByTestId('bank-transaction-inspector');
       await expect(inspector).toBeVisible();
       expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
-      expect((await inspector.getAttribute('data-vaul-drawer')) !== null).toBe(
-        viewport.width < 768,
-      );
+      // Beside the list from 1024px; below it, a bottom sheet over the list.
+      expect(await inspector.getAttribute('role')).toBe(viewport.width < 1024 ? 'dialog' : null);
       await expect(inspector.getByRole('heading', {name: 'Coffee shop'})).toBeVisible();
       await expect(inspector.getByRole('region', {name: 'Category', exact: true})).toBeVisible();
       await expect(inspector.getByRole('region', {name: 'Account', exact: true})).toContainText(
