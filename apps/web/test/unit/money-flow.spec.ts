@@ -3,7 +3,7 @@ import {expect, test} from '@playwright/test';
 
 import {buildMoneyFlow} from '../../src/features/insights/utils/money-flow';
 
-const part = (key: string, amount: string, label = key) => ({key, label, amount});
+const part = (key: string, amount: string, label = key) => ({key, label, amount, count: 1});
 const nodes = (side: {label: string; cents: number}[]) =>
   side.map(({label, cents}) => [label, cents]);
 
