@@ -8,6 +8,7 @@ The corpus lives in the private repository tempo-co/tempo-import-corpus: public,
 
 ```sh
 TEMPO_IMPORT_CORPUS=/path/to/corpus npm --prefix apps/api run test:corpus
+TEMPO_IMPORT_CORPUS=/path/to/corpus npm --prefix apps/api run test:corpus -- -t pl-mbank   # one file
 ```
 
 Point it at a clone of the corpus repository. It takes seconds. Without `TEMPO_IMPORT_CORPUS` it passes with a skip message. CI runs it as `API real-file corpus` (`docs/ci-and-images.md`). Its output is counts plus the id and problem of each failing file, never a row's content, since CI logs are public.
