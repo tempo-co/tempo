@@ -218,6 +218,12 @@ describe('parseFile', () => {
 			code: 'parse_failed',
 		},
 		{
+			name: "a built-in layout's file whose amounts carry another currency than the layout reads",
+			file: () =>
+				Buffer.from(fixture('mbank-pl-synthetic.csv').toString('latin1').replace(/ PLN;/g, ' EUR;'), 'latin1'),
+			code: 'layout_not_recognized',
+		},
+		{
 			name: 'a truncated archive',
 			file: () => createZip([{name: 'a.xml', content: statement('A', '1')}]).subarray(0, 60),
 			code: 'parse_failed',
