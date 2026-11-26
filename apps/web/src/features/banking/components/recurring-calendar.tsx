@@ -7,20 +7,12 @@ import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
-import type {CalendarItem, MonthGroupId} from '../utils/recurring-month';
-
-const KIND_LABELS: Record<MonthGroupId, string> = {
-  paid: 'paid',
-  late: 'late',
-  coming: 'coming up',
-};
+import {type CalendarItem, MONTH_KIND_LABELS, type MonthGroupId} from '../utils/recurring-month';
 
 /** Chips a day shows before "+N more"; the rest are listed under the calendar. */
 const DAY_CHIPS = 3;
 /** On phones a day is too narrow to tap a payment in it, so it shows names only and opens its list. */
 const PHONE_DAY_LABELS = 2;
-
-const itemKey = (item: CalendarItem) => `${item.series.key}-${item.date}-${item.kind}`;
 
 /**
  * This month as a calendar, weeks from Monday: each payment on the day it was paid or is expected. A late payment
@@ -58,7 +50,7 @@ export function RecurringCalendar({
   const rows = (list: CalendarItem[], label: string) => (
     <ul aria-label={label} className='divide-y divide-border/60 rounded-lg border'>
       {list.map((item) => (
-        <li key={itemKey(item)} data-testid={`recurring-calendar-item-${item.series.key}`}>
+        <li key={item.id} data-testid={`recurring-calendar-item-${item.series.key}`}>
           {rowFor(item)}
         </li>
       ))}
@@ -80,7 +72,7 @@ export function RecurringCalendar({
           <div className='flex flex-wrap items-center gap-2 text-body-small text-muted-foreground'>
             <span>Still late from {format(parseCalendarDate(earlier[0].date), 'MMMM')}</span>
             {earlier.map((item) => (
-              <span key={itemKey(item)} className='w-32 max-w-full'>
+              <span key={item.id} className='w-32 max-w-full'>
                 <CalendarChip
                   item={item}
                   amount={formatItemAmount(item)}
@@ -141,7 +133,7 @@ export function RecurringCalendar({
                   {number}
                   {onDay.slice(0, PHONE_DAY_LABELS).map((item) => (
                     <span
-                      key={itemKey(item)}
+                      key={item.id}
                       className={cn(
                         'flex min-w-0 items-center gap-0.5 rounded-sm bg-card px-0.5 text-caption leading-tight',
                         item.kind === 'paid' && 'text-muted-foreground',
@@ -163,7 +155,7 @@ export function RecurringCalendar({
                   {number}
                   {onDay.slice(0, DAY_CHIPS).map((item) => (
                     <CalendarChip
-                      key={itemKey(item)}
+                      key={item.id}
                       item={item}
                       amount={formatItemAmount(item)}
                       selected={item.series.key === selectedKey}
@@ -235,7 +227,7 @@ function CalendarChip({
       type='button'
       onClick={() => onOpen(series.key)}
       aria-current={selected || undefined}
-      aria-label={`${series.name}, ${isIncome ? '+' : ''}${amount}, ${KIND_LABELS[kind]}`}
+      aria-label={`${series.name}, ${isIncome ? '+' : ''}${amount}, ${MONTH_KIND_LABELS[kind]}`}
       className={cn(
         'grid w-full min-w-0 rounded-sm bg-card px-1 py-0.5 text-left text-caption leading-tight hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-[current=true]:outline-2 aria-[current=true]:-outline-offset-2 aria-[current=true]:outline-primary',
         kind === 'paid' && 'text-muted-foreground',

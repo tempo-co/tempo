@@ -9,6 +9,7 @@ import {
   List,
   Repeat,
 } from 'lucide-react';
+import type React from 'react';
 import {useEffect} from 'react';
 
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
@@ -19,6 +20,7 @@ import {
   ResponsiveDialogContent,
   ResponsiveDialogTitle,
 } from '@/components/ui/responsive-dialog';
+import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
 import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
@@ -40,6 +42,7 @@ import {
 } from '../utils/recurring-format';
 import {
   type CalendarItem,
+  MONTH_KIND_LABELS,
   type MonthEntry,
   type MonthGroup,
   calendarItems,
@@ -162,7 +165,7 @@ export function RecurringPage({
                 <ToggleGroupItem
                   key={value}
                   value={value}
-                  className='rounded-sm px-3 text-body-small data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground'
+                  className='rounded-sm px-3 text-body-small data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 pointer-coarse:min-h-11'
                 >
                   <Icon aria-hidden />
                   {label}
@@ -185,7 +188,7 @@ export function RecurringPage({
       </div>
       <aside
         aria-label={selected ? undefined : 'About your bills'}
-        className='grid min-w-0 grid-cols-1 gap-3 lg:sticky lg:top-8 lg:max-h-[calc(100dvh-(--spacing(16)))] lg:overflow-y-auto'
+        className='grid min-w-0 grid-cols-1 gap-3'
       >
         {wide && details ? (
           <Card className='p-4'>{details}</Card>
@@ -207,15 +210,21 @@ export function RecurringPage({
         >
           <ResponsiveDialogContent
             aria-label='Recurring payment'
-            className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl [&>button:last-child]:hidden'
+            className='flex h-[min(90dvh,--spacing(224))] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-h-[90vh] sm:max-w-xl [&>button:last-child]:hidden'
           >
             <ResponsiveDialogTitle className='sr-only'>
               {selected?.name ?? 'Recurring payment'}
             </ResponsiveDialogTitle>
-            {/* On phones a toast sits above where the tab bar is; the last actions scroll clear of it. */}
-            <div className='min-h-0 flex-1 overflow-y-auto p-5 max-md:pb-[calc(--spacing(36)+env(safe-area-inset-bottom))] sm:p-6'>
-              {details}
-            </div>
+            {/* Radix wraps content in a display:table div that grows to its widest row; keep it at the sheet's width. */}
+            <ScrollArea
+              type='always'
+              className='min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block'
+            >
+              {/* On phones a toast sits above where the tab bar is; the last actions scroll clear of it. */}
+              <div className='p-5 max-md:pb-[calc(--spacing(36)+env(safe-area-inset-bottom))] sm:p-6'>
+                {details}
+              </div>
+            </ScrollArea>
           </ResponsiveDialogContent>
         </ResponsiveDialog>
       )}
@@ -234,10 +243,17 @@ function entryAmount(
   return `${estimate && series.amountKind === 'VARIABLE' ? '≈ ' : ''}${formatMoney(cents / 100, baseCurrency)}`;
 }
 
+/** Each group's heading and how a row in it words its date: "expected 5 Oct", or "2 late, since 2 Oct". */
 const GROUPS = {
-  late: {title: 'Late', icon: Clock},
-  coming: {title: 'Coming up', icon: CalendarClock},
-  paid: {title: 'Paid', icon: CircleCheck},
+  late: {title: 'Late', icon: Clock, single: 'expected', counted: 'late', since: 'since'},
+  coming: {
+    title: 'Coming up',
+    icon: CalendarClock,
+    single: 'next',
+    counted: 'to come',
+    since: 'next',
+  },
+  paid: {title: 'Paid', icon: CircleCheck, single: 'paid', counted: 'paid', since: 'last'},
 } as const;
 
 function ThisMonth({
@@ -268,7 +284,7 @@ function ThisMonth({
           rowFor={(item) => (
             <RecurringSeriesRow
               series={item.series}
-              detail={`${RECURRING_CADENCE_LABELS[item.series.cadence]} · ${{paid: 'paid', late: 'late', coming: 'coming up'}[item.kind]} ${day(item.date)}`}
+              detail={`${RECURRING_CADENCE_LABELS[item.series.cadence]} · ${MONTH_KIND_LABELS[item.kind]} ${day(item.date)}`}
               amount={entryAmount(item.series, item.cents, item.kind !== 'paid', baseCurrency)}
               flags={[]}
               selected={item.series.key === selectedKey}
@@ -339,7 +355,7 @@ function MonthFigures({lists}: {lists: RecurringSeriesLists}) {
       )}
       {incomePaid + incomeRemaining > 0 && (
         <p className='text-body-small text-muted-foreground'>
-          Income <Figure>{money(incomePaid + incomeRemaining)}</Figure> ·{' '}
+          Income <Figure className='text-success'>+{money(incomePaid + incomeRemaining)}</Figure> ·{' '}
           {incomeRemaining > 0 ? (
             <>
               <Figure>{money(incomeRemaining)}</Figure> still to come
@@ -359,15 +375,15 @@ function MonthFigures({lists}: {lists: RecurringSeriesLists}) {
 }
 
 /** An amount inside a sentence: the sentence may wrap, the amount stays whole. */
-function Figure({children}: {children: string}) {
-  return <span className='numeric whitespace-nowrap'>{children}</span>;
+function Figure({children, className}: {children: React.ReactNode; className?: string}) {
+  return <span className={cn('numeric whitespace-nowrap', className)}>{children}</span>;
 }
 
 function entryDetail({series, date, count}: MonthEntry, id: MonthGroup['id']) {
   const rhythm = RECURRING_CADENCE_LABELS[series.cadence];
-  if (count === 1)
-    return `${rhythm} · ${{late: 'expected', coming: 'next', paid: 'paid'}[id]} ${day(date)}`;
-  return `${rhythm} · ${count} ${{late: 'late', coming: 'to come', paid: 'paid'}[id]}, ${{late: 'since', coming: 'next', paid: 'last'}[id]} ${day(date)}`;
+  const {single, counted, since} = GROUPS[id];
+  if (count === 1) return `${rhythm} · ${single} ${day(date)}`;
+  return `${rhythm} · ${count} ${counted}, ${since} ${day(date)}`;
 }
 
 function MonthGroupCard({
@@ -394,9 +410,11 @@ function MonthGroupCard({
           <Icon aria-hidden className='size-4' />
           {title}
         </span>
-        <span className='numeric font-medium text-muted-foreground'>
-          {formatMoney(group.billCents / 100, baseCurrency)}
-        </span>
+        {group.entries.some(({series}) => series.direction === 'EXPENSE') && (
+          <span className='numeric font-medium text-muted-foreground'>
+            {formatMoney(group.billCents / 100, baseCurrency)}
+          </span>
+        )}
       </h2>
       <ul className='divide-y divide-border/60'>
         {group.entries.map((entry) => (

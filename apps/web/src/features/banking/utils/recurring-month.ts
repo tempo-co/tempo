@@ -4,6 +4,13 @@ import {toCents} from '@/features/dashboard/utils/money';
 
 export type MonthGroupId = 'late' | 'coming' | 'paid';
 
+/** A payment's state in words, as rows and calendar chips name it. */
+export const MONTH_KIND_LABELS: Record<MonthGroupId, string> = {
+  paid: 'paid',
+  late: 'late',
+  coming: 'coming up',
+};
+
 /** One series in one of this month's groups: its payments there added up, and the date the row shows. */
 export type MonthEntry = {
   series: RecurringSeries;
@@ -24,6 +31,8 @@ export type MonthGroup = {
 
 /** A payment placed on the calendar. */
 export type CalendarItem = {
+  /** Unique on the calendar, even for two payments of one series on one day. */
+  id: string;
   series: RecurringSeries;
   date: string;
   kind: MonthGroupId;
@@ -84,13 +93,15 @@ export function monthGroups(lists: RecurringSeriesLists): MonthGroup[] {
 export function calendarItems(lists: RecurringSeriesLists): CalendarItem[] {
   return counted(lists)
     .flatMap((series) => [
-      ...series.thisMonth.paid.map(({date, amount}) => ({
+      ...series.thisMonth.paid.map(({date, amount}, index) => ({
+        id: `${series.key}-paid-${index}`,
         series,
         date,
         kind: 'paid' as const,
         cents: amount === null ? null : toCents(amount),
       })),
-      ...series.thisMonth.due.map(({date, amount, late}) => ({
+      ...series.thisMonth.due.map(({date, amount, late}, index) => ({
+        id: `${series.key}-due-${index}`,
         series,
         date,
         kind: late ? ('late' as const) : ('coming' as const),

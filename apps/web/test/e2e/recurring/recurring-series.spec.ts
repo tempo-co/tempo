@@ -345,7 +345,7 @@ for (const viewport of [
     await expect(summaryOf(page)).toContainText('Bills in October€146.99');
     await expect(summaryOf(page)).toContainText('Paid€38.99');
     await expect(summaryOf(page)).toContainText('Still to pay€108.00');
-    await expect(summaryOf(page)).toContainText('Income €2,500.00 · €2,500.00 still to come');
+    await expect(summaryOf(page)).toContainText('Income +€2,500.00 · €2,500.00 still to come');
 
     // Each group's bills add up to the figure it belongs to: late and coming up to what is still to pay.
     await expect(group(page, 'Late').getByRole('heading')).toHaveText('Late€78.50');
@@ -805,6 +805,23 @@ test('drills recurring series through to exactly their payments', async ({page})
   await page.setViewportSize({width: 390, height: 844});
   await openSeries(page, longKey);
   await expect(monthLabels(page)).toHaveText(['Dec', 'Feb', 'Apr', 'Jun', 'Aug', 'Oct']);
+  // The sheet stays on screen and scrolls its payments by wheel down to its last action.
+  const sheet = page.getByRole('dialog');
+  const notRecurring = detail(page).getByRole('button', {name: 'Not recurring'});
+  await expect(
+    detail(page).getByRole('list', {name: 'Payments to Example Insurance'}).getByRole('listitem'),
+  ).toHaveCount(25);
+  await expect
+    .poll(async () => {
+      const {y, height} = await boxOf(sheet);
+      return Math.round(y + height);
+    })
+    .toBeLessThanOrEqual(844 + 1);
+  await expect(notRecurring).not.toBeInViewport();
+  const box = await boxOf(sheet);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let step = 0; step < 10; step++) await page.mouse.wheel(0, 600);
+  await expect(notRecurring).toBeInViewport();
 });
 
 for (const wakeAfterMidnight of [false, true]) {
