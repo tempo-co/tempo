@@ -4413,14 +4413,14 @@ describe('Bank imports', () => {
 		await misses.save([
 			{
 				accountId: first.owner.id,
-				bankId: 'ing-nl',
+				bankId: 'knab',
 				outcome: 'mapper',
 				refusalCode: null,
 				createdAt: hoursAgo(12),
 			},
 			{
 				accountId: second.owner.id,
-				bankId: 'ing-nl',
+				bankId: 'knab',
 				outcome: 'refused',
 				refusalCode: null,
 				createdAt: hoursAgo(12),
@@ -4434,7 +4434,7 @@ describe('Bank imports', () => {
 		expect(email?.Text).toContain('Example Digest Bank (DE): 2 accounts, a saved layout to build from');
 		expect(email?.Text).toContain('BoursoBank (FR): 1 account, a saved layout to build from');
 		expect(email?.Text).toContain('Example Picked Bank: 1 account, a saved layout to build from');
-		expect(email?.Text).toContain('ING (ing-nl): 2 misses from 2 accounts');
+		expect(email?.Text).toContain('Knab (knab): 2 misses from 2 accounts');
 		expect(email?.Text).not.toContain('Example Earlier Bank');
 		expect(email?.Text).not.toContain('abn-amro');
 		expect(email?.Text?.toLowerCase()).not.toContain('rabobank');
@@ -4446,7 +4446,7 @@ describe('Bank imports', () => {
 		// A later day with nothing new sends nothing; another run on the day of a digest sends nothing, even with something new.
 		await digest.send(new Date(now.getTime() + 24 * 60 * 60 * 1000));
 		await asked(first.owner, 'Example Later Bank', 'NL', now);
-		await digest.send(new Date(now.getTime() + 60_000));
+		await digest.send(now);
 		expect(await operatorEmails()).toHaveLength(1);
 
 		// The next day's digest lists it.
