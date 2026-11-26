@@ -4,16 +4,14 @@
 #   tempo-staging-refresh.sh refresh --confirm-production-backup-refresh   # run by `tempo-deploy staging`
 #   tempo-staging-refresh.sh seed --confirm-seeded-reset
 #
-# A refresh takes its data from the feed set in feed.env (see feed.env.example): the production
-# server's encrypted owner-only copy, fetched over the tailnet and decrypted here, or the newest
-# local production backup. Restores into a temporary database, applies the current schema, clears
+# A refresh takes its data from the production server's encrypted owner-only copy, fetched over the
+# tailnet as the account in feed.env (see feed.env.example) and decrypted here. Restores into a temporary database, applies the current schema, clears
 # bank provider sessions and sync state, then swaps it in. If staging is unhealthy after the swap,
 # the previous database is restored. Never connects to production's database or copies its Redis.
 set -Eeuo pipefail
 shopt -s inherit_errexit
 
 CONFIG_DIR=$HOME/.config/tempo-staging
-BACKUP_DIR=$HOME/backups/tempo
 STATE_DIR=$HOME/.local/state/tempo-staging
 FEED_ENV=$CONFIG_DIR/feed.env
 FEED_SSH_DIR=$CONFIG_DIR/feed-ssh
@@ -73,34 +71,19 @@ WORK=$(mktemp -d "$STATE_DIR/refresh.XXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
 
 if [[ $MODE == refresh ]]; then
-    # Only these two settings are read; the file is not sourced.
-    feed_setting() { if [[ -f $FEED_ENV ]]; then sed -n "s/^$1=//p" "$FEED_ENV" | tail -n 1; fi; }
-    FEED=$(feed_setting STAGING_FEED)
-    FEED=${FEED:-local-backups}
-    STAGING_FEED_SSH=$(feed_setting STAGING_FEED_SSH)
-    case $FEED in
-        server-copy)
-            [[ ${STAGING_FEED_SSH:-} =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$ ]] || die "STAGING_FEED_SSH in $FEED_ENV must be user@host"
-            [[ -f $FEED_SSH_DIR/id_ed25519 && -f $FEED_SSH_DIR/known_hosts ]] || die "missing $FEED_SSH_DIR/id_ed25519 or known_hosts"
-            log "fetching the owner-only copy from $STAGING_FEED_SSH"
-            # The server's feed account has one forced command that sends the newest copy.
-            timeout 15m ssh -n -T -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
-                -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$FEED_SSH_DIR/known_hosts" \
-                -i "$FEED_SSH_DIR/id_ed25519" "$STAGING_FEED_SSH" >"$WORK/copy.dump.gpg" || die 'could not fetch the owner-only copy'
-            [[ -s $WORK/copy.dump.gpg ]] || die 'the fetched copy is empty'
-            gpg --homedir "$FEED_GNUPG" --batch --no-tty --quiet --decrypt --output "$WORK/copy.dump" "$WORK/copy.dump.gpg" ||
-                die 'could not decrypt the owner-only copy'
-            DUMP=$WORK/copy.dump
-            ;;
-        local-backups)
-            # Timestamped scheduled backups only; the newest sorts last.
-            shopt -s nullglob
-            dumps=("$BACKUP_DIR"/tempo-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].dump)
-            ((${#dumps[@]})) || die "no tempo-YYYYMMDD-HHMMSS.dump in $BACKUP_DIR"
-            DUMP=${dumps[-1]}
-            ;;
-        *) die "unknown STAGING_FEED '$FEED' in $FEED_ENV (server-copy or local-backups)" ;;
-    esac
+    # Only this setting is read; the file is not sourced.
+    STAGING_FEED_SSH=$(if [[ -f $FEED_ENV ]]; then sed -n 's/^STAGING_FEED_SSH=//p' "$FEED_ENV" | tail -n 1; fi)
+    [[ $STAGING_FEED_SSH =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$ ]] || die "STAGING_FEED_SSH in $FEED_ENV must be user@host"
+    [[ -f $FEED_SSH_DIR/id_ed25519 && -f $FEED_SSH_DIR/known_hosts ]] || die "missing $FEED_SSH_DIR/id_ed25519 or known_hosts"
+    log "fetching the owner-only copy from $STAGING_FEED_SSH"
+    # The server's feed account has one forced command that sends the newest copy.
+    timeout 15m ssh -n -T -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+        -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$FEED_SSH_DIR/known_hosts" \
+        -i "$FEED_SSH_DIR/id_ed25519" "$STAGING_FEED_SSH" >"$WORK/copy.dump.gpg" || die 'could not fetch the owner-only copy'
+    [[ -s $WORK/copy.dump.gpg ]] || die 'the fetched copy is empty'
+    gpg --homedir "$FEED_GNUPG" --batch --no-tty --quiet --decrypt --output "$WORK/copy.dump" "$WORK/copy.dump.gpg" ||
+        die 'could not decrypt the owner-only copy'
+    DUMP=$WORK/copy.dump
     [[ -f $DUMP && ! -L $DUMP && -s $DUMP ]] || die "$DUMP is not a non-empty regular file"
 fi
 
@@ -158,7 +141,7 @@ fi
 drop_db "$TEMP_DB"
 sql "CREATE DATABASE \"$TEMP_DB\" OWNER \"$DB_USER\"" >/dev/null
 if [[ $MODE == refresh ]]; then
-    log "restoring $(basename "$DUMP") from $FEED"
+    log "restoring the owner-only copy from $STAGING_FEED_SSH"
     compose cp "$DUMP" "postgres:$DUMP_PATH"
     compose exec -T postgres pg_restore --list "$DUMP_PATH" >/dev/null
     compose exec -T postgres pg_restore --exit-on-error --no-owner --no-privileges -U "$DB_USER" -d "$TEMP_DB" "$DUMP_PATH"
@@ -183,10 +166,8 @@ COMMIT;
 SQL
     left=$(psql_in "$TEMP_DB" -Atc 'SELECT (SELECT count(*) FROM bank_connections WHERE "providerSessionId" IS NOT NULL OR "authorizationStateHash" IS NOT NULL) + (SELECT count(*) FROM bank_sync_runs)')
     [[ $left == 0 ]] || die 'provider sessions or sync runs survived sanitizing'
-    if [[ $FEED == server-copy ]]; then
-        accounts=$(psql_in "$TEMP_DB" -Atc 'SELECT count(*) FROM accounts')
-        [[ $accounts == 1 ]] || die "the owner-only copy holds $accounts accounts"
-    fi
+    accounts=$(psql_in "$TEMP_DB" -Atc 'SELECT count(*) FROM accounts')
+    [[ $accounts == 1 ]] || die "the owner-only copy holds $accounts accounts"
 else
     log 'creating a seeded database'
     run_api node dist/scripts/schema.js

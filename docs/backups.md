@@ -46,11 +46,20 @@ When the server is lost, a new one is rebuilt from the newest snapshot, losing a
 1. Create a new server of the same type and bring it to the production baseline with `ops/wizard.sh setup` up to its DNS records stage ([`new-host.md`](new-host.md)).
 2. Put back the owner's off-server copies: `/etc/wisp/production.env`, the banking key at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` (ownership and mode as in Container privileges in `ops/README.md`) and the restic password. Set up the Storage Box key and `/etc/wisp/backup.env` as in Setting up the repository, without `restic init` and without enabling the timers yet.
 3. From a clean `main` checkout, `sudo ops/install.sh production`.
-4. Start PostgreSQL alone and restore the newest snapshot into it:
+4. Start PostgreSQL alone, create the read-only role (Read-only database access in `ops/README.md`; the dump's grants name it), and restore the newest snapshot into it:
 
    ```bash
    compose() { TEMPO_API_IMAGE=unused TEMPO_WEB_IMAGE=unused docker compose -p wisp-production -f /etc/wisp/compose/production.compose.yml --env-file /etc/wisp/production.env "$@"; }
    compose up -d --wait postgres
+   docker exec -i wisp-production-postgres-1 psql -U wisp -d wisp -v ON_ERROR_STOP=1 <<'SQL'
+   CREATE ROLE wisp_readonly LOGIN;
+   ALTER ROLE wisp_readonly SET default_transaction_read_only = on;
+   ALTER ROLE wisp_readonly SET statement_timeout = '30s';
+   GRANT CONNECT ON DATABASE wisp TO wisp_readonly;
+   GRANT USAGE ON SCHEMA public TO wisp_readonly;
+   GRANT SELECT ON ALL TABLES IN SCHEMA public TO wisp_readonly;
+   ALTER DEFAULT PRIVILEGES FOR ROLE wisp IN SCHEMA public GRANT SELECT ON TABLES TO wisp_readonly;
+   SQL
    mkdir -p ~/backups/wisp
    set -a; . /etc/wisp/backup.env; set +a
    restic dump --host wisp-production --tag wisp-db latest /wisp.dump >~/backups/wisp/restore.dump
