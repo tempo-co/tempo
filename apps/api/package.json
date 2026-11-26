@@ -22,6 +22,7 @@
 		"test:watch": "jest --watch",
 		"test:cov": "jest --coverage",
 		"test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest",
+		"test:corpus": "jest --config ./test/jest-corpus.json",
 		"test:e2e": "rimraf dist && node scripts/e2e-stack.mjs jest --config ./test/jest-e2e.json --verbose --runInBand",
 		"test:e2e:cov": "rimraf dist && node scripts/e2e-stack.mjs jest --config ./test/jest-e2e.json --verbose --coverage --runInBand",
 		"db:seed": "ts-node -r tsconfig-paths/register ./scripts/seed.ts",
