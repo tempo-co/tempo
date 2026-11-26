@@ -1,0 +1,31 @@
+Boekingsdatum vanaf;01/10/2026
+
+Boekingsdatum tot en met;31/10/2026
+
+Bedrag vanaf;
+
+Bedrag tot en met;
+
+Rekeninguittrekselnummer vanaf;
+
+Rekeninguittrekselnummer tot en met;
+
+Mededeling;
+
+Naam tegenpartij bevat;
+
+Rekening tegenpartij;
+
+Laatste saldo;1.390,00 EUR
+
+Datum/uur van het laatste saldo;31/10/2026 08:15:00
+
+;
+
+Rekening;Boekingsdatum;Rekeninguittrekselnummer;Transactienummer;Rekening tegenpartij;Naam tegenpartij bevat;Straat en nummer;Postcode en plaats;Transactie;Valutadatum;Bedrag;Devies;BIC;Landcode;Mededelingen
+
+BE68 5390 0754 7034;06/10/2026;00010;12;BE71 0961 2345 6769;Example Energie NV;Voorbeeldstraat 1;1000        BRUSSEL;EUROPESE DOMICILIERING VAN Example Energie NV REF. : 0000000001 VAL. 06-10;06/10/2026;-1.060,00;EUR;GKCCBEBB;BE;Voorschot oktober
+
+BE68 5390 0754 7034;02/10/2026;00010;11;NL91 ABNA 0417 1643 00;Example Werkgever BV;;;STORTING VAN NL91 ABNA 0417 1643 00 Example Werkgever BV REF. : 0000000002 VAL. 01-10;01/10/2026;2.500,00;EUR;ABNANL2A;NL;Loon oktober
+
+BE68 5390 0754 7034;01/10/2026;00010;10;;;;;BETALING MET BANKKAART 01/10 EXAMPLE BAKKERIJ REF. : 0000000003 VAL. 01-10;01/10/2026;-50,00;EUR;;;

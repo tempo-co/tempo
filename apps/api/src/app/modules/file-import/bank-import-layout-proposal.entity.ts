@@ -56,6 +56,10 @@ export class BankImportLayoutProposal {
 	@Column({type: 'jsonb', nullable: true})
 	layout: CsvLayout | null;
 
+	/** The bank the owner picked (`BANK_LIST` id or `OTHER_BANK_ID`), kept by the layout confirmed from it. */
+	@Column({type: 'varchar', length: 64, nullable: true})
+	bankId: string | null;
+
 	/** The file states no currency, so confirming needs one. */
 	@Column({type: 'boolean', default: false})
 	currencyNeeded: boolean;

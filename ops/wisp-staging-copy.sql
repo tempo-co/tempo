@@ -36,6 +36,8 @@ BEGIN
         ('recurring_snapshots', 'owned', 't."accountId" = $1'),
         ('bank_import_layouts', 'owned', 't."accountId" = $1'),
         ('bank_import_layout_proposals', 'owned', 't."accountId" = $1'),
+        ('bank_import_layout_misses', 'owned', 't."accountId" = $1'),
+        ('bank_requests', 'owned', 't."accountId" = $1'),
         ('merchants', 'owned', 't."accountId" = $1'),
         ('bank_connections', 'owned', 't."accountId" = $1'),
         ('bank_sync_runs', 'owned',

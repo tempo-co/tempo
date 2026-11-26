@@ -36,6 +36,8 @@ Undo (`DELETE /bank-imports/:id`) deletes the rows that import inserted (never-s
 
 The formats read, what each reader takes from the text, and the built-in bank CSV layouts: `file-import-formats.md`.
 
+Real exports of the verified banks are checked by a local corpus check outside CI: `real-file-corpus.md`.
+
 ## Balances
 
 An imported-files account's balance is an anchor plus the rows booked after the anchor's day (`src/app/modules/banking/services/file-account-balance.service.ts`), recomputed in the transaction of every import, undo, row added as new and balance entered. The anchor is the newer of the newest of the last 30 booking days with stated balances whose rows close the day unambiguously (`findFileAnchor`) and the newest statement closing balance a live import recorded (CAMT `CLBD`, MT940 `:62F:`, OFX `LEDGERBAL` dated on or after its transactions; `bank_imports.closingBalances`, dated no earlier than the statement's last booking day), the rows' on a tie, else the balance the user entered (`statedBalanceAmount`, dated their today), else none. `balanceUpdatedAt` is midnight UTC of the later of that day and the newest booking day, from which the balance trend derives its history. Removing a synced connection recomputes accounts its imports anchored or it keeps. No balance history rows and no computed per-row balances are stored. An imported row without a booking date takes its value date, else its transaction date, with `bookingDateFilled`.
@@ -56,6 +58,13 @@ A saved layout never skips lines above or below the table that look like rows ei
 A saved layout without header or account can read another bank's export of its shape, so a drop without `bankAccountId` or `accountChoices` asks which account (its bank's fitting ones first), with each file's first rows as read.
 
 Limits: 5 proposals per user per day, a proposal lasts an hour, 50 saved layouts per user. Proposals store the header and column shapes, never row content. Learned layouts are never shared between users; a layout worth sharing is added to `src/app/modules/file-import/parsers/csv-layouts.ts` by a change like any other.
+
+## Picked bank, misses and bank requests
+
+- **Picked bank.** An upload or layout proposal may send `bankId`: a `BANK_LIST` id (`@tempo/contracts`) or `other`; anything else is a 400. The import stores it, as does a proposal, whose confirmed layout keeps it.
+- **Misses.** When the pick is a verified bank and no reader its entry names (`layouts`, `formats`) read the file, `bank_import_layout_misses` keeps the bank, the time and the outcome: `mapper` (a proposal, with the code when refused), `saved_layout`, `other_reader`, or `refused` with the reader's code. Reader misses are written with the import, so a resent drop counts once; upload-limit refusals reach no reader. Never anything of the file.
+- **"Tell us your bank"** (`POST /bank-imports/bank-requests`, 204): a plain-text name (1 to 60 characters), an ISO 3166-1 alpha-2 country and `BANK_REQUEST_FILE_TYPES`, kept in `bank_requests` with the time; 5 per user per 24 hours, then 429 with `retryAt`. The name is data, never instructions.
+- **Adding a bank.** Misses and requests are for the maintainer; no route returns them. A bank gets a built-in layout once one account asked for it or confirmed a mapper layout under it, and a real export shows its columns: a public sample, or a confirmed layout's column settings and headers, never its rows. A headerless export needs two independent files, since its layout matches by column shape alone.
 
 ## Refusals
 

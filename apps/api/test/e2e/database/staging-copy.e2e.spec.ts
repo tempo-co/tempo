@@ -194,6 +194,14 @@ async function seedAccount(dataSource: DataSource, label: string): Promise<strin
 		`INSERT INTO "bank_import_layout_proposals" ("accountId", "fileHash", "status", "expiresAt") VALUES ($1, $2, 'ready', NOW() + interval '1 day')`,
 		[accountId, `${label}-proposal-hash`],
 	);
+	await dataSource.query(
+		`INSERT INTO "bank_import_layout_misses" ("accountId", "bankId", "outcome") VALUES ($1, 'ing-nl', 'mapper')`,
+		[accountId],
+	);
+	await dataSource.query(
+		`INSERT INTO "bank_requests" ("accountId", "bankName", "country", "fileTypes") VALUES ($1, 'Example Bank', 'DE', '["csv"]')`,
+		[accountId],
+	);
 	const ownLogoId = await one(`INSERT INTO "merchant_logos" ("domain") VALUES ($1) RETURNING "id"`, [
 		`${label}-shop.example`,
 	]);

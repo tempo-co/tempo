@@ -485,6 +485,7 @@ function readRow(
 	}
 	const currency = 'fixed' in layout.currency ? layout.currency.fixed : cell(layout.currency.column);
 	if (!CURRENCY.test(currency)) throw new RowProblem();
+	if (moneyColumns(layout).some((column) => namesOtherCurrency(cells[column], currency))) throw new RowProblem();
 
 	const amount = readAmount(cells, layout, debitsNegative);
 	const stated = layout.balance ? parseAmount(cells[layout.balance.column], layout, true) : null;
@@ -515,6 +516,20 @@ function readRow(
 		bankTransactionSubCode: null,
 		referenceNumber: null,
 	};
+}
+
+/** The columns a row reads money from: its amount, and its balance when the layout reads one. */
+function moneyColumns(layout: CsvLayout): number[] {
+	const {amount} = layout;
+	const columns = amount.kind === 'debitCredit' ? [amount.debitColumn, amount.creditColumn] : [amount.column];
+	return layout.balance ? [...columns, layout.balance.column] : columns;
+}
+
+/** Whether an amount cell writes a currency code other than the row's (`-12,50 EUR` on a row read as PLN). */
+function namesOtherCurrency(cell: TableCell | undefined, currency: string): boolean {
+	if (!cell || cell.number) return false;
+	const code = /(?:^|[^A-Z])([A-Z]{3})(?![A-Z])/.exec(cell.text.trim())?.[1];
+	return code !== undefined && code !== currency;
 }
 
 /** The column a row reads a field from: the one column, or its direction's. */

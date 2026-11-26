@@ -40,6 +40,10 @@ export class BankImport {
 	@Column({type: 'varchar', length: 16})
 	format: BankImportFormat;
 
+	/** The bank the owner picked for the drop: a `BANK_LIST` id or `OTHER_BANK_ID`; null when they picked none. */
+	@Column({type: 'varchar', length: 64, nullable: true})
+	bankId: string | null;
+
 	/** The known layout of a CSV-style file; null for standard formats. */
 	@Column({type: 'varchar', length: 64, nullable: true})
 	layout: string | null;

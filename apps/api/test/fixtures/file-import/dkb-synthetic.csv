@@ -1,0 +1,8 @@
+﻿"Girokonto";"DE89370400440532013000"
+
+"Kontostand vom 06.10.2026:";"1.440,00 €"
+""
+"Buchungsdatum";"Wertstellung";"Status";"Zahlungspflichtige*r";"Zahlungsempfänger*in";"Verwendungszweck";"Umsatztyp";"IBAN";"Betrag (€)";"Gläubiger-ID";"Mandatsreferenz";"Kundenreferenz"
+"06.10.26";"06.10.26";"Vorgemerkt";"Example Holder";"Example Shop";"Kartenzahlung";"Ausgang";"NL91ABNA0417164300";"-12,5";"";"";""
+"05.10.26";"05.10.26";"Gebucht";"Example Holder";"Example Energy AG";"Abschlag Oktober";"Ausgang";"DE02120300000000202051";"-1.060";"";"";""
+"02.10.26";"01.10.26";"Gebucht";"Example Employer GmbH";"Example Holder";"Gehalt Oktober";"Eingang";"GB33BUKB20201555555555";"2.500";"";"";""

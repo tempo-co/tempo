@@ -10,6 +10,7 @@ The HTTP request and response shapes the API serves, plus the fixed value lists 
 - A contract change sets both apps' CI flags, so one run tests and releases both images and the deployer rolls them out in one pass; a contract change can therefore be breaking in a single PR. When a response shape changes in a way old data can't satisfy, bump the offline cache `buster` in `apps/web/src/utils/offline-storage.ts`, or the web app may read old-shaped saved responses after the update. Already-open tabs keep the old web code until they reload.
 - `src/ecb-currencies.ts` is generated from the ECB by `.github/scripts/ecb-currencies.mjs` (see `docs/ci-and-images.md`); run the script instead of editing it. The currency lists derive from it: `REPORTING_CURRENCIES` holds the ones still published, `BANK_IMPORT_CURRENCIES` every one with rates.
 - UI copy such as labels and icons stays in the web app. API-internal types (entities, detection state) stay in the API.
+- The bank list (`src/banks.ts`) is the exception: the web app and the public site show its export steps, so they live here, with each entry's sources in `docs/bank-sources.md`. It names the API's built-in layouts by id; an API unit test keeps those ids and the layouts in agreement.
 
 ## How each consumer loads it
 

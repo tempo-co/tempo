@@ -160,9 +160,12 @@ export type BankImportAccountWithoutBalance = {
  * - `accountChoices`: a JSON object answering `accountQuestions`, from `<bank>:<currency>` (for example
  *   `Revolut:EUR`) to a bank account id or `new` (the imported-files account of that bank and currency, created when
  *   missing). A statement with a key goes where it says; the others are routed automatically.
+ * Either may come with `bankId`, the bank the user picked (`BankImportPickedBank`).
  */
 export type BankImportSummary = {
 	id: string;
+	/** The bank the user picked for the drop (a `BANK_LIST` id or `OTHER_BANK_ID`); null when they picked none. */
+	bankId: string | null;
 	format: BankImportFormat;
 	/** The bank CSV layout the drop's files were read with (such as `ing-nl`) when `format` is `csv`; else null. */
 	layout: string | null;
@@ -394,7 +397,8 @@ export type BankImportLayoutPreview = {
 export const BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY = 5;
 
 /**
- * `POST /bank-imports/layout-proposals` (201): one file, multipart field `files`. The file's columns as the model
+ * `POST /bank-imports/layout-proposals` (201): one file, multipart field `files`, and optionally `bankId`
+ * (`BankImportPickedBank`). The file's columns as the model
  * worked them out, read through the whole file. Confirm it within an hour, or reject it.
  */
 export type BankImportLayoutProposal = {

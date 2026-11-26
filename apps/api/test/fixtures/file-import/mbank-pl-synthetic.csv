@@ -1,0 +1,31 @@
+mBank S.A. Bankowość Detaliczna;
+Skrytka Pocztowa 0000;
+00-000 Łódź;
+www.mBank.pl;
+mLinia: 000 000 000;
++48 (00) 0 000 000;
+
+
+#Klient;
+ERIKA EXAMPLE;
+
+Lista operacji;
+
+#Za okres:;
+01.10.2026 - 31.10.2026;
+
+#zgodnie z wybranymi filtrami wyszukiwania;
+#dla rachunków:;
+eKonto - 0000;
+
+#Lista nie jest dokumentem w rozumieniu art. 7 Ustawy Prawo Bankowe.;
+
+#Waluta;#Wpływy;#Wydatki;
+PLN;2 500,00;-74,60;
+
+#Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;
+2026-10-09;"Example Energia Łódź";"eKonto";"Rachunki";-62,10 PLN;;
+2026-10-05;"Example Pracodawca Sp. z o.o.";"eKonto";"Wpływy";2 500,00 PLN;;
+2026-10-02;"Żabka Example Wrocław  ZAKUP PRZY UŻYCIU KARTY W KRAJU";"eKonto";"Jedzenie poza domem";-12,50 PLN;;
+
+

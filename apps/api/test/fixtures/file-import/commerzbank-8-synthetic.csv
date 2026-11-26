@@ -1,0 +1,4 @@
+﻿Buchungstag;Wertstellung;Umsatzart;Buchungstext;Betrag;Währung;IBAN Kontoinhaber;Kategorie
+01.10.2026;01.10.2026;Lastschrift;Example Energy AG Abschlag Oktober;-1.060,5;EUR;DE89370400440532013000;Wohnen
+02.10.2026;01.10.2026;Gutschrift;Example Employer GmbH Gehalt Oktober;2.500;EUR;DE89370400440532013000;Einkommen
+05.10.2026;05.10.2026;Kartenzahlung;Example Shop Examplestadt;-23,4;EUR;DE89370400440532013000;
