@@ -57,6 +57,21 @@ ruleTester.run('design/tokens', design.rules.tokens, {
     },
   ],
   invalid: [
+    {
+      name: 'an all-digit hex after a border style',
+      code: `const a = {border: '1px solid #000'};`,
+      errors: [{messageId: 'colour'}],
+    },
+    {
+      name: 'an all-digit hex after a length',
+      code: `const a = {boxShadow: '0 1px 2px #000000'};`,
+      errors: [{messageId: 'colour'}],
+    },
+    {
+      name: 'a hex inside an arbitrary value',
+      code: `const a = <div className="shadow-[0_0_0_1px_#232b66]" />;`,
+      errors: [{messageId: 'colour'}],
+    },
     {name: 'a raw hex', code: `const a = '#232B66';`, errors: [{messageId: 'colour'}]},
     {
       name: 'a short raw hex in JSX',

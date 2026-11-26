@@ -128,7 +128,7 @@ export function RecurringSeriesOverview({
           <ToggleGroupItem
             key={value}
             value={value}
-            className='min-h-7 rounded-sm px-3 text-xs data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:flex-1'
+            className='min-h-7 rounded-sm px-3 text-body-small data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:flex-1'
           >
             {label}
             <span className='ml-1.5 numeric font-normal text-muted-foreground'>

@@ -87,7 +87,7 @@ function PreviewRows() {
   return (
     <div
       aria-hidden='true'
-      className='-mx-5 mt-6 border-t [mask-image:linear-gradient(to_bottom,black_30%,transparent)] sm:-mx-6'
+      className='-mx-4 mt-6 border-t [mask-image:linear-gradient(to_bottom,black_30%,transparent)]'
     >
       {[62, 48, 55].map((width) => (
         <div key={width} className='flex h-15 items-center gap-3 border-b px-4 last:border-b-0'>

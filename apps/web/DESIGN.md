@@ -60,9 +60,9 @@ layers in `src/index.css`.
 `--grey-dark-1` … `--grey-dark-12`). They are never used in components and no Tailwind class reaches
 them.
 
-- **Grey** (cool neutrals) and **Midnight** were generated once with Radix's custom-palette method
-  (Midnight `#232B66` on `#FFFFFF` for light, `#AEB6F2` on `#121420` for dark, cool grey seeds), then
-  the agreed Wisp values replaced their nearest steps. Midnight's step 9 is the button colour;
+- **Grey** (cool neutrals) and **Midnight** follow Radix's custom-palette method (Midnight `#232B66`
+  on `#FFFFFF` for light, `#AEB6F2` on `#121420` for dark, cool grey seeds), with the Wisp anchors
+  at their nearest steps. Midnight's step 9 is the button colour;
   `--midnight-contrast` and `--midnight-dark-contrast` are the text on it.
 - **Green, amber, red and blue** are Radix's published scales, light and dark. Light step 11 of green,
   amber and blue is darkened slightly so status text clears 4.5:1 on the cool page.

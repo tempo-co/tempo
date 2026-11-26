@@ -9,8 +9,11 @@
  *   It is its own rule because a disable comment hides what the rule it names reports on its lines.
  */
 
-// A hex colour stands alone or sits in CSS punctuation (`[#fff]`, `1px #fff`, `(#fff,`).
-const HEX = /(?<=^|[\s[(,:])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?=$|[\s\]),;/])/gi;
+// A hex colour stands alone or sits in CSS punctuation (`[#fff]`, `1px #fff`, `(#fff,`, `1px_#fff`).
+const HEX = /(?<=^|[\s[(,:_])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?=$|[\s\]),;/_])/gi;
+// Words a colour follows in CSS shorthands: a length (`2px #000`) or a border style (`solid #000`).
+const CSS_BEFORE_COLOUR =
+  /(?:\d(?:px|r?em|%)|\b(?:solid|dashed|dotted|double|groove|ridge|inset|outset))\s$/i;
 const COLOUR_FUNCTION = /\b(?:rgba?|hsla?|oklch)\(/gi;
 
 // Attributes and properties whose `#…` value is a fragment or an id, never a colour.
@@ -106,8 +109,10 @@ function arbitraryClasses(text) {
 function rawColours(text) {
   const found = [];
   for (const match of text.matchAll(HEX)) {
-    // "Row #123": a number after a word is prose, not a colour.
-    if (/^#\d+$/.test(match[0]) && /[a-z]\s$/i.test(text.slice(0, match.index))) continue;
+    // "Row #123": a number after a word is prose, not a colour. After a length or a border style it is a colour.
+    const before = text.slice(0, match.index);
+    if (/^#\d+$/.test(match[0]) && /[a-z]\s$/i.test(before) && !CSS_BEFORE_COLOUR.test(before))
+      continue;
     found.push(match[0]);
   }
   for (const match of text.matchAll(COLOUR_FUNCTION)) found.push(match[0]);

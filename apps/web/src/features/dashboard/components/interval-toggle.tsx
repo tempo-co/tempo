@@ -34,7 +34,7 @@ export function IntervalToggle({
         <ToggleGroupItem
           key={item.value}
           value={item.value}
-          className='min-h-7 touch-manipulation rounded-sm px-3 text-xs active:bg-accent data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11'
+          className='min-h-7 touch-manipulation rounded-sm px-3 text-body-small active:bg-accent data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11'
         >
           {item.label}
         </ToggleGroupItem>
