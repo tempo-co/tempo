@@ -268,7 +268,7 @@ mode. A box-shadow ring in `primary` marks a selected value (the theme picker), 
 ### Buttons
 
 `Button`: `text-body-small` medium labels, control radius, 16px icons with an 8px gap, specific
-labels ("Connect a bank", "Re-authorize"). Every size grows to 44px on phones and coarse pointers.
+labels ("Connect a bank", "Reconnect"). Every size grows to 44px on phones and coarse pointers.
 
 | Size | Height | Use |
 | --- | --- | --- |
@@ -349,8 +349,7 @@ radius; items are `text-body` with segment corners, tooltips `text-body-small`.
 
 ### Alerts
 
-An inline message about the thing it sits in (a refused import, a bank to re-authorize, a failed
-save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text: 1px
+An inline message about the thing it sits in (a refused import, a failed save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text: 1px
 border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-body` medium title, a muted
 `text-body-small` description, actions under the text on phones and to the right from `sm` up.
 

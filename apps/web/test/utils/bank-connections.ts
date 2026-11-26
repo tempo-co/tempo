@@ -10,18 +10,30 @@ import {
   fulfillJson,
 } from './api-mocks';
 
-/** Opens a bank's details dialog from its card. */
-export async function openDetails(page: Page, card: Locator) {
-  await card.getByRole('button', {name: / details$/}).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  return dialog;
+/** An account's row on Accounts. */
+export const accountRow = (page: Page, accountId: string) =>
+  page.getByTestId(`account-row-${accountId}`);
+
+/** The freshness lines that need attention: a connection in trouble, a stale file or a long-quiet sync. */
+export const attentionLines = (scope: Page | Locator) =>
+  scope.locator('[data-testid="account-freshness"][data-tone="warning"]');
+
+/** Opens an account's page from its row on Accounts, and returns its connection card. */
+export async function openAccount(page: Page, accountId: string) {
+  await accountRow(page, accountId).getByRole('link').click();
+  await expect(page).toHaveURL(new RegExp(`/accounts/${accountId}$`));
+  await expect(page.getByTestId('account-about')).toBeVisible();
+  return page.getByTestId('account-connection');
 }
 
-/** Opens a bank's details and switches the dialog to its removal step. */
-export async function openRemoval(page: Page, card: Locator) {
-  const dialog = await openDetails(page, card);
-  await dialog.getByRole('button', {name: 'Remove connection'}).click();
+/**
+ * Opens the removal of the connection an account belongs to, from the account's page: the bank's Remove connection,
+ * or Remove imported files.
+ */
+export async function openRemoval(page: Page, accountId: string) {
+  await openAccount(page, accountId);
+  await page.getByRole('button', {name: /^Remove (connection|imported files)$/}).click();
+  const dialog = page.getByRole('dialog');
   await expect(dialog.getByTestId(/^remove-bank-confirm-/)).toBeVisible();
   return dialog;
 }

@@ -18,12 +18,12 @@ export const BANK_CONNECTION_STATUSES = [
 ] as const;
 export type BankConnectionStatus = (typeof BANK_CONNECTION_STATUSES)[number];
 
-/** How long before consent ends the owner is told to re-authorize: an email, and a dot on Connections. */
+/** How long before consent ends the owner is told to re-authorize: an email, and a dot on Accounts. */
 export const CONSENT_ENDING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * How long a bank may go without a fully successful sync before the owner is told: an email and push, and a
- * warning on Connections. Shorter failures retry on their own and stay quiet.
+ * warning on Accounts. Shorter failures retry on their own and stay quiet.
  */
 export const SYNC_BROKEN_AFTER_MS = 24 * 60 * 60 * 1000;
 

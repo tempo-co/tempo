@@ -20,7 +20,7 @@ const desktopPages = [
   {label: 'Transactions', url: /\/transactions(?:\?|$)/, heading: 'Bank transactions'},
   {label: 'Insights', url: /\/insights(?:\?|$)/, heading: 'Insights'},
   {label: 'Recurring', url: /\/recurring(?:\?|$)/, heading: 'Recurring'},
-  {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Bank connections'},
+  {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Accounts'},
   {label: 'Home', url: HOME, heading: null},
 ];
 
