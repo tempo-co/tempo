@@ -478,7 +478,8 @@ test.describe('bank transactions', () => {
       const detailColumns = await bankDetailsFields.evaluate(
         (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
       );
-      expect(detailColumns).toBe(viewport.width < 640 ? 1 : 2);
+      // The rail and a phone's sheet are narrow, so the bank details stack in one column.
+      expect(detailColumns).toBe(1);
       await expectNoHorizontalOverflow(page);
 
       const inspectorBox = await boxOf(inspector);
@@ -574,6 +575,7 @@ test.describe('bank transactions', () => {
     await expect(page).toHaveURL(/bankAccountIds/);
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByTestId('bank-transaction-filters')).toBeHidden();
 
     await openTransactionFilter(page, 'Date');
     for (let monthIndex = 0; monthIndex < 24; monthIndex += 1) {
@@ -830,11 +832,6 @@ test.describe('bank transactions', () => {
     await expect(resetSource).toHaveCount(0);
     await sheet.getByRole('option', {name: 'Manual', exact: true}).click();
     await expect(page).toHaveURL(/categorySources=/);
-    await expect(
-      page
-        .getByRole('list', {name: 'Filters in force'})
-        .getByRole('button', {name: /^Remove filter/}),
-    ).toHaveCount(2);
 
     // The booking date's Reset is the footer's too.
     await openTransactionFilter(page, 'Date');
@@ -845,6 +842,12 @@ test.describe('bank transactions', () => {
 
     await sheet.getByRole('button', {name: 'Done', exact: true}).click();
     await expect(sheet).toBeHidden();
+    // Each filter set in the sheet shows as a chip under the search.
+    await expect(
+      page
+        .getByRole('list', {name: 'Filters in force'})
+        .getByRole('button', {name: /^Remove filter/}),
+    ).toHaveCount(2);
     await page.getByRole('button', {name: 'Clear', exact: true}).click();
     await expect(page).not.toHaveURL(/categorySources=/);
     const clearedUrl = new URL(page.url());
@@ -1003,20 +1006,21 @@ test.describe('bank transactions', () => {
 
     await choose('Largest out first', 'Oldest first', {by: 'date', order: 'ASC'});
     const days = page.getByRole('region', {name: /August/});
+    const dayHeadings = days.getByRole('heading', {level: 2});
     await expect(days.first()).toBeVisible();
-    const headings = await page.getByRole('heading', {level: 2}).allTextContents();
+    const headings = await dayHeadings.allTextContents();
     expect(headings[headings.length - 1]).toBe('Monday 24 August');
 
     await choose('Oldest first', 'Newest first', {by: 'date', order: 'DESC'});
     expect(new URL(page.url()).searchParams.has('sort')).toBe(false);
-    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
+    await expect(dayHeadings.first()).toHaveText('Monday 24 August');
 
     // A link ordered by a field the page no longer offers opens in the default order.
     await page.goto(
       `/transactions?sort=${encodeURIComponent(JSON.stringify({by: 'category', order: 'ASC'}))}`,
     );
     await expect(order('Newest first')).toBeVisible();
-    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
+    await expect(dayHeadings.first()).toHaveText('Monday 24 August');
   });
 
   test('preserves original values for mixed-currency amount results', async ({page}) => {
@@ -1326,6 +1330,8 @@ test.describe('bank transaction inspector on a fresh account', () => {
       return fulfillJson(route, saved);
     });
 
+    // The rows have a Category column where the list beside the rail is wide enough.
+    await page.setViewportSize({width: 1440, height: 900});
     await page.goto('/transactions');
     await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 

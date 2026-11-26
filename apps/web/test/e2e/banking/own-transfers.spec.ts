@@ -42,7 +42,8 @@ test.describe('own transfers', () => {
   });
 
   test('labels recognized transfers, links the other side and filters them', async ({page}) => {
-    await page.setViewportSize({width: 1280, height: 720});
+    // The rows have a Category column where the list beside the rail is wide enough.
+    await page.setViewportSize({width: 1440, height: 900});
     await page.goto('/transactions');
 
     const ibanRow = page.getByTestId(`bank-transaction-row-${IBAN_PAIR_OUTGOING_ID}`);

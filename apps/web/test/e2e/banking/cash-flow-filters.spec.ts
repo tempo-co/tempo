@@ -188,10 +188,11 @@ for (const mobile of [false, true]) {
     await expect
       .poll(() => JSON.parse(new URL(page.url()).searchParams.get('cashFlows')!) as string[])
       .toEqual(['SPENDING', 'INTERNAL']);
-    // The chips name the filter's values.
-    await expect(
-      page.getByRole('button', {name: 'Remove filter: Spending, Internal movements'}),
-    ).toBeAttached();
+    // The chip beside the desktop popover names the filter's values; the phone sheet covers the chips.
+    if (!mobile)
+      await expect(
+        page.getByRole('button', {name: 'Remove filter: Spending, Internal movements'}),
+      ).toBeVisible();
     await parent.click();
     await expect(exchange).toHaveAttribute('data-filter-selected', 'false');
     await expect(transfer).toHaveAttribute('data-filter-selected', 'false');
