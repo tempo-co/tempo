@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
 import type {CashFlowInterval, MerchantGroup, MerchantGroupPeriod} from '@tempo/contracts';
 import {format} from 'date-fns';
-import {ArrowLeft} from 'lucide-react';
+import {ArrowLeft, X} from 'lucide-react';
 import {useState} from 'react';
 import {Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis} from 'recharts';
 
@@ -28,42 +28,64 @@ import {useGetMerchantTransactions} from '../api/use-get-merchant-transactions';
 import {countLabel, formatFrequency} from '../utils/merchant-format';
 import {MerchantTile} from './merchant-tile';
 
-/** One merchant or person: what was paid all time, per period, under which names, and every transaction. */
-export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onBack: () => void}) {
+/**
+ * One merchant or person: what was paid all time, per period, under which names, and every transaction. Laid out
+ * for the width it gets, from the Insights rail to a phone's sheet.
+ */
+export function MerchantDetail({
+  merchant,
+  onBack,
+  onClose,
+}: {
+  merchant: MerchantGroup;
+  /** Back to the list it was opened from, when there is one. */
+  onBack?: () => void;
+  onClose: () => void;
+}) {
   const currency = merchant.baseCurrency;
   const hasIncome = toCents(merchant.received) > 0;
   const frequency = formatFrequency(merchant);
   const excluded = merchant.excluded.missingBaseAmount;
 
   return (
-    <div className='grid grid-cols-1 gap-6'>
-      <Button
-        variant='ghost'
-        size='sm'
-        onClick={onBack}
-        className='-my-1 -ml-3 justify-self-start text-muted-foreground max-sm:h-11'
-      >
-        <ArrowLeft aria-hidden />
-        All merchants
-      </Button>
-
-      <header className='grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4'>
+    <div className='@container grid grid-cols-1 gap-6'>
+      <header className='grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3'>
         <MerchantTile merchant={merchant} className='h-12 w-12' />
-        <div className='min-w-0'>
-          <h3 className='text-section-title wrap-anywhere'>{merchant.name}</h3>
+        <div className='min-w-0 self-center'>
+          {onBack && (
+            <Button
+              variant='ghost'
+              size='sm'
+              onClick={onBack}
+              className='-ml-2.5 text-muted-foreground max-sm:h-11'
+            >
+              <ArrowLeft aria-hidden />
+              All merchants
+            </Button>
+          )}
+          <h2 className='text-section-title wrap-anywhere'>{merchant.name}</h2>
           {merchant.variants.length > 1 && (
             <p className='mt-0.5 text-body-small text-muted-foreground'>
               {merchant.variants.length} names grouped by brand
             </p>
           )}
         </div>
+        <Button
+          variant='ghost'
+          size='icon'
+          onClick={onClose}
+          aria-label='Close merchant'
+          className='-mt-1 -mr-2 max-sm:size-11'
+        >
+          <X aria-hidden />
+        </Button>
       </header>
 
       <section aria-label='All-time totals' className='grid grid-cols-1 gap-5'>
         <dl className='flex flex-wrap justify-between gap-x-8 gap-y-4'>
           <div className='min-w-0'>
             <dt className='text-body-small text-muted-foreground'>Spent all time</dt>
-            <dd className='numeric text-3xl font-semibold tracking-tight'>
+            <dd className='numeric text-2xl font-semibold tracking-tight @md:text-3xl'>
               {formatMoney(merchant.spent, currency)}
             </dd>
             {toCents(merchant.refunded) > 0 && (
@@ -74,15 +96,15 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
             )}
           </div>
           {hasIncome && (
-            <div className='min-w-0 sm:text-right'>
+            <div className='min-w-0 @sm:text-right'>
               <dt className='text-body-small text-muted-foreground'>Received</dt>
-              <dd className='numeric text-3xl font-semibold tracking-tight text-success'>
+              <dd className='numeric text-2xl font-semibold tracking-tight text-success @md:text-3xl'>
                 +{formatMoney(merchant.received, currency)}
               </dd>
             </div>
           )}
         </dl>
-        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4'>
+        <dl className='grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border @xs:grid-cols-2 @lg:grid-cols-4'>
           <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} numeric />
           <Fact
             label='Average payment'

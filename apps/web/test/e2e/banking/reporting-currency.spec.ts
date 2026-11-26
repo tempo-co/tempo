@@ -4,6 +4,7 @@ import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
 import {
   HOME_CONNECTION,
   HOME_NOW,
+  MARKET_ID,
   homeHistory,
   homeRanking,
   homeRecurring,
@@ -532,7 +533,22 @@ test.describe('fully mocked', () => {
       }),
     );
     await page.route('**/merchants?**', (route) =>
-      fulfillJson(route, {baseCurrency: null, merchants: [], total: 0}),
+      fulfillJson(route, {
+        baseCurrency: null,
+        merchants: [
+          {
+            id: MARKET_ID,
+            name: 'Example Market',
+            kind: 'MERCHANT',
+            logoUrl: null,
+            spent: '500.00',
+            received: '0.00',
+            count: 9,
+            lastDate: '2026-11-01',
+          },
+        ],
+        total: 1,
+      }),
     );
 
     const open = async (url: string, path: string) => {
@@ -542,9 +558,9 @@ test.describe('fully mocked', () => {
       await answered;
     };
 
-    await open('/?merchants=open', '/merchants/ranking?');
+    await open('/insights', '/merchants?');
     const top = page.getByRole('region', {name: 'Top merchants'});
-    await expect(top.getByRole('img', {name: 'Loading top merchants'})).toBeVisible();
+    await expect(top.getByText('Loading merchants')).toBeVisible();
     await expect(top.getByRole('listitem')).toHaveCount(0);
 
     await open('/?recurring=open', '/recurring-series?');

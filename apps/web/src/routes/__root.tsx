@@ -17,17 +17,17 @@ export const Route = createRootRouteWithContext<{
   validateSearch: zodValidator(appDialogsSearchSchema),
 });
 
-// The dialogs draw charts, so they and the chart library load only once a page opens one.
+// The dialog draws charts, so it and the chart library load only once a page opens it.
 const AppDialogs = lazy(() =>
   import('@/features/dashboard/components/app-dialogs').then((module) => ({
     default: module.AppDialogs,
   })),
 );
 
-/** Mounts the dialogs from the first time one is asked for, then keeps them, so they can animate closed. */
+/** Mounts the dialog from the first time it is asked for, then keeps it, so it can animate closed. */
 function useDialogsWanted() {
-  const {recurring, merchants} = Route.useSearch();
-  const asked = recurring === 'open' || merchants === 'open';
+  const {recurring} = Route.useSearch();
+  const asked = recurring === 'open';
   const [wanted, setWanted] = useState(asked);
   if (asked && !wanted) setWanted(true);
   return wanted;

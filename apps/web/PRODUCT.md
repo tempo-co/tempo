@@ -25,7 +25,7 @@ Tempo is a read-only financial record for each user, on any of their devices. It
 - The application is read-only toward banks. Transaction categories are Tempo metadata and may be suggested automatically or corrected manually; Tempo must not initiate payments or mutate bank-account data.
 - Statement file import sits behind `FILE_IMPORT_ENABLED` on the API (with it off, Accounts shows nothing of it) and its column mapper behind `FILE_IMPORT_MAPPER_ENABLED`. Behavior: `apps/api/docs/file-import.md` and `docs/file-import.md`.
 - Home answers where the user stands over the years from their history; it is not a general prediction engine.
-- Merchant details total what was paid to a merchant or person, grouping merchant names that share an identified brand.
+- Merchant details total what was paid to a merchant or person, grouping merchant names that share an identified brand. They open in the Insights rail, at their own address.
 - Integrations provides expiring, revocable, read-only access tokens and a hosted Streamable HTTP MCP endpoint; clients connect with the server URL and a bearer token.
 - Privacy, security, and financial-data correctness take priority over growth.
 - Currency scope and the accessibility target are open decisions.
