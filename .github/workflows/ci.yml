@@ -26,6 +26,7 @@ jobs:
             web: ${{ steps.paths.outputs.web }}
             ops: ${{ steps.paths.outputs.ops }}
             e2e: ${{ steps.paths.outputs.e2e }}
+            corpus: ${{ steps.paths.outputs.corpus }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -72,9 +73,11 @@ jobs:
                   # The API E2E suite also tests the staging copy filter (ops/wisp-staging-copy.sql) at the current schema.
                   api_e2e=$api
                   if [[ $(touched "$ops_base" '^ops/wisp-staging-copy\.sql$') == true ]]; then api_e2e=true; fi
+                  # The real-file corpus check reads what the import readers and the bank list decide.
+                  corpus=$(touched "$api_base" '^apps/api/src/app/modules/file-import/|^apps/api/test/corpus/|^packages/contracts/src/banks\.ts$')
                   e2e=false
                   if [[ $api == true || $web == true ]]; then e2e=true; fi
-                  printf 'api=%s\napi_e2e=%s\nweb=%s\nops=%s\ne2e=%s\n' "$api" "$api_e2e" "$web" "$ops" "$e2e" | tee -a "$GITHUB_OUTPUT"
+                  printf 'api=%s\napi_e2e=%s\nweb=%s\nops=%s\ne2e=%s\ncorpus=%s\n' "$api" "$api_e2e" "$web" "$ops" "$e2e" "$corpus" | tee -a "$GITHUB_OUTPUT"
 
     # Not gated: every change can touch a living doc or a path one names.
     docs:
@@ -209,6 +212,58 @@ jobs:
 
             - name: Run unit tests
               run: npm run test
+
+    # Reads tempo-co/tempo-import-corpus with a read-only deploy key. Fork and Dependabot PRs get no
+    # secret, so the job reports a skip there. Its output is counts and failing file ids, never rows.
+    api-corpus-check:
+        name: API real-file corpus
+        runs-on: ubuntu-latest
+        needs: [changes]
+        if: needs.changes.outputs.corpus == 'true'
+        env:
+            HAS_KEY: ${{ secrets.CORPUS_DEPLOY_KEY != '' }}
+        defaults:
+            run:
+                working-directory: apps/api
+        steps:
+            - name: Report a run without the corpus key
+              if: env.HAS_KEY != 'true'
+              working-directory: .
+              run: |
+                  echo "::notice::Real-file corpus check skipped: this run has no CORPUS_DEPLOY_KEY (fork or Dependabot PR)."
+
+            - name: Checkout repository
+              if: env.HAS_KEY == 'true'
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+
+            - name: Checkout corpus
+              if: env.HAS_KEY == 'true'
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  repository: tempo-co/tempo-import-corpus
+                  ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
+                  persist-credentials: false
+                  path: corpus
+
+            - name: Setup Node.js 26.x
+              if: env.HAS_KEY == 'true'
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              with:
+                  node-version: 26.x
+                  cache: 'npm'
+                  cache-dependency-path: apps/api/package-lock.json
+
+            - name: Install dependencies
+              if: env.HAS_KEY == 'true'
+              run: npm ci
+
+            - name: Run the corpus check
+              if: env.HAS_KEY == 'true'
+              env:
+                  TEMPO_IMPORT_CORPUS: ${{ github.workspace }}/corpus
+              run: npm run test:corpus
 
     api-e2e-test:
         name: API E2E tests
@@ -622,7 +677,7 @@ jobs:
         name: CI
         runs-on: ubuntu-latest
         needs:
-            [changes, docs, ops, api-lint-format, api-build, api-unit-test, api-e2e-test, api-image, web-lint-format, web-build, web-e2e-shards, web-e2e-test, web-image]
+            [changes, docs, ops, api-lint-format, api-build, api-unit-test, api-corpus-check, api-e2e-test, api-image, web-lint-format, web-build, web-e2e-shards, web-e2e-test, web-image]
         if: ${{ always() }}
         steps:
             - name: Require every needed job to pass or be skipped

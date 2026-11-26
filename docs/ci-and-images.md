@@ -4,7 +4,7 @@ Workflow: `.github/workflows/ci.yml` (`CI/CD`). One workflow runs for every PR a
 
 ## Which jobs run
 
-The `Changes` job sets five flags. A PR compares its merge commit with the base branch. A push to `main` compares each app with the commit its current `:main` image was built from (read from GHCR by `.github/scripts/released-revision.sh`), so a change whose release was skipped (a newer commit had already released that app) is released by the next push; `ops` compares with the previous `main`.
+The `Changes` job sets six flags. A PR compares its merge commit with the base branch. A push to `main` compares each app with the commit its current `:main` image was built from (read from GHCR by `.github/scripts/released-revision.sh`), so a change whose release was skipped (a newer commit had already released that app) is released by the next push; `ops` compares with the previous `main`.
 
 | Flag | Set when the change touches | Jobs |
 |---|---|---|
@@ -13,6 +13,7 @@ The `Changes` job sets five flags. A PR compares its merge commit with the base 
 | `web` | `apps/web/**`, `packages/contracts/**`, `.dockerignore` | `Web lint & format`, `Web build`, `Web image` |
 | `e2e` | anything that sets `api` or `web` | `Web E2E shard 1/8`…`8/8`, `Web E2E tests` |
 | `ops` | `ops/**` | `Ops checks` |
+| `corpus` | `apps/api/src/app/modules/file-import/**`, `apps/api/test/corpus/**`, `packages/contracts/src/banks.ts` | `API real-file corpus` |
 
 A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, and an area whose base commit is unknown (not in this history, or unreadable) runs. Other files (root docs, `AGENTS.md`, other workflows, Dependabot config) run only `Docs check`. Jobs are gated with `if:`, never with `on: paths:`: a skipped job reports success, while a skipped workflow leaves a required check pending forever.
 
@@ -25,6 +26,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 - `API lint & format`: the API's `lint:check`/`format:check`.
 - `API build`: `npm --prefix apps/api run build`.
 - `API unit tests`: Jest.
+- `API real-file corpus`: `npm --prefix apps/api run test:corpus` (`apps/api/docs/real-file-corpus.md`) on a checkout of the private tempo-co/tempo-import-corpus, read with a read-only deploy key whose private half is the secret `CORPUS_DEPLOY_KEY`. The key does not expire; replace both halves only if it leaks. Fork and Dependabot PRs get no secret, so the job reports a skip notice and passes.
 - `API E2E tests`: `npm --prefix apps/api run test:e2e:cov` on fresh services. It normally takes a few minutes; a run far beyond that is stuck, not slow.
 - `API image` and `Web image`: build `apps/api/Dockerfile` and `apps/web/Dockerfile.production` with the repository root as context, so both can copy `packages/contracts`. The root `.dockerignore` allowlists the two apps and that package and keeps `node_modules`, `dist` and env files out. The API Dockerfile runs a runtime smoke check, so a built API image is a smoke-tested image. Both Dockerfiles pin their base images (Node, and Nginx for the web) by tag and digest; Dependabot checks them daily, Node without the cooldown, so a Node security release reaches a PR within a day. Same-repo, non-Dependabot PRs and pushes to `main` publish `ghcr.io/<owner>/api` and `ghcr.io/<owner>/web` as `:sha-<sha>` and `:pr-<n>`. Images carry `org.opencontainers.image.source` (this repository) and `org.opencontainers.image.revision` (the commit).
 - `Web build`: `npm --prefix apps/web run build` plus `apps/web/scripts/tempo-web-security-headers-test.sh`, which builds the production web image and probes Nginx.
