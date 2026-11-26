@@ -139,9 +139,29 @@ improves scanning. Keep corners consistent within a component family.
 
 ## Logo
 
-The logo is the icon-only Tempo mark in `src/assets/logo.tsx`, the same in light and dark
-themes. Do not add text to the mark, recolor it per theme, or decorate it. Every icon under
-`public/` uses the same drawing; `manifest.webmanifest` and `index.html` wire them.
+The mark is the Wisp symbol: three rounded Midnight bars with a floating Rose dot. Bars and dot
+share one width, and the gap above the last bar equals the gaps between bars. The wordmark sets
+"Wisp" with its letters outlined to paths; the lockups pair it with the symbol, side by side or
+stacked. The app shows the symbol alone (`src/assets/logo.tsx`), and its name strings still say
+"Tempo".
+
+| Colour | Value | Use |
+| --- | --- | --- |
+| Midnight | `#232B66` | The bars on light, the app-icon tile |
+| Rose | `#D9577A` | The dot, in every version |
+| White | `#FFFFFF` | The bars on dark and on Midnight |
+
+Rose appears only in the logo, never in the interface. On dark, the bars turn white and the dot
+stays Rose: the symbol component switches to the reversed master under the `dark` class. These
+are fixed brand colours, not theme roles.
+
+Keep clear space of one bar width all round. The smallest size is 16 px, drawn from the
+pixel-snapped 16 px cut (`favicon-16.png`).
+
+Every logo file is copied from the approved masters: never redraw, recolour or decorate the mark,
+and never add text to the symbol. The favicons, app icons, maskable icon and apple-touch icon live
+in `public/`, listed in `config/app-icons.ts` and wired by `manifest.webmanifest` and
+`index.html` (`docs/pwa.md`).
 
 ## Components
 
