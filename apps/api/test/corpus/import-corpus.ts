@@ -127,7 +127,10 @@ export function checkFile(dir: string, entry: CorpusEntry, truth: Truth): FileRe
 	if ('refused' in outcome) {
 		const expected = typeof truth.expect === 'object' ? truth.expect.refused : null;
 		if (expected !== outcome.refused) {
-			result.problems.push(`refused ${outcome.refused}, expected ${expected ? `refusal ${expected}` : 'a read'}`);
+			const near = outcome.layout ? ` (its rows did not read as ${outcome.layout})` : '';
+			result.problems.push(
+				`refused ${outcome.refused}${near}, expected ${expected ? `refusal ${expected}` : 'a read'}`,
+			);
 		}
 		result.passed = result.problems.length === 0;
 		return result;
@@ -219,11 +222,11 @@ function withoutApiKey(): NodeJS.ProcessEnv {
 
 type FlatRow = NormalizedRow & {account: string | null};
 
-function parse(bytes: Buffer): {result: ReturnType<typeof parseFile>} | {refused: string} {
+function parse(bytes: Buffer): {result: ReturnType<typeof parseFile>} | {refused: string; layout: string | null} {
 	try {
 		return {result: parseFile(bytes)};
 	} catch (error) {
-		if (error instanceof ParseRefusal) return {refused: error.code};
+		if (error instanceof ParseRefusal) return {refused: error.code, layout: error.layout};
 		throw error;
 	}
 }
