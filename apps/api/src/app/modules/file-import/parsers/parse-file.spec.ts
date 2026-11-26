@@ -52,7 +52,6 @@ describe('parseFile', () => {
 		});
 	});
 
-	// Within one bank, the order of `CSV_LAYOUTS` decides (an easybank account export also reads as its card export).
 	it('skips a pending row of a file left with one booked row, whose trailing delimiters still read', () => {
 		const lines = fixture('mbank-pl-synthetic.csv').toString('utf8').split('\n');
 		const oneBooked = lines.filter((line) => !/^2026-10-0[25];/.test(line)).join('\n');
@@ -65,6 +64,7 @@ describe('parseFile', () => {
 		).toEqual([[1, ['-62.10']]]);
 	});
 
+	// Within one bank, the order of `CSV_LAYOUTS` decides (an easybank account export also reads as its card export).
 	it.each(Object.entries(EXPECTED).filter(([, {format}]) => format === 'csv'))(
 		"reads %s with no other bank's built-in layout",
 		(name, expected) => {
