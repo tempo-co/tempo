@@ -14,6 +14,7 @@ import {
   mockBankConnections,
   mockBankRefresh,
   mockEmptyRecurringLists,
+  mockFileImportOff,
   mockJson,
   mockMerchantRanking,
 } from '../../utils/api-mocks';
@@ -186,6 +187,7 @@ async function mockMerchantLogos(page: Page) {
     }),
   );
   await mockJson(page, '**/health', {});
+  await mockFileImportOff(page, API_URL);
   await mockBankConnections(page, [connection]);
   await mockBankRefresh(page);
   await mockJson(page, '**/bank-connections/aspsps', []);

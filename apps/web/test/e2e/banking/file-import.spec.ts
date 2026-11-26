@@ -2356,6 +2356,8 @@ test.describe('statement file import on Accounts', () => {
     const remove = supported.getByRole('button', {name: `Remove ${proposal.bankName}`});
     for (const width of [390, 320]) {
       await page.setViewportSize({width, height: 700});
+      // Measured once its opening has settled, not mid-scale.
+      await animationsSettled(supported);
       await expectNoHorizontalOverflow(page);
       const [sheet, name, button] = await Promise.all([
         boxOf(supported),
