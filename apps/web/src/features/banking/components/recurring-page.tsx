@@ -13,6 +13,7 @@ import {
   Clock,
   List,
   Repeat,
+  Wallet,
 } from 'lucide-react';
 import type React from 'react';
 import {useEffect} from 'react';
@@ -41,6 +42,7 @@ import type {RecurringSearch} from '../types/recurring-search';
 import {RECURRING_CADENCE_LABELS} from '../types/recurring-series';
 import {
   formatAmount,
+  formatEstimate,
   formatMonthlyEquivalent,
   formatPriceChange,
   isCounted,
@@ -237,7 +239,10 @@ export function RecurringPage({
   );
 }
 
-/** An amount in the base currency where the API gave one, otherwise the series' own; a due estimate gets "≈". */
+/**
+ * An amount in the base currency where the API gave one, otherwise the series' own. A varying amount still due is an
+ * estimate: "about €63".
+ */
 function entryAmount(
   series: RecurringSeries,
   cents: number | null,
@@ -245,10 +250,12 @@ function entryAmount(
   baseCurrency: string | null,
 ) {
   if (cents === null) return formatAmount(series);
-  return `${estimate && series.amountKind === 'VARIABLE' ? '≈ ' : ''}${formatMoney(cents / 100, baseCurrency)}`;
+  return estimate && series.amountKind === 'VARIABLE'
+    ? formatEstimate(cents / 100, baseCurrency)
+    : formatMoney(cents / 100, baseCurrency);
 }
 
-/** Each group's heading and how a row in it words its date: "expected 5 Oct", or "2 late, since 2 Oct". */
+/** Each bill group's heading and how a row in it words its date: "expected 5 Oct", or "2 late, since 2 Oct". */
 const GROUPS = {
   late: {title: 'Late', icon: Clock, single: 'expected', counted: 'late', since: 'since'},
   coming: {
@@ -260,6 +267,8 @@ const GROUPS = {
   },
   paid: {title: 'Paid', icon: CircleCheck, single: 'paid', counted: 'paid', since: 'last'},
 } as const;
+
+const HEADINGS = {...GROUPS, income: {title: 'Income', icon: Wallet}} as const;
 
 function ThisMonth({
   lists,
@@ -384,8 +393,15 @@ function Figure({children, className}: {children: React.ReactNode; className?: s
   return <span className={cn('numeric whitespace-nowrap', className)}>{children}</span>;
 }
 
-function entryDetail({series, date, count}: MonthEntry, id: MonthGroup['id']) {
+function entryDetail({series, date, count, kind, paidCount}: MonthEntry, id: MonthGroup['id']) {
   const rhythm = RECURRING_CADENCE_LABELS[series.cadence];
+  if (id === 'income') {
+    // "received 1 Oct", "2 received, last 15 Oct", "next 25 Oct", "1 received, late since 5 Oct".
+    if (kind === 'paid')
+      return `${rhythm} · ${count === 1 ? 'received' : `${count} received, last`} ${day(date)}`;
+    const state = kind === 'late' ? 'late since' : 'next';
+    return `${rhythm} · ${paidCount > 0 ? `${paidCount} received, ` : ''}${state} ${day(date)}`;
+  }
   const {single, counted, since} = GROUPS[id];
   if (count === 1) return `${rhythm} · ${single} ${day(date)}`;
   return `${rhythm} · ${count} ${counted}, ${since} ${day(date)}`;
@@ -402,7 +418,7 @@ function MonthGroupCard({
   selectedKey: string | null;
   onOpen: Open;
 }) {
-  const {title, icon: Icon} = GROUPS[group.id];
+  const {title, icon: Icon} = HEADINGS[group.id];
   return (
     <section aria-label={title} className={cn(CARD, 'overflow-hidden')}>
       <h2
@@ -415,11 +431,15 @@ function MonthGroupCard({
           <Icon aria-hidden className='size-4' />
           {title}
         </span>
-        {group.entries.some(({series}) => series.direction === 'EXPENSE') && (
-          <span className='numeric font-medium text-muted-foreground'>
-            {formatMoney(group.billCents / 100, baseCurrency)}
-          </span>
-        )}
+        <span
+          className={cn(
+            'numeric font-medium',
+            group.id === 'income' ? 'text-success' : 'text-muted-foreground',
+          )}
+        >
+          {group.id === 'income' && '+'}
+          {formatMoney(group.cents / 100, baseCurrency)}
+        </span>
       </h2>
       <ul className='divide-y divide-border/60'>
         {group.entries.map((entry) => (
@@ -427,8 +447,10 @@ function MonthGroupCard({
             <RecurringSeriesRow
               series={entry.series}
               detail={entryDetail(entry, group.id)}
-              amount={entryAmount(entry.series, entry.cents, group.id !== 'paid', baseCurrency)}
-              flags={seriesFlags(entry.series).filter((flag) => flag === 'pricier')}
+              amount={entryAmount(entry.series, entry.cents, entry.kind !== 'paid', baseCurrency)}
+              flags={seriesFlags(entry.series).filter(
+                (flag) => flag === 'pricier' || (group.id === 'income' && flag === 'late'),
+              )}
               selected={entry.series.key === selectedKey}
               onOpen={onOpen}
             />

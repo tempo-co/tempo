@@ -30,7 +30,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 
 - One row spec per entity: anything standing for transactions uses the transaction row's height and tile size on every surface. Layout specs measure rows and tiles at 1440 and 390 px on each surface.
 - A category keeps its own small icon beside its label, even when the row's tile shows a merchant logo.
-- Fact grids are two lines: a label over one value. Fold secondary detail into the label ("Next · in 29 days"). A value that can grow without bound moves to a wrapping badge. Estimates are whole amounts.
+- Fact grids are two lines: a label over one value. Fold secondary detail into the label ("Next · in 29 days"). A value that can grow without bound moves to a wrapping badge. Estimates are whole amounts with "about" ("about €63"); in a fact grid the "about" goes in the label.
 - Detail views list their items inline, newest first, with Load more and the shared row, and keep the open entity in the URL (with `replace`).
 - Optional columns keep their grid track: render an empty cell so the next column starts at the same x in every state.
 

@@ -48,6 +48,7 @@ export function RecurringSeriesDetail({
   const isIncome = series.direction === 'INCOME';
   const monthly = formatMonthlyEquivalent(series, baseCurrency);
   const yearly = series.monthlyEquivalent !== null ? Number(series.monthlyEquivalent) * 12 : null;
+  const variable = series.amountKind === 'VARIABLE';
 
   return (
     <section
@@ -102,24 +103,20 @@ export function RecurringSeriesDetail({
           }
         />
         {/* A varying series' range is a badge above, where it can wrap; a fact holds one amount. */}
-        {/* "Usually" is an estimate, so a whole amount, like the yearly total. */}
+        {/* Estimates are whole amounts, and their "about" sits in the label, so the largest still fits a phone. */}
         <Fact
-          label={series.amountKind === 'VARIABLE' ? 'Usually' : 'Price'}
+          label={variable ? 'Usually about' : 'Price'}
           value={
-            series.amountKind === 'VARIABLE'
-              ? `≈ ${formatWholeMoney(series.typicalAmount, series.currency)}`
+            variable
+              ? formatWholeMoney(series.typicalAmount, series.currency)
               : formatMoney(series.typicalAmount, series.currency)
           }
           numeric
         />
-        {/* A yearly total is an estimate, so whole amounts; they also keep large totals on one line. */}
+        {/* A yearly total is whole amounts too; they also keep large totals on one line. */}
         <Fact
-          label='A year'
-          value={
-            yearly === null
-              ? '—'
-              : `${series.amountKind === 'VARIABLE' ? '≈ ' : ''}${formatWholeMoney(yearly, baseCurrency)}`
-          }
+          label={variable ? 'A year, about' : 'A year'}
+          value={yearly === null ? '—' : formatWholeMoney(yearly, baseCurrency)}
           numeric
         />
         <Fact

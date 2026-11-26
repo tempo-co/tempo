@@ -87,7 +87,7 @@ for (const viewport of [
     // A long name stays inside the block, and a varying bill's next payment is an estimate.
     await expect(
       upcoming.filter({hasText: 'Example Energy Supplier With A Long Contract Name'}),
-    ).toContainText('≈ €78.50');
+    ).toContainText('about €79');
     await expect(upcoming.filter({hasText: 'Example Employer'})).toContainText('+€2,500.00');
     expect(new Set(dates)).toEqual(new Set(['2026-10-01']));
     await expectNoHorizontalOverflow(page);

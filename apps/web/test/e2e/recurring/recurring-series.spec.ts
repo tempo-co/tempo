@@ -1,4 +1,4 @@
-import type {Locator, Page} from '@playwright/test';
+import type {Page} from '@playwright/test';
 import {
   type BankTransaction,
   type RecurringSeries,
@@ -18,6 +18,7 @@ import {
   mockJson,
 } from '../../utils/api-mocks';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
+import {card, closeDetails, detail, group, row, summaryOf} from '../../utils/recurring';
 
 // Every API call is mocked, so no seeded session is needed.
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -251,15 +252,6 @@ function payment(
   });
 }
 
-/** A series' row; on This month, scope it to its group, since a series can be in two. */
-const row = (scope: Page | Locator, key: string) => scope.getByTestId(`recurring-series-${key}`);
-const group = (page: Page, name: 'Late' | 'Coming up' | 'Paid') =>
-  page.getByRole('region', {name, exact: true});
-const card = (page: Page, name: 'Bills' | 'Income') =>
-  page.getByRole('region', {name, exact: true});
-const summaryOf = (page: Page) => page.getByTestId('recurring-summary');
-const detail = (page: Page) => page.getByRole('region', {name: 'Recurring payment details'});
-const calendarDay = (page: Page, date: string) => page.getByTestId(`recurring-day-${date}`);
 /** The month labels under a series' payment chart, oldest first. */
 const monthLabels = (page: Page) => detail(page).locator('.recharts-xAxis-tick-labels text');
 
@@ -268,13 +260,6 @@ async function openSeries(page: Page, key: string) {
   await row(page, key).first().getByRole('button').click();
   await expect(detail(page)).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`[?&]series=${key}`));
-}
-
-/** Closes a series' details, back to the list. */
-async function closeDetails(page: Page) {
-  await page.getByRole('button', {name: 'Close details'}).click();
-  await expect(detail(page)).toBeHidden();
-  await expect(page).not.toHaveURL(/[?&]series=/);
 }
 
 /** The toast uses the app's type and card radius, and its action is a full-size touch target. */
@@ -326,7 +311,9 @@ for (const viewport of [
 ]) {
   const wide = viewport.width >= 1024;
 
-  test(`shows this month's bills by status and on a calendar, opens a series at its address and hides it with undo at ${viewport.width}px`, async ({
+  // The seeded flow (recurring-month.spec.ts) covers the groups, the calendar, the address and hiding. These are the
+  // cases its seed has no room for: a bill in two groups, flags and price changes, ended and hidden series.
+  test(`puts a bill paid and still due in both groups and flags and folds the whole catalogue at ${viewport.width}px`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -341,31 +328,24 @@ for (const viewport of [
     );
     // Bills and income come from one request.
     expect(state.listReads).toHaveLength(1);
-    // The month's bills, what is paid and what is still to pay: the list's figures.
     await expect(summaryOf(page)).toContainText('Bills in October€146.99');
     await expect(summaryOf(page)).toContainText('Paid€38.99');
     await expect(summaryOf(page)).toContainText('Still to pay€108.00');
-    await expect(summaryOf(page)).toContainText('Income +€2,500.00 · €2,500.00 still to come');
 
-    // Each group's bills add up to the figure it belongs to: late and coming up to what is still to pay.
+    // Each group adds up to the figure it belongs to: late and coming up to what is still to pay.
     await expect(group(page, 'Late').getByRole('heading')).toHaveText('Late€78.50');
-    await expect(row(group(page, 'Late'), ENERGY_KEY)).toContainText('Monthly · expected 5 Oct');
-    await expect(row(group(page, 'Late'), ENERGY_KEY)).toContainText('≈ €78.50');
+    await expect(row(group(page, 'Late'), ENERGY_KEY)).toContainText('about €79');
     await expect(group(page, 'Coming up').getByRole('heading')).toHaveText('Coming up€29.50');
-    await expect(row(group(page, 'Coming up'), PHONE_KEY)).toContainText('Monthly · next 23 Oct');
-    await expect(row(group(page, 'Coming up'), SALARY_KEY)).toContainText('+€2,500.00');
-    // Paid early in the month and due again before it ends, the gym is in both groups.
-    await expect(row(group(page, 'Coming up'), GYM_KEY)).toContainText(
-      'Every 4 weeks · next 30 Oct',
-    );
+    // Paid early in the month and due again before it ends, the gym is in both groups; within each, by date.
+    await expect(group(page, 'Coming up').getByTestId(/^recurring-series-/)).toHaveText([
+      /Example Phone.*Monthly · next 23 Oct/,
+      /Example Gym.*Every 4 weeks · next 30 Oct/,
+    ]);
     await expect(group(page, 'Paid').getByRole('heading')).toHaveText('Paid€38.99');
     await expect(row(group(page, 'Paid'), GYM_KEY)).toContainText('Every 4 weeks · paid 2 Oct');
     await expect(row(group(page, 'Paid'), STREAMING_KEY)).toContainText('€14.99');
-    // Within each group, by date.
-    await expect(group(page, 'Coming up').getByTestId(/^recurring-series-/)).toHaveText([
-      /Example Phone/,
-      /Example Employer/,
-      /Example Gym/,
+    await expect(group(page, 'Income').getByTestId(/^recurring-series-/)).toHaveText([
+      /Example Employer.*Monthly · next 25 Oct.*\+€2,500\.00/,
     ]);
     // A yearly bill between payments is listed apart; an ended one is not.
     await expect(page.getByRole('region', {name: 'Not this month'})).toContainText(
@@ -389,66 +369,18 @@ for (const viewport of [
     }
     await expectNoHorizontalOverflow(page);
 
-    // The calendar places each payment on its paid or expected day. On a phone a day is too narrow to tap one
-    // payment in, so tapping the day lists its payments under the calendar.
-    await page.getByRole('radio', {name: 'Calendar'}).click();
-    await expect(page).toHaveURL(/[?&]view=calendar/);
-    await expect(group(page, 'Late')).toBeHidden();
-    await expect(calendarDay(page, '2026-10-15')).toHaveAttribute('aria-current', 'date');
-    const payment = async (date: string, name: string, amount: string, kind: string) => {
-      if (viewport.width >= 768)
-        return calendarDay(page, date).getByRole('button', {name: `${name}, ${amount}, ${kind}`});
-      await calendarDay(page, date).getByRole('button').click();
-      return page
-        .getByRole('region', {name: /^Payments on /})
-        .getByRole('button', {name: new RegExp(`^${name}, .* · ${kind} .*, ${amount}$`)});
-    };
-    await expect(await payment('2026-10-02', 'Example Gym', '€24.00', 'paid')).toBeVisible();
-    await expect(await payment('2026-10-30', 'Example Gym', '€24.00', 'coming up')).toBeVisible();
-    const energy = await payment('2026-10-05', 'Example Energy', '≈ €78.50', 'late');
-    await expect(energy).toBeVisible();
-    await expectNoHorizontalOverflow(page);
-
-    // A series opens at its own address: in the rail beside the calendar, or a sheet on a phone.
-    await energy.click();
-    await expect(page).toHaveURL(new RegExp(`[?&]series=${ENERGY_KEY}`));
-    await expect(detail(page)).toContainText('Example Energy');
-    if (wide) {
-      await expect(page.getByRole('dialog')).toHaveCount(0);
-      await expect(calendarDay(page, '2026-10-05')).toBeVisible();
-    } else {
-      await expect(
-        page.getByRole('dialog').getByRole('region', {name: 'Recurring payment details'}),
-      ).toBeVisible();
-    }
     // A varying bill's details show its range and say its latest payment was high.
-    await expect(detail(page)).toContainText('Usually≈ €79');
-    await expect(detail(page)).toContainText('A year≈ €1,020');
+    await row(group(page, 'Late'), ENERGY_KEY).getByRole('button').click();
+    await expect(page).toHaveURL(new RegExp(`[?&]series=${ENERGY_KEY}`));
+    await expect(page.getByRole('dialog')).toHaveCount(wide ? 0 : 1);
+    await expect(detail(page)).toContainText('Usually about€79');
+    await expect(detail(page)).toContainText('A year, about€1,020');
     await expect(detail(page)).toContainText('Last 6 €48.00–€160.00');
     await expectFactsOnTwoLines(page);
     await expect(detail(page)).toContainText('Last payment €160.00, higher than usual');
     await expect(detail(page)).toContainText('Expected 5 Oct, not paid yet');
     await expectNoHorizontalOverflow(page);
-
-    // The address opens the same details after a reload.
-    await page.reload();
-    await expect(detail(page)).toContainText('Example Energy');
-
-    // Hiding takes it out of the month's figures and groups; Undo brings it back.
-    await detail(page).getByRole('button', {name: 'Not recurring'}).click();
-    await expect(page.getByText('Hidden from recurring payments.')).toBeVisible();
-    await expect(
-      detail(page).getByRole('button', {name: 'Count as recurring again'}),
-    ).toBeVisible();
     await closeDetails(page);
-    await page.getByRole('radio', {name: 'List'}).click();
-    await expect(page).not.toHaveURL(/view=/);
-    await expect(summaryOf(page)).toContainText('Still to pay€29.50');
-    await expect(group(page, 'Late')).toBeHidden();
-    await expectToastStyle(page, 'Undo', viewport.width);
-    await page.getByRole('button', {name: 'Undo'}).click();
-    await expect(row(group(page, 'Late'), ENERGY_KEY)).toBeVisible();
-    await expect(summaryOf(page)).toContainText('Still to pay€108.00');
 
     // All recurring holds the whole catalogue with its flags; a hidden series waits in its fold.
     await page.getByRole('tab', {name: /^All recurring/}).click();
@@ -457,6 +389,7 @@ for (const viewport of [
     await expect(card(page, 'Bills').getByRole('heading')).toHaveText('Bills€141.49 a month');
     await expect(row(page, ENERGY_KEY)).toContainText('Late');
     await expect(row(page, ENERGY_KEY)).toContainText('Pricier');
+    await expect(row(page, ENERGY_KEY)).toContainText('about €79');
     await expect(row(page, STREAMING_KEY)).toContainText('Pricier');
     await expect(row(page, STREAMING_KEY)).toContainText('+€2.00 since Aug');
     await expect(row(page, PHONE_KEY)).not.toContainText('Pricier');
@@ -471,6 +404,7 @@ for (const viewport of [
     await openSeries(page, GYM_KEY);
     await expect(detail(page)).toContainText('A year€312');
     await detail(page).getByRole('button', {name: 'Not recurring'}).click();
+    await expectToastStyle(page, 'Undo', viewport.width);
     await closeDetails(page);
     await expect(card(page, 'Bills').getByRole('heading')).toHaveText('Bills€115.49 a month');
     await expect(row(page, GYM_KEY)).toBeHidden();
@@ -483,8 +417,6 @@ for (const viewport of [
     await expect(card(page, 'Bills').getByRole('heading')).toHaveText('Bills€141.49 a month');
 
     expect(state.writes).toEqual([
-      {key: ENERGY_KEY, hidden: true},
-      {key: ENERGY_KEY, hidden: false},
       {key: GYM_KEY, hidden: true},
       {key: GYM_KEY, hidden: false},
     ]);

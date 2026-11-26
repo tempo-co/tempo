@@ -14,19 +14,24 @@ export const MONTH_KIND_LABELS: Record<MonthGroupId, string> = {
 /** One series in one of this month's groups: its payments there added up, and the date the row shows. */
 export type MonthEntry = {
   series: RecurringSeries;
-  /** Paid: the latest payment. Late and coming up: the first one expected. */
+  /** Paid: the latest payment. Late and coming up: the first one expected. Income: the first still due, else the latest. */
   date: string;
+  /** Where the row's date stands: paid, late or coming up. */
+  kind: MonthGroupId;
+  /** Payments already in this month, out of `count`. */
+  paidCount: number;
   /** Base-currency cents; null when none of the payments has a base amount yet. */
   cents: number | null;
   /** Payments the entry stands for, more than one at a weekly rhythm. */
   count: number;
 };
 
+/** Bills sit in Late, Coming up and Paid; recurring income has a group of its own below them. */
 export type MonthGroup = {
-  id: MonthGroupId;
+  id: MonthGroupId | 'income';
   entries: MonthEntry[];
-  /** The bills' cents in the group, as the API adds them into this month's paid and still-due totals. */
-  billCents: number;
+  /** The group's cents, as the API adds them into this month's paid and still-due totals. */
+  cents: number;
 };
 
 /** A payment placed on the calendar. */
@@ -44,20 +49,31 @@ const sumCents = (amounts: (string | null)[]) =>
     ? amounts.reduce((sum, amount) => sum + (amount === null ? 0 : toCents(amount)), 0)
     : null;
 
+type CountedSeries = RecurringSeries & {thisMonth: NonNullable<RecurringSeries['thisMonth']>};
+
+const withMonth = (series: RecurringSeries[]) =>
+  series.filter((one): one is CountedSeries => one.thisMonth !== null);
+
 const counted = ({expenses, income}: RecurringSeriesLists) =>
-  [...expenses.series, ...income.series].filter(
-    (series): series is RecurringSeries & {thisMonth: NonNullable<RecurringSeries['thisMonth']>} =>
-      series.thisMonth !== null,
-  );
+  withMonth([...expenses.series, ...income.series]);
+
+const byDate = (a: MonthEntry, b: MonthEntry) =>
+  a.date.localeCompare(b.date) || a.series.name.localeCompare(b.series.name);
+
+const group = (id: MonthGroup['id'], entries: MonthEntry[]): MonthGroup => ({
+  id,
+  entries: entries.sort(byDate),
+  cents: entries.reduce((sum, {cents}) => sum + (cents ?? 0), 0),
+});
 
 /**
- * This month's Late, Coming up and Paid groups, bills and income together. A series whose payments fall in more
- * than one group (a weekly bill paid twice with two still to come) is in each of them, so the groups' bills add up
- * to the month's paid and still-due figures.
+ * This month's Late, Coming up and Paid bills, then an Income group. A bill whose payments fall in more than one
+ * group (a weekly bill paid twice with two still to come) is in each of them, so the groups add up to the month's
+ * paid and still-due figures. An income series is one row with all of this month's payments.
  */
 export function monthGroups(lists: RecurringSeriesLists): MonthGroup[] {
-  const groups: Record<MonthGroupId, MonthEntry[]> = {late: [], coming: [], paid: []};
-  for (const series of counted(lists)) {
+  const bills: Record<MonthGroupId, MonthEntry[]> = {late: [], coming: [], paid: []};
+  for (const series of withMonth(lists.expenses.series)) {
     const {paid, due} = series.thisMonth;
     const late = due.filter((payment) => payment.late);
     const coming = due.filter((payment) => !payment.late);
@@ -67,26 +83,36 @@ export function monthGroups(lists: RecurringSeriesLists): MonthGroup[] {
       ['paid', paid, paid[paid.length - 1]?.date],
     ] as const) {
       if (payments.length === 0 || !date) continue;
-      groups[id].push({
+      bills[id].push({
         series,
         date,
+        kind: id,
+        paidCount: id === 'paid' ? payments.length : 0,
         cents: sumCents(payments.map(({amount}) => amount)),
         count: payments.length,
       });
     }
   }
-  return (['late', 'coming', 'paid'] as const).map((id) => {
-    const entries = groups[id].sort(
-      (a, b) => a.date.localeCompare(b.date) || a.series.name.localeCompare(b.series.name),
-    );
-    return {
-      id,
-      entries,
-      billCents: entries
-        .filter(({series}) => series.direction === 'EXPENSE')
-        .reduce((sum, {cents}) => sum + (cents ?? 0), 0),
-    };
+  const income = withMonth(lists.income.series).flatMap((series): MonthEntry[] => {
+    const {paid, due} = series.thisMonth;
+    const next = due[0];
+    const date = next?.date ?? paid[paid.length - 1]?.date;
+    if (!date) return [];
+    return [
+      {
+        series,
+        date,
+        kind: next ? (next.late ? 'late' : 'coming') : 'paid',
+        paidCount: paid.length,
+        cents: sumCents([...paid, ...due].map(({amount}) => amount)),
+        count: paid.length + due.length,
+      },
+    ];
   });
+  return [
+    ...(['late', 'coming', 'paid'] as const).map((id) => group(id, bills[id])),
+    group('income', income),
+  ];
 }
 
 /** Every payment paid or expected this month, on its own day; late ones from an earlier month keep their date. */
@@ -111,10 +137,16 @@ export function calendarItems(lists: RecurringSeriesLists): CalendarItem[] {
     .sort((a, b) => a.date.localeCompare(b.date) || a.series.name.localeCompare(b.series.name));
 }
 
-/** Counted series with nothing paid or expected this month: a quarterly or yearly bill between payments. */
+/** Rhythms that skip months, so a series can have nothing paid or expected in one. */
+const SKIPS_MONTHS: ReadonlySet<RecurringSeries['cadence']> = new Set(['QUARTERLY', 'YEARLY']);
+
+/** Counted quarterly and yearly series with nothing paid or expected this month. */
 export function notThisMonth(lists: RecurringSeriesLists): RecurringSeries[] {
   return counted(lists)
-    .filter(({thisMonth}) => thisMonth.paid.length === 0 && thisMonth.due.length === 0)
+    .filter(
+      ({cadence, thisMonth}) =>
+        SKIPS_MONTHS.has(cadence) && thisMonth.paid.length === 0 && thisMonth.due.length === 0,
+    )
     .sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate));
 }
 

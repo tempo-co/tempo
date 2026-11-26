@@ -2,7 +2,7 @@ import type {RecurringSeries} from '@tempo/contracts';
 import {differenceInCalendarDays, format} from 'date-fns';
 
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';
-import {formatMoney} from '@/features/dashboard/utils/money';
+import {formatMoney, formatWholeMoney} from '@/features/dashboard/utils/money';
 
 /** Counted in the totals: active and not hidden. */
 export const isCounted = (series: Pick<RecurringSeries, 'hidden' | 'status'>) =>
@@ -62,11 +62,17 @@ export function paidMonth(date: string, {anchorDay}: Pick<RecurringSeries, 'anch
   return format(nearest, 'yyyy-MM');
 }
 
-/** "€11.99", or "≈ €62.40" for a varying amount. */
+/** An estimate in words and whole units: "about €62". */
+export const formatEstimate = (value: string | number, currency: string | null) =>
+  `about ${formatWholeMoney(value, currency)}`;
+
+/** "€11.99", or "about €62" for a varying amount. */
 export function formatAmount(
   series: Pick<RecurringSeries, 'amountKind' | 'typicalAmount' | 'currency'>,
 ) {
-  return `${series.amountKind === 'VARIABLE' ? '≈ ' : ''}${formatMoney(series.typicalAmount, series.currency)}`;
+  return series.amountKind === 'VARIABLE'
+    ? formatEstimate(series.typicalAmount, series.currency)
+    : formatMoney(series.typicalAmount, series.currency);
 }
 
 /** "+€2.00 since Aug" against the price before the change. */

@@ -66,7 +66,7 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 
 ## Dates
 
-- Specs that depend on the local calendar set `timezoneId` (`test/e2e/home/recurring.spec.ts`, `test/e2e/recurring/recurring-series.spec.ts`). Keep local-calendar-date drill URLs in assertions; do not assume UTC midnight.
+- Specs that depend on the local calendar set `timezoneId` (`test/e2e/home/recurring.spec.ts`, `test/e2e/recurring/`). Keep local-calendar-date drill URLs in assertions; do not assume UTC midnight.
 - `src/hooks/use-local-date.ts` is the reactive local-date owner: it reschedules at local midnight (`setHours(24, 0, 0, 0)`) and on focus/visibility. A parent calling `localDate()` during render keeps yesterday's value even when the child query refetches; pass one `useLocalDate()` value to every date-sensitive section.
 - Rollover test: install `page.clock` just before midnight in the spec's zone, return an active item for the earlier `asOf` and an ended item for the next day, advance through midnight without navigating, then assert the new request date and the changed totals. Test tab wake separately with `page.clock.setSystemTime()` plus a focus or visibility event.
 - Do not pin an exact relative-time string computed at module load; suite delays cross minute boundaries.
