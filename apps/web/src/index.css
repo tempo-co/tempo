@@ -29,8 +29,8 @@
 
   /* Named type styles from DESIGN.md (Crisp): size, leading and weight in one utility (text-page-title). */
   --text-page-title: 1.375rem;
-  /* 26px, the nearest whole pixel to 1.2, so the title's row and everything aligned to it stay on whole pixels. */
-  --text-page-title--line-height: calc(26 / 22);
+  /* 26px, the nearest whole pixel to 1.2, as a length: a unitless ratio rounds below 26px in WebKit. */
+  --text-page-title--line-height: 1.625rem;
   --text-page-title--letter-spacing: -0.02em;
   --text-page-title--font-weight: 700;
   --text-section-title: 1rem;
