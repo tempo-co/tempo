@@ -1,0 +1,4 @@
+Rekeningnummer;Naam van de rekening;Rekening tegenpartij;Omzetnummer;Boekingsdatum;Valutadatum;Bedrag;Munteenheid;Omschrijving;Detail van de omzet;Bericht
+000-0000000-00;EXAMPLE JAN;BE71 0961 2345 6769;12;06/10/2026;06/10/2026;-1.060,00;EUR;Europese domiciliëring                    ;Example Energie NV Voorschot oktober;
+000-0000000-00;EXAMPLE JAN;NL91 ABNA 0417 1643 00;11;02/10/2026;01/10/2026;2.500,00;EUR;Virement européen                         ;Example Werkgever BV;Loon oktober
+000-0000000-00;EXAMPLE JAN;;10;01/10/2026;01/10/2026;-50,00;EUR;Betaling met debetkaart                   ;Example Bakkerij Brussel;

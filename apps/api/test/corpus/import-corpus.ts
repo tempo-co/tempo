@@ -63,7 +63,10 @@ export type Truth = {
 	kind: 'csv' | 'camt' | 'mt940' | 'ofx';
 	expect: 'read' | {refused: string};
 	rows: TruthRow[];
-	/** The account's balance after the import, by `<account>|<currency>`, where the file states one. */
+	/**
+	 * The account's balance after the import, by `<account>|<currency>`, where the file states one. The account is
+	 * `None` for a file that names none: its one account in that currency.
+	 */
 	closing: Record<string, string>;
 	/** The file's balances let an altered amount or a missing row be detected. */
 	detectable: boolean;
@@ -295,7 +298,7 @@ function compareBalances(balances: Map<string, string | null>, closing: Record<s
 		const [account, currency] = splitKey(key);
 		const found = [...balances].find(([accountKey]) => {
 			const [id, ccy] = splitKey(accountKey);
-			return ccy === currency && sameAccount(id, account);
+			return ccy === currency && (account === TRUTH_NO_ACCOUNT || sameAccount(id, account));
 		});
 		checked += 1;
 		if (!found) wrong.push(`balance: no account for a stated closing balance`);
@@ -303,6 +306,9 @@ function compareBalances(balances: Map<string, string | null>, closing: Record<s
 	}
 	return {checked, wrong};
 }
+
+/** The account of a truth's closing balance for a file that names no account. */
+const TRUTH_NO_ACCOUNT = 'None';
 
 function splitKey(key: string): [string, string] {
 	const at = key.lastIndexOf('|');
