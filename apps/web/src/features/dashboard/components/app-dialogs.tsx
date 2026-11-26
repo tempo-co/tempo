@@ -3,7 +3,6 @@ import {useCallback} from 'react';
 
 import {TooltipProvider} from '@/components/ui/tooltip';
 import {MerchantsDialog} from '@/features/dashboard/components/merchants-dialog';
-import {RecurringDialog} from '@/features/dashboard/components/recurring-dialog';
 import type {AppDialogsSearch} from '@/features/dashboard/types/app-dialogs-search';
 import {
   moneyFiguresReady,
@@ -11,7 +10,7 @@ import {
 } from '@/features/reporting-currency/api/use-reporting-currency';
 import {useLocalDate} from '@/hooks/use-local-date';
 
-/** The recurring and merchants dialogs, over whichever page opened them. */
+/** The merchants dialog, over whichever page opened it. */
 export function AppDialogs() {
   const search = useSearch({from: '__root__'});
   const navigate = useNavigate();
@@ -21,15 +20,6 @@ export function AppDialogs() {
   // A link to a list waits while the owner still has to choose a currency or its amounts are converted.
   const ready = moneyFiguresReady(useReportingCurrency());
   // Replace rather than push, so closing the dialog still steps back over one entry.
-  const selectSeries = useCallback(
-    (series: string | null) =>
-      void navigate({
-        to: '.',
-        replace: true,
-        search: (prev) => ({...prev, series: series ?? undefined}),
-      }),
-    [navigate],
-  );
   const selectMerchant = useCallback(
     (merchant: string | null) =>
       void navigate({
@@ -46,16 +36,8 @@ export function AppDialogs() {
   };
 
   return (
-    // One provider for the dialogs, so moving between figures shows the next tip without a new delay.
+    // One provider for the dialog's figures, so moving between them shows the next tip without a new delay.
     <TooltipProvider delayDuration={300}>
-      <RecurringDialog
-        open={ready && search.recurring === 'open'}
-        selectedKey={search.series ?? null}
-        onSelect={selectSeries}
-        onOpenChange={(open) => {
-          if (!open) closeDialog({recurring: undefined, series: undefined});
-        }}
-      />
       <MerchantsDialog
         open={ready && search.merchants === 'open'}
         month={thisMonth}

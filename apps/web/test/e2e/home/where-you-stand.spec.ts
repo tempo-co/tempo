@@ -305,17 +305,17 @@ test('repeats show bills and income a month, late bills first, and open their se
   // Home reads all of it from the summary, once.
   expect(recurringReads).toEqual(['/recurring-series/summary']);
 
+  // A row opens its series on the Recurring page; All opens the page alone.
   await rows.nth(1).getByRole('button').click();
-  await expect(page).toHaveURL(new RegExp(`recurring=open.*series=${PHONE_KEY}`));
-  const dialog = page.getByRole('dialog', {name: 'Recurring payments'});
-  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/recurring\\?series=${PHONE_KEY}$`));
+  await expect(page.getByRole('region', {name: 'Recurring payment details'})).toContainText(
+    'Example Mobile',
+  );
   await page.goBack();
-  await expect(dialog).toBeHidden();
+  await expect(repeats).toBeVisible();
 
   await repeats.getByRole('button', {name: 'All recurring payments'}).click();
-  await expect(page).toHaveURL(/recurring=open/);
-  await expect(page).not.toHaveURL(/series=/);
-  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/\/recurring$/);
 });
 
 test('says the history is importing while the first sync runs, and that there is none once it has', async ({

@@ -245,8 +245,8 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
   (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
   (`90dvh`, `8em`), `var(--…)` and 1px pass.
 - **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
-- **Layout:** `test/e2e/home/layout.spec.ts`, Home from 1440 to 320px and the shell at 1440, 390
-  and 320px, in both themes, each with demo and worst-case data.
+- **Layout:** `test/e2e/home/layout.spec.ts` (Home, the shell) and
+  `test/e2e/recurring/layout.spec.ts`, 1440 to 320px, both themes, demo and worst-case data.
 
 An exception needs a reason:
 
@@ -341,6 +341,8 @@ Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate 
 page background, a `text-section-title` title over a muted `text-body-small` description.
 `DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
 radius; items are `text-body` with segment corners, tooltips `text-body-small`.
+
+Details rail: a sticky 360px `card` from `lg`, a `ResponsiveDialog` below.
 
 ### Badges
 

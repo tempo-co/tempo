@@ -1,7 +1,7 @@
 import {Link} from '@tanstack/react-router';
 import type {BankTransaction, RecurringSeries} from '@tempo/contracts';
 import {differenceInCalendarMonths, format} from 'date-fns';
-import {ArrowLeft, Eye, EyeOff, Link2, Link2Off} from 'lucide-react';
+import {Eye, EyeOff, Link2, Link2Off, X} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';
 
 import {LoadMore} from '@/components/shared/load-more';
@@ -36,12 +36,12 @@ export function RecurringSeriesDetail({
   series,
   baseCurrency,
   asOf,
-  onBack,
+  onClose,
 }: {
   series: RecurringSeries;
   baseCurrency: string | null;
   asOf: string;
-  onBack: () => void;
+  onClose: () => void;
 }) {
   const {update, isPending: busy} = useUpdateRecurringSeries();
   const {continuation} = series;
@@ -52,20 +52,11 @@ export function RecurringSeriesDetail({
   return (
     <section
       aria-label='Recurring payment details'
-      className='grid grid-cols-1 gap-6'
+      className='@container grid grid-cols-1 gap-6'
       aria-busy={busy || undefined}
     >
-      <Button
-        variant='ghost'
-        size='sm'
-        onClick={onBack}
-        className='-my-1 -ml-3 justify-self-start text-muted-foreground max-sm:h-11'
-      >
-        <ArrowLeft aria-hidden />
-        All {isIncome ? 'income' : 'bills'}
-      </Button>
-
-      <header className='flex items-center gap-4'>
+      {/* In a narrow rail or sheet the amount moves under the name, so a long name keeps its width. */}
+      <header className='flex flex-wrap items-center gap-x-4 gap-y-1'>
         <SeriesTile series={series} className='h-10 w-10' />
         <div className='min-w-0 flex-1'>
           <h3 className='text-section-title break-words'>{series.name}</h3>
@@ -75,7 +66,7 @@ export function RecurringSeriesDetail({
             {series.status === 'ENDED' && ' · ended'}
           </p>
         </div>
-        <p className='shrink-0 text-right'>
+        <p className='shrink-0 text-right @max-md:order-last @max-md:basis-full @max-md:pl-14 @max-md:text-left'>
           <span className={cn('block numeric text-2xl font-semibold', isIncome && 'text-success')}>
             {isIncome && '+'}
             {formatAmount(series)}
@@ -84,11 +75,20 @@ export function RecurringSeriesDetail({
             <span className='block numeric text-body-small text-muted-foreground'>{monthly}</span>
           )}
         </p>
+        <Button
+          variant='ghost'
+          size='icon'
+          onClick={onClose}
+          aria-label='Close details'
+          className='-mt-1 -mr-2 self-start text-muted-foreground'
+        >
+          <X aria-hidden />
+        </Button>
       </header>
 
       <Badges series={series} />
 
-      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4'>
+      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border @lg:grid-cols-4'>
         <Fact
           label={
             isPast(series)
@@ -146,7 +146,7 @@ export function RecurringSeriesDetail({
         </p>
       )}
 
-      <div className='grid gap-2 border-t pt-4 sm:flex sm:flex-wrap'>
+      <div className='grid gap-2 border-t pt-4 @md:flex @md:flex-wrap'>
         {continuation && (
           <Button
             variant='outline'
@@ -169,7 +169,7 @@ export function RecurringSeriesDetail({
         )}
         <Button
           variant='ghost'
-          className='max-sm:h-11 sm:ml-auto'
+          className='max-sm:h-11 @md:ml-auto'
           disabled={busy}
           onClick={() => void update({kind: 'hidden', key: series.key, hidden: !series.hidden})}
         >

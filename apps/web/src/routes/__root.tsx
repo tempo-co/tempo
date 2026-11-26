@@ -26,8 +26,8 @@ const AppDialogs = lazy(() =>
 
 /** Mounts the dialogs from the first time one is asked for, then keeps them, so they can animate closed. */
 function useDialogsWanted() {
-  const {recurring, merchants} = Route.useSearch();
-  const asked = recurring === 'open' || merchants === 'open';
+  const {merchants} = Route.useSearch();
+  const asked = merchants === 'open';
   const [wanted, setWanted] = useState(asked);
   if (asked && !wanted) setWanted(true);
   return wanted;

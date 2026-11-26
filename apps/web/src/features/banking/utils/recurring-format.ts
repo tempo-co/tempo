@@ -27,39 +27,6 @@ function daysUntil(date: string, asOf: string) {
   return differenceInCalendarDays(parseCalendarDate(date), parseCalendarDate(asOf));
 }
 
-/** "Today", "Tomorrow", "In 4 days", "12 Nov", or "Due 26 Oct" once it has passed. */
-export function formatDue(date: string, asOf: string) {
-  const days = daysUntil(date, asOf);
-  if (days < 0) return `Due ${format(parseCalendarDate(date), 'd MMM')}`;
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  if (days < 7) return `In ${days} days`;
-  return format(parseCalendarDate(date), 'd MMM');
-}
-
-export type DueGroup = {id: string; title: string; series: RecurringSeries[]};
-
-/** Active series by when they are next due: late, this week, the rest of this month, later. */
-export function groupByDue(series: RecurringSeries[], asOf: string): DueGroup[] {
-  const month = asOf.slice(0, 7);
-  const monthName = format(parseCalendarDate(asOf), 'MMMM');
-  const groups: DueGroup[] = [
-    {id: 'late', title: 'Late', series: []},
-    {id: 'week', title: 'Next 7 days', series: []},
-    {id: 'month', title: `Rest of ${monthName}`, series: []},
-    {id: 'later', title: 'Later', series: []},
-  ];
-  const sorted = [...series].sort((a, b) => a.nextExpectedDate.localeCompare(b.nextExpectedDate));
-  for (const entry of sorted) {
-    const days = daysUntil(entry.nextExpectedDate, asOf);
-    if (entry.flags.includes('LATE') || days < 0) groups[0].series.push(entry);
-    else if (days < 7) groups[1].series.push(entry);
-    else if (entry.nextExpectedDate.startsWith(month)) groups[2].series.push(entry);
-    else groups[3].series.push(entry);
-  }
-  return groups.filter((group) => group.series.length > 0);
-}
-
 /** "today", "tomorrow", "in 21 days", or "2 days late". */
 export function formatRelativeDays(date: string, asOf: string) {
   const days = daysUntil(date, asOf);
