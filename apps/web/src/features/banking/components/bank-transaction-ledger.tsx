@@ -155,7 +155,6 @@ export function BankTransactionLedger({
   );
 }
 
-/** "Select all 27", or "3 of 27 selected", over the list: its box picks every loaded row or none. */
 /**
  * "Select all 50" picks the loaded rows; once they are all picked and the filters match more, "Select all 1240
  * matching" picks every one of those too.

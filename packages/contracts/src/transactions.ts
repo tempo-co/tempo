@@ -272,9 +272,12 @@ export const BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS = 500;
  * rows are either `transactionIds` (at most `BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS`) or every row the Transactions
  * list's `filter` matches; a request sends exactly one.
  */
-export type BankTransactionBulkCategoryPreviewRequest = {category: BankTransactionCategory} & (
-	{transactionIds: string[]; filter?: never} | {filter: BankTransactionFilter; transactionIds?: never}
-);
+export type BankTransactionBulkCategoryPreviewRequest = BankTransactionBulkCategorySelection & {
+	category: BankTransactionCategory;
+};
+
+/** The rows a bulk category is for; the API refuses a request with both or neither (400). */
+export type BankTransactionBulkCategorySelection = {transactionIds?: string[]; filter?: BankTransactionFilter};
 
 /** One of the owner's other rows from the selected rows' payees that changing all of them would change. */
 export type BankTransactionBulkCategoryPreviewTransaction = BankTransactionCategoryImpactTransaction & {

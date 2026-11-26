@@ -1,8 +1,8 @@
 import type {
   BankTransactionBulkCategoryPreview,
   BankTransactionBulkCategoryScope,
+  BankTransactionBulkCategorySelection,
   BankTransactionCategory,
-  BankTransactionFilter,
 } from '@tempo/contracts';
 import {CircleAlert} from 'lucide-react';
 import {useEffect, useId, useRef, useState} from 'react';
@@ -19,12 +19,10 @@ import {useUpdateBulkCategory} from '../api/use-bulk-category';
 import {formatBankTransactionCategory, formatBankTransactionCompactDate} from '../utils/formatters';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
-/** The picked rows: by id, or every row the list's filters match. */
-export type BulkCategorySelection = {transactionIds: string[]} | {filter: BankTransactionFilter};
-
 /** A category picked for the selected rows, with the other rows from their payees that could follow. */
 export type BulkCategoryDraft = {
-  selection: BulkCategorySelection;
+  /** The picked ids, or the list's filter when every matching row is picked. */
+  selection: BankTransactionBulkCategorySelection;
   category: BankTransactionCategory;
   preview: BankTransactionBulkCategoryPreview;
 };

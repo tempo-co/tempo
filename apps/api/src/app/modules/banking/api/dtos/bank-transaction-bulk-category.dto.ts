@@ -2,18 +2,22 @@ import {BadRequestException} from '@nestjs/common';
 import {
 	BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS,
 	BANK_TRANSACTION_BULK_CATEGORY_SCOPES,
+	type BankTransactionBulkCategoryPreviewRequest,
 	type BankTransactionBulkCategoryScope,
+	type BankTransactionBulkCategoryUpdate,
 	type BankTransactionCategory,
 } from '@tempo/contracts';
 import {Type} from 'class-transformer';
 import {ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsObject, IsOptional, IsUUID, ValidateNested} from 'class-validator';
 
 import {REUSABLE_MANUAL_CATEGORIES} from '../../categorization/manual-category-follow-up';
-import type {BulkCategorySelection} from '../../services/bulk-category.service';
 import {BankTransactionFilterQueryDto} from './bank-transaction-query.dto';
 
+/** The rows a bulk category is for: the selected ids, or every row the Transactions list's filters match. */
+export type BulkCategorySelection = {transactionIds: readonly string[]} | {filter: BankTransactionFilterQueryDto};
+
 /** The selection is `transactionIds` or `filter`, never both: `toBulkCategorySelection` refuses anything else. */
-export class BankTransactionBulkCategoryPreviewDto {
+export class BankTransactionBulkCategoryPreviewDto implements BankTransactionBulkCategoryPreviewRequest {
 	/** The owner's selected rows; one that is not theirs refuses the whole request. */
 	@IsOptional()
 	@IsArray()
@@ -34,7 +38,10 @@ export class BankTransactionBulkCategoryPreviewDto {
 	category: BankTransactionCategory;
 }
 
-export class BankTransactionBulkCategoryUpdateDto extends BankTransactionBulkCategoryPreviewDto {
+export class BankTransactionBulkCategoryUpdateDto
+	extends BankTransactionBulkCategoryPreviewDto
+	implements BankTransactionBulkCategoryUpdate
+{
 	@IsIn(BANK_TRANSACTION_BULK_CATEGORY_SCOPES)
 	scope: BankTransactionBulkCategoryScope;
 }

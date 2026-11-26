@@ -3,6 +3,7 @@ import {zodValidator} from '@tanstack/zod-adapter';
 import {
   BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS,
   BANK_TRANSACTION_SEARCH_MAX_LENGTH,
+  type BankTransactionBulkCategorySelection,
   BankTransactionCategory,
 } from '@tempo/contracts';
 import {CircleCheck, Layers, ListChecks} from 'lucide-react';
@@ -27,7 +28,6 @@ import {
 } from '@/features/banking/components/bank-transaction-bulk-bar';
 import {
   type BulkCategoryDraft,
-  type BulkCategorySelection,
   BulkCategoryStep,
 } from '@/features/banking/components/bank-transaction-bulk-category-step';
 import {BankTransactionDetailsPanel} from '@/features/banking/components/bank-transaction-details-panel';
@@ -113,7 +113,7 @@ function TransactionsPage() {
   };
   const pickBulkCategory = (category: BankTransactionCategory) => {
     // Every matching row goes as the list's filters, which the server matches again when it writes.
-    const picks: BulkCategorySelection = selection.allMatching
+    const picks: BankTransactionBulkCategorySelection = selection.allMatching
       ? {filter: toBankTransactionFilter(filters)}
       : {transactionIds: selection.selectedIds};
     previewBulkCategory(
@@ -129,12 +129,12 @@ function TransactionsPage() {
     );
   };
   // The step stands for the rows it was asked for: picking or dropping a row, or another view, ends it.
-  const isDraftSelection = (draft: BulkCategoryDraft) =>
-    'filter' in draft.selection
-      ? selection.allMatching
-      : !selection.allMatching &&
-        draft.selection.transactionIds.length === picked &&
-        draft.selection.transactionIds.every((id) => selection.isSelected(id));
+  const isDraftSelection = ({selection: {transactionIds}}: BulkCategoryDraft) =>
+    transactionIds
+      ? !selection.allMatching &&
+        transactionIds.length === picked &&
+        transactionIds.every((id) => selection.isSelected(id))
+      : selection.allMatching;
   const activeDraft = bulkDraft && isDraftSelection(bulkDraft) ? bulkDraft : null;
   if (bulkDraft && !activeDraft) setBulkDraft(null);
   const bulkStep = activeDraft && (

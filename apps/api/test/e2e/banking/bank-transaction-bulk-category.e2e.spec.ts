@@ -136,8 +136,10 @@ describe('Bulk category', () => {
 			.expect(200);
 
 		expect(response.body).toEqual({updated: 4});
+		const inputHashes = new Map<string, string | null>();
 		for (const name of ['cafeA', 'cafeB', 'bakery', 'shop'] as const) {
 			const row = await reload(name);
+			inputHashes.set(name, row.categoryInputHash);
 			expect({name, ...row}).toMatchObject({
 				name,
 				category: 'EATING_OUT',
@@ -147,6 +149,10 @@ describe('Bulk category', () => {
 			});
 			expect(row.categoryAppliedInputHash).toBe(row.categoryInputHash);
 		}
+		// Each row stores the hash of its own input: the two cafe rows share one, the bakery and shop have their own.
+		expect(inputHashes.get('cafeA')).toMatch(/^[\da-f]{64}$/);
+		expect(inputHashes.get('cafeB')).toBe(inputHashes.get('cafeA'));
+		expect(new Set(inputHashes.values()).size).toBe(3);
 		const after = await snapshot();
 		for (const name of ['cafeOther', 'cafeSame', 'bakeryOther', 'shopOther', 'otherOwnersCafe'] as const) {
 			expect({name, ...after[name]}).toEqual({name, ...before[name]});

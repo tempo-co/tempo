@@ -11,6 +11,7 @@ import {EntityManager, Repository} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 
 import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
+import type {BulkCategorySelection} from '../api/dtos/bank-transaction-bulk-category.dto';
 import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
@@ -22,9 +23,6 @@ import {AccountHistoryWriterService} from './account-history-writer.service';
 import {applyBankTransactionFilters} from './bank-transaction-filters';
 import {toCategoryImpactTransaction} from './bank-transaction.service';
 import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
-
-/** The rows a bulk category is for: the selected ids, or every row the Transactions list's filters match. */
-export type BulkCategorySelection = {transactionIds: readonly string[]} | {filter: BankTransactionFilterQueryDto};
 
 /** A selection as the write finds it: ids, or the filter with the recurring series' payments it names. */
 type ResolvedSelection =

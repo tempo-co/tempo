@@ -169,14 +169,24 @@ export class ManualCategoryService {
 		followUpIds: readonly string[],
 	): Promise<{updated: number; recheckIds: string[]}> {
 		const repository = manager.getRepository(BankTransaction);
-		let updated = 0;
-		for (const transaction of selected) {
-			const result = await repository.update(
-				{id: transaction.id, bankAccountId: ownedBankAccountId(accountId)},
-				manualCategoryValues(followUps.category, createBankTransactionCategorizationInputHash(transaction)),
-			);
-			updated += result.affected ?? 0;
-		}
+		// One statement for the whole selection, however large: each row takes its own input hash from the map.
+		const inputHashes = Object.fromEntries(
+			selected.map((transaction) => [transaction.id, createBankTransactionCategorizationInputHash(transaction)]),
+		);
+		const rowInputHash = () => 'CAST(:inputHashes AS jsonb) ->> CAST("id" AS text)';
+		const result = await repository
+			.createQueryBuilder()
+			.update(BankTransaction)
+			.set({
+				...manualCategoryValues(followUps.category, ''),
+				categoryInputHash: rowInputHash,
+				categoryAppliedInputHash: rowInputHash,
+			})
+			// The selection was read owner-scoped inside this write.
+			.where('id = ANY(:selectedIds)', {selectedIds: selected.map(({id}) => id)})
+			.setParameter('inputHashes', JSON.stringify(inputHashes))
+			.execute();
+		let updated = result.affected ?? 0;
 		if (followUpIds.length === 0) return {updated, recheckIds: []};
 
 		const candidates = {accountId, selectedIds: selected.map(({id}) => id), transactionIds: followUpIds};
