@@ -58,8 +58,7 @@ test.describe('Login', () => {
       homePage,
     }) => {
       const otherAccount = await createVerifiedAccount(request);
-      const transactionUrl =
-        '/bank-transactions?transactionId=00000000-0000-4000-8000-000000000011';
+      const transactionUrl = '/transactions?transactionId=00000000-0000-4000-8000-000000000011';
 
       await loginPage.login(VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
       await homePage.expectToBeOnPage();

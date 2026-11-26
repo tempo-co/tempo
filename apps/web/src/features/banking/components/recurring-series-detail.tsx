@@ -243,7 +243,7 @@ function PaymentHistory({series}: {series: RecurringSeries}) {
         <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
           <h4 className='text-card-title'>{total === 1 ? '1 payment' : `All ${total} payments`}</h4>
           <TextAction asChild className='-mr-2'>
-            <Link to='/bank-transactions' search={{recurringSeriesKey: series.key}}>
+            <Link to='/transactions' search={{recurringSeriesKey: series.key}}>
               Open in Transactions
             </Link>
           </TextAction>
@@ -268,7 +268,7 @@ function PaymentHistory({series}: {series: RecurringSeries}) {
                   <TransactionListRow
                     transaction={transaction}
                     link={{
-                      to: '/bank-transactions',
+                      to: '/transactions',
                       search: {recurringSeriesKey: series.key, transactionId: transaction.id},
                     }}
                   />

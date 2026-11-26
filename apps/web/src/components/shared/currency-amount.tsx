@@ -11,11 +11,12 @@ export function CurrencyAmount({amount, currency}: CurrencyAmountProps) {
   // Amounts that round to zero would otherwise render as "-€0.00".
   const roundsToZero = amountRoundsToZero(amount, currency);
   const formattedAmount = formatter.format(roundsToZero ? 0 : amount);
+  // Money in is green with a plus sign.
+  const income = !roundsToZero && amount > 0;
 
   return (
-    <span
-      className={cn('numeric whitespace-nowrap', !roundsToZero && amount > 0 && 'text-success')}
-    >
+    <span className={cn('numeric whitespace-nowrap', income && 'text-success')}>
+      {income && '+'}
       {formattedAmount}
     </span>
   );

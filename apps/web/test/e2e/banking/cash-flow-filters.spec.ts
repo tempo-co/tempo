@@ -14,7 +14,7 @@ for (const [value, label] of [
   ['OWN_TRANSFER', 'Own transfer'],
 ]) {
   test(`cash flow ${label} is selectable and renders real filtered results`, async ({page}) => {
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await openTransactionFilter(page, 'Cash flow');
     const responsePromise = page.waitForResponse(
       (response) =>
@@ -67,7 +67,7 @@ test('mobile pickers share combined drills, preserve category status and clear a
     baseAmount: 'MISSING',
     categoryStatuses: JSON.stringify(['FAILED']),
   });
-  await page.goto(`/bank-transactions?${params}`);
+  await page.goto(`/transactions?${params}`);
   await expect(page.getByRole('button', {name: 'Remove filter: Not categorized'})).toBeVisible();
   const drawer = await openTransactionFilter(page, 'Cash flow');
   for (const label of ['Spending', 'Income']) {
@@ -104,7 +104,7 @@ test('a link to the rows a total leaves out lists them under its other filters u
       response.url().includes('filter%5BbaseAmount%5D=MISSING') &&
       response.url().includes('filter%5BcashFlows%5D%5B%5D=INCOME'),
   );
-  await page.goto(`/bank-transactions?${params}`);
+  await page.goto(`/transactions?${params}`);
   expect((await responsePromise).ok()).toBe(true);
   await expect(
     page.getByRole('button', {name: 'Remove filter: Income', exact: true}),
@@ -121,7 +121,7 @@ test('cash flow picker applies the real spending predicate from the first page',
   const firstPage = page.waitForResponse((response) =>
     response.url().startsWith(`${API_URL}/bank-transactions?`),
   );
-  await page.goto('/bank-transactions?pageIndex=2&pageSize=10&view=%22compact%22');
+  await page.goto('/transactions?pageIndex=2&pageSize=10&view=%22compact%22');
   const first = await firstPage;
   expect(first.ok()).toBe(true);
   expect(first.url()).not.toContain('filter');
@@ -164,7 +164,7 @@ for (const mobile of [false, true]) {
       .getByRole('link')
       .first()
       .click();
-    await expect(page).toHaveURL(/bank-transactions/);
+    await expect(page).toHaveURL(/transactions/);
     const dateParam = new URL(page.url()).searchParams.get('date');
     await openTransactionFilter(page, 'Cash flow');
     const parent = page.getByRole('option', {name: 'Internal movements', exact: true});
@@ -221,7 +221,7 @@ for (const mobile of [false, true]) {
         baseAmount: 'PRESENT',
         categoryStatuses: JSON.stringify(['FAILED']),
       });
-      await page.goto(`/bank-transactions?${params}`);
+      await page.goto(`/transactions?${params}`);
       await expect(
         page.getByRole('button', {
           name: `Remove filter: ${values.includes('INTERNAL') || values.length === 2 ? 'Internal movements' : values[0] === 'OWN_TRANSFER' ? 'Own transfer' : 'Currency exchange'}`,

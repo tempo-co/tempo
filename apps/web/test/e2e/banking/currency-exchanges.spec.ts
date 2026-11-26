@@ -12,7 +12,7 @@ test.describe('currency exchanges', () => {
 
   test('links the other side of an exchange both ways', async ({page}) => {
     await page.setViewportSize({width: 1280, height: 720});
-    await page.goto(`/bank-transactions?transactionId=${EXCHANGE_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${EXCHANGE_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
     const exchange = inspector.getByRole('region', {name: 'Money movement'});
     await expect(inspector.getByText('Currency exchange', {exact: true})).toBeVisible();
@@ -38,7 +38,7 @@ test.describe('currency exchanges', () => {
   });
 
   test('says when the other side is not matched', async ({page}) => {
-    await page.goto(`/bank-transactions?transactionId=${UNMATCHED_EXCHANGE_ID}`);
+    await page.goto(`/transactions?transactionId=${UNMATCHED_EXCHANGE_ID}`);
     const exchange = page.getByRole('region', {name: 'Money movement'});
     await expect(exchange).toContainText('Other side not matched');
     await expect(exchange.getByRole('link')).toHaveCount(0);
@@ -46,7 +46,7 @@ test.describe('currency exchanges', () => {
 
   test('fits the other side on mobile', async ({page}) => {
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto(`/bank-transactions?transactionId=${EXCHANGE_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${EXCHANGE_OUTGOING_ID}`);
     const exchange = page.getByRole('region', {name: 'Money movement'});
     const counterpartCard = exchange.getByTestId('movement-counterpart');
     await expect(counterpartCard).toBeVisible();

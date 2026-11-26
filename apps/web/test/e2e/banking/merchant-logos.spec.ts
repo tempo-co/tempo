@@ -288,20 +288,26 @@ async function expectTintedPixels(tile: Locator, theme: Theme) {
   });
 }
 
+/** A tile without a logo shows the category's icon tinted with the category's colour. */
+async function expectCategoryTint(tile: Locator, theme: Theme) {
+  await expect(tile).toHaveCSS('color', `rgb(${PALETTES[theme].category.join(', ')})`);
+  await expect(tile).not.toHaveCSS('background-color', `rgb(${PALETTES[theme].field.join(', ')})`);
+}
+
 async function expectIcon(tile: Locator) {
   await expect(tile.locator('svg')).toHaveCount(1);
   await expect(tile.locator('img')).toHaveCount(0);
 }
 
-/** Checks the tile of each row: the logo, the category icon, the icon after a failed image, the activity icon. */
+/** Checks the tile of each row: the logo, the tinted category icon, the same after a failed image, the neutral activity icon. */
 async function expectRowTiles(tileOf: (row: BankTransaction) => Locator, theme: Theme) {
   await expectLogo(tileOf(withLogo), theme);
   await expectTintedPixels(tileOf(withLogo), theme);
   await expectIcon(tileOf(withoutLogo));
-  await expectPalette(tileOf(withoutLogo), theme);
+  await expectCategoryTint(tileOf(withoutLogo), theme);
   await expectIcon(tileOf(brokenLogo));
   await expectIcon(tileOf(ownTransfer));
-  await expectPalette(tileOf(brokenLogo), theme);
+  await expectCategoryTint(tileOf(brokenLogo), theme);
   await expectPalette(tileOf(ownTransfer), theme);
   await expect(tileOf(ownTransfer).locator('svg')).toHaveCSS(
     'color',
@@ -348,7 +354,7 @@ for (const width of [1440, 390]) {
           .getByRole('region', {name: 'Transactions'})
           .getByRole('link', {name: 'Open in Transactions', exact: true})
           .click();
-        await expect(page).toHaveURL(/\/bank-transactions\?(.*&)?date=/);
+        await expect(page).toHaveURL(/\/transactions\?(.*&)?date=/);
         const listUrl = page.url();
         const tableRow = (row: BankTransaction) =>
           page.getByTestId(`bank-transaction-row-${row.id}`);
@@ -367,7 +373,7 @@ for (const width of [1440, 390]) {
         }, otherTheme);
         await expectPalette(tableTile(withLogo), otherTheme);
         await expectTintedPixels(tableTile(withLogo), otherTheme);
-        await expectPalette(tableTile(withoutLogo), otherTheme);
+        await expectCategoryTint(tableTile(withoutLogo), otherTheme);
         await page.evaluate((theme) => {
           document.documentElement.classList.remove('light', 'dark');
           document.documentElement.classList.add(theme);

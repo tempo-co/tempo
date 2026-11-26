@@ -601,7 +601,7 @@ test('merchant details show all-time totals, periods, grouped names and transact
   await expectNoHorizontalOverflow(page);
 
   await transactions.getByRole('link', {name: 'Open in Transactions'}).click();
-  await expect(page).toHaveURL(new RegExp(`/bank-transactions\\?merchantGroup=${BRAND}`));
+  await expect(page).toHaveURL(new RegExp(`/transactions\\?merchantGroup=${BRAND}`));
   await expect(page.getByRole('button', {name: 'Remove filter: One merchant'})).toBeVisible();
 });
 
@@ -624,7 +624,7 @@ for (const scenario of [
     });
     await mockJson(page, `${API_URL}/bank-transactions/${transaction.id}`, transaction);
     await page.setViewportSize({width: scenario.width, height: 844});
-    await page.goto(`/bank-transactions?transactionId=${transaction.id}`);
+    await page.goto(`/transactions?transactionId=${transaction.id}`);
 
     const inspector = page.getByTestId('bank-transaction-inspector');
     const history = inspector.getByRole('link', {name: 'Payment history'});
@@ -692,13 +692,13 @@ for (const scenario of [
       await history.click();
     }
     // The merchant opens over the transactions it came from, in place of the transaction.
-    await expect(page).toHaveURL(`/bank-transactions?merchants=open&merchant=${BRAND}`);
+    await expect(page).toHaveURL(`/transactions?merchants=open&merchant=${BRAND}`);
     await expect(dialog(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
     await expect(page.locator('main h1')).toHaveText('Bank transactions');
     await expect(inspector).toHaveCount(0);
     // Moving within the dialog keeps it over the same page.
     await dialog(page).getByRole('button', {name: 'All merchants'}).click();
-    await expect(page).toHaveURL('/bank-transactions?merchants=open');
+    await expect(page).toHaveURL('/transactions?merchants=open');
     await expect(dialog(page).getByRole('region', {name: 'All merchants'})).toBeVisible();
     // Closing returns to the transaction it was opened from.
     await dialog(page).getByRole('button', {name: 'Close merchants'}).click();

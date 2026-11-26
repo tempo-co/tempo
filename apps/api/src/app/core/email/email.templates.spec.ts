@@ -26,7 +26,7 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 			subject: 'Your Example Bank connection to Tempo ends soon',
 			bankName: 'Example Bank',
 			consentEndsOn: '1 January 2030 at 00:00 UTC',
-			bankConnectionsUrl: 'https://tempo.example.test/bank-connections',
+			bankConnectionsUrl: 'https://tempo.example.test/accounts',
 		},
 	},
 	{
@@ -36,7 +36,7 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 			bankName: 'Example Bank',
 			reason: 'Recent sync attempts did not succeed.',
 			lastSyncDescription: 'The last successful sync was on 1 January 2030 at 00:00 UTC.',
-			bankConnectionsUrl: 'https://tempo.example.test/bank-connections',
+			bankConnectionsUrl: 'https://tempo.example.test/accounts',
 		},
 	},
 	{

@@ -78,7 +78,7 @@ function withSecondAccount(connections: BankConnection[]) {
 }
 
 async function saveTransactions(page: Page) {
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   await expect(page.getByText('Coffee shop')).toBeVisible();
   await waitForOfflineShell(page);
   await expect
@@ -94,9 +94,9 @@ async function saveTransactions(page: Page) {
 
 test('does not send an unreachable session check to login', async ({page}) => {
   await page.route('**/accounts/me', (route) => route.abort('failed'));
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   await expect(unreachableHeading(page)).toBeVisible();
-  await expect(page).toHaveURL(/\/bank-transactions(?:\?|$)/);
+  await expect(page).toHaveURL(/\/transactions(?:\?|$)/);
   await expect(page.getByRole('button', {name: 'Try again'})).toBeVisible();
 });
 
@@ -164,7 +164,7 @@ test.describe('saved app', () => {
     await expect(savedStatus(page)).toBeVisible();
     await expectNoHorizontalOverflow(page);
     const reopened = await context.newPage();
-    await reopened.goto('/bank-transactions');
+    await reopened.goto('/transactions');
     await expect(reopened.getByText('Coffee shop')).toBeVisible();
     await reopened.close();
     await context.setOffline(false);
@@ -185,7 +185,7 @@ test.describe('saved app', () => {
     await page.reload();
     await expect(savedStatus(page)).toBeVisible();
     await expect(page.getByText('Coffee shop')).toBeVisible();
-    await expect(page).toHaveURL(/\/bank-transactions(?:\?|$)/);
+    await expect(page).toHaveURL(/\/transactions(?:\?|$)/);
     unavailable = false;
     await expect(savedStatus(page)).not.toBeVisible({timeout: 15000});
     await expect(page.getByText('Coffee shop')).toBeVisible();
@@ -199,7 +199,7 @@ test.describe('saved app', () => {
       const connections = (await (await route.fetch()).json()) as {syncStatus: string}[];
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const cards = page.getByRole('region', {name: 'ABN AMRO'});
     await expect(cards.first()).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
@@ -215,7 +215,7 @@ test.describe('saved app', () => {
       const connections = (await (await route.fetch()).json()) as {syncStatus: string}[];
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByRole('region', {name: 'ABN AMRO'})).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
     await expect(page.getByRole('heading', {name: "Couldn't load bank connections"})).toBeVisible();
@@ -246,7 +246,7 @@ test.describe('saved app', () => {
         connectionRequests++;
         return withSecondAccount(connections);
       });
-      await page.goto('/bank-transactions');
+      await page.goto('/transactions');
       const filters = await openTransactionFilter(page, 'Bank accounts');
       const tab = filters.getByRole('tab', {name: /^Bank accounts/});
       await filters.getByRole('option', {name: /Daily spending/}).click();
@@ -277,7 +277,7 @@ test.describe('saved app', () => {
       await routeBankConnectionsApi(page, (route) => route.abort('failed'));
       // Keep the reconnect probe failing too, so the app does not come back online mid-test.
       await page.route('**/health', (route) => route.abort('failed'));
-      await page.goto('/bank-transactions');
+      await page.goto('/transactions');
       await expect(page.getByText('Coffee shop')).toBeVisible();
       await expect(savedStatus(page)).toBeVisible();
       const filters = await openTransactionFilter(page, 'Bank accounts');
@@ -300,7 +300,7 @@ test.describe('saved app', () => {
           json: withSecondAccount((await response.json()) as BankConnection[]),
         });
       });
-      await page.goto('/bank-transactions');
+      await page.goto('/transactions');
       const filters = await openTransactionFilter(page, 'Bank accounts');
       const pane = filters.getByRole('tabpanel', {name: 'Bank accounts'});
       await expect(pane.getByRole('option', {name: /Secondary spending/})).toBeVisible();
@@ -480,7 +480,7 @@ test('a logout that could not reach Tempo is completed once it is reachable agai
   homePage,
 }) => {
   test.setTimeout(30000);
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
   await waitForOfflineShell(page);
@@ -792,7 +792,7 @@ test('a session check started before a real 401 cannot restore saved data', asyn
   homePage,
 }) => {
   await context.clock.install();
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   await expect(homePage.accountName).toHaveText(freshAccount.name);
   await expect.poll(() => readCache(page)).not.toBe(null);
   let releaseAccount!: () => void;

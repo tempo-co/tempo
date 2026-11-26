@@ -1,69 +1,7 @@
 // A pure module's contract: no page, so this uses Playwright's own `test` rather than the app fixtures.
 import {expect, test} from '@playwright/test';
-import {readFileSync} from 'node:fs';
 
-/**
- * Reads the shipped theme file and resolves the colour every Tailwind colour utility gives, in light and
- * dark. DESIGN.md (Foundations, Colour) names the same pairs.
- */
-const css = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8').replace(
-  /\/\*[\s\S]*?\*\//g,
-  '',
-);
-
-type Theme = 'light' | 'dark';
-
-/** Custom properties declared directly in each block whose selector is `name`. */
-function declarations(name: string) {
-  const found = new Map<string, string>();
-  const stack: string[] = [];
-  let text = '';
-  for (const char of css) {
-    if (char === '{') {
-      stack.push(text.trim());
-      text = '';
-    } else if (char === '}') {
-      stack.pop();
-      text = '';
-    } else if (char === ';') {
-      const match = text.trim().match(/^(--[\w-]+\*?)\s*:\s*([\s\S]+)$/);
-      if (match && stack[stack.length - 1] === name) found.set(match[1], match[2].trim());
-      text = '';
-    } else {
-      text += char;
-    }
-  }
-  return found;
-}
-
-const blocks = {
-  theme: declarations('@theme'),
-  root: declarations(':root'),
-  dark: declarations('.dark'),
-};
-
-function lookup(property: string, theme: Theme) {
-  return (
-    (theme === 'dark' ? blocks.dark.get(property) : undefined) ??
-    blocks.root.get(property) ??
-    blocks.theme.get(property)
-  );
-}
-
-/** The colour a property ends at, following `var()` through the layers. */
-function resolve(property: string, theme: Theme, seen: string[] = []): string {
-  const value = lookup(property, theme);
-  if (value === undefined)
-    throw new Error(`${property} is not defined (${[...seen, property].join(' → ')})`);
-  const reference = value.match(/^var\((--[\w-]+)\)$/);
-  if (reference) return resolve(reference[1], theme, [...seen, property]);
-  if (!/^#[0-9a-f]{6}$/i.test(value))
-    throw new Error(`${property} is "${value}", not a #rrggbb colour`);
-  return value.toUpperCase();
-}
-
-/** A Tailwind colour name such as `muted-foreground`, resolved for one theme. */
-const utility = (name: string, theme: Theme) => resolve(`--color-${name}`, theme);
+import {type Theme, blocks, css, lookup, utility} from '../utils/theme-css';
 
 const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const luminance = (hex: string) => {

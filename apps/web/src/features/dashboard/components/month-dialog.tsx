@@ -335,7 +335,7 @@ function MissingAmounts({from, to}: {from: string; to: string}) {
   if (!totals?.baseCurrency || totals.excluded.missingBaseAmount === 0) return null;
   return (
     <Link
-      to='/bank-transactions'
+      to='/transactions'
       search={{...periodDrill(from, to), baseAmount: 'MISSING'}}
       className='inline-flex items-center gap-1.5 justify-self-start text-body text-warning underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
       data-testid='month-missing-base-amounts-link'
@@ -465,7 +465,7 @@ function WhereItWent({
           return (
             <li key={part.key}>
               <Link
-                to='/bank-transactions'
+                to='/transactions'
                 search={categoryDrill(part.key, from, to, missingBaseAmounts)}
                 className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 px-2 text-body hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
               >
@@ -516,7 +516,7 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
       <header className='flex items-center justify-between gap-3 px-4 pt-3 pb-1'>
         <h2 className='text-card-title'>Transactions</h2>
         <TextAction asChild className='-mr-2'>
-          <Link to='/bank-transactions' search={periodDrill(from, to)}>
+          <Link to='/transactions' search={periodDrill(from, to)}>
             Open in Transactions
           </Link>
         </TextAction>
@@ -549,7 +549,7 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
                 <TransactionListRow
                   transaction={transaction}
                   link={{
-                    to: '/bank-transactions',
+                    to: '/transactions',
                     search: {...periodDrill(from, to), transactionId: transaction.id},
                   }}
                 />
@@ -588,7 +588,7 @@ function WhereItCameFrom({
         {top.map((part) => (
           <li key={part.key}>
             <Link
-              to='/bank-transactions'
+              to='/transactions'
               search={sourceDrill(part.key, from, to, missingBaseAmounts)}
               className='grid min-h-11 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 px-2 text-body hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
             >

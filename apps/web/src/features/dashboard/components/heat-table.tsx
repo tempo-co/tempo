@@ -283,7 +283,7 @@ function YearValue({
   return (
     <DataTip tip={tip}>
       <Link
-        to='/bank-transactions'
+        to='/transactions'
         search={item.search}
         aria-label={tip.label}
         className={cn(

@@ -206,7 +206,7 @@ test.describe('Connect a bank', () => {
         await route.fallback();
       });
 
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       const trigger = page.getByTestId('connect-bank-button');
       // Pointing at the button starts loading the banks.
       await trigger.hover();
@@ -386,7 +386,7 @@ test.describe('Connect a bank', () => {
 
       test(`starts with ${name}`, async ({page}) => {
         await mockPickerPage(page, {connections});
-        await page.goto('/bank-connections');
+        await page.goto('/accounts');
         await page.getByTestId('connect-bank-button').click();
         const picker = page.getByTestId('bank-connection-picker');
         await expect(picker.getByTestId('bank-connection-country')).toHaveText(`${expected}Change`);
@@ -408,7 +408,7 @@ test.describe('Connect a bank', () => {
         await connectionsHeld;
         await route.fallback();
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await page.getByTestId('connect-bank-button').click();
       const picker = page.getByTestId('bank-connection-picker');
       const country = picker.getByTestId('bank-connection-country');
@@ -432,7 +432,7 @@ test.describe('Connect a bank', () => {
     page,
   }) => {
     const authorizations = await mockPickerPage(page);
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const trigger = page.getByTestId('connect-bank-button');
     await trigger.click();
     const picker = page.getByTestId('bank-connection-picker');
@@ -471,7 +471,7 @@ test.describe('Connect a bank', () => {
       if (available) return route.fallback();
       await fulfillJson(route, {message: 'Unavailable'}, 500);
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
     const picker = page.getByTestId('bank-connection-picker');
     await expect(picker.getByRole('alert')).toContainText('Supported banks are unavailable.');
@@ -485,7 +485,7 @@ test.describe('Connect a bank', () => {
 
   test('counts one country in the singular', async ({page}) => {
     await mockPickerPage(page, {banks: [{name: 'Beispielbank', country: 'DE'}]});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
     const picker = page.getByTestId('bank-connection-picker');
     await picker.getByTestId('bank-connection-country').click();
@@ -497,7 +497,7 @@ test.describe('Connect a bank', () => {
 
   test('says so when the provider offers no banks', async ({page}) => {
     await mockPickerPage(page, {banks: []});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
     const picker = page.getByTestId('bank-connection-picker');
     await expect(picker.getByText('No banks are available to connect right now.')).toBeVisible();
@@ -513,7 +513,7 @@ test.describe('Connect a bank', () => {
     }) => {
       test.skip(browserName !== 'chromium', 'Touch gestures are sent with Chromium DevTools.');
       await mockPickerPage(page, {banks: WORST_CASE_BANKS, connections: []});
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await page.getByTestId('connect-bank-button').click();
       const picker = page.getByTestId('bank-connection-picker');
       await expect(picker.getByTestId('bank-connection-country')).toHaveText('GermanyChange');
@@ -557,7 +557,7 @@ test.describe('Connect a bank', () => {
       await mockPickerPage(page, {banks: WORST_CASE_BANKS, connections: []});
       await page.route(BROKEN_LOGO_URL, (route) => route.fulfill({status: 404, body: ''}));
       await page.route('**/assets/nl-*.svg', (route) => route.fulfill({status: 404, body: ''}));
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await page.getByTestId('connect-bank-button').click();
       const picker = page.getByTestId('bank-connection-picker');
       const country = picker.getByTestId('bank-connection-country');

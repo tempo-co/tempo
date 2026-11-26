@@ -73,7 +73,7 @@ async function openExpirationSelect(page: Page) {
 test('touch date selection fills the available seven-column calendar on a narrow phone', async ({
   page,
 }) => {
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   const drawer = await openTransactionFilter(page, 'Date');
   const calendar = drawer.getByTestId('bank-transaction-mobile-calendar');
   await expect(calendar).toBeVisible();
@@ -175,7 +175,7 @@ async function swipeFilterUp(page: Page) {
 test('touch category filtering uses readable search text and finger-sized choices', async ({
   page,
 }) => {
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   const drawer = await openTransactionFilter(page, 'Categories');
   const search = drawer.getByPlaceholder('Search categories...');
   await swipeFilterUp(page);
@@ -251,7 +251,7 @@ test('reduced-motion touch selections commit quietly', async ({page}) => {
   await expect(page.getByRole('listbox')).toHaveCSS('animation-name', 'none');
   await page.getByRole('option', {name: '1 year', exact: true}).tap();
   await expect(size).toHaveText('1 year');
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   const drawer = await openTransactionFilter(page, 'Categories');
   await swipeFilterUp(page);
   await drawer.getByPlaceholder('Search categories...').fill('Groc');
@@ -334,7 +334,7 @@ test.describe('precise-pointer controls', () => {
     await page.getByRole('option', {name: '1 year', exact: true}).focus();
     await page.keyboard.press('Enter');
     await expect(size).toHaveText('1 year');
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await openTransactionFilter(page, 'Categories');
     const search = page.getByPlaceholder('Search categories...');
     await expect(search).toHaveCSS('font-size', '14px');

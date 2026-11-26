@@ -22,7 +22,7 @@ async function openDisclosure(page: Page, name: 'Bank details' | 'Transfer setti
 
 /** Clears an override left by an earlier failed attempt, so every test starts from the seed. */
 async function restoreAutomaticRecognition(page: Page, transactionId: string) {
-  await page.goto(`/bank-transactions?transactionId=${transactionId}`);
+  await page.goto(`/transactions?transactionId=${transactionId}`);
   const settings = await openDisclosure(page, 'Transfer settings');
   await expect(settings.getByRole('button').first()).toBeVisible();
   const restore = settings.getByRole('button', {name: 'Use automatic recognition'});
@@ -43,7 +43,7 @@ test.describe('own transfers', () => {
 
   test('labels recognized transfers, links the other side and filters them', async ({page}) => {
     await page.setViewportSize({width: 1280, height: 720});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
 
     const ibanRow = page.getByTestId(`bank-transaction-row-${IBAN_PAIR_OUTGOING_ID}`);
     const ibanCategory = ibanRow.getByTestId('ledger-row-category');
@@ -56,7 +56,7 @@ test.describe('own transfers', () => {
       'Own transfer',
     );
 
-    await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
     const movement = inspector.getByRole('region', {name: 'Money movement'});
     await expect(movement.getByRole('heading', {name: 'Between your accounts'})).toBeVisible();
@@ -76,7 +76,7 @@ test.describe('own transfers', () => {
     await expect(inspector.getByTestId('bank-transaction-detail-amount')).toContainText('200');
     await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
 
-    await page.goto(`/bank-transactions?transactionId=${ONE_SIDED_ID}`);
+    await page.goto(`/transactions?transactionId=${ONE_SIDED_ID}`);
     await expect(movement).toContainText('Other side not in your connected accounts');
     await inspector.getByRole('button', {name: 'Close transaction details'}).click();
 
@@ -90,7 +90,7 @@ test.describe('own transfers', () => {
     // Several saves, each refetching the affected transactions.
     test.slow();
     // Every step ends on automatic recognition, so the test is retry-safe and leaves the seed as-is.
-    await page.goto(`/bank-transactions?transactionId=${COINCIDENCE_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${COINCIDENCE_OUTGOING_ID}`);
     const inspector = page.getByTestId('bank-transaction-inspector');
     let settings = await openDisclosure(page, 'Transfer settings');
 
@@ -104,7 +104,7 @@ test.describe('own transfers', () => {
     await expect(settings.getByRole('button', {name: 'Mark as own transfer'})).toBeVisible();
     await expect(inspector.getByRole('combobox', {name: 'Transaction category'})).toBeVisible();
 
-    await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
     settings = await openDisclosure(page, 'Transfer settings');
     await settings.getByRole('button', {name: 'Not my own transfer'}).click();
     await expect(settings.getByRole('button', {name: 'Mark as own transfer'})).toBeVisible();
@@ -116,7 +116,7 @@ test.describe('own transfers', () => {
     ).toBeVisible();
 
     // Unmarking one leg unpairs the other; it keeps its own evidence and stays undoable on its own.
-    await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_INCOMING_ID}`);
+    await page.goto(`/transactions?transactionId=${IBAN_PAIR_INCOMING_ID}`);
     await expect(await openDisclosure(page, 'Bank details')).toContainText(
       'Matched by account holder name',
     );
@@ -124,7 +124,7 @@ test.describe('own transfers', () => {
       'Other side not in your connected accounts',
     );
 
-    await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
     settings = await openDisclosure(page, 'Transfer settings');
     await settings.getByRole('button', {name: 'Use automatic recognition'}).click();
     await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
@@ -132,9 +132,9 @@ test.describe('own transfers', () => {
 
   test('shows own transfers on mobile', async ({page}) => {
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto(`/bank-transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
+    await page.goto(`/transactions?transactionId=${IBAN_PAIR_OUTGOING_ID}`);
     await expect(await openDisclosure(page, 'Bank details')).toContainText('Matched by IBAN');
-    await page.goto(`/bank-transactions?transactionId=${ONE_SIDED_ID}`);
+    await page.goto(`/transactions?transactionId=${ONE_SIDED_ID}`);
     const movement = page.getByRole('region', {name: 'Money movement'});
     const oneSided = movement.getByText('Other side not in your connected accounts');
     await expect(oneSided).toBeVisible();

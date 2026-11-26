@@ -143,7 +143,7 @@ function ConnectBankPrompt() {
       description='Your balance over the years, what you kept and where the money went, once one account has synced.'
     >
       <Button asChild>
-        <Link to='/bank-connections'>Connect a bank</Link>
+        <Link to='/accounts'>Connect a bank</Link>
       </Button>
     </StateMessage>
   );

@@ -190,7 +190,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 		account: Account,
 	) {
 		const bankName = connection.aspspName;
-		const bankConnectionsUrl = createWebUrl('/bank-connections', this.configurationService.get('WEB_BASE_URL'));
+		const bankConnectionsUrl = createWebUrl('/accounts', this.configurationService.get('WEB_BASE_URL'));
 
 		if (alert === BANK_CONNECTION_ALERTS.SYNC_BROKEN) {
 			const subject = `Tempo can't sync ${bankName}`;

@@ -2,6 +2,10 @@
 
 Standing rules for what Tempo's screens show and how they behave, for new and changed screens. Anything visual (colours, type, sizes, components and patterns) is in `DESIGN.md`, which wins where this file seems to disagree; shared code rules are in `docs/frontend-conventions.md`.
 
+## Pages
+
+- Each page answers one question. Home is for status: this month's spending against the usual pace, how far the imported data runs, and what to do next. Reports (cash flow, categories, year tables) belong in Insights, bills in Recurring, account management and imports in Accounts. Until Home and Insights get their own pages, both show the reports.
+
 ## Density and copy
 
 - A lean dashboard: each number is shown once, with no repeated or decorative content. A new summary widget needs the decision it helps the user make.
@@ -19,7 +23,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 - Every incomplete period (the running one, and one cut short by where history starts) is marked apart from complete ones and labelled "so far". Averages count complete periods only.
 - Weekly comparisons use the median of earlier full weeks, since one rent week inflates the mean.
 - Hide a header average while fewer than two full periods exist. Word it as the exact span plus money per period: "Per month, <Mon YYYY> – <Mon YYYY>: €X spent · €Y earned · €Z kept". Round each figure to the displayed unit before deriving "kept".
-- Summary cards lead with figures that compare month to month ("Monthly bills", "Monthly income"), not countdowns that shrink to zero. Income is green, costs stay neutral, and amber is only for problems.
+- Summary cards lead with figures that compare month to month ("Monthly bills", "Monthly income"), not countdowns that shrink to zero. Income is green with a +, costs stay neutral, and amber is only for problems.
 - Wide tables do not just scroll sideways at 320 to 430 px: give them a phone form (one row per item with the latest value and change, older periods on tap). Desktop keeps the table.
 
 ## Lists and detail views
@@ -33,7 +37,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 ## Filters and pickers
 
 - Parent and child checkboxes: the parent selects or clears all children and shows a mixed state when some are selected.
-- A filter panel has exactly one scroll area. Desktop: two panes, filter types on the left and options on the right. Phones: one stepped bottom sheet at a fixed height, rows at least 44 px.
+- Filters are removable chips with "+ Add filter" and Clear, kept in the address. An option list opened from a chip has exactly one scroll area; on phones it is one stepped bottom sheet at a fixed height, rows at least 44 px.
 - One-press filter shortcuts ("To review") sit in the toolbar, not alone in the chips row.
 - Long-list pickers (country, bank) on phones are one stepped bottom sheet with the likely value preselected and 56 px rows. Never auto-focus search, on any device.
 - Restyle, don't replace: flags stay flags (small 4:3, small radius) and badges keep the pill radius.
@@ -46,4 +50,4 @@ First load shows skeleton rows shaped like the real list. A refetch keeps the ol
 
 - A managed list comes first and one-time setup steps below it; setup copy never refers to where the list sits.
 - Setup steps are terse, with only key terms in medium weight.
-- Pages with separate sections use in-page tabs (Settings at every width).
+- Settings sections each have one address (`/settings/<section>`). A changed Settings page lists them as a section list: on the left on desktop, a tap-in list with a way back on phones, in place of today's tabs. Sections whose feature has not shipped are not listed; announced ones show as disabled "later" rows.

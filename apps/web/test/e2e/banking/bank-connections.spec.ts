@@ -52,7 +52,7 @@ test.describe('bank connections', () => {
       return [connection];
     });
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
     await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
     await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
@@ -88,12 +88,12 @@ test.describe('bank connections', () => {
       return [seededConnection];
     });
 
-    await page.goto('/bank-connections?result=connected');
+    await page.goto('/accounts?result=connected');
 
     await expect(page.getByRole('heading', {name: 'Bank connections'})).toBeVisible();
     // The toast times out, so check it on landing rather than after the later steps.
     await expect(page.getByText('Bank connection added')).toBeVisible();
-    await expect(page).toHaveURL(new RegExp('/bank-connections$'));
+    await expect(page).toHaveURL(new RegExp('/accounts$'));
     const connectionCard = page.getByRole('region', {name: 'ABN AMRO'});
     await expect(connectionCard).toBeVisible();
     // The seeded bank last updated more than a day before the fixed clock.
@@ -161,7 +161,7 @@ test.describe('bank connections', () => {
     await expect(connectionCard.getByRole('button', {name: 'ABN AMRO details'})).toBeFocused();
 
     await accountRow.click();
-    await expect(page).toHaveURL(/\/bank-transactions\?/);
+    await expect(page).toHaveURL(/\/transactions\?/);
     expect(new URL(page.url()).searchParams.get('bankAccountIds')).toBe(
       JSON.stringify([accountId]),
     );
@@ -207,7 +207,7 @@ test.describe('bank connections', () => {
         },
       ]);
 
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       const problem = page.getByTestId('bank-connection-problem');
       await expect(problem).toBeVisible();
       await expect(problem).toHaveAttribute('role', 'alert');
@@ -248,13 +248,13 @@ test.describe('bank connections', () => {
         },
       ]);
 
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
       await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
       await expect(
         page
           .getByRole('navigation', {name: 'Primary'})
-          .getByRole('link', {name: 'Connections', exact: true}),
+          .getByRole('link', {name: 'Accounts', exact: true}),
       ).toBeVisible();
     });
   }
@@ -274,7 +274,7 @@ test.describe('bank connections', () => {
         ];
       });
 
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       await expect(page.getByTestId('bank-connection-total')).toContainText('1,335.00');
       await expect(page.getByTestId('bank-connection-problem')).toHaveCount(0);
       await expect.poll(() => requestCount, {timeout: 12_000}).toBeGreaterThan(1);
@@ -285,7 +285,7 @@ test.describe('bank connections', () => {
   test('requires re-authorization when consent is missing', async ({page}) => {
     await mockBankConnections(page, [{...MOCK_CONNECTION, consentValidUntil: null}]);
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
     await expect(page.getByTestId('bank-connection-problem')).toContainText('Consent expired');
   });
@@ -301,7 +301,7 @@ test.describe('bank connections', () => {
       })),
     );
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const problem = page.getByTestId('bank-connection-problem').first();
     await expect(problem).toContainText('Consent expired');
@@ -322,7 +322,7 @@ test.describe('bank connections', () => {
       })),
     );
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const problem = page.getByTestId('bank-connection-problem').first();
     await expect(problem).toContainText('Not connected');
@@ -368,7 +368,7 @@ test.describe('bank connections', () => {
       await route.fulfill({status: 204, body: ''});
     });
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const pendingCard = page.getByTestId(`bank-connection-${pendingConnectionId}`);
     await expect(pendingCard).toBeVisible();
@@ -418,7 +418,7 @@ test.describe('bank connections', () => {
       await route.fulfill({status: 204, body: ''});
     });
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const connectedCard = page.getByTestId(`bank-connection-${connectedConnectionId}`);
     await expect(connectedCard).toBeVisible();
@@ -473,9 +473,9 @@ test.describe('bank connections', () => {
         logoUrl: 'https://enablebanking.com/brands/NL/Mock-ASPSP/',
       },
     ]);
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const authorizationUrl = 'https://bank.example.test/mock-bank-authorization';
-    const callbackUrl = new URL('./bank-connections?result=connected', page.url()).toString();
+    const callbackUrl = new URL('./accounts?result=connected', page.url()).toString();
     await mockJson(page, '**/bank-connections/authorize', {authorizationUrl}, 201);
     await context.route('**/mock-bank-authorization', async (route) => {
       await fulfillRedirect(route, callbackUrl);
@@ -489,14 +489,14 @@ test.describe('bank connections', () => {
     await connectThroughPicker(page, {name: 'Mock ASPSP', countryLabel: 'Netherlands'});
 
     await expect(page.getByText('Bank connection added')).toBeVisible();
-    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect(page).toHaveURL(/\/accounts$/);
     expect(popupOpened).toBe(false);
   });
 
   test('keeps the connection overview usable at phone widths', async ({page}) => {
     await mockBankRefresh(page);
     await page.setViewportSize({width: 393, height: 852});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const heading = page.getByRole('heading', {name: 'Bank connections'});
     const connectButton = page.getByRole('button', {name: 'Connect a bank'}).first();
@@ -522,12 +522,12 @@ test.describe('bank connections', () => {
 
   test('keeps the connection overview within a narrow phone viewport', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const connectionCard = page
       .locator('[data-testid^="bank-connection-"][aria-labelledby]')
       .first();
-    const activeTab = page.getByTestId('app-tab-bar').getByRole('link', {name: 'Connections'});
+    const activeTab = page.getByTestId('app-tab-bar').getByRole('link', {name: 'Accounts'});
 
     await expect(connectionCard).toBeVisible();
     await expect(
@@ -546,7 +546,7 @@ test.describe('bank connections', () => {
 
   test('supports enlarged text without horizontal overflow', async ({page}) => {
     await page.setViewportSize({width: 320, height: 852});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page.evaluate(() => {
       document.documentElement.style.fontSize = '200%';
     });
@@ -609,7 +609,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     const totalBalance = connectionCard.getByTestId('bank-connection-total');
 
     // Balances in one currency add up in that currency, before the owner has a base currency.
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(totalBalance).toHaveText('Total€1,335.00');
     connection = currencies('EUR', ['USD', 'USD']);
     await page.reload();
@@ -696,7 +696,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       removal = route.request().postDataJSON();
       await route.fulfill({status: 204, body: ''});
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const dialog = await openRemoval(
       page,
@@ -740,7 +740,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       removal = route.request().postDataJSON();
       await route.fulfill({status: 204, body: ''});
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const dialog = await openRemoval(page, page.getByTestId(`bank-connection-${imported.id}`));
     await expect(
@@ -762,7 +762,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await mockBankConnections(page, () => [
       {...MOCK_CONNECTION, syncStatus: running ? 'RUNNING' : 'SUCCEEDED'},
     ]);
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
     await chooseDeleteEverything(await openRemoval(page, card));
     const confirm = page.getByRole('button', {name: 'Remove permanently', exact: true});
@@ -793,7 +793,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         removals++;
         return route.fulfill({status: 204, body: ''});
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       const dialog = await openRemoval(page, card);
       await expect(dialog.getByRole('status')).toHaveText(SYNC_IN_PROGRESS_REMOVAL);
@@ -811,7 +811,7 @@ test.describe('mocked Enable Banking bank connection', () => {
 
     test('explains blocked removal in the drawer', async ({page}) => {
       await mockBankConnections(page, [{...MOCK_CONNECTION, syncStatus: 'RUNNING'}]);
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       const card = page.getByTestId(`bank-connection-${MOCK_CONNECTION.id}`);
       await card.getByRole('button', {name: / details$/}).tap();
       const drawer = page.getByRole('dialog');
@@ -970,8 +970,8 @@ test.describe('mocked Enable Banking bank connection', () => {
         await route.fulfill({status: 204, body: ''});
       });
 
-      await page.goto('/bank-connections');
-      callbackRedirectUrl = new URL('/bank-connections?result=connected', page.url()).toString();
+      await page.goto('/accounts');
+      callbackRedirectUrl = new URL('/accounts?result=connected', page.url()).toString();
       const providerCallback = new URL('/bank-connections/callback', page.url());
       providerCallback.searchParams.set('state', 'mock-authorization-state');
       providerCallback.searchParams.set('code', 'mock-provider-code');
@@ -995,7 +995,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await page.getByRole('button', {name: 'Authorize', exact: true}).click();
 
       await expect(page.getByText('Bank connection added', {exact: true})).toBeVisible();
-      await expect(page).toHaveURL(/\/bank-connections$/);
+      await expect(page).toHaveURL(/\/accounts$/);
       await expect.poll(() => callbackRequest?.searchParams.get('code')).toBe('mock-provider-code');
       expect(callbackRequest?.searchParams.get('state')).toBe('mock-authorization-state');
       expect(connectionPersisted).toBe(true);
@@ -1064,7 +1064,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       await answered;
       await fulfillJson(route, [MOCK_CONNECTION]);
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const placeholders = page
       .getByRole('status', {name: 'Loading bank connections'})
@@ -1087,7 +1087,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     page,
   }) => {
     await page.route('**/accounts/me', (route) => route.abort('failed'));
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
     await expect(page.locator('body')).toContainText(
@@ -1229,7 +1229,7 @@ test.describe('mocked Enable Banking bank connection', () => {
               };
             return connection;
           });
-          await page.goto('/bank-connections');
+          await page.goto('/accounts');
           const cards = page.locator('[data-testid^="bank-connection-"][role="region"]');
           await expect(cards).toHaveCount(connections.length);
           const rows = page.getByRole('link', {name: / transactions$/});
@@ -1266,9 +1266,9 @@ test.describe('mocked Enable Banking bank connection', () => {
               true,
             );
           }
-          // Wide screens flow cards into two columns; phones keep one.
+          // A page column of 60rem or more, past the 240px sidebar, flows cards into two columns; narrower keeps one.
           const columns = new Set(cardBoxes.map((box) => Math.round(box.x))).size;
-          expect(columns, data).toBe(width >= 1024 && cardBoxes.length > 1 ? 2 : 1);
+          expect(columns, data).toBe(width >= 1280 && cardBoxes.length > 1 ? 2 : 1);
           await expectNoHorizontalOverflow(page);
         }
 
@@ -1319,7 +1319,7 @@ test.describe('bank connection loading errors', () => {
       await fulfillJson(route, {message: 'Service unavailable'}, 503);
     });
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
     const alert = page.getByRole('alert');
@@ -1352,7 +1352,7 @@ test.describe('bank connection loading errors', () => {
       sessionChecks++ === 0 ? route.abort('failed') : route.continue(),
     );
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
     // Focus makes Tempo check its connection now instead of on its next timer.
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -1364,7 +1364,7 @@ test.describe('bank connection loading errors', () => {
 
 test.describe('bank connections without bank connections', () => {
   test('shows the connect prompt without bank connections', async ({page, freshAccount}) => {
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
     await expect(page.getByRole('heading', {name: 'No bank connections'})).toBeVisible();

@@ -179,10 +179,16 @@ test('groups rows by day and loads fifty more at a time', async ({page}) => {
   });
   // They take the place of two 1 October rows, so the first page still ends in December.
   const ledger = history();
-  const rows = [...ledger.slice(0, 2), unbooked, ...ledger.slice(2, 6), paidSunday, ...ledger.slice(8)];
+  const rows = [
+    ...ledger.slice(0, 2),
+    unbooked,
+    ...ledger.slice(2, 6),
+    paidSunday,
+    ...ledger.slice(8),
+  ];
   const requests = await mockLedger(page, rows);
   await page.setViewportSize({width: 1440, height: 900});
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
 
   await expect(listRows(page)).toHaveCount(50);
   await expect(page.getByRole('heading', {level: 2})).toHaveText([
@@ -243,7 +249,7 @@ test('groups rows by day and loads fifty more at a time', async ({page}) => {
 test('shows what a filter matches, spent and earned, swapping the line once', async ({page}) => {
   const requests = await mockLedger(page, history());
   await page.setViewportSize({width: 1440, height: 900});
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   const summary = page.getByTestId('bank-transactions-summary');
   await expect(summary).toHaveText('120 transactions');
 
@@ -290,7 +296,7 @@ test('shows what a filter matches, spent and earned, swapping the line once', as
     await heldFirst;
     await route.fallback();
   });
-  await page.goto(`/bank-transactions?categories=${encodeURIComponent('["SHOPPING"]')}`);
+  await page.goto(`/transactions?categories=${encodeURIComponent('["SHOPPING"]')}`);
   try {
     await expect(listRows(page).nth(1)).toContainText('Example Shop 4');
     await expect(summary).toHaveCount(0);
@@ -311,7 +317,7 @@ test('names the rows a filtered total leaves out without an amount in the report
   );
   const requests = await mockLedger(page, rows);
   await page.setViewportSize({width: 1440, height: 900});
-  await page.goto(`/bank-transactions?categories=${encodeURIComponent('["SHOPPING"]')}`);
+  await page.goto(`/transactions?categories=${encodeURIComponent('["SHOPPING"]')}`);
   const summary = page.getByTestId('bank-transactions-summary');
   await expect(summary).toHaveText('40 transactions · €380.00 spent');
   const missing = page.getByRole('link', {name: '2 transactions aren’t included in EUR totals'});
@@ -335,7 +341,7 @@ for (const phone of [false, true]) {
     const rows = history();
     const requests = await mockLedger(page, rows);
     await page.setViewportSize(phone ? {width: 390, height: 844} : {width: 1440, height: 900});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(listRows(page)).toHaveCount(50);
 
     const toggle = page.getByRole('button', {name: /^To review/});
@@ -403,7 +409,7 @@ test('hides To review while nothing needs review', async ({page}) => {
     page,
     history().map((candidate) => ({...candidate, toReview: false})),
   );
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   await expect(listRows(page)).toHaveCount(50);
   await expect(page.getByRole('button', {name: /^To review/})).toHaveCount(0);
 });
@@ -411,7 +417,7 @@ test('hides To review while nothing needs review', async ({page}) => {
 test('filters from a two-pane panel whose options alone scroll', async ({page}) => {
   await mockLedger(page, history(), {accounts: 'several'});
   await page.setViewportSize({width: 1440, height: 900});
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
 
   const panel = await openTransactionFilter(page, 'Categories');
   const tabs = panel.getByRole('tablist', {name: 'Filters'});
@@ -473,7 +479,7 @@ test('shows every filter in force as a removable chip, Home drills included', as
     baseAmount: 'PRESENT',
   });
   await page.setViewportSize({width: 1440, height: 900});
-  await page.goto(`/bank-transactions?${params}`);
+  await page.goto(`/transactions?${params}`);
 
   const chips = page
     .getByRole('list', {name: 'Filters in force'})
@@ -513,7 +519,7 @@ test('a later page that fails keeps the loaded rows and tries that page again', 
     const index = params.get('pagination[pageIndex]');
     return index && index !== '0' ? index : null;
   });
-  await page.goto('/bank-transactions');
+  await page.goto('/transactions');
   await expectFailedPageRetried(page.locator('main'), listRows(page), later, {
     loaded: 50,
     after: 100,
@@ -565,7 +571,7 @@ test('keeps rows, tiles and the Category column in place with worst-case values 
     for (const accounts of ['one', 'several'] as const) {
       // Later routes win, so each pass answers with its own accounts.
       await mockLedger(page, worstCase(), {accounts});
-      await page.goto('/bank-transactions');
+      await page.goto('/transactions');
       await expect(listRows(page)).toHaveCount(4);
       const account = (index: number) =>
         listRows(page).nth(index).getByTestId('ledger-row-account');
@@ -584,7 +590,7 @@ test('keeps rows, tiles and the Category column in place with worst-case values 
 
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({width, height: 900});
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(listRows(page)).toHaveCount(4);
     const sizes = await listRows(page).evaluateAll((rows) =>
       rows.map((candidate) => ({

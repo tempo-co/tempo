@@ -87,7 +87,7 @@ test('a real income source reconciles with its drill, from its month and from it
     to: string,
   ) => {
     await link.click();
-    await expect(page).toHaveURL(/\/bank-transactions/);
+    await expect(page).toHaveURL(/\/transactions/);
     const search = new URL(page.url()).searchParams;
     expect(search.get('incomeSource')).toBe(part.key);
     expect(JSON.parse(search.get('cashFlows')!)).toEqual(['INCOME']);

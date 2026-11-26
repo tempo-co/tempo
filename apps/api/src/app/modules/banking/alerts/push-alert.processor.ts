@@ -52,7 +52,7 @@ export class PushAlertProcessor extends WorkerHost {
 		return this.pushNotificationService.deliver(accountId, {
 			title: TITLE,
 			body: BODIES[alert.alert],
-			url: createWebUrl('/bank-connections', this.configurationService.get('WEB_BASE_URL')),
+			url: createWebUrl('/accounts', this.configurationService.get('WEB_BASE_URL')),
 			tag: 'bank-connections',
 			badge: needsAttention,
 		});
