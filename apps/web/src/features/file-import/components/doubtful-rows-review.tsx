@@ -170,7 +170,7 @@ export function DoubtfulRowsReview({
 
   return (
     <div className='grid grid-cols-1 gap-4'>
-      <div className='grid grid-cols-1 gap-1 text-sm text-muted-foreground'>
+      <div className='grid grid-cols-1 gap-1 text-body-small text-muted-foreground'>
         <p>Choose what each one is, then save. You can change a choice until you save it.</p>
         {synced && (
           <p>
@@ -212,9 +212,9 @@ export function DoubtfulRowsReview({
         </Button>
       )}
       {/* Stays in reach at the bottom of the scrolling body, like the dialog's footer. */}
-      <div className='sticky bottom-0 -mx-4 -mb-[calc(1rem+env(safe-area-inset-bottom))] flex flex-col gap-2 border-t bg-background px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:-mx-6 md:-mb-6 md:flex-row md:items-center md:justify-end md:px-6 md:pb-4'>
+      <div className='sticky bottom-0 -mx-4 -mb-[calc(--spacing(4)+env(safe-area-inset-bottom))] flex flex-col gap-2 border-t bg-background px-4 pt-4 pb-[calc(--spacing(4)+env(safe-area-inset-bottom))] md:-mx-6 md:-mb-6 md:flex-row md:items-center md:justify-end md:px-6 md:pb-4'>
         {unsaved.length > 0 && unanswered > 0 && (
-          <p className='text-xs text-muted-foreground md:mr-auto'>
+          <p className='text-body-small text-muted-foreground md:mr-auto'>
             {unanswered === 1
               ? '1 without an answer stays open'
               : `${formatCount(unanswered)} without an answer stay open`}
@@ -271,7 +271,7 @@ function DoubtfulRowBlock({
       className='grid grid-cols-1 overflow-hidden rounded-md border'
       data-testid='bank-import-doubtful-row'
     >
-      <div className={cn(ROW, 'py-3')}>
+      <div className={cn(ROW, 'min-h-15 py-2')}>
         <span aria-hidden='true' className={IMPORT_TILE}>
           <FileQuestion strokeWidth={2} />
         </span>
@@ -282,7 +282,7 @@ function DoubtfulRowBlock({
         <Amount amount={fileRow.amount} currency={fileRow.currency} />
       </div>
       {saved ? (
-        <p role='status' className='border-t px-3 py-2 text-sm text-muted-foreground'>
+        <p role='status' className='border-t px-3 py-2 text-body-small text-muted-foreground'>
           {saved.decision === 'new'
             ? inTempo
               ? 'Kept both'
@@ -294,7 +294,7 @@ function DoubtfulRowBlock({
       ) : (
         <fieldset className='min-w-0 border-t' disabled={disabled}>
           <legend className='sr-only'>What {title} is</legend>
-          <p aria-hidden='true' className='px-3 pt-2 text-xs text-muted-foreground'>
+          <p aria-hidden='true' className='px-3 pt-2 text-body-small text-muted-foreground'>
             {row.candidates.length > 0
               ? inTempo
                 ? 'Your bank also sent'
@@ -330,7 +330,7 @@ function DoubtfulRowBlock({
             onChange={() => onPick({decision: 'new'})}
             divided={row.candidates.length > 0}
           >
-            <span className='flex min-w-0 items-center gap-2 text-sm'>
+            <span className='flex min-w-0 items-center gap-2 text-body'>
               {inTempo ? (
                 <Files aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
               ) : (
@@ -342,7 +342,7 @@ function DoubtfulRowBlock({
           {failed && (
             <p
               role='alert'
-              className='flex items-center gap-1.5 border-t px-3 py-2 text-xs text-destructive'
+              className='flex items-center gap-1.5 border-t px-3 py-2 text-body-small text-destructive'
             >
               <CircleAlert aria-hidden='true' className='size-3.5 shrink-0' />
               Couldn&apos;t save this answer. Save to try again.
@@ -405,15 +405,15 @@ function Choice({
 function Title({title, detail}: {title: string; detail: string}) {
   return (
     <span className='min-w-0'>
-      <span className='block text-sm wrap-anywhere'>{title}</span>
-      <span className='block truncate text-xs text-muted-foreground'>{detail}</span>
+      <span className='block text-body wrap-anywhere'>{title}</span>
+      <span className='block truncate text-body-small text-muted-foreground'>{detail}</span>
     </span>
   );
 }
 
 function Amount({amount, currency}: {amount: string; currency: string}) {
   return (
-    <span className='text-right text-sm'>
+    <span className='text-right text-body'>
       <CurrencyAmount amount={Number(amount)} currency={currency} />
     </span>
   );

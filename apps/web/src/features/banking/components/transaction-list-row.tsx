@@ -21,17 +21,17 @@ export function TransactionListRow({
   return (
     <Link
       {...link}
-      className='grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+      className='grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
     >
       <MerchantLogoTile transaction={transaction} />
       <div className='min-w-0'>
-        <p className='truncate text-sm'>{resolveBankTransactionDisplayTitle(transaction)}</p>
-        <p className='truncate text-xs text-muted-foreground'>
+        <p className='truncate text-body'>{resolveBankTransactionDisplayTitle(transaction)}</p>
+        <p className='truncate text-body-small text-muted-foreground'>
           {formatBankTransactionCompactDate(transaction.date)}
           {isPendingBankTransaction(transaction) && ' · Pending'}
         </p>
       </div>
-      <span className='text-sm'>
+      <span className='text-body'>
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
       </span>
     </Link>

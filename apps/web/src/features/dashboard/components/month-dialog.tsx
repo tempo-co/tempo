@@ -84,17 +84,17 @@ export function MonthDialog({
     <ResponsiveDialog open={month !== null} onOpenChange={onOpenChange}>
       <ResponsiveDialogContent
         onKeyDown={onKeyDown}
-        className='flex h-[94dvh] max-h-[94dvh] flex-col gap-0 overflow-hidden p-0 sm:h-[min(94vh,72rem)] sm:max-h-[94vh] sm:max-w-6xl [&>button:last-child]:hidden'
+        className='flex h-[94dvh] max-h-[94dvh] flex-col gap-0 overflow-hidden p-0 sm:h-[min(94vh,--spacing(288))] sm:max-h-[94vh] sm:max-w-6xl [&>button:last-child]:hidden'
       >
         <ResponsiveDialogCornerClose label='Close the month' />
         <ResponsiveDialogHeader className='shrink-0 border-b py-2 pr-16 pl-1 text-left sm:pl-4'>
           <nav aria-label='Months' className='flex items-center gap-1'>
             <StepButton month={prev} label='Previous month' icon={ChevronLeft} onStep={onStep} />
             {/*
-              As wide as the longest month, "September 2026" (8.1em in Inter semibold), whatever month it shows, so the
-              arrows stay put while stepping. In em, so it grows with the text; a narrow phone takes a size down to fit.
+              As wide as the longest month, "September 2026" (about 8.3em in Inter bold), whatever month it shows, so the
+              arrows stay put while stepping. In em, so it grows with the text; a narrow phone takes the section title's size to fit.
             */}
-            <ResponsiveDialogTitle className='w-[8.5em] shrink-0 text-center text-xl leading-tight whitespace-nowrap max-[22rem]:text-lg sm:text-2xl'>
+            <ResponsiveDialogTitle className='w-[8.5em] shrink-0 text-center text-page-title whitespace-nowrap max-[22rem]:text-section-title'>
               {month ? formatMonth(month) : ''}
             </ResponsiveDialogTitle>
             <StepButton month={next} label='Next month' icon={ChevronRight} onStep={onStep} />
@@ -189,7 +189,9 @@ function MonthView({
       />
     );
   if (overview && !point)
-    return <p className='text-sm text-muted-foreground'>No history for {formatMonth(month)}.</p>;
+    return (
+      <p className='text-body-small text-muted-foreground'>No history for {formatMonth(month)}.</p>
+    );
 
   // Each part shows once its own data is in, in a placeholder of its loaded size until then, and only in the
   // history's currency: a part read on the other side of a currency change waits for its refetch.
@@ -335,7 +337,7 @@ function MissingAmounts({from, to}: {from: string; to: string}) {
     <Link
       to='/bank-transactions'
       search={{...periodDrill(from, to), baseAmount: 'MISSING'}}
-      className='inline-flex items-center gap-1.5 justify-self-start text-sm text-warning underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+      className='inline-flex items-center gap-1.5 justify-self-start text-body text-warning underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
       data-testid='month-missing-base-amounts-link'
     >
       <CircleAlert aria-hidden='true' className='size-3.5 shrink-0' />
@@ -350,7 +352,7 @@ function FigureCells({loading, children}: {loading?: boolean; children: ReactNod
     <section
       aria-label='The month'
       aria-busy={loading || undefined}
-      className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border @[760px]:grid-cols-4'
+      className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border @[760px]:grid-cols-4'
     >
       {children}
       {loading && <LoadingLabel>Loading the month</LoadingLabel>}
@@ -372,13 +374,13 @@ function PartsSkeleton({
     <section
       aria-label={title}
       aria-busy='true'
-      className={cn('grid gap-3 rounded-card border bg-card p-5', className)}
+      className={cn('grid gap-3 rounded-lg border bg-card p-4', className)}
     >
       <LoadingLabel>{`Loading ${title.toLowerCase()}`}</LoadingLabel>
       <h2 className='text-card-title'>{title}</h2>
       <ul aria-hidden='true' className='-mx-2 grid gap-1'>
         {Array.from({length: rows}, (_, index) => (
-          <li key={index} className='flex min-h-11 items-center gap-3 px-2 text-sm'>
+          <li key={index} className='flex min-h-11 items-center gap-3 px-2 text-body'>
             <Bone className='size-5' />
             <TextBone className='w-[8em]' />
             <Bone className='h-3 flex-1 max-sm:hidden' />
@@ -403,7 +405,7 @@ function Figure({
   sub?: ReactNode;
 }) {
   return (
-    <div className='min-w-0 bg-card p-3 @[24rem]:p-4 @[40rem]:p-5'>
+    <div className='min-w-0 bg-card p-3 @[24rem]:p-4'>
       <p className='text-label text-muted-foreground'>{label}</p>
       {/* On a phone a long amount steps down a size, so it stays whole in its half of the card. */}
       <p
@@ -415,7 +417,7 @@ function Figure({
       >
         {value ?? <TextBone className='w-[4.5em]' />}
       </p>
-      {sub && <p className='numeric text-xs text-muted-foreground'>{sub}</p>}
+      {sub && <p className='numeric text-body-small text-muted-foreground'>{sub}</p>}
     </div>
   );
 }
@@ -445,20 +447,17 @@ function WhereItWent({
   );
   const hasUsual = parts.some((part) => usualOf(part.key) !== null);
   return (
-    <section
-      aria-label='Where it went'
-      className='grid gap-3 rounded-card border bg-card p-5 sm:p-6'
-    >
+    <section aria-label='Where it went' className='grid gap-3 rounded-lg border bg-card p-4'>
       <header className='flex flex-wrap items-baseline justify-between gap-x-3'>
         <h2 className='text-card-title'>Where it went</h2>
         {hasUsual && (
           // The bars and their ticks are hidden on a phone, where each row reads "on usual" instead.
-          <span className='inline-flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden'>
+          <span className='inline-flex items-center gap-1.5 text-body-small text-muted-foreground max-sm:hidden'>
             <i aria-hidden='true' className='h-5 w-0.5 bg-foreground' /> {usualLabel}
           </span>
         )}
       </header>
-      {parts.length === 0 && <p className='text-sm text-muted-foreground'>No spending.</p>}
+      {parts.length === 0 && <p className='text-body-small text-muted-foreground'>No spending.</p>}
       <ul className='-mx-2 grid gap-1'>
         {parts.map((part) => {
           const value = toCents(part.amount);
@@ -468,7 +467,7 @@ function WhereItWent({
               <Link
                 to='/bank-transactions'
                 search={categoryDrill(part.key, from, to, missingBaseAmounts)}
-                className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 px-2 text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
+                className='grid min-h-11 grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] items-center gap-3 px-2 text-body hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-sm:grid-cols-[minmax(0,1fr)_auto]'
               >
                 <CategoryName category={part.key} />
                 <span aria-hidden='true' className='relative block h-3 bg-muted max-sm:hidden'>
@@ -489,12 +488,14 @@ function WhereItWent({
                 <span className='min-w-24 text-right numeric'>
                   {wholeCents(value, currency)}
                   {usual !== null && usual > 0 && (
-                    <span className='block text-xs text-muted-foreground'>
+                    <span className='block text-body-small text-muted-foreground'>
                       {signedPct((value - usual) / usual)} on usual
                     </span>
                   )}
                   {usual === 0 && (
-                    <span className='block text-xs text-muted-foreground'>none usually</span>
+                    <span className='block text-body-small text-muted-foreground'>
+                      none usually
+                    </span>
                   )}
                 </span>
               </Link>
@@ -511,8 +512,8 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
   const {data, isPending, error, refetch} = query;
   const transactions = data?.pages.flatMap((page) => page.transactions) ?? [];
   return (
-    <section aria-label='Transactions' className='min-w-0 rounded-card border bg-card'>
-      <header className='flex items-center justify-between gap-3 px-5 pt-3 pb-1'>
+    <section aria-label='Transactions' className='min-w-0 rounded-lg border bg-card'>
+      <header className='flex items-center justify-between gap-3 px-4 pt-3 pb-1'>
         <h2 className='text-card-title'>Transactions</h2>
         <TextAction asChild className='-mr-2'>
           <Link to='/bank-transactions' search={periodDrill(from, to)}>
@@ -528,7 +529,7 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
           </ul>
         </div>
       ) : !data ? (
-        <div className='px-5 pb-5'>
+        <div className='px-4 pb-4'>
           <LoadErrorState
             size='section'
             title="Couldn't load transactions"
@@ -537,7 +538,9 @@ function MonthTransactions({from, to}: {from: string; to: string}) {
           />
         </div>
       ) : transactions.length === 0 ? (
-        <p className='px-5 pb-5 text-sm text-muted-foreground'>No transactions this month.</p>
+        <p className='px-4 pb-4 text-body-small text-muted-foreground'>
+          No transactions this month.
+        </p>
       ) : (
         <>
           <ul className='divide-y divide-border/60 px-2 pb-2'>
@@ -578,16 +581,16 @@ function WhereItCameFrom({
   const rest = parts.slice(limit).reduce((sum, part) => sum + toCents(part.amount), 0);
   const max = Math.max(1, ...top.map((part) => toCents(part.amount)));
   return (
-    <section aria-label='Where it came from' className='grid gap-3 rounded-card border bg-card p-5'>
+    <section aria-label='Where it came from' className='grid gap-3 rounded-lg border bg-card p-4'>
       <h2 className='text-card-title'>Where it came from</h2>
-      {parts.length === 0 && <p className='text-sm text-muted-foreground'>No income.</p>}
+      {parts.length === 0 && <p className='text-body-small text-muted-foreground'>No income.</p>}
       <ul className='-mx-2 grid gap-1'>
         {top.map((part) => (
           <li key={part.key}>
             <Link
               to='/bank-transactions'
               search={sourceDrill(part.key, from, to, missingBaseAmounts)}
-              className='grid min-h-11 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 px-2 text-sm hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+              className='grid min-h-11 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 px-2 text-body hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
             >
               {/* The tile sits beside the name, as a category's icon does; the bar runs under the name. */}
               <span className='grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2'>
@@ -608,7 +611,7 @@ function WhereItCameFrom({
         ))}
       </ul>
       {rest > 0 && (
-        <p className='flex justify-between numeric text-xs text-muted-foreground'>
+        <p className='flex justify-between numeric text-body-small text-muted-foreground'>
           <span>{parts.length - limit} more</span>
           <span>{wholeCents(rest, currency)}</span>
         </p>
@@ -635,7 +638,7 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
   // A ranking read mid-conversion or in another currency waits for its refetch; an empty one has nothing to label.
   const waiting = !!ranking && ranking.merchants.length > 0 && !accepted(ranking.baseCurrency);
   return (
-    <section aria-label='Biggest merchants' className='grid gap-3 rounded-card border bg-card p-5'>
+    <section aria-label='Biggest merchants' className='grid gap-3 rounded-lg border bg-card p-4'>
       <h2 className='text-card-title'>Biggest merchants</h2>
       {isPending || waiting ? (
         <div aria-busy='true'>
@@ -653,7 +656,7 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
           onRetry={refetch}
         />
       ) : ranking.merchants.length === 0 ? (
-        <p className='text-sm text-muted-foreground'>No spending this month.</p>
+        <p className='text-body-small text-muted-foreground'>No spending this month.</p>
       ) : (
         <ul className='-mx-3 -mb-3 divide-y divide-border/60'>
           {ranking.merchants.map((merchant) => {

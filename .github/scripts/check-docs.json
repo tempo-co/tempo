@@ -52,6 +52,10 @@
   ],
   "defaultBudget": 2500,
   "overrides": {
+    "apps/web/DESIGN.md": {
+      "words": 4000,
+      "reason": "the design system's single document: colour layers, the type and size scale, and every shared component's variants"
+    },
     "apps/api/docs/banking-invariants.md": {
       "words": 4500,
       "reason": "every remaining line is a banking invariant that no test or other doc states"

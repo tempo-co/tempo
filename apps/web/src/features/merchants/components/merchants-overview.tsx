@@ -61,7 +61,7 @@ export function MerchantsOverview({
         maxLength={MERCHANT_SEARCH_MAX_LENGTH}
         placeholder='Search merchants and people'
         aria-label='Search merchants and people'
-        className='h-12 text-base sm:h-9 sm:text-sm'
+        className='h-12 text-base sm:h-8 sm:text-body'
       />
       {search ? (
         <AllMerchants search={search} onSelect={onSelect} />
@@ -116,7 +116,7 @@ function Ranking({
         toggleLabel='Rank merchants by'
       >
         {loaded && loaded.baselinePeriods.length > 0 && (
-          <p className='col-span-2 text-xs text-muted-foreground'>
+          <p className='col-span-2 text-body-small text-muted-foreground'>
             {running
               ? `Compared with the last ${loaded.baselinePeriods.length} ${interval}s by this point.`
               : `Compared with the ${loaded.baselinePeriods.length} ${interval}s before.`}
@@ -133,7 +133,7 @@ function Ranking({
       ) : isPending || !loaded ? (
         <Skeleton className='h-72' role='img' aria-label='Loading top merchants' />
       ) : loaded.merchants.length === 0 ? (
-        <p className='text-sm text-muted-foreground'>No spending this {interval}.</p>
+        <p className='text-body-small text-muted-foreground'>No spending this {interval}.</p>
       ) : (
         <ol className='-mx-3 divide-y divide-border/60'>
           {loaded.merchants.map((merchant) => {
@@ -157,7 +157,7 @@ function Ranking({
         </ol>
       )}
       {loaded && loaded.total > loaded.merchants.length && (
-        <p className='text-xs text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           Top {loaded.merchants.length} of {loaded.total.toLocaleString()} merchants.
         </p>
       )}
@@ -199,7 +199,7 @@ function AllMerchants({
       <header className='flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1'>
         <h2 className='text-card-title'>{search ? 'Results' : 'All merchants'}</h2>
         {last && (
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-body-small text-muted-foreground'>
             {countLabel(last.total, search ? 'match' : 'merchant', search ? 'matches' : undefined)}
             {!search && ', most spent first'}
           </p>
@@ -215,7 +215,7 @@ function AllMerchants({
           onRetry={refetch}
         />
       ) : merchants.length === 0 ? (
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           {search ? 'No merchant or person matches that name.' : 'No merchants yet.'}
         </p>
       ) : (

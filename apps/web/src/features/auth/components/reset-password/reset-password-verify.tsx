@@ -57,7 +57,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
           viewKey='success-view-fade'
           role='status'
           aria-live='polite'
-          className='flex w-full flex-col gap-4 text-sm'
+          className='flex w-full flex-col gap-4 text-body'
         >
           <p className='leading-6 text-muted-foreground'>
             Your new password is ready. You can now log in to your Tempo account.
@@ -79,7 +79,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
           viewKey='error-view-fade'
           role='alert'
           aria-live='assertive'
-          className='flex w-full flex-col gap-4 text-sm'
+          className='flex w-full flex-col gap-4 text-body'
         >
           <p className='leading-6 text-muted-foreground'>
             This reset link is no longer valid. Request a new link to choose another password.
@@ -89,7 +89,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
               Request a new link
             </Link>
           </Button>
-          <p className='text-center text-sm text-muted-foreground'>
+          <p className='text-center text-body-small text-muted-foreground'>
             <Link
               to='/login'
               className='text-foreground underline-offset-4 hover:underline'
@@ -106,7 +106,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
   return (
     <AuthLayout title='Choose a new password'>
       <FadeSwitch viewKey='verify-form-view-fade' className='flex w-full flex-col gap-4'>
-        <p className='text-sm leading-6 text-muted-foreground'>
+        <p className='text-body-small leading-6 text-muted-foreground'>
           Choose a new password for the account associated with{' '}
           <span className='font-medium wrap-break-word text-foreground'>{email}</span>.
         </p>
@@ -148,7 +148,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
             </Button>
           </form>
         </Form>
-        <p className='pt-0 text-center text-sm text-muted-foreground'>
+        <p className='pt-0 text-center text-body-small text-muted-foreground'>
           <Link
             to='/login'
             className='text-foreground underline-offset-4 hover:underline'

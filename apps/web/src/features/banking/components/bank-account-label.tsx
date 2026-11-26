@@ -15,7 +15,9 @@ export function BankAccountLabel({bankName, currency, accountName}: BankAccountL
         </span>
         <span className='shrink-0 text-muted-foreground'>{currency}</span>
       </p>
-      {accountName && <p className='truncate text-xs text-muted-foreground'>{accountName}</p>}
+      {accountName && (
+        <p className='truncate text-body-small text-muted-foreground'>{accountName}</p>
+      )}
     </div>
   );
 }

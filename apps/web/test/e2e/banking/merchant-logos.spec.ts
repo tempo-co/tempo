@@ -31,12 +31,12 @@ const PNG = Buffer.from(
 
 const PALETTES = {
   light: {
-    field: [241, 227, 216],
-    ink: [143, 64, 50],
-    edge: [208, 184, 169],
-    category: [160, 86, 44],
+    field: [238, 240, 245],
+    ink: [93, 98, 117],
+    edge: [226, 229, 238],
+    category: [157, 83, 41],
   },
-  dark: {field: [53, 42, 40], ink: [229, 154, 123], edge: [89, 65, 58], category: [229, 152, 108]},
+  dark: {field: [22, 24, 38], ink: [163, 168, 186], edge: [42, 46, 64], category: [230, 151, 110]},
 };
 type Theme = keyof typeof PALETTES;
 
@@ -333,7 +333,7 @@ for (const width of [1440, 390]) {
     test.describe(`merchant logo tiles at ${width}px in ${theme}`, () => {
       test.use({viewport: {width, height: 1000}});
 
-      test('show Clay alpha logos across transaction surfaces with inspectors returning to their origin', async ({
+      test('show tinted alpha logos across transaction surfaces with inspectors returning to their origin', async ({
         page,
       }) => {
         test.slow();

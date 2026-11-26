@@ -19,8 +19,8 @@ function pwaManifestPlugin(basePath: string): Plugin {
         start_url: basePath,
         scope: basePath,
         display: 'standalone',
-        background_color: '#17161B',
-        theme_color: '#17161B',
+        background_color: '#F5F6FA',
+        theme_color: '#F5F6FA',
         icons: PWA_ICONS.map(({file, sizes, purpose}) => ({
           src: icon(file),
           sizes,

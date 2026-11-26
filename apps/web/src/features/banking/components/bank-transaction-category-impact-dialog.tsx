@@ -82,7 +82,7 @@ function Checkbox({
 /** A category's 20px icon and name, the size used beside category names across the app. */
 function CategoryChip({category}: {category: string | null}) {
   return (
-    <span className='inline-flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground'>
+    <span className='inline-flex min-w-0 items-center gap-1.5 text-body font-medium text-foreground'>
       <BankTransactionCategoryIcon
         category={toBankTransactionCategory(category)}
         className='size-5'
@@ -96,7 +96,7 @@ function CategoryChip({category}: {category: string | null}) {
 
 function RecheckChip() {
   return (
-    <span className='inline-flex items-center gap-1.5 text-sm font-medium text-foreground'>
+    <span className='inline-flex items-center gap-1.5 text-body font-medium text-foreground'>
       <span
         aria-hidden='true'
         data-testid='category-icon'
@@ -226,7 +226,7 @@ function SwapGroup({
                 />
                 {/* The amount shares the name's line, so the date below always has the full width. */}
                 <span className='min-w-0'>
-                  <span className='flex flex-wrap items-baseline justify-between gap-x-3 text-sm'>
+                  <span className='flex flex-wrap items-baseline justify-between gap-x-3 text-body'>
                     {/* Wraps in full: these rows don't open, and a name's end can be what tells two apart. */}
                     <span className='min-w-0 wrap-anywhere'>{row.displayDescription}</span>
                     {/* An amount wider than the row breaks rather than running past its edge. */}
@@ -234,7 +234,7 @@ function SwapGroup({
                       <CurrencyAmount amount={Number(row.amount)} currency={row.currency} />
                     </span>
                   </span>
-                  <span className='block text-xs whitespace-nowrap text-muted-foreground'>
+                  <span className='block text-body-small whitespace-nowrap text-muted-foreground'>
                     {rowDate(row)}
                   </span>
                 </span>
@@ -314,7 +314,7 @@ export function BankTransactionCategoryImpactDialog({
             </ResponsiveDialogDescription>
           </ResponsiveDialogHeader>
           <div className='p-5'>
-            <p className='mb-3 text-sm wrap-anywhere text-muted-foreground'>
+            <p className='mb-3 text-body-small wrap-anywhere text-muted-foreground'>
               {recheck
                 ? 'Each can end up in a different category.'
                 : `${others.charAt(0).toUpperCase()}${others.slice(1)} other ${sameName ? `${name} ` : ''}${noun(shown)} can follow:`}
@@ -337,7 +337,7 @@ export function BankTransactionCategoryImpactDialog({
               </ul>
             </fieldset>
             {capped && (
-              <p className='mt-3 text-sm text-muted-foreground'>
+              <p className='mt-3 text-body-small text-muted-foreground'>
                 The {impact.total - shown} older {noun(impact.total - shown)} stay as they are.
               </p>
             )}

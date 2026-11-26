@@ -39,7 +39,7 @@ const POINTER = '[@media(hover:hover)_and_(pointer:fine)]:cursor-pointer';
  * it; stacked, it keeps a fixed height.
  */
 const BALANCE_BOX =
-  'relative flex min-h-72 flex-1 flex-col sm:min-h-80 @[60rem]:max-h-[40rem] @[60rem]:min-h-48';
+  'relative flex min-h-72 flex-1 flex-col sm:min-h-80 @[60rem]:max-h-160 @[60rem]:min-h-48';
 /** The y axis' labels, which {@link useLabelWidth} measures in the same type. */
 const Y_TICK = 'numeric text-caption';
 
@@ -124,7 +124,7 @@ export function BalanceChart({
       {measurer}
       <ChartContainer
         className={cn('aspect-auto min-h-0 w-full flex-1', POINTER)}
-        config={{balance: {color: 'hsl(var(--chart-primary))'}}}
+        config={{balance: {color: 'var(--color-chart-primary)'}}}
         role='img'
         aria-label={
           first === undefined
@@ -150,7 +150,7 @@ export function BalanceChart({
             if (data[index]) onPick(data[index].point.month);
           }}
         >
-          <CartesianGrid vertical={false} stroke='hsl(var(--border))' />
+          <CartesianGrid vertical={false} stroke='var(--color-border)' />
           <XAxis
             dataKey='index'
             type='number'
@@ -290,7 +290,7 @@ function PointBand({
         y={top}
         width={to - from}
         height={height}
-        fill='hsl(var(--accent))'
+        fill='var(--color-accent)'
         stroke='none'
         pointerEvents='none'
       />

@@ -41,7 +41,7 @@ const ROW = cn(
   'hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
 );
 const COUNTRY_SHAPE =
-  'mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-sm';
+  'mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-body';
 
 /**
  * Connecting a bank, one step at a time in one sheet: pick a bank in the likely country (changing it is a step of
@@ -135,11 +135,11 @@ export function BankConnectionPicker({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         {/* One height for every step and for loading, so the sheet never resizes under a thumb. */}
-        <div className='flex h-[min(68dvh,32rem)] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
+        <div className='flex h-[min(68dvh,--spacing(128))] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
           {isError ? (
             <div
               role='alert'
-              className='m-auto grid justify-items-center gap-3 text-center text-sm text-muted-foreground'
+              className='m-auto grid justify-items-center gap-3 text-center text-body-small text-muted-foreground'
             >
               <p>Supported banks are unavailable.</p>
               <Button variant='outline' onClick={() => void refetch()}>
@@ -149,7 +149,7 @@ export function BankConnectionPicker({
           ) : isPending ? (
             <BankStepSkeleton />
           ) : !country ? (
-            <p className='m-auto text-center text-sm text-muted-foreground'>
+            <p className='m-auto text-center text-body-small text-muted-foreground'>
               No banks are available to connect right now.
             </p>
           ) : step === 'country' ? (
@@ -233,7 +233,7 @@ function BankStep({
           <li key={`${bank.country}:${bank.name}`}>
             <button type='button' className={ROW} onClick={() => onSelect(bank)}>
               <BankWordmark bank={bank} />
-              <span className='min-w-0 truncate text-sm'>{bank.name}</span>
+              <span className='min-w-0 truncate text-body'>{bank.name}</span>
               <ChevronRight aria-hidden='true' className='size-4 text-muted-foreground' />
             </button>
           </li>
@@ -309,8 +309,8 @@ function CountryStep({
               onClick={() => onSelect(country.code)}
             >
               <CountryTile code={country.code} />
-              <span className='min-w-0 truncate text-sm'>{country.label}</span>
-              <span className='numeric text-xs text-muted-foreground'>
+              <span className='min-w-0 truncate text-body'>{country.label}</span>
+              <span className='numeric text-body-small text-muted-foreground'>
                 {countOf(country.bankCount, 'bank', 'banks')}
               </span>
             </button>
@@ -336,7 +336,7 @@ function ConfirmStep({
     <div className='flex flex-1 flex-col'>
       <div className='grid flex-1 content-center justify-items-center gap-3 text-center'>
         <BankWordmark bank={bank} size='lg' />
-        <p className='text-sm text-muted-foreground'>{country.label}</p>
+        <p className='text-body-small text-muted-foreground'>{country.label}</p>
       </div>
       <div className='grid gap-2'>
         <Button
@@ -351,7 +351,7 @@ function ConfirmStep({
             `Continue to ${bank.name}`
           )}
         </Button>
-        <p className='text-center text-xs wrap-anywhere text-muted-foreground'>
+        <p className='text-center text-body-small wrap-anywhere text-muted-foreground'>
           You approve access at {bank.name}, then come back here.
         </p>
       </div>
@@ -399,7 +399,7 @@ function List({children, empty}: {children: React.ReactNode; empty: string | nul
   return (
     <ScrollArea type='auto' className='-mx-2 min-h-0 flex-1'>
       {empty ? (
-        <p className='px-4 py-8 text-center text-sm text-muted-foreground'>{empty}</p>
+        <p className='px-4 py-8 text-center text-body-small text-muted-foreground'>{empty}</p>
       ) : (
         // Clear of the scrollbar on the right, so it never touches a row.
         <ul className='grid pr-5 pl-2'>{children}</ul>
@@ -418,7 +418,7 @@ const FLAGS = import.meta.glob<string>('./*.svg', {
   import: 'default',
 });
 
-const TILE = 'inline-flex h-[21px] w-7 shrink-0 rounded-sm';
+const TILE = 'inline-flex aspect-4/3 w-7 shrink-0 rounded-sm';
 
 /**
  * A country's flag: flat, 28×21, the small corner radius, and a hairline edge so white and pale flags keep their
@@ -433,7 +433,7 @@ function CountryTile({code}: {code: string}) {
         aria-hidden='true'
         className={cn(
           TILE,
-          'items-center justify-center border border-border text-[10px] font-medium text-muted-foreground',
+          'items-center justify-center border border-border text-caption font-medium text-muted-foreground',
         )}
       >
         {code.toUpperCase()}

@@ -159,7 +159,7 @@ export function CreateTokenDialog({open, onOpenChange, onClosed}: CreateTokenDia
                   )}
                 />
                 {create.isPending && (
-                  <p role='status' className='text-sm text-muted-foreground'>
+                  <p role='status' className='text-body-small text-muted-foreground'>
                     Keep this dialog open while your token is being created.
                   </p>
                 )}

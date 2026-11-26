@@ -14,12 +14,12 @@ type MerchantLogoTileProps = {
 };
 
 const TILE_CLASS_NAME =
-  'h-9 w-9 shrink-0 rounded-full border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink';
+  'h-9 w-9 shrink-0 rounded-full border border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground';
 
 /**
  * The round tile before a transaction's name: the merchant's logo when the API has one, otherwise
  * the category icon. Own transfers and currency exchanges (internal movements) show the activity
- * icon. Both the alpha logo and fallback glyph use the leading tile's Clay palette.
+ * icon. Both the alpha logo and fallback glyph use the leading tile's colours.
  */
 export function MerchantLogoTile({
   transaction,
@@ -56,7 +56,7 @@ export function MerchantLogoTile({
       <svg aria-hidden='true' className='absolute h-0 w-0 overflow-hidden'>
         <defs>
           <filter id={filterId} colorInterpolationFilters='sRGB'>
-            <feFlood floodColor='var(--transaction-tile-ink)' />
+            <feFlood floodColor='var(--color-transaction-tile-foreground)' />
             <feComposite in2='SourceAlpha' operator='in' />
           </filter>
         </defs>

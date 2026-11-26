@@ -249,9 +249,9 @@ async function expectToastStyle(page: Page, action: string, width: number) {
   expect(style).toEqual({
     font: 'Inter Variable',
     size: '14px',
-    radius: '12px',
-    buttonSize: '14px',
-    buttonHeight: width < 640 ? 44 : 36,
+    radius: '8px',
+    buttonSize: '13px',
+    buttonHeight: width < 640 ? 44 : 32,
   });
 }
 

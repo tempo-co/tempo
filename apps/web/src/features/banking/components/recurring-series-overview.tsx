@@ -128,7 +128,7 @@ export function RecurringSeriesOverview({
           <ToggleGroupItem
             key={value}
             value={value}
-            className='min-h-9 px-3 text-xs data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:flex-1'
+            className='min-h-7 rounded-sm px-3 text-body-small data-[state=on]:bg-secondary data-[state=on]:font-semibold data-[state=on]:text-secondary-foreground max-sm:min-h-11 max-sm:flex-1'
           >
             {label}
             <span className='ml-1.5 numeric font-normal text-muted-foreground'>
@@ -160,7 +160,7 @@ function DirectionView({
 
   if (data.series.length === 0) {
     return (
-      <p className='text-sm text-muted-foreground'>
+      <p className='text-body-small text-muted-foreground'>
         {isIncome ? 'No regular income found yet.' : 'No recurring bills found yet.'}
       </p>
     );
@@ -228,11 +228,11 @@ function MonthHeader({
             {isIncome && '+'}
             {formatWholeMoney(data.monthlyTotal, currency)}
           </p>
-          <p className='mt-1.5 text-sm text-muted-foreground'>
+          <p className='mt-1.5 text-body-small text-muted-foreground'>
             a month · {activeCount} {noun}
           </p>
         </div>
-        <dl className='grid grid-cols-[auto_auto] items-baseline gap-x-3 gap-y-0.5 text-sm'>
+        <dl className='grid grid-cols-[auto_auto] items-baseline gap-x-3 gap-y-0.5 text-body'>
           <dd className='text-right numeric font-medium'>
             {formatWholeMoney(month.paid, currency)}
           </dd>
@@ -258,7 +258,7 @@ function MonthHeader({
         </div>
       )}
       {data.unconvertedCount > 0 && (
-        <p className='text-xs text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           {data.unconvertedCount} not converted yet, left out of the totals.
         </p>
       )}
@@ -319,7 +319,7 @@ function SeriesList({
   muted?: boolean;
 }) {
   return (
-    <ul className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'>
+    <ul className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'>
       {series.map((entry) => (
         <li key={entry.key} data-testid={`recurring-series-${entry.key}`}>
           <SeriesRow
@@ -359,21 +359,21 @@ function SeriesRow({
       onClick={() => onOpen(series.key)}
       aria-label={`${series.name}, ${formatAmount(series)}, ${RECURRING_CADENCE_LABELS[series.cadence].toLowerCase()}, ${when}`}
       className={cn(
-        'flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+        'flex min-h-15 w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
         muted && 'opacity-70',
       )}
     >
       <SeriesTile series={series} />
       <span className='min-w-0 flex-1'>
-        <span className='block truncate text-sm font-medium'>{series.name}</span>
-        <span className='block truncate text-xs text-muted-foreground'>
+        <span className='block truncate text-body font-medium'>{series.name}</span>
+        <span className='block truncate text-body-small text-muted-foreground'>
           {RECURRING_CADENCE_LABELS[series.cadence]} · {when}
         </span>
       </span>
       <span className='shrink-0 text-right'>
         <span
           className={cn(
-            'block numeric text-sm font-medium',
+            'block numeric text-body font-medium',
             series.direction === 'INCOME' && 'text-success',
           )}
         >
@@ -393,7 +393,7 @@ function RecurringSkeleton() {
       <Skeleton className='h-9 w-40' />
       <Skeleton className='h-10 w-48' />
       <Skeleton className='h-1.5' />
-      <div className='grid gap-px overflow-hidden rounded-card border'>
+      <div className='grid gap-px overflow-hidden rounded-lg border'>
         <Skeleton className='h-16 rounded-none' />
         <Skeleton className='h-16 rounded-none' />
         <Skeleton className='h-16 rounded-none' />

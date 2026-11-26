@@ -110,7 +110,7 @@ function VerifyEmailIndex() {
           viewKey='error-view-fade'
           role='alert'
           aria-live='assertive'
-          className='flex w-full flex-col gap-4 text-center text-sm'
+          className='flex w-full flex-col gap-4 text-center text-body'
         >
           <p className='leading-6 text-muted-foreground'>
             We couldn&apos;t verify{' '}
@@ -147,7 +147,7 @@ function VerifyEmailIndex() {
           viewKey='error-view-fade'
           role='status'
           aria-live='polite'
-          className='flex w-full flex-col gap-4 text-center text-sm text-muted-foreground'
+          className='flex w-full flex-col gap-4 text-center text-body-small text-muted-foreground'
         >
           <p>You&apos;re trying to verify your email too often.</p>
           <p>Try again later.</p>
@@ -168,7 +168,7 @@ function VerifyEmailIndex() {
           viewKey='unknown-error-view-fade'
           role='alert'
           aria-live='assertive'
-          className='flex w-full flex-col gap-4 text-center text-sm'
+          className='flex w-full flex-col gap-4 text-center text-body'
         >
           <p className='leading-6 text-muted-foreground'>
             We couldn&apos;t verify your email right now. Try again.
@@ -208,7 +208,7 @@ function VerifyEmailIndex() {
           viewKey='confirmed-view-fade'
           role='status'
           aria-live='polite'
-          className='flex w-full flex-col gap-4 text-center text-sm'
+          className='flex w-full flex-col gap-4 text-center text-body'
         >
           <p className='leading-6 text-muted-foreground'>
             Go back to where you signed up, or log in here.
@@ -230,7 +230,7 @@ function VerifyEmailIndex() {
           viewKey='loading-view-fade'
           role='status'
           aria-live='polite'
-          className='flex w-full flex-col items-center gap-4 text-sm text-muted-foreground'
+          className='flex w-full flex-col items-center gap-4 text-body-small text-muted-foreground'
         >
           <Loader aria-hidden className='h-10 w-10 animate-slow-spin text-primary' />
         </FadeSwitch>
@@ -245,12 +245,12 @@ function VerifyEmailIndex() {
         layout
         className='flex w-full flex-col items-center gap-4'
       >
-        <div className='w-full text-center text-sm text-muted-foreground'>
+        <div className='w-full text-center text-body-small text-muted-foreground'>
           <p>We sent a verification email to</p>
           <p className='mt-1 font-medium wrap-break-word text-foreground'>
             {currentAccount?.email ?? 'your email address'}
           </p>
-          <p className='mt-3 text-xs leading-5'>
+          <p className='mt-3 text-body-small leading-5'>
             Click the link in the email, or enter the 6-digit code manually.
           </p>
         </div>
@@ -273,7 +273,7 @@ function VerifyEmailIndex() {
           )}
           <ResendCodeButton variant='outline' />
         </FadeSwitch>
-        <p className='pt-0 text-center text-sm text-muted-foreground'>
+        <p className='pt-0 text-center text-body-small text-muted-foreground'>
           Need to start over?{' '}
           <Button
             variant='link'

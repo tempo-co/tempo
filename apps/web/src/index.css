@@ -27,101 +27,105 @@
 @theme {
   --font-sans: Inter Variable, Inter, ui-sans-serif, system-ui, sans-serif;
 
-  /* Named type styles from DESIGN.md: size, leading and weight in one utility (text-page-title). */
-  --text-page-title: 1.5rem;
-  --text-page-title--line-height: calc(2 / 1.5);
-  --text-page-title--letter-spacing: -0.025em;
-  --text-page-title--font-weight: 600;
-  --text-section-title: 1.125rem;
+  /* Named type styles from DESIGN.md (Crisp): size, leading and weight in one utility (text-page-title). */
+  --text-page-title: 1.375rem;
+  /* 26px, the nearest whole pixel to 1.2, as a length: a unitless ratio rounds below 26px in WebKit. */
+  --text-page-title--line-height: 1.625rem;
+  --text-page-title--letter-spacing: -0.02em;
+  --text-page-title--font-weight: 700;
+  --text-section-title: 1rem;
   --text-section-title--line-height: 1.35;
   --text-section-title--font-weight: 600;
-  --text-card-title: 1rem;
-  --text-card-title--line-height: 1.5;
+  --text-card-title: 0.8125rem;
+  --text-card-title--line-height: 1.4;
   --text-card-title--font-weight: 600;
-  --text-caption: 0.6875rem;
-  --text-caption--line-height: 1;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-body-small: 0.8125rem;
+  /* 20px, the nearest whole pixel to 1.5, so second lines and rows stay on whole pixels. */
+  --text-body-small--line-height: 1.25rem;
   --text-label: 0.75rem;
   --text-label--line-height: 1.333;
   --text-label--font-weight: 500;
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 1;
 
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
+  /* Colour utilities: only the shadcn names and our additions in the same style (DESIGN.md, Colour).
+     Tailwind's own palette is cleared, so no class reaches a scale step or a stock colour. */
+  --color-*: initial;
 
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-sunk: var(--sunk);
+  --color-faint: var(--faint);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-muted: var(--info-muted);
+  --color-scrim: var(--scrim);
 
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-chart-primary: var(--chart-primary);
+  --color-chart-secondary: var(--chart-secondary);
+  --color-chart-secondary-edge: var(--chart-secondary-edge);
+  --color-chart-heat: var(--chart-heat);
 
-  --color-warning: hsl(var(--warning));
-  --color-warning-foreground: hsl(var(--warning-foreground));
-
-  --color-info: hsl(var(--info));
-  --color-info-foreground: hsl(var(--info-foreground));
-
-  --color-success: hsl(var(--success));
-  --color-success-foreground: hsl(var(--success-foreground));
-
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-
-  --color-clay: hsl(var(--clay));
-
-  --color-transaction-tile-field: var(--transaction-tile-field);
-  --color-transaction-tile-ink: var(--transaction-tile-ink);
-  --color-transaction-tile-edge: var(--transaction-tile-edge);
-  /* Original-colour bank artwork uses one quiet, bordered plate in either theme. */
+  --color-transaction-tile: var(--transaction-tile);
+  --color-transaction-tile-foreground: var(--transaction-tile-foreground);
+  --color-transaction-tile-border: var(--transaction-tile-border);
   --color-bank-logo-plate: var(--bank-logo-plate);
-  --color-bank-logo-edge: #D9D2C6; /* Fold shadow */
-  --color-bank-logo-ink: #28252B; /* Ink for initials on either light plate */
+  --color-bank-logo-plate-foreground: var(--bank-logo-plate-foreground);
+  --color-bank-logo-plate-border: var(--bank-logo-plate-border);
 
-  --color-chart-primary: hsl(var(--chart-primary));
-  --color-chart-secondary: hsl(var(--chart-secondary));
-  --color-chart-secondary-edge: hsl(var(--chart-secondary-edge));
-  --color-scrim: hsl(var(--scrim));
-
-  --color-category-housing: rgb(var(--category-housing));
-  --color-category-home-improvement: rgb(var(--category-home-improvement));
-  --color-category-groceries: rgb(var(--category-groceries));
-  --color-category-eating-out: rgb(var(--category-eating-out));
-  --color-category-transportation: rgb(var(--category-transportation));
-  --color-category-shopping: rgb(var(--category-shopping));
-  --color-category-health: rgb(var(--category-health));
-  --color-category-travel: rgb(var(--category-travel));
-  --color-category-entertainment: rgb(var(--category-entertainment));
-  --color-category-personal-care: rgb(var(--category-personal-care));
-  --color-category-services: rgb(var(--category-services));
-  --color-category-education: rgb(var(--category-education));
-  --color-category-insurance: rgb(var(--category-insurance));
-  --color-category-loans-and-debt: rgb(var(--category-loans-and-debt));
-  --color-category-fees: rgb(var(--category-fees));
-  --color-category-taxes-and-government: rgb(var(--category-taxes-and-government));
-  --color-category-gifts-and-donations: rgb(var(--category-gifts-and-donations));
-  --color-category-cash-withdrawal: rgb(var(--category-cash-withdrawal));
-  --color-category-income: rgb(var(--category-income));
-  --color-category-refund: rgb(var(--category-refund));
-  --color-category-transfer-in: rgb(var(--category-transfer-in));
-  --color-category-transfer-out: rgb(var(--category-transfer-out));
-
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-category-housing: var(--category-housing);
+  --color-category-home-improvement: var(--category-home-improvement);
+  --color-category-groceries: var(--category-groceries);
+  --color-category-eating-out: var(--category-eating-out);
+  --color-category-transportation: var(--category-transportation);
+  --color-category-shopping: var(--category-shopping);
+  --color-category-health: var(--category-health);
+  --color-category-travel: var(--category-travel);
+  --color-category-entertainment: var(--category-entertainment);
+  --color-category-personal-care: var(--category-personal-care);
+  --color-category-services: var(--category-services);
+  --color-category-education: var(--category-education);
+  --color-category-insurance: var(--category-insurance);
+  --color-category-loans-and-debt: var(--category-loans-and-debt);
+  --color-category-fees: var(--category-fees);
+  --color-category-taxes-and-government: var(--category-taxes-and-government);
+  --color-category-gifts-and-donations: var(--category-gifts-and-donations);
+  --color-category-cash-withdrawal: var(--category-cash-withdrawal);
+  --color-category-income: var(--category-income);
+  --color-category-refund: var(--category-refund);
+  --color-category-transfer-in: var(--category-transfer-in);
+  --color-category-transfer-out: var(--category-transfer-out);
 
   --radius-lg: var(--radius);
   --radius-md: max(0px, calc(var(--radius) - 2px));
   --radius-sm: max(0px, calc(var(--radius) - 4px));
-  --radius-card: var(--card-radius);
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -160,179 +164,448 @@
   }
 }
 
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
+/* Tailwind v4 borders default to currentcolor; every border here takes the hairline role instead. */
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--color-border);
   }
 }
 
+/*
+  Colour, in three layers (DESIGN.md, Foundations, Colour):
+  1. Scales: raw 12-step colours for both themes. Only the role layer reads them.
+  2. Roles, named by job: light values on :root, dark values under .dark.
+  3. shadcn names and our additions, which point at roles. Only these become Tailwind utilities.
+*/
 @layer base {
+  /* 1. Scales. Step jobs follow Radix: 1–2 backgrounds, 3–5 component fills (rest, hover, pressed),
+     6–8 borders and focus, 9–10 solid fills, 11–12 text. Grey and Midnight come from Radix's custom-scale
+     method anchored on the agreed Wisp values; green, amber, red and blue are Radix's published scales,
+     with light step 11 of green, amber and blue darkened slightly so status text clears 4.5:1 on the
+     cool page. */
   :root {
-    /* light: Paper canvas, Ink text, Clay accents */
-    --background: 38.6 43.8% 93.7%; /* Paper #F6F1E8 */
-    --foreground: 270 7.5% 15.7%;   /* Ink #28252B */
+    --grey-1: #ffffff;
+    --grey-2: #f5f6fa;
+    --grey-3: #eef0f5;
+    --grey-4: #e6e8ef;
+    --grey-5: #e2e5ee;
+    --grey-6: #d6d9e4;
+    --grey-7: #cacedb;
+    --grey-8: #b6bbcd;
+    --grey-9: #8a8fa0;
+    --grey-10: #7e8393;
+    --grey-11: #5d6275;
+    --grey-12: #1d2140;
 
-    --card: 42 55.6% 96.5%;         /* lifted Paper */
-    --card-foreground: 270 7.5% 15.7%;
+    --grey-dark-0: #07080f; /* one step below 1: the dark theme's modal backdrop */
+    --grey-dark-1: #121420;
+    --grey-dark-2: #161826;
+    --grey-dark-3: #1a1d2b;
+    --grey-dark-4: #222536;
+    --grey-dark-5: #2a2e40;
+    --grey-dark-6: #373a45;
+    --grey-dark-7: #434755;
+    --grey-dark-8: #5b6072;
+    --grey-dark-9: #686e82;
+    --grey-dark-10: #767c90;
+    --grey-dark-11: #a3a8ba;
+    --grey-dark-12: #eef0f7;
 
-    --popover: 42 55.6% 96.5%;
-    --popover-foreground: 270 7.5% 15.7%;
+    --midnight-1: #fdfdff;
+    --midnight-2: #f7f9ff;
+    --midnight-3: #eef2ff;
+    --midnight-4: #e2e9ff;
+    --midnight-5: #d5deff;
+    --midnight-6: #c4d0ff;
+    --midnight-7: #acbdfd;
+    --midnight-8: #8ea1f5;
+    --midnight-9: #232b66;
+    --midnight-10: #343f7c;
+    --midnight-11: #505fac;
+    --midnight-12: #222a65;
+    --midnight-contrast: #ffffff;
 
-    --primary: 9 48.2% 37.8%;       /* Clay strong #8F4032 — small text/controls on light */
-    --primary-foreground: 38.6 43.8% 93.7%;
+    --midnight-dark-1: #13141d;
+    --midnight-dark-2: #161722;
+    --midnight-dark-3: #22243e;
+    --midnight-dark-4: #2b2f53;
+    --midnight-dark-5: #353963;
+    --midnight-dark-6: #3f4471;
+    --midnight-dark-7: #4b5083;
+    --midnight-dark-8: #585e9a;
+    --midnight-dark-9: #aeb6f2;
+    --midnight-dark-10: #a4abe7;
+    --midnight-dark-11: #aab1ed;
+    --midnight-dark-12: #dde0f6;
+    --midnight-dark-contrast: #14161a;
 
-    --secondary: 34.3 38.2% 89.2%;
-    --secondary-foreground: 9 48.2% 37.8%;
+    --green-1: #fbfefc;
+    --green-2: #f4fbf6;
+    --green-3: #e6f6eb;
+    --green-4: #d6f1df;
+    --green-5: #c4e8d1;
+    --green-6: #adddc0;
+    --green-7: #8eceaa;
+    --green-8: #5bb98b;
+    --green-9: #30a46c;
+    --green-10: #2b9a66;
+    --green-11: #1a7e54;
+    --green-12: #193b2d;
+    --green-dark-1: #0e1512;
+    --green-dark-2: #121b17;
+    --green-dark-3: #132d21;
+    --green-dark-4: #113b29;
+    --green-dark-5: #174933;
+    --green-dark-6: #20573e;
+    --green-dark-7: #28684a;
+    --green-dark-8: #2f7c57;
+    --green-dark-9: #30a46c;
+    --green-dark-10: #33b074;
+    --green-dark-11: #3dd68c;
+    --green-dark-12: #b1f1cb;
 
-    --muted: 37.9 20% 81.4%;        /* Fold shadow #D9D2C6 — planes/borders only */
-    --muted-foreground: 33.7 7.8% 40%;
+    --amber-1: #fefdfb;
+    --amber-2: #fefbe9;
+    --amber-3: #fff7c2;
+    --amber-4: #ffee9c;
+    --amber-5: #fbe577;
+    --amber-6: #f3d673;
+    --amber-7: #e9c162;
+    --amber-8: #e2a336;
+    --amber-9: #ffc53d;
+    --amber-10: #ffba18;
+    --amber-11: #a56000;
+    --amber-12: #4f3422;
+    --amber-dark-1: #16120c;
+    --amber-dark-2: #1d180f;
+    --amber-dark-3: #302008;
+    --amber-dark-4: #3f2700;
+    --amber-dark-5: #4d3000;
+    --amber-dark-6: #5c3d05;
+    --amber-dark-7: #714f19;
+    --amber-dark-8: #8f6424;
+    --amber-dark-9: #ffc53d;
+    --amber-dark-10: #ffd60a;
+    --amber-dark-11: #ffca16;
+    --amber-dark-12: #ffe7b3;
 
-    --accent: 37.1 36.8% 88.8%;
-    --accent-foreground: 270 7.5% 15.7%;
+    --red-1: #fffcfc;
+    --red-2: #fff7f7;
+    --red-3: #feebec;
+    --red-4: #ffdbdc;
+    --red-5: #ffcdce;
+    --red-6: #fdbdbe;
+    --red-7: #f4a9aa;
+    --red-8: #eb8e90;
+    --red-9: #e5484d;
+    --red-10: #dc3e42;
+    --red-11: #ce2c31;
+    --red-12: #641723;
+    --red-dark-1: #191111;
+    --red-dark-2: #201314;
+    --red-dark-3: #3b1219;
+    --red-dark-4: #500f1c;
+    --red-dark-5: #611623;
+    --red-dark-6: #72232d;
+    --red-dark-7: #8c333a;
+    --red-dark-8: #b54548;
+    --red-dark-9: #e5484d;
+    --red-dark-10: #ec5d5e;
+    --red-dark-11: #ff9592;
+    --red-dark-12: #ffd1d9;
 
-    --clay: 13.7 46.3% 51.8%; /* Clay #BD654B — large accents */
+    --blue-1: #fbfdff;
+    --blue-2: #f4faff;
+    --blue-3: #e6f4fe;
+    --blue-4: #d5efff;
+    --blue-5: #c2e5ff;
+    --blue-6: #acd8fc;
+    --blue-7: #8ec8f6;
+    --blue-8: #5eb1ef;
+    --blue-9: #0090ff;
+    --blue-10: #0588f0;
+    --blue-11: #016fc9;
+    --blue-12: #113264;
+    --blue-dark-1: #0d1520;
+    --blue-dark-2: #111927;
+    --blue-dark-3: #0d2847;
+    --blue-dark-4: #003362;
+    --blue-dark-5: #004074;
+    --blue-dark-6: #104d87;
+    --blue-dark-7: #205d9e;
+    --blue-dark-8: #2870bd;
+    --blue-dark-9: #0090ff;
+    --blue-dark-10: #3b9eff;
+    --blue-dark-11: #70b8ff;
+    --blue-dark-12: #c2e6ff;
 
-    /* Leading transaction tiles only; ordinary category/status colours keep their semantics. */
-    --bank-logo-plate: #FFFFFF;
-    --transaction-tile-field: #F1E3D8;
-    --transaction-tile-ink: #8F4032;
-    --transaction-tile-edge: #D0B8A9;
+    /* Category colours: one fixed colour per category and theme, today's hues retuned on the cool
+       neutrals so each icon clears 3:1 on its 10% tile. Dark keeps each category's light hue. */
+    --hue-housing: #846106;
+    --hue-home-improvement: #50657c;
+    --hue-groceries: #9d5329;
+    --hue-eating-out: #b03e1c;
+    --hue-transportation: #176c74;
+    --hue-shopping: #563f8d;
+    --hue-health: #99334c;
+    --hue-travel: #1e6f95;
+    --hue-entertainment: #8a386c;
+    --hue-personal-care: #864c94;
+    --hue-services: #516732;
+    --hue-education: #304791;
+    --hue-insurance: #6c6a27;
+    --hue-loans-and-debt: #76482e;
+    --hue-fees: #862c27;
+    --hue-taxes-and-government: #725c31;
+    --hue-gifts-and-donations: #713d45;
+    --hue-cash-withdrawal: #4b5f5d;
+    --hue-income: #246a4a;
+    --hue-refund: #45742e;
+    --hue-transfer-in: #524d6a;
+    --hue-transfer-out: #6c5c4b;
 
-    --chart-primary: 270 7% 30%;   /* Ink-led data series: spending, balance line */
-    --chart-secondary: 37 16% 74%; /* light warm tint second series: income */
-    --chart-secondary-edge: 37 12% 48%; /* its 1px outline, 3:1 on card */
-    --scrim: 252 10.2% 9.6%;       /* Night: overlay backdrop (dark uses a deeper Night) */
-
-    --category-housing: 138 103 18;
-    --category-home-improvement: 80 101 124;
-    --category-groceries: 160 86 44;
-    --category-eating-out: 176 62 28;
-    --category-transportation: 23 108 116;
-    --category-shopping: 86 63 141;
-    --category-health: 153 51 76;
-    --category-travel: 32 112 151;
-    --category-entertainment: 138 56 108;
-    --category-personal-care: 134 76 148;
-    --category-services: 81 103 50;
-    --category-education: 48 71 145;
-    --category-insurance: 111 109 42;
-    --category-loans-and-debt: 118 72 46;
-    --category-fees: 134 44 39;
-    --category-taxes-and-government: 114 92 49;
-    --category-gifts-and-donations: 113 61 69;
-    --category-cash-withdrawal: 75 95 93;
-    --category-income: 36 106 74;
-    --category-refund: 72 119 49;
-    --category-transfer-in: 82 77 106;
-    --category-transfer-out: 108 92 75;
-
-    --destructive: 6 62% 42%;
-    --destructive-foreground: 8 60% 96%;
-
-    --warning: 34 80% 30%;
-    --warning-foreground: 38 70% 95%;
-
-    --info: 200 60% 33%;
-    --info-foreground: 200 50% 96%;
-
-    --success: 150 50% 27%;
-    --success-foreground: 145 40% 95%;
-
-    --border: 39.1 19.7% 77.1%;
-    --input: 39.1 19.7% 77.1%;
-    --ring: 9 48.2% 37.8%;
-
-    --radius: 0.5rem;
-    --card-radius: 0.75rem;
+    --hue-dark-housing: #dcad4c;
+    --hue-dark-home-improvement: #aabbcf;
+    --hue-dark-groceries: #e6976e;
+    --hue-dark-eating-out: #f48e71;
+    --hue-dark-transportation: #6ec3cc;
+    --hue-dark-shopping: #a798da;
+    --hue-dark-health: #e18595;
+    --hue-dark-travel: #7fc3e9;
+    --hue-dark-entertainment: #d389b4;
+    --hue-dark-personal-care: #d0a3dc;
+    --hue-dark-services: #b2ce8e;
+    --hue-dark-education: #8aa2e2;
+    --hue-dark-insurance: #c9c772;
+    --hue-dark-loans-and-debt: #d8a589;
+    --hue-dark-fees: #de796f;
+    --hue-dark-taxes-and-government: #d6be90;
+    --hue-dark-gifts-and-donations: #d19fa5;
+    --hue-dark-cash-withdrawal: #a6c1be;
+    --hue-dark-income: #7bd2a5;
+    --hue-dark-refund: #92d176;
+    --hue-dark-transfer-in: #a8a3c2;
+    --hue-dark-transfer-out: #bfad9b;
   }
 
+  /* 2. Roles, light (the reference theme). */
+  :root {
+    --fgColor-default: var(--grey-12);
+    --fgColor-muted: var(--grey-11);
+    --fgColor-faint: var(--grey-9);
+    --fgColor-onEmphasis: var(--midnight-contrast);
+    --fgColor-accent: var(--midnight-12);
+    --fgColor-success: var(--green-11);
+    --fgColor-warning: var(--amber-11);
+    --fgColor-danger: var(--red-11);
+    --fgColor-info: var(--blue-11);
+
+    --bgColor-default: var(--grey-2);
+    --bgColor-surface: var(--grey-1);
+    --bgColor-sunk: var(--grey-3);
+    --bgColor-neutral-muted: var(--grey-4);
+    --bgColor-accent-muted: var(--midnight-3);
+    --bgColor-accent-emphasis: var(--midnight-9);
+    /* Radix's step 9 is too light for white text at body size, so light emphasis fills use step 11. */
+    --bgColor-success-muted: var(--green-3);
+    --bgColor-success-emphasis: var(--green-11);
+    --bgColor-warning-muted: var(--amber-3);
+    --bgColor-warning-emphasis: var(--amber-11);
+    --bgColor-danger-muted: var(--red-3);
+    --bgColor-danger-emphasis: var(--red-11);
+    --bgColor-info-muted: var(--blue-3);
+    --bgColor-info-emphasis: var(--blue-11);
+    --bgColor-backdrop: var(--grey-dark-1);
+    /* Original-colour bank artwork sits on one light plate in either theme. */
+    --bgColor-plate: var(--grey-1);
+    --fgColor-onPlate: var(--grey-12);
+    --borderColor-plate: var(--grey-6);
+
+    --borderColor-default: var(--grey-5);
+    --borderColor-muted: var(--grey-4);
+    /* Control boundaries (inputs, checkboxes, outlines) and chart outlines: 3:1 on every background. */
+    --borderColor-emphasis: var(--grey-10);
+    --borderColor-accent: var(--midnight-9);
+    --focus-outlineColor: var(--midnight-9);
+
+    --data-series-primary: var(--grey-12);
+    --data-series-secondary: var(--grey-7);
+    --data-heat: var(--grey-12);
+
+    --categoryColor-housing: var(--hue-housing);
+    --categoryColor-home-improvement: var(--hue-home-improvement);
+    --categoryColor-groceries: var(--hue-groceries);
+    --categoryColor-eating-out: var(--hue-eating-out);
+    --categoryColor-transportation: var(--hue-transportation);
+    --categoryColor-shopping: var(--hue-shopping);
+    --categoryColor-health: var(--hue-health);
+    --categoryColor-travel: var(--hue-travel);
+    --categoryColor-entertainment: var(--hue-entertainment);
+    --categoryColor-personal-care: var(--hue-personal-care);
+    --categoryColor-services: var(--hue-services);
+    --categoryColor-education: var(--hue-education);
+    --categoryColor-insurance: var(--hue-insurance);
+    --categoryColor-loans-and-debt: var(--hue-loans-and-debt);
+    --categoryColor-fees: var(--hue-fees);
+    --categoryColor-taxes-and-government: var(--hue-taxes-and-government);
+    --categoryColor-gifts-and-donations: var(--hue-gifts-and-donations);
+    --categoryColor-cash-withdrawal: var(--hue-cash-withdrawal);
+    --categoryColor-income: var(--hue-income);
+    --categoryColor-refund: var(--hue-refund);
+    --categoryColor-transfer-in: var(--hue-transfer-in);
+    --categoryColor-transfer-out: var(--hue-transfer-out);
+  }
+
+  /* 2. Roles, dark. */
   .dark {
     /* Native controls and scrollbars follow the theme instead of staying light. */
     color-scheme: dark;
-    /* dark: Night canvas, warm paper text, Clay-on-dark accents */
-    --background: 252 10.2% 9.6%;   /* Night #17161B */
-    --foreground: 38.6 31.8% 91.4%;
 
-    --card: 260 9.1% 12.9%;
-    --card-foreground: 38.6 31.8% 91.4%;
+    --fgColor-default: var(--grey-dark-12);
+    --fgColor-muted: var(--grey-dark-11);
+    --fgColor-faint: var(--grey-dark-10);
+    --fgColor-onEmphasis: var(--midnight-dark-contrast);
+    --fgColor-accent: var(--midnight-dark-11);
+    --fgColor-success: var(--green-dark-11);
+    --fgColor-warning: var(--amber-dark-11);
+    --fgColor-danger: var(--red-dark-11);
+    --fgColor-info: var(--blue-dark-11);
 
-    --popover: 260 9.1% 12.9%;
-    --popover-foreground: 38.6 31.8% 91.4%;
+    --bgColor-default: var(--grey-dark-1);
+    --bgColor-surface: var(--grey-dark-3);
+    --bgColor-sunk: var(--grey-dark-2);
+    --bgColor-neutral-muted: var(--grey-dark-4);
+    --bgColor-accent-muted: var(--midnight-dark-3);
+    --bgColor-accent-emphasis: var(--midnight-dark-9);
+    --bgColor-success-muted: var(--green-dark-3);
+    --bgColor-success-emphasis: var(--green-dark-11);
+    --bgColor-warning-muted: var(--amber-dark-3);
+    --bgColor-warning-emphasis: var(--amber-dark-11);
+    --bgColor-danger-muted: var(--red-dark-3);
+    --bgColor-danger-emphasis: var(--red-dark-11);
+    --bgColor-info-muted: var(--blue-dark-3);
+    --bgColor-info-emphasis: var(--blue-dark-11);
+    /* The dark page is already near black, so its backdrop is one step deeper. */
+    --bgColor-backdrop: var(--grey-dark-0);
+    /* A light plate, quieter than white against the dark page. */
+    --bgColor-plate: var(--grey-3);
+    --fgColor-onPlate: var(--grey-12);
+    --borderColor-plate: var(--grey-6);
 
-    --primary: 17.5 67.1% 69%;      /* Clay on dark #E59A7B — accent + links on dark */
-    --primary-foreground: 252 10.2% 9.6%;
+    --borderColor-default: var(--grey-dark-5);
+    --borderColor-muted: var(--grey-dark-4);
+    --borderColor-emphasis: var(--grey-dark-9);
+    --borderColor-accent: var(--midnight-dark-9);
+    --focus-outlineColor: var(--midnight-dark-9);
 
-    --secondary: 265.7 8.2% 16.7%;
-    --secondary-foreground: 17.5 67.1% 69%;
+    --data-series-primary: var(--grey-dark-12);
+    --data-series-secondary: var(--grey-dark-6);
+    /* Dimmer than ink, so light text stays readable on the strongest heat cell. */
+    --data-heat: var(--grey-dark-8);
 
-    --muted: 266.7 8.7% 20.2%;
-    --muted-foreground: 36 9.2% 68%;
+    --categoryColor-housing: var(--hue-dark-housing);
+    --categoryColor-home-improvement: var(--hue-dark-home-improvement);
+    --categoryColor-groceries: var(--hue-dark-groceries);
+    --categoryColor-eating-out: var(--hue-dark-eating-out);
+    --categoryColor-transportation: var(--hue-dark-transportation);
+    --categoryColor-shopping: var(--hue-dark-shopping);
+    --categoryColor-health: var(--hue-dark-health);
+    --categoryColor-travel: var(--hue-dark-travel);
+    --categoryColor-entertainment: var(--hue-dark-entertainment);
+    --categoryColor-personal-care: var(--hue-dark-personal-care);
+    --categoryColor-services: var(--hue-dark-services);
+    --categoryColor-education: var(--hue-dark-education);
+    --categoryColor-insurance: var(--hue-dark-insurance);
+    --categoryColor-loans-and-debt: var(--hue-dark-loans-and-debt);
+    --categoryColor-fees: var(--hue-dark-fees);
+    --categoryColor-taxes-and-government: var(--hue-dark-taxes-and-government);
+    --categoryColor-gifts-and-donations: var(--hue-dark-gifts-and-donations);
+    --categoryColor-cash-withdrawal: var(--hue-dark-cash-withdrawal);
+    --categoryColor-income: var(--hue-dark-income);
+    --categoryColor-refund: var(--hue-dark-refund);
+    --categoryColor-transfer-in: var(--hue-dark-transfer-in);
+    --categoryColor-transfer-out: var(--hue-dark-transfer-out);
+  }
 
-    --accent: 262.5 9.1% 17.3%;
-    --accent-foreground: 38.6 31.8% 91.4%;
+  /* 3. shadcn names and our additions. The same in both themes: each points at a role. */
+  :root {
+    --background: var(--bgColor-default);
+    --foreground: var(--fgColor-default);
+    --card: var(--bgColor-surface);
+    --card-foreground: var(--fgColor-default);
+    --popover: var(--bgColor-surface);
+    --popover-foreground: var(--fgColor-default);
+    --primary: var(--bgColor-accent-emphasis);
+    --primary-foreground: var(--fgColor-onEmphasis);
+    --secondary: var(--bgColor-neutral-muted);
+    --secondary-foreground: var(--fgColor-default);
+    --muted: var(--bgColor-neutral-muted);
+    --muted-foreground: var(--fgColor-muted);
+    --accent: var(--bgColor-neutral-muted);
+    --accent-foreground: var(--fgColor-default);
+    --destructive: var(--bgColor-danger-emphasis);
+    --destructive-foreground: var(--fgColor-onEmphasis);
+    --destructive-muted: var(--bgColor-danger-muted);
+    --border: var(--borderColor-default);
+    --input: var(--borderColor-emphasis);
+    --ring: var(--focus-outlineColor);
 
-    --clay: 17.5 67.1% 69%;         /* Clay on dark — large accents */
+    --sunk: var(--bgColor-sunk);
+    --faint: var(--fgColor-faint);
+    --success: var(--bgColor-success-emphasis);
+    --success-foreground: var(--fgColor-onEmphasis);
+    --success-muted: var(--bgColor-success-muted);
+    --warning: var(--bgColor-warning-emphasis);
+    --warning-foreground: var(--fgColor-onEmphasis);
+    --warning-muted: var(--bgColor-warning-muted);
+    --info: var(--bgColor-info-emphasis);
+    --info-foreground: var(--fgColor-onEmphasis);
+    --info-muted: var(--bgColor-info-muted);
+    --scrim: var(--bgColor-backdrop);
 
-    --bank-logo-plate: #F6F1E8; /* Paper, muted against Night */
-    --transaction-tile-field: #352A28;
-    --transaction-tile-ink: #E59A7B;
-    --transaction-tile-edge: #59413A;
+    /* Data is drawn in ink, with a quiet second series outlined at 3:1. */
+    --chart-primary: var(--data-series-primary);
+    --chart-secondary: var(--data-series-secondary);
+    --chart-secondary-edge: var(--borderColor-emphasis);
+    /* Heat-table cells: this colour at 5–45% behind the cell's amount. */
+    --chart-heat: var(--data-heat);
 
-    --chart-primary: 38 28% 80%;
-    --chart-secondary: 36 6% 48%;
-    --chart-secondary-edge: 36 6% 48%;
-    --scrim: 252 12% 3%;            /* deeper Night: the dark page is already Night */
+    /* The round tile that leads transaction, recurring and account rows. */
+    --transaction-tile: var(--bgColor-sunk);
+    --transaction-tile-foreground: var(--fgColor-muted);
+    --transaction-tile-border: var(--borderColor-default);
+    --bank-logo-plate: var(--bgColor-plate);
+    --bank-logo-plate-foreground: var(--fgColor-onPlate);
+    --bank-logo-plate-border: var(--borderColor-plate);
 
-    --category-housing: 214 176 75;
-    --category-home-improvement: 170 187 207;
-    --category-groceries: 229 152 108;
-    --category-eating-out: 240 146 96;
-    --category-transportation: 110 195 201;
-    --category-shopping: 171 151 216;
-    --category-health: 224 133 156;
-    --category-travel: 125 196 232;
-    --category-entertainment: 210 137 183;
-    --category-personal-care: 208 163 220;
-    --category-services: 179 206 141;
-    --category-education: 141 161 226;
-    --category-insurance: 202 199 114;
-    --category-loans-and-debt: 214 166 134;
-    --category-fees: 222 120 115;
-    --category-taxes-and-government: 213 190 144;
-    --category-gifts-and-donations: 209 159 167;
-    --category-cash-withdrawal: 166 193 190;
-    --category-income: 125 210 163;
-    --category-refund: 148 209 117;
-    --category-transfer-in: 168 163 194;
-    --category-transfer-out: 191 173 155;
+    --category-housing: var(--categoryColor-housing);
+    --category-home-improvement: var(--categoryColor-home-improvement);
+    --category-groceries: var(--categoryColor-groceries);
+    --category-eating-out: var(--categoryColor-eating-out);
+    --category-transportation: var(--categoryColor-transportation);
+    --category-shopping: var(--categoryColor-shopping);
+    --category-health: var(--categoryColor-health);
+    --category-travel: var(--categoryColor-travel);
+    --category-entertainment: var(--categoryColor-entertainment);
+    --category-personal-care: var(--categoryColor-personal-care);
+    --category-services: var(--categoryColor-services);
+    --category-education: var(--categoryColor-education);
+    --category-insurance: var(--categoryColor-insurance);
+    --category-loans-and-debt: var(--categoryColor-loans-and-debt);
+    --category-fees: var(--categoryColor-fees);
+    --category-taxes-and-government: var(--categoryColor-taxes-and-government);
+    --category-gifts-and-donations: var(--categoryColor-gifts-and-donations);
+    --category-cash-withdrawal: var(--categoryColor-cash-withdrawal);
+    --category-income: var(--categoryColor-income);
+    --category-refund: var(--categoryColor-refund);
+    --category-transfer-in: var(--categoryColor-transfer-in);
+    --category-transfer-out: var(--categoryColor-transfer-out);
 
-    --destructive: 4 70% 66%;
-    --destructive-foreground: 4 40% 12%;
-
-    --warning: 36 70% 58%;
-    --warning-foreground: 36 40% 12%;
-
-    --info: 200 55% 62%;
-    --info-foreground: 200 35% 12%;
-
-    --success: 148 40% 55%;
-    --success-foreground: 148 30% 12%;
-
-    --border: 270 6.9% 22.7%;
-    --input: 270 6.9% 22.7%;
-    --ring: 17.5 67.1% 69%;
+    --radius: 0.5rem;
   }
 }
 
@@ -403,7 +676,7 @@
     }
   }
   body {
-    @apply bg-background font-sans text-foreground;
+    @apply bg-background font-sans text-body text-foreground;
   }
   :where(h1, h2, h3, h4, h5, h6) {
     @apply font-sans;

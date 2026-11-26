@@ -9,7 +9,7 @@ the page's primary action. **Import a file** is the outline button beside **Conn
 No copy calls import a fallback or assumes a bank is connected.
 
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
-  `FileUp` Clay tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
+  `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
   screens get the button alone, full width. The picker accepts any extension, since banks name
   their exports oddly. Files dragged anywhere over Connections show a full-column overlay (dashed
@@ -28,7 +28,7 @@ No copy calls import a fallback or assumes a bank is connected.
 - **Summary.** Counts as a bordered `divide-y` list with `numeric` values (the count that needs a
   look in `warning`), then Period and Went to, each a small muted label with its glyph
   (`CalendarRange`, `ArrowDownToLine`) over its value. Each account it went to shows as on
-  Connections: its bank's logo (imported files: the `Files` Clay tile) with the account-type tile
+  Connections: its bank's logo (imported files: the `Files` leading tile) with the account-type tile
   on its corner, its name, and its details and bank under it. A drop that added nothing shows
   the `CheckCheck` state instead of the counts. Skipped days get a `warning` Alert (`FileWarning`, "Some days are missing")
   under the counts: each gap's days, the account under them when the drop went to several, and
@@ -38,7 +38,7 @@ No copy calls import a fallback or assumes a bank is connected.
   sent", `ChevronRight`), never in the attention tone and never counted as a look: nothing waits
   for the user. Opened, a muted line says the bank sent every transaction for those days, then the
   rows grouped by counterparty (else description), largest group first: one bordered block per
-  group (the `FileX` Clay tile, the name, its row count and **Add N** while more than one is open),
+  group (the `FileX` leading tile, the name, its row count and **Add N** while more than one is open),
   its rows under it with **Add** each. Both are small outline buttons of one minimum width in one
   right-hand column, so their right edges line up. An added row turns into a muted "Added". Nothing
   adds every row at once. Rows of the import a later sync removed get a second fold line just like
@@ -51,9 +51,9 @@ No copy calls import a fallback or assumes a bank is connected.
   imported" in the past tense.
 - **Account question.** Native radio rows, so arrow keys move between them; nothing is
   preselected, and Import stays disabled until every question has an answer. Each row starts
-  with its bank's logo as on its Connections card (imported files: the `Files` Clay tile) and a
+  with its bank's logo as on its Connections card (imported files: the `Files` leading tile) and a
   small round account-type tile on its corner as on its Connections row; a new account gets the
-  `Plus` Clay tile in the same square.
+  `Plus` leading tile in the same square.
 - **Balances.** The amount field shows its currency inside at the far right, over padding the
   value scrolls short of. Save sits under the field: in the summary on its own row, in the
   Add/Edit balance dialog in its footer with Cancel.
@@ -84,6 +84,6 @@ No copy calls import a fallback or assumes a bank is connected.
   Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
   the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API
   refuses says why under the control.
-- **Imported files.** The imported-files connection uses the bank card with the `Files` Clay tile
+- **Imported files.** The imported-files connection uses the bank card with the `Files` leading tile
   and "From statement files". It never shows consent, sync or re-authorization states, and its
   Details hold the accounts and Remove only.

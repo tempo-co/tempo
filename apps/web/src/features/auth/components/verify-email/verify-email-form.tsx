@@ -34,7 +34,7 @@ export function VerifyEmailForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate className='mt-4 flex flex-col gap-3'>
-        <p className='text-center text-xs leading-5 text-muted-foreground'>
+        <p className='text-center text-body-small leading-5 text-muted-foreground'>
           Enter the 6-digit code from the email.
         </p>
         <FormField
@@ -55,7 +55,7 @@ export function VerifyEmailForm() {
                   containerClassName='w-full justify-center'
                   disabled={isVerifying}
                 >
-                  <InputOTPGroup className='grid w-full max-w-[20rem] grid-cols-6 gap-1'>
+                  <InputOTPGroup className='grid w-full max-w-xs grid-cols-6 gap-1'>
                     <InputOTPSlot index={0} className='h-11 w-full rounded-md border' />
                     <InputOTPSlot index={1} className='h-11 w-full rounded-md border' />
                     <InputOTPSlot index={2} className='h-11 w-full rounded-md border' />

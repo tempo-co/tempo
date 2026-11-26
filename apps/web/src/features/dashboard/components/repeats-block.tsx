@@ -26,10 +26,11 @@ const ROWS = 4;
  * what it shows. 349px is that shape's height with its top border and padding: four 48px rows, the bar, the
  * totals and the header.
  */
+// eslint-disable-next-line design/tokens -- a measured height (349px, above), not a step on the size scale
 const RESERVE = '@[60rem]:min-h-[21.8125rem]';
 
 const ROW =
-  'grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-1.5 text-left text-sm';
+  'grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-1.5 text-left text-body';
 
 /**
  * What repeats beside the history: bills and income a month, how far this month's bills are paid, late or
@@ -90,7 +91,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
         </dl>
         <div className='grid gap-1.5'>
           <Bone className='h-1.5' />
-          <p className='numeric text-xs'>
+          <p className='numeric text-body-small'>
             <TextBone className='w-[16em]' />
           </p>
         </div>
@@ -102,7 +103,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
                 <span className='block'>
                   <TextBone className='w-[8em]' />
                 </span>
-                <span className='block text-xs'>
+                <span className='block text-body-small'>
                   <TextBone className='w-[9em]' />
                 </span>
               </span>
@@ -140,7 +141,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
           <dt className='text-label text-muted-foreground'>Bills a month</dt>
           <dd className='numeric text-lg font-semibold'>{wholeCents(bills, currency)}</dd>
           {summary.expenseUnconvertedCount > 0 && (
-            <dd className='text-xs text-muted-foreground'>
+            <dd className='text-body-small text-muted-foreground'>
               {summary.expenseUnconvertedCount} not converted yet
             </dd>
           )}
@@ -160,7 +161,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
               style={{width: `${(paid / (paid + left)) * 100}%`}}
             />
           </span>
-          <p className='numeric text-xs text-muted-foreground'>
+          <p className='numeric text-body-small text-muted-foreground'>
             {left === 0
               ? `All of ${monthName}'s bills paid`
               : `${monthName}: ${wholeCents(paid, currency)} paid · ${wholeCents(left, currency)} to go`}
@@ -176,7 +177,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
                 <SeriesTile series={item} className='size-7' />
                 <span className='min-w-0'>
                   <span className='block truncate'>{item.name}</span>
-                  <span className='block text-xs text-warning'>
+                  <span className='block text-body-small text-warning'>
                     {item.flags.includes('LATE') ? 'Not paid yet' : 'Higher than usual'}
                   </span>
                 </span>
@@ -190,7 +191,7 @@ export function RepeatsBlock({today, className}: {today: string; className?: str
                 <SeriesTile series={payment} className='size-7' />
                 <span className='min-w-0'>
                   <span className='block truncate'>{payment.name}</span>
-                  <span className='block text-xs text-muted-foreground'>
+                  <span className='block text-body-small text-muted-foreground'>
                     {format(parseCalendarDate(payment.nextExpectedDate), 'd MMM')} ·{' '}
                     {formatRelativeDays(payment.nextExpectedDate, today)}
                   </span>

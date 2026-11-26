@@ -104,7 +104,7 @@ export function EmailChangeDialog({currentEmail}: EmailChangeDialogProps) {
                 We sent a verification link to
               </ResponsiveDialogDescription>
             </ResponsiveDialogHeader>
-            <ResponsiveDialogBody className='space-y-3 text-sm text-muted-foreground'>
+            <ResponsiveDialogBody className='space-y-3 text-body-small text-muted-foreground'>
               <p
                 className='font-medium break-all text-foreground'
                 data-testid='email-change-sent-to'

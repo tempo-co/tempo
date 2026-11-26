@@ -40,7 +40,7 @@ import {
 import {useUndoImport} from './use-undo-import';
 
 const FOOTER =
-  'flex shrink-0 flex-col gap-2 border-t px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:flex-row md:items-center md:justify-end md:px-6 md:pb-4';
+  'flex shrink-0 flex-col gap-2 border-t px-4 pt-4 pb-[calc(--spacing(4)+env(safe-area-inset-bottom))] md:flex-row md:items-center md:justify-end md:px-6 md:pb-4';
 
 /**
  * Importing statement files, in one dialog (a bottom sheet on phones) from choosing files to the summary, the
@@ -102,7 +102,10 @@ export function FileImportDialog({
             body={
               <div className='grid grid-cols-1 gap-4'>
                 {/* A flex row keeps the spinner on the text's line. */}
-                <p role='status' className='flex items-center text-sm text-muted-foreground'>
+                <p
+                  role='status'
+                  className='flex items-center text-body-small text-muted-foreground'
+                >
                   <PendingLabel>Working out the columns…</PendingLabel>
                 </p>
                 <FileList files={[step.files[step.file - 1]]} />
@@ -200,7 +203,7 @@ function Frame({
           <div
             className={cn(
               'px-4 md:px-6 md:pb-6',
-              footer ? 'pb-4' : 'pb-[calc(1rem+env(safe-area-inset-bottom))]',
+              footer ? 'pb-4' : 'pb-[calc(--spacing(4)+env(safe-area-inset-bottom))]',
             )}
           >
             {body}

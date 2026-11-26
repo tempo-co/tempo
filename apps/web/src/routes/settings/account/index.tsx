@@ -23,7 +23,7 @@ function SettingsAccountIndex() {
   const {currentAccount} = useCurrentAccount({skipFetch: true});
 
   if (!currentAccount) {
-    return <Skeleton className='h-72 w-full rounded-card bg-card' />;
+    return <Skeleton className='h-72 w-full rounded-lg bg-card' />;
   }
 
   return (

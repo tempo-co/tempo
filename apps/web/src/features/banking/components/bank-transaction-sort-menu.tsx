@@ -76,7 +76,7 @@ export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransacti
           <div
             role='radiogroup'
             aria-label='Order'
-            className='divide-y divide-border/60 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]'
+            className='divide-y divide-border/60 px-2 pb-[calc(--spacing(2)+env(safe-area-inset-bottom))]'
           >
             {SORT_IDS.map((id) => (
               <button
@@ -88,7 +88,7 @@ export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransacti
                   select(id);
                   setOpen(false);
                 }}
-                className='flex min-h-14 w-full items-center justify-between px-2 text-left text-sm'
+                className='flex min-h-14 w-full items-center justify-between px-2 text-left text-body'
               >
                 {SORTS[id].label}
                 {id === current && <Check aria-hidden='true' className='size-4 text-primary' />}
@@ -104,7 +104,7 @@ export function BankTransactionSortMenu({sort}: {sort: NonNullable<BankTransacti
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-48'>
-        <DropdownMenuLabel className='text-xs font-normal text-muted-foreground'>
+        <DropdownMenuLabel className='text-body-small font-normal text-muted-foreground'>
           Order
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup value={current} onValueChange={(id) => select(id as SortId)}>

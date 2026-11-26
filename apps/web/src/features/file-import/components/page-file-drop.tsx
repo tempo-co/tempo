@@ -116,13 +116,13 @@ export function PageFileDrop({
   return (
     <div
       data-testid='bank-import-page-drop'
-      className='pointer-events-none absolute inset-0 z-30 rounded-card border-2 border-dashed border-ring bg-background/95'
+      className='pointer-events-none absolute inset-0 z-30 rounded-lg border-2 border-dashed border-ring bg-background/95'
     >
       <div className='sticky top-1/3 grid justify-items-center gap-3 py-16 text-center'>
         <span aria-hidden='true' className={IMPORT_TILE}>
           <FileUp strokeWidth={2} />
         </span>
-        <p className='text-sm font-medium'>Drop to import</p>
+        <p className='text-body font-medium'>Drop to import</p>
       </div>
     </div>
   );

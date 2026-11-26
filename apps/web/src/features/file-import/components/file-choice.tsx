@@ -10,9 +10,9 @@ import {fileNameTail, formatFileSize} from '../utils/import-format';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {SupportedFiles} from './supported-files';
 
-/** The 36px Clay tile the import surfaces lead with. */
+/** The 36px leading tile the import surfaces lead with. */
 export const IMPORT_TILE =
-  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink [&_svg]:size-4';
+  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground [&_svg]:size-4';
 
 /**
  * Choosing statement files: a drop area with a Choose files button on desktop, the button alone on phones and
@@ -116,15 +116,15 @@ export function FileChoice({
           <span aria-hidden='true' className={IMPORT_TILE}>
             <FileUp strokeWidth={2} />
           </span>
-          <p className='text-sm font-medium'>Drop statement files here</p>
-          <p className='text-sm text-muted-foreground'>or</p>
+          <p className='text-body font-medium'>Drop statement files here</p>
+          <p className='text-body-small text-muted-foreground'>or</p>
           {chooseButton}
         </div>
       ) : (
         chooseButton
       )}
       <div className='flex flex-wrap items-center justify-between gap-x-3'>
-        <p className='text-sm text-pretty text-muted-foreground'>
+        <p className='text-body-small text-pretty text-muted-foreground'>
           Statement files from your bank, several at once or in a zip.
         </p>
         <SupportedFiles />
@@ -142,13 +142,13 @@ export function FileList({files}: {files: readonly File[]}) {
         return (
           <li
             key={`${index}:${file.name}`}
-            className='flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm'
+            className='flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-body'
           >
             <span title={file.name} className='flex min-w-0'>
               <span className='truncate'>{head}</span>
               <span className='shrink-0 whitespace-pre'>{tail}</span>
             </span>
-            <span className='shrink-0 numeric text-xs text-muted-foreground'>
+            <span className='shrink-0 numeric text-body-small text-muted-foreground'>
               {formatFileSize(file.size)}
             </span>
           </li>

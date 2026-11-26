@@ -71,7 +71,7 @@ export function NeverSentRows({
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen(!open)}
-        className='h-auto min-h-11 w-full justify-start rounded-card border px-4 py-2.5 text-left text-sm font-normal whitespace-normal'
+        className='h-auto min-h-11 w-full justify-start rounded-lg border px-4 py-2.5 text-left text-body font-normal whitespace-normal'
       >
         <ChevronRight
           aria-hidden='true'
@@ -164,7 +164,7 @@ function NeverSentList({
   const more = Math.min(GROUPS_PAGE, groups.length - shown);
   return (
     <div className='grid grid-cols-1 gap-3'>
-      <p className='text-sm text-muted-foreground'>{copy.intro}</p>
+      <p className='text-body-small text-muted-foreground'>{copy.intro}</p>
       <ul className='grid grid-cols-1 gap-3'>
         {groups.slice(0, shown).map((group) => (
           <Group
@@ -216,13 +216,13 @@ function Group({
       className='grid grid-cols-1 overflow-hidden rounded-md border'
       data-testid='bank-import-never-sent-group'
     >
-      <div className='grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-3'>
+      <div className='grid min-h-15 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2'>
         <span aria-hidden='true' className={IMPORT_TILE}>
           <FileX strokeWidth={2} />
         </span>
         <span className='min-w-0'>
-          <span className='block text-sm wrap-anywhere'>{group.label}</span>
-          <span className='block truncate text-xs text-muted-foreground'>
+          <span className='block text-body wrap-anywhere'>{group.label}</span>
+          <span className='block truncate text-body-small text-muted-foreground'>
             {plural(group.rows.length, 'row')}
           </span>
         </span>
@@ -301,16 +301,16 @@ function Row({
   return (
     <li className='grid min-h-14 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 px-3 py-2'>
       <span className='min-w-0'>
-        <span className='block text-sm wrap-anywhere'>{sameAsGroup ? date : title}</span>
+        <span className='block text-body wrap-anywhere'>{sameAsGroup ? date : title}</span>
         {!sameAsGroup && (
-          <span className='block truncate text-xs text-muted-foreground'>{date}</span>
+          <span className='block truncate text-body-small text-muted-foreground'>{date}</span>
         )}
       </span>
-      <span className='text-right text-sm'>
+      <span className='text-right text-body'>
         <CurrencyAmount amount={Number(row.row.amount)} currency={row.row.currency} />
       </span>
       {added ? (
-        <span role='status' className='min-w-20 text-right text-sm text-muted-foreground'>
+        <span role='status' className='min-w-20 text-right text-body-small text-muted-foreground'>
           {copy.added}
         </span>
       ) : (

@@ -37,7 +37,7 @@ export function SessionList() {
               onRetry={() => void refetch()}
             />
           )}
-          {isPending && <Skeleton className='h-16 w-full rounded-card border bg-card' />}
+          {isPending && <Skeleton className='h-16 w-full rounded-lg border bg-card' />}
           {currentSession && (
             <SettingsList>
               <SessionCard key={currentSession.id} session={currentSession} />
@@ -46,7 +46,7 @@ export function SessionList() {
           {otherSessions.length > 0 && (
             <section aria-labelledby='other-sessions-heading' className='pt-3'>
               <div className='mb-3 flex items-center justify-between gap-3'>
-                <h3 id='other-sessions-heading' className='text-sm font-medium'>
+                <h3 id='other-sessions-heading' className='text-body font-medium'>
                   Other sessions{' '}
                   <span className='font-normal text-muted-foreground'>
                     ({otherSessions.length})

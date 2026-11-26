@@ -111,7 +111,7 @@ export function BankTransactionDetailsDialog({
                     {transaction.currency}
                   </span>
                 </div>
-                <div className='mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground'>
+                <div className='mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-body-small text-muted-foreground'>
                   <span className='inline-flex items-center gap-1.5'>
                     <CalendarDays className='size-4' aria-hidden='true' />
                     {transaction.transactionDate || transaction.bookingDate

@@ -32,18 +32,18 @@ export function TileRowsSkeleton({count}: {count: number}) {
     <li
       key={index}
       aria-hidden='true'
-      className='grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3'
+      className='grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2'
     >
       <Bone className='size-9 rounded-full' />
       <span className='min-w-0'>
-        <span className='block text-sm'>
+        <span className='block text-body'>
           <TextBone className='w-[9em]' />
         </span>
-        <span className='block text-xs'>
+        <span className='block text-body-small'>
           <TextBone className='w-[6em]' />
         </span>
       </span>
-      <span className='text-sm'>
+      <span className='text-body'>
         <TextBone className='w-[4em]' />
       </span>
     </li>
