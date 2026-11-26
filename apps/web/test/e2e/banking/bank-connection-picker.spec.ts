@@ -264,10 +264,10 @@ test.describe('Connect a bank', () => {
         for (const slot of await picker.getByTestId('bank-wordmark').all()) {
           await expect(slot).toHaveCSS(
             'background-color',
-            theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+            theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(238, 240, 245)',
           );
           await expect(slot).toHaveCSS('border-top-width', '1px');
-          await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+          await expect(slot).toHaveCSS('border-top-color', 'rgb(214, 217, 228)');
         }
         await expectCenteredLogo(exampleLogo);
       }
@@ -332,10 +332,10 @@ test.describe('Connect a bank', () => {
         const slot = picker.getByTestId('bank-wordmark');
         await expect(slot).toHaveCSS(
           'background-color',
-          theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+          theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(238, 240, 245)',
         );
         await expect(slot).toHaveCSS('border-top-width', '1px');
-        await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+        await expect(slot).toHaveCSS('border-top-color', 'rgb(214, 217, 228)');
         await expectCenteredLogo(slot);
       }
       await page.evaluate(() => document.documentElement.classList.remove('dark'));

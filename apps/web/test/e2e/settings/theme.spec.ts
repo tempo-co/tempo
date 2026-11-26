@@ -70,7 +70,10 @@ test.describe('Theme Switcher', () => {
     await accountSettingsPage.navigate();
     await accountSettingsPage.changeName('Example Name');
     await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
-    await expect(page.locator('[data-sonner-toaster]')).toHaveAttribute('data-sonner-theme', 'dark');
+    await expect(page.locator('[data-sonner-toaster]')).toHaveAttribute(
+      'data-sonner-theme',
+      'dark',
+    );
   });
 
   test('should switch to system theme', async ({page, appearanceSettingsPage}) => {

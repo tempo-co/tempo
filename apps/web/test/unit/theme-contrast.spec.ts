@@ -36,7 +36,11 @@ function declarations(name: string) {
   return found;
 }
 
-const blocks = {theme: declarations('@theme'), root: declarations(':root'), dark: declarations('.dark')};
+const blocks = {
+  theme: declarations('@theme'),
+  root: declarations(':root'),
+  dark: declarations('.dark'),
+};
 
 function lookup(property: string, theme: Theme) {
   return (
@@ -49,10 +53,12 @@ function lookup(property: string, theme: Theme) {
 /** The colour a property ends at, following `var()` through the layers. */
 function resolve(property: string, theme: Theme, seen: string[] = []): string {
   const value = lookup(property, theme);
-  if (value === undefined) throw new Error(`${property} is not defined (${[...seen, property].join(' → ')})`);
+  if (value === undefined)
+    throw new Error(`${property} is not defined (${[...seen, property].join(' → ')})`);
   const reference = value.match(/^var\((--[\w-]+)\)$/);
   if (reference) return resolve(reference[1], theme, [...seen, property]);
-  if (!/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${property} is "${value}", not a #rrggbb colour`);
+  if (!/^#[0-9a-f]{6}$/i.test(value))
+    throw new Error(`${property} is "${value}", not a #rrggbb colour`);
   return value.toUpperCase();
 }
 
@@ -88,11 +94,21 @@ const STATUSES = ['destructive', 'success', 'warning', 'info'];
 const CATEGORY_TILE_ALPHA = 0.1;
 /** Heat-table cells tint up to 45% of `chart-heat` behind their amount. */
 const HEAT_MAX_ALPHA = 0.45;
-const CATEGORIES =[...css.matchAll(/^\s*--color-category-([\w-]+):/gm)].map((match) => match[1]);
+const CATEGORIES = [...css.matchAll(/^\s*--color-category-([\w-]+):/gm)].map((match) => match[1]);
 
 const PAIRS: Pair[] = [
-  {fg: 'foreground', on: [...PAGES, 'muted', 'sunk', 'accent', 'secondary'], min: TEXT, job: 'body text'},
-  {fg: 'muted-foreground', on: [...PAGES, 'muted', 'sunk', 'accent'], min: TEXT, job: 'secondary text'},
+  {
+    fg: 'foreground',
+    on: [...PAGES, 'muted', 'sunk', 'accent', 'secondary'],
+    min: TEXT,
+    job: 'body text',
+  },
+  {
+    fg: 'muted-foreground',
+    on: [...PAGES, 'muted', 'sunk', 'accent'],
+    min: TEXT,
+    job: 'secondary text',
+  },
   {fg: 'card-foreground', on: ['card'], min: TEXT, job: 'card text'},
   {fg: 'popover-foreground', on: ['popover'], min: TEXT, job: 'popover text'},
   {fg: 'accent-foreground', on: ['accent'], min: TEXT, job: 'hovered row text'},
@@ -100,15 +116,35 @@ const PAIRS: Pair[] = [
   {fg: 'primary', on: PAGES, min: TEXT, job: 'links and accent text'},
   {fg: 'primary-foreground', on: ['primary'], min: TEXT, job: 'primary button label'},
   ...STATUSES.flatMap((status): Pair[] => [
-    {fg: status, on: [...PAGES, `${status}-muted`], min: TEXT, job: `${status} text, alerts and toasts`},
-    {fg: 'muted-foreground', on: [`${status}-muted`], min: TEXT, job: `description in a ${status} toast`},
+    {
+      fg: status,
+      on: [...PAGES, `${status}-muted`],
+      min: TEXT,
+      job: `${status} text, alerts and toasts`,
+    },
+    {
+      fg: 'muted-foreground',
+      on: [`${status}-muted`],
+      min: TEXT,
+      job: `description in a ${status} toast`,
+    },
     {fg: `${status}-foreground`, on: [status], min: TEXT, job: `label on a ${status} fill`},
   ]),
-  {fg: 'bank-logo-plate-foreground', on: ['bank-logo-plate'], min: TEXT, job: 'bank initials on the plate'},
+  {
+    fg: 'bank-logo-plate-foreground',
+    on: ['bank-logo-plate'],
+    min: TEXT,
+    job: 'bank initials on the plate',
+  },
   {fg: 'input', on: [...PAGES, 'sunk'], min: GRAPHIC, job: 'control borders'},
   {fg: 'ring', on: [...PAGES, 'sunk'], min: GRAPHIC, job: 'focus rings'},
   {fg: 'chart-primary', on: ['card', 'background'], min: GRAPHIC, job: 'main chart series'},
-  {fg: 'chart-secondary-edge', on: ['card', 'background'], min: GRAPHIC, job: 'second chart series outline'},
+  {
+    fg: 'chart-secondary-edge',
+    on: ['card', 'background'],
+    min: GRAPHIC,
+    job: 'second chart series outline',
+  },
   {
     fg: 'foreground',
     on: [{color: 'chart-heat', alpha: HEAT_MAX_ALPHA, over: 'card'}],
@@ -116,19 +152,22 @@ const PAIRS: Pair[] = [
     job: 'amount on the strongest heat-table cell',
   },
   {fg: 'faint', on: ['card'], min: GRAPHIC, job: 'decorative icons beside text'},
-  {fg: 'transaction-tile-foreground', on: ['transaction-tile'], min: GRAPHIC, job: 'icon on a leading tile'},
-  ...CATEGORIES.map(
-    (category): Pair => ({
-      fg: `category-${category}`,
-      on: ['card', 'background'].map((page) => ({
-        color: `category-${category}`,
-        alpha: CATEGORY_TILE_ALPHA,
-        over: page,
-      })),
-      min: GRAPHIC,
-      job: 'category icon on its tile',
-    }),
-  ),
+  {
+    fg: 'transaction-tile-foreground',
+    on: ['transaction-tile'],
+    min: GRAPHIC,
+    job: 'icon on a leading tile',
+  },
+  ...CATEGORIES.map((category): Pair => ({
+    fg: `category-${category}`,
+    on: ['card', 'background'].map((page) => ({
+      color: `category-${category}`,
+      alpha: CATEGORY_TILE_ALPHA,
+      over: page,
+    })),
+    min: GRAPHIC,
+    job: 'category icon on its tile',
+  })),
 ];
 
 const groundColour = (ground: Ground, theme: Theme) =>
@@ -143,7 +182,9 @@ for (const theme of ['light', 'dark'] as const) {
     const failures = PAIRS.flatMap(({fg, on, min, job}) =>
       on.flatMap((ground) => {
         const ratio = contrast(utility(fg, theme), groundColour(ground, theme));
-        return ratio < min ? [`${fg} on ${groundName(ground)} (${job}): ${ratio.toFixed(2)}:1, needs ${min}:1`] : [];
+        return ratio < min
+          ? [`${fg} on ${groundName(ground)} (${job}): ${ratio.toFixed(2)}:1, needs ${min}:1`]
+          : [];
       }),
     );
     expect(failures).toEqual([]);
@@ -176,7 +217,9 @@ test('the agreed Wisp values sit at their roles in both themes', () => {
     },
   };
   for (const theme of ['light', 'dark'] as const) {
-    const actual = Object.fromEntries(Object.keys(anchors[theme]).map((name) => [name, utility(name, theme)]));
+    const actual = Object.fromEntries(
+      Object.keys(anchors[theme]).map((name) => [name, utility(name, theme)]),
+    );
     expect(actual, theme).toEqual(anchors[theme]);
   }
 });
@@ -185,7 +228,8 @@ test('Tailwind colours reach the scales only through the role layer', () => {
   const reference = (value: string | undefined) => value?.match(/^var\((--[\w-]+)\)$/)?.[1];
   const isRaw = (value: string | undefined) => value !== undefined && /^#[0-9a-f]{6}$/i.test(value);
   /** Roles are named by job, Primer-style: `--fgColor-muted`, `--bgColor-sunk`, `--focus-outlineColor`. */
-  const isRole = (property: string) => /^--(fgColor|bgColor|borderColor|focus|data|categoryColor)-/.test(property);
+  const isRole = (property: string) =>
+    /^--(fgColor|bgColor|borderColor|focus|data|categoryColor)-/.test(property);
   /** Scales hold the raw values, the same in both themes. */
   const isScale = (property: string) => !isRole(property) && isRaw(blocks.root.get(property));
 
@@ -201,12 +245,14 @@ test('Tailwind colours reach the scales only through the role layer', () => {
     for (const theme of ['light', 'dark'] as const) {
       const role = reference(lookup(name, theme));
       if (!role || !isRole(role)) leaks.push(`${name} (${theme}) does not point at a role`);
-      else if (!isScale(reference(lookup(role, theme)) ?? '')) leaks.push(`${role} (${theme}) does not read a scale`);
+      else if (!isScale(reference(lookup(role, theme)) ?? ''))
+        leaks.push(`${role} (${theme}) does not read a scale`);
     }
   }
   for (const block of [blocks.root, blocks.dark]) {
     for (const [property, value] of block) {
-      if (isRaw(value) && !isScale(property)) leaks.push(`${property} holds a raw colour outside the scales`);
+      if (isRaw(value) && !isScale(property))
+        leaks.push(`${property} holds a raw colour outside the scales`);
     }
   }
   expect(leaks).toEqual([]);

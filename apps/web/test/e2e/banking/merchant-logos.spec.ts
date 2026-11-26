@@ -30,7 +30,12 @@ const PNG = Buffer.from(
 );
 
 const PALETTES = {
-  light: {field: [238, 240, 245], ink: [93, 98, 117], edge: [226, 229, 238], category: [157, 83, 41]},
+  light: {
+    field: [238, 240, 245],
+    ink: [93, 98, 117],
+    edge: [226, 229, 238],
+    category: [157, 83, 41],
+  },
   dark: {field: [22, 24, 38], ink: [163, 168, 186], edge: [42, 46, 64], category: [230, 151, 110]},
 };
 type Theme = keyof typeof PALETTES;
