@@ -104,8 +104,8 @@ test.describe('Home navigation badges', () => {
     await page.goto('/');
 
     const primary = page.getByRole('navigation', {name: 'Primary'}).first();
-    // Two to review and one failed; the five still categorizing are not counted.
-    const transactions = primary.getByRole('link', {name: 'Transactions, 3 to review'});
+    // Two to check and one failed; the five still categorizing are not counted.
+    const transactions = primary.getByRole('link', {name: 'Transactions, 3 to check'});
     await expect(transactions).toHaveText('Transactions3');
     await expect(
       primary.getByRole('link', {name: 'Accounts, a bank needs attention'}),
@@ -210,7 +210,7 @@ test.describe('Home navigation badges', () => {
     });
   }
 
-  test('without anything to review or reconnect, the tabs carry no badge', async ({page}) => {
+  test('without anything to check or reconnect, the tabs carry no badge', async ({page}) => {
     await mockSyntheticHome(page, {
       reviewCounts: {
         needsReview: 0,
@@ -236,7 +236,7 @@ test.describe('Home navigation badges', () => {
     });
     await page.goto('/');
     const tabs = page.getByRole('navigation', {name: 'Primary'}).last();
-    await expect(tabs.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
+    await expect(tabs.getByRole('link', {name: 'Transactions, 3 to check'})).toBeVisible();
     await expect(tabs.getByRole('link', {name: 'Accounts, a bank needs attention'})).toBeVisible();
   });
 });

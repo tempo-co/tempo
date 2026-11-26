@@ -1,4 +1,4 @@
-import {BankTransactionCategory} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -194,3 +194,8 @@ export const BANK_TRANSACTION_CATEGORY_META: Record<
     'var(--color-muted-foreground)',
   ),
 };
+
+/** Every category an owner can pick: Needs review is the AI's answer, never the owner's. */
+export const PICKABLE_CATEGORIES = BANK_TRANSACTION_CATEGORIES.filter(
+  (category) => category !== 'NEEDS_REVIEW',
+);

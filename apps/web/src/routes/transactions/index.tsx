@@ -1,48 +1,46 @@
-import {Link, createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
+import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
-import {BANK_TRANSACTION_SEARCH_MAX_LENGTH, type BankTransactionTotals} from '@tempo/contracts';
-import {CircleAlert} from 'lucide-react';
-import {Fragment, useEffect, useState} from 'react';
+import {BANK_TRANSACTION_SEARCH_MAX_LENGTH} from '@tempo/contracts';
+import {CircleCheck, Layers} from 'lucide-react';
+import {useEffect, useState} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadMore} from '@/components/shared/load-more';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {SearchInput} from '@/components/shared/search-input';
-import {LoadErrorState} from '@/components/shared/state-message';
+import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
+import {Sheet, SheetContent, SheetDescription, SheetTitle} from '@/components/ui/sheet';
+import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {useBankTransactionLedger} from '@/features/banking/api/use-bank-transaction-ledger';
-import {BankTransactionDateFilter} from '@/features/banking/components/bank-transaction-date-filter';
-import {BankTransactionDetailsDialog} from '@/features/banking/components/bank-transaction-details-dialog';
+import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
+import {BankTransactionDetailsPanel} from '@/features/banking/components/bank-transaction-details-panel';
 import {
   NoMatchingTransactions,
   NoTransactionsYet,
 } from '@/features/banking/components/bank-transaction-empty-states';
-import {
-  BankTransactionFilterChips,
-  BankTransactionReviewToggle,
-} from '@/features/banking/components/bank-transaction-filter-chips';
-import {BankTransactionFilters} from '@/features/banking/components/bank-transaction-filters';
+import {BankTransactionFilterChips} from '@/features/banking/components/bank-transaction-filter-chips';
 import {BankTransactionLedger} from '@/features/banking/components/bank-transaction-ledger';
 import {BankTransactionSortMenu} from '@/features/banking/components/bank-transaction-sort-menu';
+import {
+  SummaryStrip,
+  ToCheckCard,
+  ViewTotalsCard,
+} from '@/features/banking/components/bank-transaction-view-totals';
+import {ToCheckOneByOne} from '@/features/banking/components/to-check-one-by-one';
 import {
   BANK_TRANSACTION_FILTER_KEYS,
   bankTransactionSearchParamsSchema,
 } from '@/features/banking/types/bank-transaction';
-import {
-  Bone,
-  LoadingLabel,
-  TextBone,
-  TileRowsSkeleton,
-} from '@/features/dashboard/components/loading';
-import {formatMoney, toCents} from '@/features/dashboard/utils/money';
-import {missingAmountsLabel} from '@/features/reporting-currency/utils/currency-names';
+import {Bone, LoadingLabel, TileRowsSkeleton} from '@/features/dashboard/components/loading';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
+import {useHasRail} from '@/hooks/use-has-rail';
 import {cn} from '@/utils/cn';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
 
 export const Route = createFileRoute('/transactions/')({
-  component: BankTransactionsIndex,
+  component: TransactionsPage,
   validateSearch: zodValidator(bankTransactionSearchParamsSchema),
   // The list loads more in place, so page keys from older links are dropped.
   search: {
@@ -53,20 +51,48 @@ export const Route = createFileRoute('/transactions/')({
   },
 });
 
-function BankTransactionsIndex() {
+/** What the chips' Clear removes: every filter except the tab and the search, which have their own controls. */
+const CHIP_FILTER_KEYS = BANK_TRANSACTION_FILTER_KEYS.filter(
+  (key) => key !== 'needsAttention' && key !== 'search',
+);
+
+function TransactionsPage() {
   const searchParams = Route.useSearch();
   const navigate = useNavigate({from: '/transactions/'});
+  const hasRail = useHasRail();
   const transactionId = searchParams.transactionId;
   const {openTransaction, closeTransaction} = useBankTransactionInspector();
-  const {pages, transactions, total, totals, totalsPlaceholder, isFiltered, filters, sort} =
-    useBankTransactionLedger(searchParams);
+  const {
+    pages,
+    transactions,
+    total,
+    totals,
+    totalsPlaceholder,
+    dayTotals,
+    isFiltered,
+    filters,
+    sort,
+  } = useBankTransactionLedger(searchParams);
+  const toCheck = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention ?? 0;
+  const tab = filters.needsAttention ? 'check' : 'all';
 
-  const clearFilters = () =>
+  const clearAll = () =>
     void navigate({
       search: (prev) => ({
         ...prev,
         ...Object.fromEntries(BANK_TRANSACTION_FILTER_KEYS.map((key) => [key, undefined])),
       }),
+    });
+  const clearChips = () =>
+    void navigate({
+      search: (prev) => ({
+        ...prev,
+        ...Object.fromEntries(CHIP_FILTER_KEYS.map((key) => [key, undefined])),
+      }),
+    });
+  const showTab = (next: string) =>
+    void navigate({
+      search: (prev) => ({...prev, needsAttention: next === 'check' ? true : undefined}),
     });
 
   // Offline, a list never loaded reads as unavailable; a later page that fails keeps the rows (see LoadMore).
@@ -75,105 +101,201 @@ function BankTransactionsIndex() {
   const isError = status.isError && pages.data === undefined;
   // Rows kept from the previous filters say nothing about whether the account has any.
   const isEmpty = !isPending && !isError && !pages.isPlaceholderData && total === 0 && !isFiltered;
+  const totalsProps = {
+    totals,
+    settled: !pages.isPlaceholderData && !totalsPlaceholder,
+    missingLinked: filters.baseAmount !== 'MISSING',
+  };
+  // Only the tab narrows the list: nothing left to check is done, not a filter that matches nothing.
+  const onlyTab = tab === 'check' && countOtherFilters(filters) === 0;
+
+  const list = isPending ? (
+    <LedgerSkeleton />
+  ) : (
+    <>
+      <BankTransactionLedger
+        transactions={transactions}
+        groupByDay={sort.by === 'date'}
+        selectedId={transactionId}
+        dayTotals={dayTotals}
+        empty={
+          onlyTab ? (
+            <StateMessage
+              icon={CircleCheck}
+              title='All checked'
+              description='Every transaction has a category.'
+            />
+          ) : isFiltered ? (
+            <NoMatchingTransactions filters={filters} onClearFilters={clearAll} />
+          ) : (
+            <NoTransactionsYet />
+          )
+        }
+        onTransactionSelect={openTransaction}
+      />
+      {/* Rows kept from the previous filters can't be continued. */}
+      {!pages.isPlaceholderData && <LoadMore query={pages} />}
+    </>
+  );
 
   return (
     <>
       {/* The first load shows skeleton rows; a refetch after a filter change uses the page's bar, never one on a card. */}
       <LoadingBar isPending={pages.isPlaceholderData} />
       <AppBodyLayout>
-        <div className='space-y-5 max-md:space-y-4'>
-          <div className='flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1'>
-            <h1 className='text-page-title'>Bank transactions</h1>
-            {isPending ? (
-              <p className='text-body' aria-hidden='true'>
-                <TextBone className='w-[10em]' />
-              </p>
+        <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'>
+          <div className='min-w-0 space-y-5 max-md:space-y-4'>
+            <div className='flex flex-wrap items-center justify-between gap-x-6 gap-y-3'>
+              <h1 className='text-page-title'>Transactions</h1>
+              {!isError && !isEmpty && (
+                <div className='flex min-w-0 items-center gap-2 max-md:w-full'>
+                  <LedgerSearch search={filters.search} />
+                  <BankTransactionSortMenu sort={sort} />
+                </div>
+              )}
+            </div>
+
+            {isError ? (
+              <LoadErrorState
+                title="Couldn't load transactions"
+                error={pages.error}
+                onRetry={() => pages.refetch()}
+              >
+                {isFiltered && (
+                  <Button variant='ghost' onClick={clearAll}>
+                    Clear filters
+                  </Button>
+                )}
+              </LoadErrorState>
+            ) : isEmpty ? (
+              <NoTransactionsYet />
             ) : (
-              !isError && (
-                <LedgerSummary
-                  count={total}
-                  totals={totals}
-                  settled={!pages.isPlaceholderData && !totalsPlaceholder}
-                  missingLinked={filters.baseAmount !== 'MISSING'}
-                />
-              )
+              <Tabs value={tab} onValueChange={showTab}>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <TabsList aria-label='Transactions to show'>
+                    <TabsTrigger value='all'>All</TabsTrigger>
+                    <TabsTrigger value='check'>
+                      To check
+                      {toCheck > 0 && (
+                        <span className='grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground'>
+                          {toCheck > 99 ? '99+' : toCheck}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+                  {tab === 'check' && !hasRail && toCheck > 0 && (
+                    <Button
+                      size='sm'
+                      onClick={() => void navigate({search: (prev) => ({...prev, oneByOne: true})})}
+                    >
+                      <Layers aria-hidden='true' />
+                      One by one
+                    </Button>
+                  )}
+                </div>
+                <div className='mt-3 grid gap-3'>
+                  <BankTransactionFilterChips filters={filters} onClear={clearChips} />
+                  {!hasRail && <SummaryStrip {...totalsProps} />}
+                </div>
+                <TabsContent value={tab} className='mt-4' tabIndex={-1}>
+                  <div
+                    className={cn(
+                      'grid gap-2 transition-opacity duration-200',
+                      // Rows for the previous filters stay put but fade, after a beat so quick answers don't flicker.
+                      pages.isPlaceholderData && 'opacity-50 delay-150',
+                    )}
+                    aria-busy={pages.isPlaceholderData || undefined}
+                  >
+                    {list}
+                  </div>
+                </TabsContent>
+              </Tabs>
             )}
           </div>
 
-          {isError ? (
-            <LoadErrorState
-              title="Couldn't load transactions"
-              error={pages.error}
-              onRetry={() => pages.refetch()}
+          {/* A link to one row opens it whatever the list holds; an empty list has no totals to show. */}
+          {hasRail && (transactionId || !isEmpty) && (
+            <aside
+              aria-label={transactionId ? 'Transaction details' : 'Totals'}
+              className='sticky top-8 flex max-h-[calc(100dvh-(--spacing(16)))] min-h-0 flex-col gap-3'
             >
-              {isFiltered && (
-                <Button variant='ghost' onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              )}
-            </LoadErrorState>
-          ) : isEmpty ? (
-            <NoTransactionsYet />
-          ) : (
-            <>
-              <div className='grid gap-3'>
-                <div className='flex items-center gap-2 md:gap-3'>
-                  <LedgerSearch search={filters.search} />
-                  <div className='contents max-md:hidden'>
-                    <BankTransactionDateFilter filters={filters} />
-                    <BankTransactionReviewToggle filters={filters} />
-                  </div>
-                  <div className='ml-auto flex items-center gap-2'>
-                    <BankTransactionSortMenu sort={sort} />
-                    <BankTransactionFilters
-                      filters={filters}
-                      isFilteringApplied={isFiltered}
-                      onClearFilters={clearFilters}
-                    />
-                  </div>
-                </div>
-                <BankTransactionFilterChips filters={filters} />
-              </div>
-
-              <div
-                className={cn(
-                  'grid gap-2 transition-opacity duration-200',
-                  // Rows for the previous filters stay put but fade, after a beat so quick answers don't flicker.
-                  pages.isPlaceholderData && 'opacity-50 delay-150',
-                )}
-                aria-busy={pages.isPlaceholderData || undefined}
-              >
-                {isPending ? (
-                  <LedgerSkeleton />
-                ) : (
+              {transactionId ? (
+                <DetailsRail
+                  transactionId={transactionId}
+                  onClose={() => closeTransaction(false)}
+                />
+              ) : (
+                !isError && (
                   <>
-                    <BankTransactionLedger
-                      transactions={transactions}
-                      groupByDay={sort.by === 'date'}
-                      empty={
-                        isFiltered ? (
-                          <NoMatchingTransactions filters={filters} onClearFilters={clearFilters} />
-                        ) : (
-                          <NoTransactionsYet />
-                        )
-                      }
-                      onTransactionSelect={openTransaction}
-                    />
-                    {/* Rows kept from the previous filters can't be continued. */}
-                    {!pages.isPlaceholderData && <LoadMore query={pages} />}
+                    <ViewTotalsCard {...totalsProps} />
+                    {tab === 'all' && toCheck > 0 && (
+                      <ToCheckCard count={toCheck} onCheck={() => showTab('check')} />
+                    )}
                   </>
-                )}
-              </div>
-            </>
+                )
+              )}
+            </aside>
           )}
         </div>
       </AppBodyLayout>
-      <BankTransactionDetailsDialog
-        transactionId={transactionId ?? ''}
-        open={Boolean(transactionId)}
-        onOpenChange={closeTransaction}
-      />
+      {!hasRail && (
+        <Sheet open={Boolean(transactionId)} onOpenChange={closeTransaction}>
+          <SheetContent
+            side='bottom'
+            data-testid='bank-transaction-inspector'
+            className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] [&>button:last-child]:hidden'
+          >
+            <SheetDescription className='sr-only'>
+              Payment summary and editable transaction details
+            </SheetDescription>
+            {transactionId && (
+              <BankTransactionDetailsPanel
+                transactionId={transactionId}
+                onClose={() => closeTransaction(false)}
+                renderTitle={(title) => <SheetTitle asChild>{title}</SheetTitle>}
+              />
+            )}
+          </SheetContent>
+        </Sheet>
+      )}
+      {searchParams.oneByOne && !hasRail && (
+        <ToCheckOneByOne
+          onClose={() => void navigate({search: (prev) => ({...prev, oneByOne: undefined})})}
+        />
+      )}
     </>
+  );
+}
+
+/** Filters in force besides the tab and the search. */
+function countOtherFilters(filters: ReturnType<typeof useBankTransactionLedger>['filters']) {
+  return (
+    CHIP_FILTER_KEYS.filter((key) => {
+      const value = filters[key];
+      return Array.isArray(value) ? value.length > 0 : Boolean(value);
+    }).length + (filters.search?.trim() ? 1 : 0)
+  );
+}
+
+/**
+ * The open row's details beside the list. They never cover it; Escape closes them unless something inside handled
+ * it first (an open menu, or the "update other transactions" step).
+ */
+function DetailsRail({transactionId, onClose}: {transactionId: string; onClose: () => void}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+  return (
+    <div
+      data-testid='bank-transaction-inspector'
+      className='flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card'
+    >
+      <BankTransactionDetailsPanel transactionId={transactionId} onClose={onClose} focusOnOpen />
+    </div>
   );
 }
 
@@ -206,124 +328,12 @@ function LedgerSearch({search}: {search: string | undefined}) {
       maxLength={BANK_TRANSACTION_SEARCH_MAX_LENGTH}
       placeholder='Search...'
       aria-label='Search transactions'
-      wrapperClassName='flex-1 md:max-w-sm'
+      wrapperClassName='flex-1 md:w-64'
       className='h-12 sm:h-8'
       data-testid='bank-transactions-search'
     />
   );
 }
-
-/**
- * How many rows match and, with a filter in force, what they spent and earned, and how many of them those totals
- * leave out for want of an amount in the reporting currency. It keeps the last settled line while the list and its
- * totals refetch, then swaps to the new one once both have arrived and fades it in: the line changes once, in place,
- * instead of jumping as each figure lands. Without a reporting currency to add them up in, it counts rows only.
- */
-function LedgerSummary({
-  count,
-  totals,
-  settled,
-  missingLinked,
-}: {
-  count: number;
-  totals:
-    Pick<BankTransactionTotals, 'spending' | 'income' | 'baseCurrency' | 'excluded'> | undefined;
-  settled: boolean;
-  /** Whether the left-out rows can be listed; not while the list already shows only them. */
-  missingLinked: boolean;
-}) {
-  const parts: SummaryPart[] = [
-    {text: `${count.toLocaleString()} ${count === 1 ? 'transaction' : 'transactions'}`},
-  ];
-  const currency = totals?.baseCurrency ?? null;
-  if (totals && currency && toCents(totals.spending) !== 0) {
-    parts.push({
-      figure: formatMoney(Math.abs(Number(totals.spending)), currency),
-      word: 'spent',
-    });
-  }
-  if (totals && currency && toCents(totals.income) !== 0) {
-    parts.push({
-      figure: formatMoney(totals.income, currency),
-      word: 'earned',
-      income: true,
-    });
-  }
-  const missing =
-    totals && currency && missingLinked
-      ? {count: totals.excluded.missingBaseAmount, currency}
-      : null;
-  const keyOf = (line: Shown) =>
-    [
-      ...line.parts.map((part) => part.text ?? `${part.figure} ${part.word}`),
-      line.missing?.count ?? 0,
-    ].join(' · ');
-  // Until the list and its totals have both arrived once, the line stays a bone.
-  const [shown, setShown] = useState<Shown | null>(settled ? {parts, missing} : null);
-  if (settled && (!shown || keyOf({parts, missing}) !== keyOf(shown))) setShown({parts, missing});
-
-  if (!shown) {
-    return (
-      <p className='text-body' aria-hidden='true'>
-        <TextBone className='w-[10em]' />
-      </p>
-    );
-  }
-
-  // The wrapper stays; the line is replaced, so it fades in as a whole.
-  return (
-    <div className='grid justify-items-start gap-0.5 text-body text-muted-foreground md:justify-items-end md:text-right'>
-      <p
-        key={keyOf(shown)}
-        className='animate-in duration-200 fade-in motion-reduce:animate-none'
-        data-testid='bank-transactions-summary'
-        aria-live='polite'
-      >
-        {shown.parts.map((part, index) => (
-          <Fragment key={index}>
-            {index > 0 && ' · '}
-            <span className='whitespace-nowrap'>
-              {part.text ?? (
-                <>
-                  <span className={cn('numeric', part.income ? 'text-success' : 'text-foreground')}>
-                    {part.figure}
-                  </span>{' '}
-                  {part.word}
-                </>
-              )}
-            </span>
-          </Fragment>
-        ))}
-      </p>
-      {shown.missing && shown.missing.count > 0 && (
-        <MissingAmountsLink
-          key={`missing-${shown.missing.count}`}
-          count={shown.missing.count}
-          currency={shown.missing.currency}
-        />
-      )}
-    </div>
-  );
-}
-
-type Shown = {parts: SummaryPart[]; missing: {count: number; currency: string} | null};
-
-/** The rows a total leaves out, listed under the same filters. */
-function MissingAmountsLink({count, currency}: {count: number; currency: string}) {
-  return (
-    <Link
-      to='/transactions'
-      search={(prev) => ({...prev, baseAmount: 'MISSING' as const})}
-      className='inline-flex items-center gap-1.5 text-warning underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-      data-testid='missing-base-amounts-link'
-    >
-      <CircleAlert aria-hidden='true' className='size-3.5 shrink-0' />
-      {missingAmountsLabel(count, currency)}
-    </Link>
-  );
-}
-
-type SummaryPart = {text?: string; figure?: string; word?: string; income?: boolean};
 
 /** Placeholder days shaped like the list: a day label over a card of rows. */
 function LedgerSkeleton() {

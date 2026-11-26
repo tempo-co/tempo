@@ -176,6 +176,14 @@ export function formatBankTransactionCategory(value: string | null | undefined) 
     : BANK_TRANSACTION_UNCATEGORIZED_LABEL;
 }
 
+/** To check: rows the AI could not place (Needs review) and rows whose categorization failed, as the tab counts them. */
+export function isToCheck(transaction: Pick<BankTransaction, 'category' | 'categoryStatus'>) {
+  return (
+    transaction.category === 'NEEDS_REVIEW' ||
+    (transaction.categoryStatus === 'FAILED' && transaction.category === null)
+  );
+}
+
 export function formatBankTransactionCategoryStatus(
   value: BankTransactionCategorizationStatus | null | undefined,
 ) {

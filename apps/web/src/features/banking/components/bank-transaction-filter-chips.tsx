@@ -6,26 +6,25 @@ import {
   type BankTransactionFilterKey,
   useBankTransactionFilterLabels,
 } from '@/hooks/use-bank-transaction-filter-labels';
-import {cn} from '@/utils/cn';
 
-import {useGetBankTransactionReviewCounts} from '../api/use-get-bank-transaction-review-counts';
 import type {BankTransactionFilterParams} from '../types/bank-transaction';
+import {BankTransactionAddFilter} from './bank-transaction-add-filter';
 
 /**
- * Every filter in force as one removable chip, wherever it was set (the Filters panel or a link from Home). On phones
- * the row starts with the "To review" toggle, which sits in the toolbar on larger screens.
+ * Every filter in force as one removable chip, wherever it was set ("+ Add filter" or a link from Home), then
+ * "+ Add filter" and, with any chip, Clear. To check is a tab, and the search has its own box, so neither is a chip.
  */
-export function BankTransactionFilterChips({filters}: {filters: BankTransactionFilterParams}) {
+export function BankTransactionFilterChips({
+  filters,
+  onClear,
+}: {
+  filters: BankTransactionFilterParams;
+  onClear: () => void;
+}) {
   const navigate = useNavigate({from: '/transactions/'});
-  const toReview = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention ?? 0;
-  // The toggle shows its own state, so "To review" never doubles as a chip.
   const chips = useBankTransactionFilterLabels(filters).filter(
     (chip) => chip.key !== 'needsAttention',
   );
-  const showToggle = Boolean(filters.needsAttention) || toReview > 0;
-  if (chips.length === 0 && !showToggle) return null;
-  // With only phone items in it, the row takes no space on larger screens.
-  const phoneOnlyRow = chips.every((chip) => chip.phoneOnly);
 
   const remove = (key: BankTransactionFilterKey) =>
     void navigate({search: (prev) => ({...prev, [key]: undefined})});
@@ -33,16 +32,11 @@ export function BankTransactionFilterChips({filters}: {filters: BankTransactionF
   return (
     <ul
       aria-label='Filters in force'
-      className={cn('flex flex-wrap items-center gap-2', phoneOnlyRow && 'md:hidden')}
+      className='flex flex-wrap items-center gap-2'
       data-testid='bank-transaction-filter-chips'
     >
-      {showToggle && (
-        <li className='md:hidden'>
-          <BankTransactionReviewToggle filters={filters} />
-        </li>
-      )}
-      {chips.map(({key, label, phoneOnly}) => (
-        <li key={key} className={cn(phoneOnly && 'md:hidden')}>
+      {chips.map(({key, label}) => (
+        <li key={key} className='min-w-0'>
           <Button
             variant='secondary'
             size='sm'
@@ -55,50 +49,21 @@ export function BankTransactionFilterChips({filters}: {filters: BankTransactionF
           </Button>
         </li>
       ))}
+      <li>
+        <BankTransactionAddFilter filters={filters} />
+      </li>
+      {chips.length > 0 && (
+        <li>
+          <Button
+            variant='ghost'
+            size='sm'
+            className='h-10 font-normal text-muted-foreground sm:h-8'
+            onClick={onClear}
+          >
+            Clear
+          </Button>
+        </li>
+      )}
     </ul>
-  );
-}
-
-/**
- * The rows the nav badge counts, one press away: dashed with the count while off, filled with a remove mark while on.
- * Hidden while nothing needs review and it is off.
- */
-export function BankTransactionReviewToggle({
-  filters,
-  className,
-}: {
-  filters: BankTransactionFilterParams;
-  className?: string;
-}) {
-  const navigate = useNavigate({from: '/transactions/'});
-  const toReview = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention ?? 0;
-  const on = Boolean(filters.needsAttention);
-  if (!on && toReview === 0) return null;
-  const set = (value: true | undefined) =>
-    void navigate({search: (prev) => ({...prev, needsAttention: value})});
-
-  return on ? (
-    <Button
-      variant='secondary'
-      size='sm'
-      className={cn('h-10 gap-1.5 font-normal sm:h-8', className)}
-      aria-label='Remove filter: To review'
-      onClick={() => set(undefined)}
-    >
-      To review
-      <X aria-hidden='true' />
-    </Button>
-  ) : (
-    <Button
-      variant='outline'
-      size='sm'
-      className={cn('h-10 gap-2 border-dashed font-normal sm:h-8', className)}
-      onClick={() => set(true)}
-    >
-      To review
-      <span className='grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground'>
-        {toReview > 99 ? '99+' : toReview}
-      </span>
-    </Button>
   );
 }

@@ -320,8 +320,8 @@ the destructive colour with a plain-language message on the field (`FormMessage`
 ### Tables and transaction rows
 
 Quiet `text-label` headers, dividers only for row scanning, right-aligned `numeric` amounts. Long
-descriptions truncate where the row opens a view that shows them in full; a selection row in a
-dialog wraps its description instead, so similar names can be told apart. Rows that navigate show a
+descriptions truncate where the row opens their full view; a selection row in a dialog wraps
+instead, so similar names stay distinct. Rows that navigate show a
 keyboard-visible focus state.
 
 Every transaction and recurring row starts with a round `36px` leading tile: the merchant's
@@ -329,8 +329,8 @@ monochrome logo on the neutral `transaction-tile` (sunk field, muted mark, hairl
 category glyph on its category tile. Own transfers, exchanges and uncategorised rows, account rows,
 import surfaces and empty states use the neutral tile. The row is the
 shared `60px` row (`min-h-15`, `px-3 py-2`): a `text-body` title over a muted `text-body-small` line, plus
-any `1px` divider; a wrapping selection row grows only for its description. The transaction
-inspector keeps its `40px` tile. Logo loading, tinting and fallbacks: `docs/frontend-conventions.md`.
+any `1px` divider; a wrapping selection row grows only for its description. Transaction
+details keep a `40px` tile. Logo loading, tinting and fallbacks: `docs/frontend-conventions.md`.
 No per-merchant exceptions; logos are display only.
 
 Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate in both themes.
@@ -341,6 +341,9 @@ Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate 
 page background, a `text-section-title` title over a muted `text-body-small` description.
 `DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
 radius; items are `text-body` with segment corners, tooltips `text-body-small`.
+
+From `lg` up, opened details fill a sticky `20rem` right rail beside the list; below it, a bottom
+`Sheet` at the same address.
 
 ### Badges
 
@@ -378,8 +381,8 @@ toast's colour.
 
 ### Status, loading and feedback
 
-Top loading bar for route and data progress, skeletons for known shapes. A skeleton keeps its section's loaded size and static labels, and each section fills in
-when its own data arrives, so nothing on screen moves as a page loads. An inline control whose
+Top loading bar for route and data progress, skeletons for known shapes. A skeleton keeps its section's loaded size and labels; each section fills in on its own, so
+nothing moves. An inline control whose
 result shows where it was edited confirms in place (its own pending state and status line); toasts
 carry failures, saves finished after a dialog closed, and outcomes the screen does not show. They
 stack collapsed and use the library's default lifetime. Distinct states get distinct copy; never
@@ -425,7 +428,7 @@ Pages: `/`, `/transactions`, `/insights`, `/recurring`, `/accounts`, `/settings/
 - **Phones:** a sticky 48px header with the logo, Add data (+) and Settings (gear) as 44px actions,
   and a bottom bar of four tabs (Home, Transactions, Insights, Accounts): icon over label, the active
   one in `primary` with a top rule, padded for the safe area. Toasts sit above it.
-- **Badges:** the count to review on Transactions (`99+` above 99), a `warning` dot on Accounts for
+- **Badges:** the count to check on Transactions (`99+` above 99), a `warning` dot on Accounts for
   a bank that needs attention; the link's name says what each means.
 
 Each Settings section (`src/features/settings/sections.ts`) has an address. Desktop: a 208px

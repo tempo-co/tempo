@@ -57,7 +57,7 @@ const SETTINGS = '/settings';
 type NavBadge = {count: number | null; label: string};
 
 /**
- * What needs the owner sits on the page that settles it: transactions to review as a count on Transactions, a bank
+ * What needs the owner sits on the page that settles it: transactions to check as a count on Transactions, a bank
  * whose automatic sync needs attention, or whose consent ends within a week, as a dot on Accounts.
  */
 function useNavBadges() {
@@ -84,7 +84,7 @@ function useNavBadges() {
     .join(' and ');
   return (item: NavItem): NavBadge | null => {
     if (item.to === '/transactions' && review > 0)
-      return {count: review, label: `${review} to review`};
+      return {count: review, label: `${review} to check`};
     if (item.to === '/accounts' && banksLabel) return {count: null, label: banksLabel};
     return null;
   };

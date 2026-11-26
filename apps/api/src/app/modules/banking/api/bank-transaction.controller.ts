@@ -6,6 +6,7 @@ import type {
 	BankTransactionBreakdown,
 	BankTransactionCashFlow,
 	BankTransactionCategoryImpact,
+	BankTransactionDayTotals,
 	BankTransactionRecurring,
 	BankTransactionReviewCounts,
 	BankTransactionSummary,
@@ -60,6 +61,16 @@ export class BankTransactionController {
 		@Query() query: BankTransactionTotalsQueryDto,
 	): Promise<BankTransactionTotals> {
 		return this.bankTransactionSummaryService.getTotals(account, query);
+	}
+
+	@Get('day-totals')
+	@TokenReadable()
+	@Throttle(BROWSING_THROTTLE)
+	getDayTotals(
+		@CurrentAccount() account: Account,
+		@Query() query: BankTransactionTotalsQueryDto,
+	): Promise<BankTransactionDayTotals> {
+		return this.bankTransactionSummaryService.getDayTotals(account, query);
 	}
 
 	@Get('summary')

@@ -121,6 +121,8 @@ export const bankTransactionSearchParamsSchema = z.object({
   /** Only the rows the nav badge counts: to review or failed to categorize. */
   needsAttention: z.literal(true).optional(),
   transactionId: z.string().optional(),
+  /** The phone's one-by-one checking of the To check rows. */
+  oneByOne: z.literal(true).optional(),
   /** The orders the page offers; an older link's category or source order falls back to newest first. */
   sort: z
     .object({
