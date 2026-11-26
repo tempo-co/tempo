@@ -280,7 +280,7 @@ export const BANK_LIST: readonly Bank[] = [
 		name: 'GLS Bank',
 		country: 'DE',
 		status: 'verified',
-		layouts: [],
+		layouts: ['atruvia'],
 		formats: ['camt053'],
 		exportSteps: {
 			steps: [
@@ -290,7 +290,188 @@ export const BANK_LIST: readonly Bank[] = [
 				'Click the arrow icon ("Pfeil").',
 				'Choose the file type and the period, up to 24 months back. A TAN may be needed for more than 90 days.',
 			],
-			file: 'CAMT; GLS Bank turns it on for your account when you ask in the "Postfach" (mailbox)',
+			file: 'CSV, or CAMT once GLS Bank turns it on for your account when you ask in the "Postfach" (mailbox)',
+		},
+	},
+	{
+		id: 'sparkasse',
+		name: 'Sparkasse',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['sparkasse-camt-v2', 'sparkasse-mt940', 'sparkasse-creditcard'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Log in to online banking with your "Anmeldename" (login name) and PIN.',
+				'In the "Finanzstatus" (financial status), choose the account\'s "Umsatzabfrage" (transaction search).',
+				'Choose the period and export the transactions in the file type below.',
+			],
+			file: 'CSV-CAMT V2 (or CSV-MT940)',
+		},
+	},
+	{
+		id: 'volksbanken-raiffeisenbanken',
+		name: 'Volksbanken Raiffeisenbanken',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['atruvia'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Log in to OnlineBanking with your VR-NetKey and PIN.',
+				"Open the account's transactions.",
+				'Click the three grey dots, choose "Export", then CSV.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'ing-de',
+		name: 'ING',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['ing-de', 'ing-de-saldo'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Open the "Umsatzanzeige" (transaction view) of the account and set the filters you want, up to 390 days back.',
+				'Scroll to the bottom and click "Exportieren" (export).',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'deutsche-bank',
+		name: 'Deutsche Bank',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['deutsche-bank-19', 'deutsche-bank-6', 'deutsche-bank-planer'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Open "Finanzübersicht" (financial overview), then "Produkte" (products), then the account.',
+				'At the bottom of the "Umsatzliste" (transaction list), click "Herunterladen" (download) and choose "CSV-Datei" (CSV file).',
+			],
+			file: 'CSV-Datei (not the Excel document)',
+		},
+	},
+	{
+		id: 'postbank',
+		name: 'Postbank',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['postbank'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Log in to online banking with your access data and BestSign.',
+				'Select the account in the "Finanzübersicht" (financial overview).',
+				'Click "Filtern" (filter), set "Von" and "Bis" (from and to), then click "Anwenden" (apply).',
+				'Download the filtered transactions as CSV.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'commerzbank',
+		name: 'Commerzbank',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['commerzbank-8', 'commerzbank-9'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"Log in to online banking in a browser (the app cannot export) and open the account's transaction overview.",
+				'Click "PDF/CSV" above the list on the right, then "Umsätze exportieren" (export transactions). Optionally tick entries or set filters.',
+				'Choose "CSV" and click "Exportieren" (export).',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'dkb',
+		name: 'DKB',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['dkb'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Open the "Umsatzübersicht" (transaction overview) and set the filters you want: the export holds the filtered list.',
+				'Click "Exportieren" (export) and choose CSV.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'n26',
+		name: 'N26',
+		country: null,
+		status: 'verified',
+		layouts: ['n26-de', 'n26-en'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'On the N26 website (the app offers only PDF statements), go to the Home tab, select the account or Space and open "Downloads".',
+				'Under "Account Activity", enter the start and end dates.',
+				'Choose "CSV", then click "Download".',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'comdirect',
+		name: 'comdirect',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['comdirect'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Open "Konto & Karte", then "Umsätze" (transactions), up to about 540 days back.',
+				'Apply the filter you want, then click "Export als csv" (export as CSV) at the bottom.',
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'targobank',
+		name: 'Targobank',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['targobank'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				'Click "Konten" (accounts), then "Übersicht" (overview), then "Download der Umsätze" (download transactions).',
+			],
+			file: 'CSV (an Excel file is not read)',
+		},
+	},
+	{
+		id: 'sparda-bank',
+		name: 'Sparda-Bank',
+		country: 'DE',
+		status: 'verified',
+		layouts: ['sparda-bank'],
+		formats: [],
+		exportSteps: {
+			steps: [
+				"In online banking, open the account's transaction list and download it as CSV. Downloads may reach back only 30 days.",
+			],
+			file: 'CSV',
+		},
+	},
+	{
+		id: 'vivid-money',
+		name: 'Vivid Money',
+		country: null,
+		status: 'verified',
+		layouts: ['vivid'],
+		formats: [],
+		exportSteps: {
+			steps: ['In the Vivid app, open the "Transactions" tab and tap the export button at the top right.'],
+			file: 'CSV',
 		},
 	},
 	{
