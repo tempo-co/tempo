@@ -20,6 +20,14 @@ export class MerchantGroupsQueryDto implements MerchantGroupsQuery {
 	search?: string;
 
 	@IsOptional()
+	@IsCalendarDate()
+	from?: string;
+
+	@IsOptional()
+	@IsCalendarDate()
+	to?: string;
+
+	@IsOptional()
 	@Transform(transformStrictDecimalInteger)
 	@IsInt()
 	@Min(0)

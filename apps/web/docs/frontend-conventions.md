@@ -17,8 +17,8 @@ Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 - A flow that can fail asserts its failure message appears exactly once.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
-- Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either. While a side sheet is open, toasts move to the left edge, clear of its footer (`data-side-sheet`, end of `src/index.css`).
-- Stepped sheets build steps from `StepFrame` (`src/components/shared/step-frame.tsx`). The shell's entry bundle holds only `AddDataProvider`; `src/features/add-data/components/add-data-sheet.tsx` loads on the first ask, which waits for it, then stays mounted so an import outlives its page.
+- Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks on `[data-sonner-toaster]`; keep both. Side sheets move toasts left (`data-side-sheet`, `src/index.css`).
+- Stepped sheets use `StepFrame` (`src/components/shared/step-frame.tsx`). The entry holds only `AddDataProvider`; `src/features/add-data/components/add-data-sheet.tsx` loads on first use, then stays mounted.
 - When a hook changes which `sonner` methods it calls, update the `sonner` stub in hook-harness specs (see `docs/e2e-helpers.md`).
 
 ## Colour and theme
@@ -75,6 +75,8 @@ Value axes take their ticks from `axisTicks` (`src/features/dashboard/utils/char
 about 6% headroom, passed as explicit `ticks` rather than `tickCount`. A Recharts `Bar` has no default fill: a `Cell`
 without `fill` takes the bar's, and with neither the bar renders black.
 
+HTML bars (the Insights cash flow) use `axisTicks` too, and a pair is a link only while it is a 44px target.
+
 ## Settings lists
 
 Pattern in `src/features/settings/components/settings-group.tsx` and the access-token settings:
@@ -105,6 +107,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Routing and URL state
 
 - Dialog state that Back should close lives in the host route's search schema; see `docs/browser-and-e2e-testing.md` for the close/back rule and the test.
+- A rail's opened item (the Insights merchant) lives in the search with `replace`: beside the content from 1280px, in a `Sheet` narrower (bottom on phones).
 - Input limits that reach the URL use one exported constant for the schema and the input's `maxLength` (`BANK_TRANSACTION_SEARCH_MAX_LENGTH`).
 
 ## Query caches

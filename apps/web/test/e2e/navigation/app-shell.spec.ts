@@ -85,14 +85,16 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
 
   const tabBar = page.getByTestId('app-tab-bar');
   await expect(page.getByTestId('app-sidebar')).toBeHidden();
-  // The tab's accessible name carries its To check count once the counts have loaded.
-  await expect(tabBar.getByRole('link', {name: 'Transactions, 3 to check'})).toBeVisible();
-  await expect(tabBar.getByRole('link')).toHaveText([
+  // A screen reader hears each tab's label, Transactions with its To check count; the count badge itself is hidden.
+  const tabs = tabBar.getByRole('link');
+  await expect(tabs).toHaveCount(4);
+  for (const [index, name] of [
     'Home',
-    /Transactions$/,
+    'Transactions, 3 to check',
     'Insights',
     'Accounts',
-  ]);
+  ].entries())
+    await expect(tabs.nth(index)).toHaveAccessibleName(name);
 
   for (const {label, url} of [
     {label: 'Transactions', url: /\/transactions(?:\?|$)/},
@@ -127,7 +129,7 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
   await expectNoHorizontalOverflow(page);
 });
 
-test('old Connections and Transactions links open Accounts and Transactions with their query', async ({
+test('old Connections, Transactions, merchants and recurring links open the pages that hold them', async ({
   page,
 }) => {
   await page.setViewportSize({width: 1440, height: 900});
@@ -145,4 +147,12 @@ test('old Connections and Transactions links open Accounts and Transactions with
   await page.goto('/bank-transactions?search=Example%20Market');
   await expect(page).toHaveURL(/\/transactions\?search=Example(?:\+|%20)Market$/);
   await expect(page.getByTestId('bank-transactions-search')).toHaveValue('Example Market');
+
+  // A merchant or series link over any page opens Insights or Recurring with it.
+  await page.goto('/transactions?merchants=open');
+  await expect(page).toHaveURL(/\/insights$/);
+  await expect(page.getByRole('heading', {name: 'Insights', level: 1})).toBeVisible();
+  const series = 'a'.repeat(32);
+  await page.goto(`/?recurring=open&series=${series}`);
+  await expect(page).toHaveURL(`/recurring?series=${series}`);
 });

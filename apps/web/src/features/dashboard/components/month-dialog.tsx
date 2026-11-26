@@ -631,9 +631,8 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
     asOf,
     MERCHANTS,
   );
-  const navigate = useNavigate({from: '/'});
-  const open = (merchant: string) =>
-    void navigate({search: (prev) => ({...prev, merchants: 'open', merchant})});
+  const navigate = useNavigate();
+  const open = (merchant: string) => void navigate({to: '/insights', search: {merchant}});
   const accepted = useFiguresCurrencyAccepted();
   // A ranking read mid-conversion or in another currency waits for its refetch; an empty one has nothing to label.
   const waiting = !!ranking && ranking.merchants.length > 0 && !accepted(ranking.baseCurrency);
