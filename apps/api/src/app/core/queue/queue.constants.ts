@@ -31,5 +31,9 @@ export const FETCH_MERCHANT_LOGO_JOB = 'fetch-merchant-logo';
 export const RECONCILE_MERCHANT_LOGOS_JOB = 'reconcile-merchant-logos';
 export const MERCHANT_LOGO_RECONCILE_SCHEDULER_ID = 'merchant-logo-reconciler';
 
+export const BANK_COVERAGE_DIGEST_QUEUE = 'bank-coverage-digest';
+export const SEND_BANK_COVERAGE_DIGEST_JOB = 'send-bank-coverage-digest';
+export const BANK_COVERAGE_DIGEST_SCHEDULER_ID = 'bank-coverage-digest-scheduler';
+
 export const PUSH_NOTIFICATION_QUEUE = 'push-notifications';
 export const DELIVER_PUSH_ALERT_JOB = 'deliver-push-alert';
