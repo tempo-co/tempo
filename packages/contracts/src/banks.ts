@@ -294,23 +294,6 @@ export const BANK_LIST: readonly Bank[] = [
 		},
 	},
 	{
-		id: 'postbank',
-		name: 'Postbank',
-		country: 'DE',
-		status: 'verified',
-		layouts: [],
-		formats: ['mt940'],
-		exportSteps: {
-			steps: [
-				'Log in to online banking with your access data and BestSign.',
-				'Select the account in the financial overview.',
-				'Click "Filtern" (filter), set "Von" and "Bis" (from and to), then click "Anwenden" (apply).',
-				'Download the filtered transactions in the file type below.',
-			],
-			file: 'MT940',
-		},
-	},
-	{
 		id: 'boursobank',
 		name: 'BoursoBank',
 		country: 'FR',

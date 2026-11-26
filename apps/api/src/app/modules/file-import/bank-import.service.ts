@@ -112,7 +112,7 @@ export type BankImportRequest = {
  * The statements of one account in one drop: its rows per format (a bank CSV export per layout), in matching order
  * (`FORMAT_ORDER`, then layout id), each joined in statement order (`joinStatements`).
  */
-type AccountRows = {
+export type AccountRows = {
 	identifier: string;
 	iban: string | null;
 	/** The bank of a file that names no account (Revolut, or an owner's saved layout); null when it names one. */
@@ -1542,7 +1542,7 @@ async function refuseMovedAccounts(
  * that order, per format (`joinStatements`). An account is one (IBAN, other id or bank; currency) pair.
  * `learnedBanks`: the bank of each of the owner's saved layouts, by layout id.
  */
-function groupByAccount(
+export function groupByAccount(
 	statements: readonly NormalizedStatement[],
 	learnedBanks: ReadonlyMap<string, string>,
 	evidenceFiles: ReadonlyMap<NormalizedStatement, number>,
@@ -1851,7 +1851,7 @@ function statementBankIdentity(
 }
 
 /** The scheme a statement numbers its rows in: its format, and the layout of a CSV-style file. */
-function statementNumbering(format: StatementFormat, layout: string | null): string {
+export function statementNumbering(format: StatementFormat, layout: string | null): string {
 	return layout ? `${format}:${layout}` : format;
 }
 
@@ -2055,7 +2055,7 @@ function toFileRow(row: NormalizedRow): BankImportFileRow {
 	};
 }
 
-function toMatchRow(row: NormalizedRow) {
+export function toMatchRow(row: NormalizedRow) {
 	return {
 		text: matchText(row.counterpartyName, row.description),
 		amount: row.amount,
