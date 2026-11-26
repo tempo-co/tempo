@@ -375,7 +375,7 @@ export const CSV_LAYOUTS: readonly CsvLayout[] = [
 		currency: {column: 2},
 		amount: {kind: 'direction', column: 4, directionColumn: 3, debit: 'D', credit: 'C'},
 		counterpartyIban: 5,
-		counterpartyName: 14,
+		counterpartyName: 6,
 		valueDate: 7,
 		bankTransactionCode: 8,
 		description: [9],
