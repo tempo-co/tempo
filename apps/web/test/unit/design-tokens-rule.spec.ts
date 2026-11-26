@@ -50,6 +50,7 @@ ruleTester.run('design/tokens', design.rules.tokens, {
     },
     {name: 'a variant selector', code: `const a = 'data-[state=open]:bg-accent [&_svg]:size-4';`},
     {name: 'an in-page link', code: `const a = <a href="#add">Add</a>;`},
+    {name: 'an in-page link in a template', code: 'const a = <a href={`#add`}>Add</a>;'},
     {name: 'a number in prose', code: `const a = 'Row #123 failed';`},
     {
       name: 'a commented exception',
@@ -71,6 +72,11 @@ ruleTester.run('design/tokens', design.rules.tokens, {
       name: 'a hex inside an arbitrary value',
       code: `const a = <div className="shadow-[0_0_0_1px_#232b66]" />;`,
       errors: [{messageId: 'colour'}],
+    },
+    {
+      name: 'a one-off length among several values',
+      code: `const a = <div className="rounded-[8px_8px_0_0]" />;`,
+      errors: [{messageId: 'arbitrary'}],
     },
     {name: 'a raw hex', code: `const a = '#232B66';`, errors: [{messageId: 'colour'}]},
     {

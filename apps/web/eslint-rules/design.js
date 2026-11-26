@@ -68,12 +68,13 @@ const CHECKED_UTILITIES = new Set([...TYPE, ...SPACING, ...GAPS, ...SIZE, ...COL
 const SIZE_UTILITIES = new Set(SIZE);
 // Parts of a value that come from the system or the device: a token (`var(--color-chart-1)`), a spacing step
 // (`--spacing(4)`), a safe-area inset (`env(safe-area-inset-bottom)`) and the 1px hairline.
-const SYSTEM_PARTS = /var\(--[\w-]+\)|--spacing\([\d.]+\)|env\([\w-]+\)|(?<![\d.])1px\b/g;
+const SYSTEM_PARTS = /var\(--[\w-]+\)|--spacing\([\d.]+\)|env\([\w-]+\)|(?<![\d.])1px(?![a-z])/g;
 // Absolute lengths are one-offs. Text-relative lengths (em, ch) also are, except on size utilities, where
 // they size a column or a line to the text it holds (`w-[8em]`, `max-w-[60ch]`). Lengths relative to the
 // viewport, the container or the parent (dvh, vw, %) have no scale step and pass.
-const ABSOLUTE = /\d(?:px|rem|pt|pc|cm|mm|in|q)\b/i;
-const TEXT_RELATIVE = /\d(?:em|ch|ex|lh|rlh)\b/i;
+// A unit ends at anything but a letter: `_` separates values inside a class (`rounded-[8px_8px_0_0]`).
+const ABSOLUTE = /\d(?:px|rem|pt|pc|cm|mm|in|q)(?![a-z])/i;
+const TEXT_RELATIVE = /\d(?:em|ch|ex|lh|rlh)(?![a-z])/i;
 // `leading-[1.1]`, `font-[550]`: a bare number on a type utility is a one-off too.
 const BARE_NUMBER = /^-?(?:\d*\.)?\d+$/;
 
@@ -120,9 +121,12 @@ function rawColours(text) {
 }
 
 function keyOf(node) {
-  const parent = node.parent;
+  // A template literal's text sits below the literal, and a JSX value below its braces (`href={`#${id}`}`).
+  let value = node.type === 'TemplateElement' ? node.parent : node;
+  if (value.parent?.type === 'JSXExpressionContainer') value = value.parent;
+  const parent = value.parent;
   if (parent?.type === 'JSXAttribute') return parent.name.name;
-  if (parent?.type === 'Property' && parent.value === node)
+  if (parent?.type === 'Property' && parent.value === value)
     return parent.key.name ?? parent.key.value;
   return undefined;
 }
