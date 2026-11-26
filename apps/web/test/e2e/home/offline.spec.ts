@@ -112,16 +112,15 @@ test.describe('saved Home', () => {
     test.setTimeout(30000);
     const state = await mockHome(page);
     await openSavedHome(page);
-    // Connections shows the bank's logo; only the connected banks' logos are saved, not the provider's
+    // Accounts shows the bank's logo; only the connected banks' logos are saved, not the provider's
     // whole bank list.
     await page
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Accounts', exact: true})
       .click();
-    await expect(page.getByTestId('bank-connection-logo').locator('img:visible')).toHaveAttribute(
-      'src',
-      LOGO_URL,
-    );
+    await expect(
+      page.getByTestId('account-bank-logo').first().locator('img:visible'),
+    ).toHaveAttribute('src', LOGO_URL);
     await page.goBack();
     await expect(totalBalance(page)).toHaveText('€24,300');
     const savedQueries = async () => {
@@ -165,10 +164,9 @@ test.describe('saved Home', () => {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Accounts', exact: true})
       .click();
-    await expect(page.getByTestId('bank-connection-logo').locator('img:visible')).toHaveAttribute(
-      'src',
-      LOGO_URL,
-    );
+    await expect(
+      page.getByTestId('account-bank-logo').first().locator('img:visible'),
+    ).toHaveAttribute('src', LOGO_URL);
     await page.goBack();
     await expect(totalBalance(page)).toHaveText('€24,300');
 
@@ -210,9 +208,7 @@ test.describe('saved Home', () => {
     await page.clock.runFor(1100);
     await expect.poll(savedMonths).toEqual(['2026-08', '2026-09']);
     await page.getByRole('link', {name: 'Accounts', exact: true}).first().click();
-    await expect(
-      page.getByTestId('bank-connections-list').getByRole('region').first(),
-    ).toBeVisible();
+    await expect(page.getByTestId('accounts-overview').getByRole('region').first()).toBeVisible();
     await page.clock.runFor(1100);
     // Inactive transactions share one budget rather than each view getting its own.
     await expect.poll(savedMonths).toEqual(['2026-09']);

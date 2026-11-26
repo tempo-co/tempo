@@ -146,10 +146,9 @@ test.describe('Home navigation badges', () => {
 
     await connections.click();
     await expect(page).toHaveURL(/\/accounts$/);
-    const notice = page.getByTestId('bank-connection-problem');
-    await expect(notice).toContainText('Consent ends in 3 days');
-    await expect(notice).toContainText('Re-authorize to keep syncing');
-    await expect(notice.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+    const notice = page.locator('[data-testid="account-freshness"][data-tone="warning"]');
+    await expect(notice).toContainText('Access ends in 3 days · reconnect to keep syncing');
+    await expect(notice.getByRole('button', {name: 'Reconnect'})).toBeVisible();
   });
 
   test('a bank with a sync problem whose consent ends soon leads with re-authorizing', async ({
@@ -162,10 +161,10 @@ test.describe('Home navigation badges', () => {
     });
     await mockJson(page, '**/bank-connections/aspsps', []);
     await page.goto('/accounts');
-    const notice = page.getByTestId('bank-connection-problem');
+    const notice = page.locator('[data-testid="account-freshness"][data-tone="warning"]');
     await expect(notice).toHaveCount(1);
-    await expect(notice).toContainText('Consent ends in 3 days');
-    await expect(notice.getByRole('button', {name: 'Re-authorize'})).toBeVisible();
+    await expect(notice).toContainText('Access ends in 3 days');
+    await expect(notice.getByRole('button', {name: 'Reconnect'})).toBeVisible();
   });
 
   for (const {name, connections, label} of [

@@ -39,7 +39,7 @@ const title = (page: Page) =>
 
 const mockPages = async (page: Page) => {
   await mockSyntheticHome(page);
-  // Connections and Settings ask for more than Home; in CI an unmocked request reaches the API and signs out.
+  // Accounts and Settings ask for more than Home; in CI an unmocked request reaches the API and signs out.
   await mockJson(page, '**/bank-connections/aspsps', []);
   await mockJson(page, '**/notifications', {
     publicKey: null,
@@ -64,17 +64,14 @@ for (const width of [1440, 1280]) {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Accounts'})
       .click();
-    await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Accounts', exact: true})).toBeVisible();
     expect(await scrolls(page)).toBe(false);
     expect(await column(page)).toEqual(home);
     // Home has no title, so its content starts where the title does; the Connect button overhangs the title's row.
     const connections = await title(page);
     expect(connections).toMatchObject({x: home.contentX + 16, y: home.top});
 
-    await page
-      .getByRole('button', {name: /details$/})
-      .first()
-      .click();
+    await page.getByRole('button', {name: 'Connect a bank'}).first().click();
     await expect(page.getByRole('dialog')).toBeVisible();
     expect(await column(page)).toEqual(home);
     await page.keyboard.press('Escape');
@@ -97,11 +94,7 @@ for (const width of [1440, 1280]) {
   });
 }
 
-// At 320px the Connect button wraps under its title; at 390px it sits beside it.
-for (const [width, wraps] of [
-  [320, true],
-  [390, false],
-] as const) {
+for (const width of [320, 390]) {
   test(`starts every page title where Home starts its content on a ${width}px phone`, async ({
     page,
   }) => {
@@ -111,7 +104,7 @@ for (const [width, wraps] of [
     await expect(page.getByText('Total balance')).toBeVisible();
     const home = await column(page);
     for (const [path, name] of [
-      ['/accounts', 'Bank connections'],
+      ['/accounts', 'Accounts'],
       ['/transactions', 'Transactions'],
       ['/settings/account', 'Settings'],
     ]) {
@@ -119,16 +112,14 @@ for (const [width, wraps] of [
       await expect(page.getByRole('heading', {name, exact: true})).toBeVisible();
       expect(await title(page), path).toMatchObject({x: 16, y: home.top});
     }
-    // Wrapped, the Connect button keeps 12px under the title; beside it, it centres on the title's row.
-    // Either way the cards start 16px below it.
+    // The Connect button sits beside the title, centred on its row, and the cards start 16px below it.
     await page.goto('/accounts');
-    await expect(page.getByRole('heading', {name: 'Bank connections', exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Accounts', exact: true})).toBeVisible();
     const [heading, button] = await Promise.all([
-      boxOf(page.getByRole('heading', {name: 'Bank connections', exact: true})),
+      boxOf(page.getByRole('heading', {name: 'Accounts', exact: true})),
       boxOf(page.getByTestId('connect-bank-button')),
     ]);
-    if (wraps) expect(button.y - (heading.y + heading.height)).toBe(12);
-    else expect(button.y + button.height / 2).toBe(heading.y + heading.height / 2);
+    expect(button.y + button.height / 2).toBe(heading.y + heading.height / 2);
     expect((await title(page)).contentY! - (button.y + button.height)).toBe(16);
   });
 }

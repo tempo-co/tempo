@@ -200,12 +200,12 @@ test.describe('saved app', () => {
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
     await page.goto('/accounts');
-    const cards = page.getByRole('region', {name: 'ABN AMRO'});
+    const cards = page.getByRole('region', {name: 'Cash'});
     await expect(cards.first()).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
     await expect(savedStatus(page)).toBeVisible();
     await expect(cards.first()).toBeVisible();
-    await expect(page.getByText("Couldn't load bank connections")).not.toBeVisible();
+    await expect(page.getByText("Couldn't load accounts")).not.toBeVisible();
   });
 
   test('reports a failed refresh when Tempo answers with an error', async ({page}) => {
@@ -216,9 +216,9 @@ test.describe('saved app', () => {
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
     await page.goto('/accounts');
-    await expect(page.getByRole('region', {name: 'ABN AMRO'})).toBeVisible();
+    await expect(page.getByRole('region', {name: 'Cash'})).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
-    await expect(page.getByRole('heading', {name: "Couldn't load bank connections"})).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Couldn't load accounts"})).toBeVisible();
     await expect(savedStatus(page)).not.toBeVisible();
   });
 
