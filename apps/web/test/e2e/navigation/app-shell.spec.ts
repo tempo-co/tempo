@@ -85,9 +85,10 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
 
   const tabBar = page.getByTestId('app-tab-bar');
   await expect(page.getByTestId('app-sidebar')).toBeHidden();
+  // Transactions' text starts with its count once the review counts have loaded.
   await expect(tabBar.getByRole('link')).toHaveText([
     'Home',
-    /^Transactions/,
+    /Transactions$/,
     'Insights',
     'Accounts',
   ]);
@@ -107,8 +108,13 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
   }
 
   const header = page.getByTestId('app-phone-header');
+  // With file import off, Add data opens on its one way in, over the page.
   await header.getByRole('button', {name: 'Add data'}).click();
-  await expect(page).toHaveURL(/\/accounts(?:\?|$)/);
+  const sheet = page.getByTestId('add-data-sheet');
+  await expect(sheet.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
+  await expect(page).toHaveURL(HOME);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
   await header.getByRole('link', {name: 'Settings'}).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(tabBar.locator('[aria-current="page"]')).toHaveCount(0);
@@ -129,7 +135,12 @@ test('old Connections and Transactions links open Accounts and Transactions with
 
   await page.goto('/bank-connections?result=cancelled');
   await expect(page).toHaveURL(/\/accounts(?:\?|$)/);
-  await expect(page.getByText('Bank connection cancelled')).toBeVisible();
+  await expect(
+    page
+      .getByTestId('add-data-sheet')
+      .getByRole('heading', {name: "You didn't finish at your bank"}),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.goto('/bank-transactions?search=Example%20Market');
   await expect(page).toHaveURL(/\/transactions\?search=Example(?:\+|%20)Market$/);

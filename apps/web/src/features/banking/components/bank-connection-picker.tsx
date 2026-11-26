@@ -1,19 +1,13 @@
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import type {BankConnectionAspsp} from '@tempo/contracts';
-import {ArrowLeft, ChevronRight, Loader, Plus, Search} from 'lucide-react';
+import {ChevronRight, CircleAlert, CircleX, Loader, Plus, Search} from 'lucide-react';
 import {useMemo, useState} from 'react';
 
 import {PendingLabel} from '@/components/shared/pending-label';
+import {StepFrame} from '@/components/shared/step-frame';
+import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogDescription,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogTrigger,
-} from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cn} from '@/utils/cn';
@@ -22,15 +16,18 @@ import {bankConnectionsQueryOptions} from '../api/use-get-all-bank-connections';
 import {supportedBanksQueryOptions, useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {BankWordmark} from './bank-wordmark';
 
-type BankConnectionPickerProps = {
-  onBankSelect: (bank: BankConnectionAspsp) => void | Promise<void>;
-  isStarting: boolean;
-  className?: string;
-};
+/** A bank as the hand-off to it remembers it, enough to try it again. */
+export type ConnectingBank = Pick<BankConnectionAspsp, 'name' | 'country'>;
+
+/** Where connecting a bank is: the bank list (in the likely country), another country, the hand-off, or the return. */
+export type ConnectStep =
+  | {kind: 'bank'}
+  | {kind: 'country'}
+  | {kind: 'confirm'; bank: BankConnectionAspsp}
+  /** Back from the bank without a connection; `bank` is the one left for, when this tab remembers it. */
+  | {kind: 'returned'; result: 'cancelled' | 'error'; bank: ConnectingBank | null};
 
 type CountryOption = {code: string; label: string; bankCount: number};
-
-type Step = 'bank' | 'country' | 'confirm';
 
 /** Shared row shape: 56px, full width. */
 const ROW_SHAPE =
@@ -44,21 +41,34 @@ const COUNTRY_SHAPE =
   'mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-body';
 
 /**
- * Connecting a bank, one step at a time in one sheet: pick a bank in the likely country (changing it is a step of
- * its own), confirm, then leave for the bank. The sheet keeps one height across steps, so nothing jumps.
+ * Connecting a bank, one step at a time in the Add data sheet: pick a bank in the likely country (changing it is a
+ * step of its own), confirm, then leave for the bank; it sends the owner back with the result. On phones the steps
+ * keep one height, so nothing jumps under a thumb.
  */
-export function BankConnectionPicker({
-  onBankSelect,
+export function ConnectBankSteps({
+  step,
+  onStep,
+  countryCode,
+  onCountryCode,
+  onBack,
+  onConnect,
   isStarting,
-  className,
-}: BankConnectionPickerProps) {
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<Step>('bank');
-  const [countryCode, setCountryCode] = useState<string>();
-  const [bank, setBank] = useState<BankConnectionAspsp>();
-  const queryClient = useQueryClient();
-  const {supportedBanks, isPending, isError, refetch} = useGetSupportedBanks(open);
-  // The page already loads the connections; read them without fetching again.
+  onImportInstead,
+}: {
+  step: ConnectStep;
+  onStep: (step: ConnectStep) => void;
+  /** The country the owner chose; it stays while the sheet closes and opens again. */
+  countryCode: string | undefined;
+  onCountryCode: (code: string) => void;
+  /** From the bank list back to what the sheet offered first. */
+  onBack?: () => void;
+  onConnect: (bank: ConnectingBank) => void | Promise<void>;
+  isStarting: boolean;
+  /** Offered when the bank failed to connect, while file import is on. */
+  onImportInstead?: () => void;
+}) {
+  const {supportedBanks, isPending, isError, refetch} = useGetSupportedBanks(true);
+  // The pages already load the connections; read them without fetching again.
   const {data: bankConnections} = useQuery({...bankConnectionsQueryOptions, enabled: false});
 
   const countries = useMemo(() => getCountryOptions(supportedBanks ?? []), [supportedBanks]);
@@ -73,69 +83,37 @@ export function BankConnectionPicker({
     [country?.code, supportedBanks],
   );
 
-  // Each opening starts at the bank list; the chosen country stays.
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen) {
-      setStep('bank');
-      setBank(undefined);
-    }
-    setOpen(nextOpen);
-  };
+  if (step.kind === 'returned')
+    return (
+      <ReturnedStep
+        step={step}
+        onPickBank={() => onStep({kind: 'bank'})}
+        onConnect={onConnect}
+        isStarting={isStarting}
+        onImportInstead={onImportInstead}
+      />
+    );
 
   const title =
-    step === 'country'
+    step.kind === 'country'
       ? 'Choose a country'
-      : step === 'confirm' && bank
-        ? `Connect ${bank.name}`
+      : step.kind === 'confirm'
+        ? `Connect ${step.bank.name}`
         : 'Connect a bank';
+  const back =
+    step.kind === 'bank' ? onBack : isStarting ? undefined : () => onStep({kind: 'bank'});
 
   return (
-    <ResponsiveDialog open={open} onOpenChange={handleOpenChange}>
-      <ResponsiveDialogTrigger asChild>
-        <Button
-          className={cn(
-            'max-md:h-auto max-md:min-h-11 max-md:max-w-full max-md:whitespace-normal',
-            className,
-          )}
-          disabled={isStarting}
-          // Start loading the banks when the pointer or focus reaches the button, so they are often ready by the click.
-          onPointerEnter={() => void queryClient.prefetchQuery(supportedBanksQueryOptions)}
-          onFocus={() => void queryClient.prefetchQuery(supportedBanksQueryOptions)}
-          data-testid='connect-bank-button'
-        >
-          {isStarting ? <Loader className='animate-slow-spin' /> : <Plus />}
-          {isStarting ? 'Connecting…' : 'Connect a bank'}
-        </Button>
-      </ResponsiveDialogTrigger>
-      {/* grid-cols-1 here and on the header: their grid track stays the sheet's width under a truncated title. */}
-      <ResponsiveDialogContent
-        className='grid-cols-1 sm:max-w-lg'
-        data-testid='bank-connection-picker'
-      >
-        <ResponsiveDialogHeader className='relative grid-cols-1 px-4 text-start md:px-0'>
-          {/* Desktop keeps the title clear of the dialog's close button. */}
-          <div className='flex min-h-11 items-center gap-1 md:pr-8'>
-            {step !== 'bank' && (
-              <Button
-                variant='ghost'
-                size='icon'
-                aria-label='Back'
-                className='-ml-2 size-11'
-                onClick={() => setStep('bank')}
-                disabled={isStarting}
-              >
-                <ArrowLeft />
-              </Button>
-            )}
-            {/* One line, so a long bank name never makes the sheet taller; the name is in full below. */}
-            <ResponsiveDialogTitle className='min-w-0 truncate'>{title}</ResponsiveDialogTitle>
-          </div>
-          <ResponsiveDialogDescription className='sr-only'>
-            Pick your bank, then approve access at the bank.
-          </ResponsiveDialogDescription>
-        </ResponsiveDialogHeader>
-        {/* One height for every step and for loading, so the sheet never resizes under a thumb. */}
-        <div className='flex h-[min(68dvh,--spacing(128))] min-h-0 flex-col px-4 pb-4 md:px-0 md:pb-0'>
+    <StepFrame
+      title={title}
+      truncateTitle
+      srDescription='Pick your bank, then approve access at the bank.'
+      onBack={back}
+      backLabel={step.kind === 'bank' ? 'Back to Add data' : 'Back'}
+      scroll={false}
+      body={
+        // On phones one height for every step and for loading; on desktop the sheet's own height.
+        <div className='flex min-h-0 flex-col max-md:h-[min(68dvh,--spacing(128))] md:flex-1'>
           {isError ? (
             <div
               role='alert'
@@ -152,21 +130,21 @@ export function BankConnectionPicker({
             <p className='m-auto text-center text-body-small text-muted-foreground'>
               No banks are available to connect right now.
             </p>
-          ) : step === 'country' ? (
+          ) : step.kind === 'country' ? (
             <CountryStep
               countries={countries}
               selected={country.code}
               onSelect={(code) => {
-                setCountryCode(code);
-                setStep('bank');
+                onCountryCode(code);
+                onStep({kind: 'bank'});
               }}
             />
-          ) : step === 'confirm' && bank ? (
+          ) : step.kind === 'confirm' ? (
             <ConfirmStep
-              bank={bank}
+              bank={step.bank}
               country={country}
               isStarting={isStarting}
-              onContinue={() => void onBankSelect(bank)}
+              onContinue={() => void onConnect(step.bank)}
             />
           ) : (
             <BankStep
@@ -174,18 +152,119 @@ export function BankConnectionPicker({
               country={country}
               banks={banks}
               // Once the user searches or picks, a late guess from connected banks no longer moves the country.
-              onInteract={() => setCountryCode(country.code)}
-              onChangeCountry={() => setStep('country')}
+              onInteract={() => onCountryCode(country.code)}
+              onChangeCountry={() => onStep({kind: 'country'})}
               onSelect={(option) => {
-                setCountryCode(country.code);
-                setBank(option);
-                setStep('confirm');
+                onCountryCode(country.code);
+                onStep({kind: 'confirm', bank: option});
               }}
             />
           )}
         </div>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
+      }
+    />
+  );
+}
+
+/** Connect a bank on a page: it opens the steps in the Add data sheet, loading the banks once pointed at. */
+export function ConnectBankButton({
+  onClick,
+  isStarting,
+  className,
+}: {
+  onClick: () => void;
+  isStarting: boolean;
+  className?: string;
+}) {
+  const queryClient = useQueryClient();
+  return (
+    <Button
+      className={cn(
+        'max-md:h-auto max-md:min-h-11 max-md:max-w-full max-md:whitespace-normal',
+        className,
+      )}
+      disabled={isStarting}
+      onClick={onClick}
+      // Start loading the banks when the pointer or focus reaches the button, so they are often ready by the click.
+      onPointerEnter={() => void queryClient.prefetchQuery(supportedBanksQueryOptions)}
+      onFocus={() => void queryClient.prefetchQuery(supportedBanksQueryOptions)}
+      data-testid='connect-bank-button'
+    >
+      {isStarting ? <Loader className='animate-slow-spin' /> : <Plus />}
+      {isStarting ? 'Connecting…' : 'Connect a bank'}
+    </Button>
+  );
+}
+
+/** Back from the bank's site without a connection: what happened, and the ways on from there. */
+function ReturnedStep({
+  step,
+  onPickBank,
+  onConnect,
+  isStarting,
+  onImportInstead,
+}: {
+  step: Extract<ConnectStep, {kind: 'returned'}>;
+  onPickBank: () => void;
+  onConnect: (bank: ConnectingBank) => void | Promise<void>;
+  isStarting: boolean;
+  onImportInstead?: () => void;
+}) {
+  const {result, bank} = step;
+  const cancelled = result === 'cancelled';
+  const name = bank?.name ?? 'your bank';
+  const Icon = cancelled ? CircleAlert : CircleX;
+  return (
+    <StepFrame
+      title={
+        cancelled ? `You didn't finish at ${name}` : `${bank?.name ?? 'Your bank'} didn't connect`
+      }
+      srDescription='Nothing was connected.'
+      body={
+        <Alert role='alert' variant={cancelled ? 'warning' : 'destructive'}>
+          <Icon aria-hidden='true' />
+          <AlertTitle>
+            {cancelled ? 'Nothing was connected' : "Couldn't finish the connection"}
+          </AlertTitle>
+          <AlertDescription className='wrap-anywhere'>
+            {cancelled
+              ? `You left ${bank ? `${bank.name}'s` : "your bank's"} site before approving access.`
+              : 'Nothing was connected. Try again in a few minutes.'}
+          </AlertDescription>
+        </Alert>
+      }
+      footer={
+        <>
+          {!cancelled && onImportInstead && (
+            <Button
+              variant='ghost'
+              disabled={isStarting}
+              onClick={onImportInstead}
+              className='order-3 md:order-1 md:mr-auto md:-ml-4'
+            >
+              Import a file instead
+            </Button>
+          )}
+          <Button
+            variant={bank ? 'outline' : 'default'}
+            disabled={isStarting}
+            onClick={onPickBank}
+            className='order-2'
+          >
+            {bank ? 'Pick another bank' : 'Pick a bank'}
+          </Button>
+          {bank && (
+            <Button
+              disabled={isStarting}
+              onClick={() => void onConnect(bank)}
+              className='order-1 h-auto min-h-8 wrap-anywhere whitespace-normal max-md:min-h-11 md:order-3'
+            >
+              {isStarting ? <PendingLabel>Taking you to {bank.name}…</PendingLabel> : 'Try again'}
+            </Button>
+          )}
+        </>
+      }
+    />
   );
 }
 

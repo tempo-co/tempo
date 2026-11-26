@@ -27,6 +27,7 @@ import {
   mockFileImport,
   mockSetBalance,
   openImport,
+  openImportFromAddData,
   refused,
   statement,
 } from '../../utils/file-import';
@@ -942,8 +943,9 @@ test.describe('statement file import on Accounts', () => {
       ],
       proposals: [proposed(layoutProposal(), held)],
     });
-    await page.goto('/accounts');
-    const dialog = await openImport(page);
+    // Add data offers the import on any page.
+    await page.goto('/settings/profile');
+    const dialog = await openImportFromAddData(page);
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-april.xml'), statement('export-example.csv')]);

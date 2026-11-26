@@ -6,7 +6,7 @@ import {type Page, expect} from '@playwright/test';
  */
 export async function connectThroughPicker(page: Page, bank: {name: string; countryLabel: string}) {
   await page.getByRole('button', {name: 'Connect a bank'}).click();
-  const picker = page.getByTestId('bank-connection-picker');
+  const picker = page.getByTestId('add-data-sheet');
   await picker.getByTestId('bank-connection-country').click();
   await picker
     .getByRole('button', {name: new RegExp(`^${bank.countryLabel} \\d+ banks?$`)})

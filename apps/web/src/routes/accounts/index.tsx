@@ -1,24 +1,21 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {FileUp} from 'lucide-react';
-import {useEffect, useRef} from 'react';
-import {toast} from 'sonner';
+import {useEffect} from 'react';
 import {z} from 'zod';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {Button} from '@/components/ui/button';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
-import {useConnectBank} from '@/features/accounts/api/use-connect-bank';
 import {AccountsOverview} from '@/features/accounts/components/accounts-overview';
+import {useAddData} from '@/features/add-data/use-add-data';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
-import {BankConnectionPicker} from '@/features/banking/components/bank-connection-picker';
+import {ConnectBankButton} from '@/features/banking/components/bank-connection-picker';
 import {useBankImports} from '@/features/file-import/api/use-bank-imports';
 import {AccountBalanceAction} from '@/features/file-import/components/account-balance';
-import {FileImportDialog} from '@/features/file-import/components/file-import-dialog';
 import {ImportsList} from '@/features/file-import/components/imports-list';
-import {ImportFileButton, PageFileDrop} from '@/features/file-import/components/page-file-drop';
-import {BUSY, useFileImport} from '@/features/file-import/components/use-file-import';
+import {ImportFileButton} from '@/features/file-import/components/page-file-drop';
 import {balanceActionOf} from '@/features/file-import/utils/balance-copy';
 import {ReportingCurrencySetup} from '@/features/reporting-currency/components/reporting-currency-setup';
 import {useNow} from '@/hooks/use-now';
@@ -33,8 +30,6 @@ const searchSchema = z.object({
   tab: z.enum(['imports']).optional().catch(undefined),
 });
 
-type BankConnectionResult = z.infer<typeof bankConnectionResultSchema>;
-
 export const Route = createFileRoute('/accounts/')({
   component: AccountsIndex,
   validateSearch: zodValidator(searchSchema),
@@ -42,19 +37,6 @@ export const Route = createFileRoute('/accounts/')({
     handleAuthenticatedRedirect(context);
   },
 });
-
-function showBankConnectionResult(result: BankConnectionResult) {
-  if (result === 'connected') {
-    toast.success('Bank connection added', {id: 'bank-connection-success'});
-  } else if (result === 'cancelled') {
-    toast.info('Bank connection cancelled', {id: 'bank-connection-cancelled'});
-  } else {
-    toast.error('Bank connection failed', {
-      description: 'No bank account data was changed. Try again.',
-      id: 'bank-connection-error',
-    });
-  }
-}
 
 /** Every account, grouped by type, with how current each is; and, while file import is on, every import. */
 function AccountsIndex() {
@@ -65,21 +47,21 @@ function AccountsIndex() {
   // The import list answers 404 while file import is off; until it answers, the page shows nothing of it.
   const imports = useBankImports();
   const importOn = imports.state === 'on';
-  const fileImport = useFileImport();
+  const addData = useAddData();
   const now = useNow();
-  const importButton = useRef<HTMLButtonElement>(null);
-  const {connect, isStarting} = useConnectBank();
+  const {connectReturned} = addData;
 
+  // The bank sends the owner back here: the result shows once, and the address loses it.
   useEffect(() => {
     if (!result) return;
 
-    showBankConnectionResult(result);
+    connectReturned(result);
     void navigate({
       to: '/accounts',
       search: (prev) => ({...prev, result: undefined}),
       replace: true,
     });
-  }, [navigate, result]);
+  }, [connectReturned, navigate, result]);
 
   const overview = (
     <AccountsOverview
@@ -89,7 +71,7 @@ function AccountsIndex() {
       error={query.error}
       onRetry={() => query.refetch()}
       imports={imports.data}
-      onImport={importOn ? fileImport.openNew : undefined}
+      onImport={importOn ? addData.openImport : undefined}
       balanceAction={
         importOn
           ? (account) => {
@@ -102,8 +84,8 @@ function AccountsIndex() {
       emptyActions={
         importOn && (
           <>
-            <BankConnectionPicker onBankSelect={connect} isStarting={isStarting} />
-            <Button variant='outline' onClick={fileImport.openNew}>
+            <ConnectBankButton onClick={addData.openConnect} isStarting={addData.isStarting} />
+            <Button variant='outline' onClick={addData.openImport}>
               <FileUp />
               Import a file
             </Button>
@@ -119,13 +101,6 @@ function AccountsIndex() {
       <LoadingBar isPending={isPending} />
       <AppBodyLayout>
         <div className='relative grid grid-cols-1 gap-5 max-md:gap-4' data-testid='accounts-page'>
-          {/* One import at a time: a drop waits until the running one has answered. */}
-          {importOn && (
-            <PageFileDrop
-              enabled={!fileImport.open && !BUSY.includes(fileImport.step.kind)}
-              onFiles={fileImport.importDropped}
-            />
-          )}
           {/* The padding keeps the content 16px below the overhanging buttons; the 21px row gap leaves 12px between
               the title and buttons wrapped under it. */}
           <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-5.25 max-md:pb-2.25 md:pointer-coarse:pb-1.25'>
@@ -140,8 +115,8 @@ function AccountsIndex() {
                   : '-my-2.25 md:-my-1 md:pointer-coarse:-my-2.25'
               }
             >
-              {importOn && <ImportFileButton ref={importButton} onClick={fileImport.openNew} />}
-              <BankConnectionPicker onBankSelect={connect} isStarting={isStarting} />
+              {importOn && <ImportFileButton onClick={addData.openImport} />}
+              <ConnectBankButton onClick={addData.openConnect} isStarting={addData.isStarting} />
             </div>
           </header>
           <ReportingCurrencySetup />
@@ -165,9 +140,9 @@ function AccountsIndex() {
                 <ImportsList
                   query={imports}
                   title='Import history'
-                  onOpen={(summary) => fileImport.show({kind: 'summary', summary})}
+                  onOpen={(summary) => addData.showImport({kind: 'summary', summary})}
                   onReview={(summary) =>
-                    fileImport.show({kind: 'review', summary, count: summary.rowsDoubtful})
+                    addData.showImport({kind: 'review', summary, count: summary.rowsDoubtful})
                   }
                 />
                 {imports.data?.length === 0 && (
@@ -179,7 +154,6 @@ function AccountsIndex() {
             overview
           )}
         </div>
-        {importOn && <FileImportDialog controller={fileImport} returnFocus={importButton} />}
       </AppBodyLayout>
     </>
   );

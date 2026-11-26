@@ -1,17 +1,15 @@
 import {createFileRoute} from '@tanstack/react-router';
-import {useRef} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadingBar} from '@/components/shared/loading-bar';
 import {LoadErrorState} from '@/components/shared/state-message';
 import {AccountNotFound, AccountPage} from '@/features/accounts/components/account-page';
+import {useAddData} from '@/features/add-data/use-add-data';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {isFileConnection} from '@/features/banking/utils/bank-sync-status';
 import {useBankImports} from '@/features/file-import/api/use-bank-imports';
 import {AccountBalanceAction} from '@/features/file-import/components/account-balance';
-import {FileImportDialog} from '@/features/file-import/components/file-import-dialog';
 import {ImportsList} from '@/features/file-import/components/imports-list';
-import {useFileImport} from '@/features/file-import/components/use-file-import';
 import {balanceActionOf} from '@/features/file-import/utils/balance-copy';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {useNow} from '@/hooks/use-now';
@@ -32,9 +30,8 @@ function AccountRoute() {
   const {isPending, isError} = savedDataStatus({...query, data: bankConnections});
   const imports = useBankImports();
   const importOn = imports.state === 'on';
-  const fileImport = useFileImport();
+  const addData = useAddData();
   const now = useNow();
-  const importButton = useRef<HTMLButtonElement>(null);
   const today = useLocalDate();
   const connection = bankConnections?.find((candidate) =>
     candidate.bankAccounts.some(({id}) => id === accountId),
@@ -69,15 +66,14 @@ function AccountRoute() {
                   query={imports}
                   accountId={account.id}
                   title='Imports for this account'
-                  onOpen={(summary) => fileImport.show({kind: 'summary', summary})}
+                  onOpen={(summary) => addData.showImport({kind: 'summary', summary})}
                   onReview={(summary) =>
-                    fileImport.show({kind: 'review', summary, count: summary.rowsDoubtful})
+                    addData.showImport({kind: 'review', summary, count: summary.rowsDoubtful})
                   }
                 />
               ) : undefined
             }
-            onImport={importOn ? fileImport.openNew : undefined}
-            importButton={importButton}
+            onImport={importOn ? addData.openImport : undefined}
             balanceAction={
               importOn && balance ? (
                 <AccountBalanceAction account={account} action={balance} />
@@ -87,7 +83,6 @@ function AccountRoute() {
             now={now}
           />
         )}
-        {importOn && <FileImportDialog controller={fileImport} returnFocus={importButton} />}
       </AppBodyLayout>
     </>
   );

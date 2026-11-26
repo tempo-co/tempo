@@ -71,6 +71,9 @@ services:
       THROTTLE_TTL: 1m
       THROTTLE_LIMIT: 400
       AI_CATEGORIZATION_ENABLED: 'false'
+      # Statement file import is on, as on staging; a file in no known layout is refused rather than sent to a model.
+      FILE_IMPORT_ENABLED: 'true'
+      FILE_IMPORT_MAPPER_ENABLED: 'false'
     depends_on:
       postgres:
         condition: service_healthy
