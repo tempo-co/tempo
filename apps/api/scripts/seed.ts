@@ -5,6 +5,7 @@ import {AppModule} from '../src/app.module';
 import {installSchemaExtras} from '../src/app/core/database/synchronized-schema-extras';
 import {seedAccounts} from './seed-data/seed-accounts';
 import {seedBankingData} from './seed-data/seed-banking-data';
+import {seedBulkCategoryData} from './seed-data/seed-bulk-category-data';
 import {seedOwnTransferData} from './seed-data/seed-own-transfer-data';
 
 seed();
@@ -17,6 +18,7 @@ async function seed() {
 	await seedAccounts(app);
 	await seedBankingData(app);
 	await seedOwnTransferData(app);
+	await seedBulkCategoryData(app);
 
 	console.log('Seeding complete.');
 	await app.close();

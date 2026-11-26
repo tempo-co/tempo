@@ -1,8 +1,9 @@
 import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
-import {BANK_TRANSACTION_SEARCH_MAX_LENGTH} from '@tempo/contracts';
-import {CircleCheck, Layers} from 'lucide-react';
+import {BANK_TRANSACTION_SEARCH_MAX_LENGTH, BankTransactionCategory} from '@tempo/contracts';
+import {CircleCheck, Layers, ListChecks} from 'lucide-react';
 import {useEffect, useState} from 'react';
+import {toast} from 'sonner';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadMore} from '@/components/shared/load-more';
@@ -13,7 +14,16 @@ import {Button} from '@/components/ui/button';
 import {Sheet, SheetContent, SheetDescription, SheetTitle} from '@/components/ui/sheet';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from '@/components/ui/tabs';
 import {useBankTransactionLedger} from '@/features/banking/api/use-bank-transaction-ledger';
+import {usePreviewBulkCategory} from '@/features/banking/api/use-bulk-category';
 import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
+import {
+  BankTransactionBulkBar,
+  BulkCategoryAction,
+} from '@/features/banking/components/bank-transaction-bulk-bar';
+import {
+  type BulkCategoryDraft,
+  BulkCategoryStep,
+} from '@/features/banking/components/bank-transaction-bulk-category-step';
 import {BankTransactionDetailsPanel} from '@/features/banking/components/bank-transaction-details-panel';
 import {
   NoMatchingTransactions,
@@ -35,6 +45,8 @@ import {
 import {Bone, LoadingLabel, TileRowsSkeleton} from '@/features/dashboard/components/loading';
 import {useBankTransactionInspector} from '@/hooks/use-bank-transaction-inspector';
 import {useHasRail} from '@/hooks/use-has-rail';
+import {useRowSelection} from '@/hooks/use-row-selection';
+import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 import {savedDataStatus} from '@/utils/query-status';
@@ -75,6 +87,40 @@ function TransactionsPage() {
   } = useBankTransactionLedger(searchParams);
   const toCheck = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention ?? 0;
   const tab = filters.needsAttention ? 'check' : 'all';
+
+  // Picked rows hold while the list shows the same filters and order; another view starts over.
+  const selection = useRowSelection(
+    transactions.map(({id}) => id),
+    JSON.stringify({filters, sort}),
+  );
+  const picked = selection.selectedIds.length;
+  // Phones show checkboxes only in Select mode; desktop always does.
+  const [selectMode, setSelectMode] = useState(false);
+  const showCheckboxes = hasRail || selectMode;
+  const [bulkDraft, setBulkDraft] = useState<BulkCategoryDraft | null>(null);
+  const {previewBulkCategory, isPending: isCheckingBulk} = usePreviewBulkCategory();
+  const endSelection = () => {
+    selection.clear();
+    setSelectMode(false);
+    setBulkDraft(null);
+  };
+  const pickBulkCategory = (category: BankTransactionCategory) => {
+    const transactionIds = selection.selectedIds;
+    previewBulkCategory(
+      {transactionIds, category},
+      {
+        onSuccess: (preview) => setBulkDraft({transactionIds, category, preview}),
+        onError: (error) => {
+          if (!wasToasted(error)) {
+            toast.error('Other transactions could not be checked. Nothing was saved. Try again.');
+          }
+        },
+      },
+    );
+  };
+  const bulkStep = bulkDraft && (
+    <BulkCategoryStep draft={bulkDraft} onDone={endSelection} onCancel={() => setBulkDraft(null)} />
+  );
 
   const clearAll = () =>
     void navigate({
@@ -118,6 +164,9 @@ function TransactionsPage() {
         groupByDay={sort.by === 'date'}
         selectedId={transactionId}
         dayTotals={dayTotals}
+        selection={
+          showCheckboxes ? {rows: selection, picking: selectMode || picked > 0} : undefined
+        }
         empty={
           onlyTab ? (
             <StateMessage
@@ -135,6 +184,16 @@ function TransactionsPage() {
       />
       {/* Rows kept from the previous filters can't be continued. */}
       {!pages.isPlaceholderData && <LoadMore query={pages} />}
+      {picked > 0 && (
+        <BankTransactionBulkBar count={picked} onClear={endSelection}>
+          <BulkCategoryAction
+            count={picked}
+            sheet={!hasRail}
+            isChecking={isCheckingBulk}
+            onPick={pickBulkCategory}
+          />
+        </BankTransactionBulkBar>
+      )}
     </>
   );
 
@@ -151,6 +210,17 @@ function TransactionsPage() {
                 <div className='flex min-w-0 items-center gap-2 max-md:w-full'>
                   <LedgerSearch search={filters.search} />
                   <BankTransactionSortMenu sort={sort} />
+                  {!hasRail && (
+                    <Button
+                      variant='outline'
+                      aria-pressed={selectMode}
+                      onClick={() => (selectMode ? endSelection() : setSelectMode(true))}
+                      className='shrink-0 max-sm:h-12'
+                    >
+                      <ListChecks aria-hidden='true' />
+                      {selectMode ? 'Done' : 'Select'}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -216,10 +286,16 @@ function TransactionsPage() {
           {/* A link to one row opens it whatever the list holds; an empty list has no totals to show. */}
           {hasRail && (transactionId || !isEmpty) && (
             <aside
-              aria-label={transactionId ? 'Transaction details' : 'Totals'}
+              aria-label={
+                bulkStep ? 'Change category' : transactionId ? 'Transaction details' : 'Totals'
+              }
               className='sticky top-8 flex max-h-[calc(100dvh-(--spacing(16)))] min-h-0 flex-col gap-3'
             >
-              {transactionId ? (
+              {bulkStep ? (
+                <div className='flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card'>
+                  {bulkStep}
+                </div>
+              ) : transactionId ? (
                 <DetailsRail
                   transactionId={transactionId}
                   onClose={() => closeTransaction(false)}
@@ -255,6 +331,20 @@ function TransactionsPage() {
                 renderTitle={(title) => <SheetTitle asChild>{title}</SheetTitle>}
               />
             )}
+          </SheetContent>
+        </Sheet>
+      )}
+      {!hasRail && (
+        <Sheet open={Boolean(bulkStep)} onOpenChange={(open) => !open && setBulkDraft(null)}>
+          <SheetContent
+            side='bottom'
+            className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] [&>button:last-child]:hidden'
+          >
+            <SheetTitle className='sr-only'>Change category</SheetTitle>
+            <SheetDescription className='sr-only'>
+              Change only the selected transactions or all from their payees
+            </SheetDescription>
+            {bulkStep}
           </SheetContent>
         </Sheet>
       )}

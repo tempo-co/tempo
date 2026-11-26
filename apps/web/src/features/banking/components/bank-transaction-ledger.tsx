@@ -3,6 +3,8 @@ import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 import type {ReactNode} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
+import {Checkbox} from '@/components/ui/checkbox';
+import type {RowSelection} from '@/hooks/use-row-selection';
 import {cn} from '@/utils/cn';
 
 import {useActiveBankAccounts} from '../api/use-active-bank-accounts';
@@ -30,6 +32,14 @@ type LedgerProps = {
   selectedId?: BankTransaction['id'];
   /** Each day's totals by date, in the reporting currency; a day without one shows its label alone. */
   dayTotals?: Map<string, BankTransactionDayTotal & {currency: string}>;
+  /** Rows picked for a bulk action; without it the list has no checkboxes. */
+  selection?: LedgerSelection;
+};
+
+type LedgerSelection = {
+  rows: RowSelection;
+  /** A press on a row picks it instead of opening it: in Select mode, or while any row is picked. */
+  picking: boolean;
 };
 
 const dayOf = (transaction: BankTransaction) => transaction.date ?? '';
@@ -65,6 +75,7 @@ export function BankTransactionLedger({
   onTransactionSelect,
   selectedId,
   dayTotals,
+  selection,
 }: LedgerProps) {
   const {accounts, needsAccountName} = useActiveBankAccounts();
   const showAccount = accounts.length > 1;
@@ -86,19 +97,25 @@ export function BankTransactionLedger({
         account={accountLabel(transaction)}
         selected={transaction.id === selectedId}
         onSelect={onTransactionSelect}
+        selection={selection}
       />
     </li>
+  );
+  const header = selection && (
+    <SelectAllRow selection={selection.rows} count={transactions.length} />
   );
 
   if (!groupByDay) {
     return (
-      <ul
-        aria-label='Transactions'
-        data-testid='bank-transaction-ledger'
-        className='@container divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'
-      >
-        {transactions.map(row)}
-      </ul>
+      <div className='@container grid gap-1.5' data-testid='bank-transaction-ledger'>
+        {header}
+        <ul
+          aria-label='Transactions'
+          className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'
+        >
+          {transactions.map(row)}
+        </ul>
+      </div>
     );
   }
 
@@ -111,6 +128,7 @@ export function BankTransactionLedger({
   return (
     // The rows lay out by the list's own width, which the rail beside it narrows.
     <div className='@container grid gap-5' data-testid='bank-transaction-ledger'>
+      {header}
       {[...days].map(([day, rows]) => {
         const label = formatLedgerDay(day);
         const totals = dayTotals?.get(day);
@@ -130,18 +148,39 @@ export function BankTransactionLedger({
   );
 }
 
+/** "Select all 27", or "3 of 27 selected", over the list: its box picks every loaded row or none. */
+function SelectAllRow({selection, count}: {selection: RowSelection; count: number}) {
+  const picked = selection.selectedIds.length;
+  const label = picked > 0 ? `${picked} of ${count} selected` : `Select all ${count}`;
+  return (
+    <label className='flex min-h-8 w-fit cursor-pointer items-center gap-3 px-3 text-body-small text-muted-foreground max-sm:min-h-11'>
+      <Checkbox
+        checked={selection.allSelected ? true : picked > 0 ? 'indeterminate' : false}
+        onCheckedChange={() => selection.toggleAll()}
+        aria-label={selection.allSelected ? 'Clear the selection' : `Select all ${count}`}
+        className='border-input'
+      />
+      <span className='numeric' data-testid='ledger-selection-count'>
+        {label}
+      </span>
+    </label>
+  );
+}
+
 function LedgerRow({
   transaction,
   showDate,
   account,
   selected,
   onSelect,
+  selection,
 }: {
   transaction: BankTransaction;
   showDate: boolean;
   account: string | null;
   selected: boolean;
   onSelect: LedgerProps['onTransactionSelect'];
+  selection?: LedgerSelection;
 }) {
   const title = resolveBankTransactionDisplayTitle(transaction);
   const activity = formatBankTransactionActivity(transaction);
@@ -181,16 +220,27 @@ function LedgerRow({
     .filter(Boolean)
     .join(' · ');
 
-  return (
+  const picked = selection?.rows.isSelected(transaction.id) ?? false;
+  const row = (
     <button
       type='button'
-      aria-label={`View ${title} transaction details`}
+      aria-label={
+        selection?.picking
+          ? `${picked ? 'Unselect' : 'Select'} ${title}`
+          : `View ${title} transaction details`
+      }
       aria-current={selected || undefined}
-      onClick={(event) => onSelect(transaction.id, event.currentTarget)}
+      aria-pressed={selection?.picking ? picked : undefined}
+      onClick={(event) => {
+        if (selection?.picking) selection.rows.toggle(transaction.id, {range: event.shiftKey});
+        else onSelect(transaction.id, event.currentTarget);
+      }}
       className={cn(
         // The row fills its card edge to edge, so hover and the click target do too; the card clips the corners and
         // the focus ring sits inside the row. One set of tracks for every list, so Category sits in the same place with or without accounts.
         'grid min-h-15 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-current:bg-accent @3xl:grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(8rem,max-content)]',
+        // The box sits in its own cell before the row, and the row with the box takes the hover and open washes.
+        selection && 'pl-0 hover:bg-transparent aria-current:bg-transparent',
       )}
     >
       <MerchantLogoTile transaction={transaction} />
@@ -236,5 +286,33 @@ function LedgerRow({
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
       </span>
     </button>
+  );
+  if (!selection) return row;
+
+  return (
+    <div
+      className={cn(
+        'group/row grid grid-cols-[auto_minmax(0,1fr)] items-stretch hover:bg-accent/50',
+        (picked || selected) && 'bg-accent hover:bg-accent',
+      )}
+    >
+      {/* Its own cell, wide enough to press; faint until the row is hovered, the box focused or checked. */}
+      <span className='flex items-center pr-3 pl-3'>
+        <Checkbox
+          checked={picked}
+          aria-label={`Select ${title}`}
+          // A click carries Shift for a range; the box's own toggle would drop it.
+          onClick={(event) => {
+            event.preventDefault();
+            selection.rows.toggle(transaction.id, {range: event.shiftKey});
+          }}
+          className={cn(
+            'relative border-input opacity-40 group-hover/row:opacity-100 after:absolute after:-inset-3.5 focus-visible:opacity-100 data-[state=checked]:opacity-100',
+            selection.picking && 'opacity-100',
+          )}
+        />
+      </span>
+      {row}
+    </div>
   );
 }

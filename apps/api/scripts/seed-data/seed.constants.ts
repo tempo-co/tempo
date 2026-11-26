@@ -25,3 +25,7 @@ export const SESSION_TEST_ACCOUNT_PASSWORD = 'session-test';
 export const OWN_TRANSFER_ACCOUNT_NAME = 'Own Transfer Account';
 export const OWN_TRANSFER_ACCOUNT_EMAIL = 'own-transfers@test.com';
 export const OWN_TRANSFER_ACCOUNT_PASSWORD = 'own-transfers';
+
+export const BULK_CATEGORY_ACCOUNT_NAME = 'Bulk Category Account';
+export const BULK_CATEGORY_ACCOUNT_EMAIL = 'bulk-category@test.com';
+export const BULK_CATEGORY_ACCOUNT_PASSWORD = 'bulk-category';
