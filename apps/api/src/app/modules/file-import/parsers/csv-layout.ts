@@ -88,6 +88,7 @@ export const PENDING_WORDS: ReadonlySet<string> = new Set([
 	'in bearbeitung',
 	'en attente',
 	'in sospeso',
+	'autorizzato',
 	'pendiente',
 ]);
 

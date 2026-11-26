@@ -49,7 +49,7 @@ The built-in bank CSV layouts:
 | Oberbank (AT) | `oberbank-at` | Payer and payee columns, read by direction; names no account. Source: ofxstatement-austrian's test export. |
 | Intesa Sanpaolo (IT) | `intesa-sanpaolo-it` | The download Intesa calls Excel, written as text, with five filter lines above the header. Names its account or card by number: one per file, by bank and currency. Its 32-column Dare/Avere CSV goes to the column mapper. Source: BananaAccounting/Italia's test export. |
 | UniCredit (IT) | `unicredit-it`, `unicredit-it-two-line-header`, `unicredit-it-balances` | Name no account. The two-line header is skipped, so that file is claimed only when all of it reads; the balance lines above the table are not read. Source: BananaAccounting/Italia's test exports. |
-| FinecoBank (IT) | `fineco-it`, `fineco-it-value-date` | Tab-separated, with four lines above the header; names no account. A row whose `Stato` is `Autorizzato` is read as booked. The Excel download is not read by a built-in layout. Source: BananaAccounting/Italia's test exports. |
+| FinecoBank (IT) | `fineco-it`, `fineco-it-value-date` | Tab-separated, with four lines above the header; names no account. A row whose `Stato` is `Autorizzato` (a card payment not booked yet) is skipped. The Excel download is not read by a built-in layout. Source: BananaAccounting/Italia's test exports. |
 | Crédit Agricole Italia (IT) | `credit-agricole-it` | Amounts may start with an apostrophe; names no account. Source: BananaAccounting/Italia's test export. |
 | Banca Popolare di Sondrio (IT) | `popolare-sondrio-it` | Amounts with a plus sign and a decimal point; names no account. Source: BananaAccounting/Italia's test export. |
 
