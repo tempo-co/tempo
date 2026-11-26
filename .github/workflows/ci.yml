@@ -214,7 +214,8 @@ jobs:
               run: npm run test
 
     # Reads tempo-co/tempo-import-corpus with a read-only deploy key. Fork and Dependabot PRs get no
-    # secret, so the job reports a skip there. Its output is counts and failing file ids, never rows.
+    # secret, so the job reports a skip there; any other run without the key fails. Every step after
+    # the two key checks runs only with the key. Its output is counts and failing file ids, never rows.
     api-corpus-check:
         name: API real-file corpus
         runs-on: ubuntu-latest
@@ -222,15 +223,23 @@ jobs:
         if: needs.changes.outputs.corpus == 'true'
         env:
             HAS_KEY: ${{ secrets.CORPUS_DEPLOY_KEY != '' }}
+            NO_SECRETS: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
         defaults:
             run:
                 working-directory: apps/api
         steps:
-            - name: Report a run without the corpus key
-              if: env.HAS_KEY != 'true'
+            - name: Report a fork or Dependabot run
+              if: env.HAS_KEY != 'true' && env.NO_SECRETS == 'true'
               working-directory: .
               run: |
-                  echo "::notice::Real-file corpus check skipped: this run has no CORPUS_DEPLOY_KEY (fork or Dependabot PR)."
+                  echo "::notice::Real-file corpus check skipped: fork and Dependabot PRs get no CORPUS_DEPLOY_KEY."
+
+            - name: Require the corpus key
+              if: env.HAS_KEY != 'true' && env.NO_SECRETS != 'true'
+              working-directory: .
+              run: |
+                  echo "::error::The secret CORPUS_DEPLOY_KEY is missing, so the real-file corpus cannot be read."
+                  exit 1
 
             - name: Checkout repository
               if: env.HAS_KEY == 'true'
