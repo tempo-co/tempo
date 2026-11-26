@@ -1535,6 +1535,8 @@ export const CSV_LAYOUTS: readonly CsvLayout[] = [
 		currency: {fixed: 'PLN'},
 		bookingDate: 0,
 		amount: {kind: 'signed', column: 4},
+		// A card payment not settled yet ends its description with this; the bank may still change or drop it.
+		pendingSuffix: {column: 1, text: 'transakcja nierozliczona'},
 		description: [1],
 	},
 	{
