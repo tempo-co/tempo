@@ -39,7 +39,7 @@ function SettingsIndex() {
                     to={section.route}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'relative flex h-12 items-center justify-center px-1 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-[360px]:text-[13px] sm:h-11 sm:px-3',
+                      'relative flex h-12 items-center justify-center px-1 text-body whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-[360px]:text-body-small sm:h-11 sm:px-3',
                       isActive &&
                         'font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary sm:after:inset-x-3',
                     )}

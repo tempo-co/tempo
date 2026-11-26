@@ -85,7 +85,7 @@ function BankTransactionsIndex() {
           <div className='flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1'>
             <h1 className='text-page-title'>Bank transactions</h1>
             {isPending ? (
-              <p className='text-sm' aria-hidden='true'>
+              <p className='text-body' aria-hidden='true'>
                 <TextBone className='w-[10em]' />
               </p>
             ) : (
@@ -264,7 +264,7 @@ function LedgerSummary({
 
   if (!shown) {
     return (
-      <p className='text-sm' aria-hidden='true'>
+      <p className='text-body' aria-hidden='true'>
         <TextBone className='w-[10em]' />
       </p>
     );
@@ -272,7 +272,7 @@ function LedgerSummary({
 
   // The wrapper stays; the line is replaced, so it fades in as a whole.
   return (
-    <div className='grid justify-items-start gap-0.5 text-sm text-muted-foreground md:justify-items-end md:text-right'>
+    <div className='grid justify-items-start gap-0.5 text-body text-muted-foreground md:justify-items-end md:text-right'>
       <p
         key={keyOf(shown)}
         className='animate-in duration-200 fade-in motion-reduce:animate-none'
@@ -333,7 +333,7 @@ function LedgerSkeleton() {
       {[3, 5].map((count, index) => (
         <div key={index} className='grid gap-1.5' aria-hidden='true'>
           <Bone className='mx-1 h-3 w-24 rounded-sm' />
-          <ul className='divide-y divide-border/60 overflow-hidden rounded-card border bg-card'>
+          <ul className='divide-y divide-border/60 overflow-hidden rounded-lg border bg-card'>
             <TileRowsSkeleton count={count} />
           </ul>
         </div>

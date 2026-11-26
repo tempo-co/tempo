@@ -1,39 +1,35 @@
 import {SVGProps} from 'react';
 
-// Same drawing as the icons in public/: a faceted clay crown with a cut gem, on an ink tile.
-// Layers paint in order (deep underlay first) so facet joins never show the tile.
-const TILE =
-  'M6.66 2.5H17.34A4.16 4.16 0 0 1 21.5 6.66V17.34A4.16 4.16 0 0 1 17.34 21.5H6.66A4.16 4.16 0 0 1 2.5 17.34V6.66A4.16 4.16 0 0 1 6.66 2.5Z';
-const LAYERS: ReadonlyArray<readonly [string, string]> = [
-  [
-    '#8F4032',
-    'M19.58 8.30L19.11 8.06L18.53 8.15L15.68 9.75L12.51 4.29L12.15 4.02L11.74 4.09L11.40 4.46L8.40 9.75L5.57 8.19L4.89 8.09L4.54 8.25L4.25 8.73L4.23 9.37L5.78 17.80L5.98 18.20L6.42 18.60L7.47 18.95L8.94 19.16L11.32 19.29L15.37 19.11L16.78 18.82L17.65 18.44L18.12 17.84L18.50 16.36L19.78 9.32L19.78 8.68ZM9.35 17.20L12.20 17.02L14.64 17.22L13.35 17.44L11.44 17.49L9.53 17.32ZM7.61 12.75L9.53 10.29L10.65 9.25L12.02 8.27L13.51 9.40L14.58 10.43L16.37 12.84L14.77 15.18L12.09 15.09L14.50 12.46L12.02 9.95L11.99 12.47L9.54 12.44L11.94 15.09L9.23 15.18Z',
-  ],
-  [
-    '#BD654B',
-    'M9.54 12.49L11.98 14.99L12.04 12.49ZM4.30 8.60L4.23 9.37L5.50 16.23L7.63 12.74ZM19.70 8.49L16.36 12.78L18.08 15.61L18.39 16.43L18.50 16.32L19.78 9.32ZM11.99 4.02L12.01 8.27L13.51 9.40L14.68 10.51L15.67 9.74L12.65 4.49L12.35 4.12Z',
-  ],
-  [
-    '#E59A7B',
-    'M5.53 16.43L5.78 17.80L6.01 18.23L6.51 17.84L7.88 17.44L9.84 17.13L11.77 17.02L14.06 17.12L15.96 17.42L17.26 17.77L17.92 18.18L18.15 17.77L18.43 16.46L18.01 15.95L16.51 15.42L14.81 15.16L12.12 15.09L9.05 15.16L7.65 15.35L6.08 15.85L5.68 16.15ZM12.01 9.95L11.98 12.50L14.42 12.50L14.36 12.30ZM19.47 8.20L18.88 8.06L18.08 8.35L15.65 9.74L14.64 10.50L16.36 12.81L19.71 8.50ZM12.02 4.02L11.64 4.16L11.19 4.78L8.40 9.75L5.40 8.13L4.82 8.11L4.35 8.47L4.30 8.64L7.58 12.75L9.53 10.29L10.65 9.25L12.02 8.27Z',
-  ],
-  ['#F6F1E8', 'M11.98 9.96L9.60 12.49L11.98 12.47Z'],
-];
+// The Wisp symbol's fills are fixed brand colours in every theme, not theme roles (DESIGN.md, Brand).
+// eslint-disable-next-line design/tokens -- the logo's Midnight is a fixed brand colour, not a theme role
+const MIDNIGHT = '#232B66';
+// eslint-disable-next-line design/tokens -- the reversed logo's bars are fixed white, not a theme role
+const WHITE = '#FFFFFF';
+// eslint-disable-next-line design/tokens -- Rose appears only in the logo, as a fixed brand colour
+const ROSE = '#D9577A';
 
+// The Wisp symbol, copied from the masters `wisp-symbol.svg` (light) and `wisp-symbol-reversed.svg` (dark).
 const Logo = (props: SVGProps<SVGSVGElement>) => (
   <svg
     xmlns='http://www.w3.org/2000/svg'
     width='1rem'
     height='1rem'
-    viewBox='0 0 24 24'
+    viewBox='0 0 176 154'
     role='img'
     aria-hidden='true'
     {...props}
   >
-    <path fill='#28252B' d={TILE} />
-    {LAYERS.map(([fill, d]) => (
-      <path key={fill} fill={fill} fillRule='evenodd' d={d} />
-    ))}
+    <g className='dark:hidden'>
+      <rect x='0' y='66' width='44' height='88' rx='22' fill={MIDNIGHT} />
+      <rect x='66' y='32' width='44' height='122' rx='22' fill={MIDNIGHT} />
+      <rect x='132' y='66' width='44' height='88' rx='22' fill={MIDNIGHT} />
+    </g>
+    <g className='hidden dark:inline'>
+      <rect x='0' y='66' width='44' height='88' rx='22' fill={WHITE} />
+      <rect x='66' y='32' width='44' height='122' rx='22' fill={WHITE} />
+      <rect x='132' y='66' width='44' height='88' rx='22' fill={WHITE} />
+    </g>
+    <circle cx='154' cy='22' r='22' fill={ROSE} />
   </svg>
 );
 export default Logo;

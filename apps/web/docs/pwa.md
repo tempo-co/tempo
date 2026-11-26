@@ -4,6 +4,8 @@
 
 The build emits `manifest.webmanifest` from `pwaManifestPlugin` in `vite.config.ts`, using `VITE_BASE_PATH` for `id`, `start_url`, `scope` and every icon `src`. It overwrites `public/manifest.webmanifest`, which is a root-path copy for `vite dev`. Icon lists come from `config/app-icons.ts` (`PWA_ICONS` for the manifest, `PAGE_ICONS` for `index.html`). When changing names, colours or icons, change the plugin and `config/app-icons.ts`, and keep `public/manifest.webmanifest` in step.
 
+The icons are the logo masters' web set, copied unchanged (DESIGN.md, Logo): `icon-192.png` and `icon-512.png` for install, `maskable-512.png` on the full Midnight tile for launchers that crop, `apple-touch-icon.png` (180 px) for iOS, and `favicon.ico`, `favicon.svg` and the 16, 32 and 48 px PNGs for browser tabs. `icon-192.png` is also the push notification icon.
+
 `index.html` links icons and the manifest with `%BASE_URL%`, so they follow `base`. `id` is set explicitly: without it the browser derives the app identity from `start_url`, and two apps on one origin would share an identity.
 
 ## Offline shell

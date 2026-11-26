@@ -7,7 +7,7 @@ import {cn} from '@/utils/cn';
 // A leading 16px icon takes the first column when there is one; an action sits under the text, and to its
 // right from `sm` up.
 const alertVariants = cva(
-  'grid w-full grid-cols-[0_minmax(0,1fr)] items-start gap-y-0.5 rounded-md border px-3 py-2.5 text-sm has-[>svg]:grid-cols-[1rem_minmax(0,1fr)] has-[>svg]:gap-x-3 sm:has-data-[slot=alert-action]:grid-cols-[0_minmax(0,1fr)_auto] sm:has-data-[slot=alert-action]:has-[>svg]:grid-cols-[1rem_minmax(0,1fr)_auto] [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:shrink-0',
+  'grid w-full grid-cols-[0_minmax(0,1fr)] items-start gap-y-0.5 rounded-md border px-3 py-2.5 text-body has-[>svg]:grid-cols-[1rem_minmax(0,1fr)] has-[>svg]:gap-x-3 sm:has-data-[slot=alert-action]:grid-cols-[0_minmax(0,1fr)_auto] sm:has-data-[slot=alert-action]:has-[>svg]:grid-cols-[1rem_minmax(0,1fr)_auto] [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -46,7 +46,7 @@ function AlertDescription({className, ...props}: React.ComponentProps<'div'>) {
     <div
       data-slot='alert-description'
       className={cn(
-        'col-start-2 max-w-[60ch] text-pretty wrap-anywhere text-muted-foreground',
+        'col-start-2 max-w-[60ch] text-body-small text-pretty wrap-anywhere text-muted-foreground',
         className,
       )}
       {...props}

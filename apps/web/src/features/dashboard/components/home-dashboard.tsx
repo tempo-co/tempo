@@ -40,7 +40,7 @@ export function HomeDashboard({today, onOpenMonth}: HomeDashboardProps) {
   if (reporting?.recalculating) return <RecalculatingTotals currency={reporting.currency} />;
 
   return (
-    <div className='@container grid gap-6' aria-busy={!connections || undefined}>
+    <div className='@container grid gap-3' aria-busy={!connections || undefined}>
       <ReportingCurrencySetup />
       <HomeHistory
         today={today}
@@ -81,7 +81,7 @@ function HomeHistory({
       />
     );
   return (
-    <div className='grid gap-6'>
+    <div className='grid gap-3'>
       <WhereYouStand overview={overview} today={today} onOpenMonth={onOpenMonth} />
       {overview ? <YearTable overview={overview} /> : <YearTableSkeleton />}
       <YearBreakdowns today={today} overview={overview} />

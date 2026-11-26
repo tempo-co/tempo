@@ -80,7 +80,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
 
   return (
     <div className='col-span-2 min-w-0' data-testid='bank-transaction-category-control'>
-      <dt className='flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground'>
+      <dt className='flex items-center justify-between gap-3 text-body-small font-medium text-muted-foreground'>
         <label htmlFor={selectId} className='shrink-0'>
           Transaction category
         </label>
@@ -110,7 +110,7 @@ export function BankTransactionCategorySelect({transaction}: BankTransactionCate
             id={selectId}
             aria-label='Transaction category'
             aria-describedby={statusId}
-            className='h-14 w-full max-w-none border-0 bg-accent/50 px-3 text-base shadow-none hover:bg-accent'
+            className='h-14 w-full max-w-none border-0 bg-accent/50 px-3 text-body shadow-none hover:bg-accent'
           >
             <SelectValue placeholder={formatBankTransactionCategory(transaction.category)}>
               {selectedCategory && <BankTransactionCategoryOption category={selectedCategory} />}

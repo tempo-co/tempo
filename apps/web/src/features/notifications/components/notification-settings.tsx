@@ -97,7 +97,7 @@ export function NotificationSettings() {
   const {data: settings, isPending, isError, error, refetch} = useNotificationSettings();
   const update = useUpdateNotificationPreferences();
 
-  if (isPending) return <Skeleton className='h-72 w-full rounded-card bg-card' />;
+  if (isPending) return <Skeleton className='h-72 w-full rounded-lg bg-card' />;
   if (isError) {
     return (
       <LoadErrorState title="Couldn't load notification settings" error={error} onRetry={refetch} />
@@ -118,8 +118,8 @@ export function NotificationSettings() {
         {publicKey && (
           <label className='flex min-h-16 cursor-pointer items-center gap-4 px-4 py-3'>
             <span className='min-w-0 flex-1'>
-              <span className='block text-sm font-medium'>Bank alerts</span>
-              <span className='mt-0.5 block text-sm text-muted-foreground'>
+              <span className='block text-body font-medium'>Bank alerts</span>
+              <span className='mt-0.5 block text-body-small text-muted-foreground'>
                 When a bank needs re-authorizing or has stopped syncing
               </span>
             </span>

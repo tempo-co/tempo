@@ -112,7 +112,7 @@ function BalanceForm({
       />
       <span
         id={`${id}-currency`}
-        className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground peer-disabled:opacity-50'
+        className='pointer-events-none absolute inset-y-0 right-3 flex items-center text-body-small text-muted-foreground peer-disabled:opacity-50'
       >
         {currency}
       </span>
@@ -121,16 +121,16 @@ function BalanceForm({
   const fields = (
     <div className='grid grid-cols-1 gap-2'>
       <div className='grid grid-cols-1 gap-0.5'>
-        <label htmlFor={`${id}-amount`} className='text-sm font-medium wrap-anywhere'>
+        <label htmlFor={`${id}-amount`} className='text-body font-medium wrap-anywhere'>
           {label}
         </label>
-        <p id={`${id}-help`} className='text-xs text-muted-foreground'>
+        <p id={`${id}-help`} className='text-body-small text-muted-foreground'>
           {BALANCE_HELP}
         </p>
       </div>
       {amountField}
       {invalid && (
-        <p id={`${id}-error`} role='alert' className='text-xs text-destructive'>
+        <p id={`${id}-error`} role='alert' className='text-body-small text-destructive'>
           {INVALID_BALANCE.title}. {INVALID_BALANCE.description}
         </p>
       )}
@@ -213,10 +213,10 @@ export function ImportBalancePrompts({summary}: {summary: BankImportSummary}) {
           />
         ) : (
           <div key={account.id} className='grid grid-cols-1 gap-1'>
-            <p className='text-sm font-medium wrap-anywhere'>{balanceLabel(name)}</p>
-            <p role='status' className='flex items-center gap-2 text-sm'>
+            <p className='text-body font-medium wrap-anywhere'>{balanceLabel(name)}</p>
+            <p role='status' className='flex items-center gap-2 text-body'>
               <span className='numeric'>{formatCurrency(Number(balance), account.currency)}</span>
-              <span className='flex items-center gap-1 text-xs text-muted-foreground'>
+              <span className='flex items-center gap-1 text-body-small text-muted-foreground'>
                 <Check aria-hidden='true' className='size-3.5' />
                 Saved
               </span>
@@ -254,7 +254,7 @@ export function AccountBalanceAction({
       <TextAction
         onClick={() => setOpen(true)}
         aria-label={source ? `Edit balance of ${name}` : `${ADD_BALANCE} of ${name}`}
-        className={source ? '-mr-2 h-auto py-0 text-xs text-muted-foreground' : '-mr-2'}
+        className={source ? '-mr-2 h-auto py-0 text-body-small text-muted-foreground' : '-mr-2'}
       >
         {source ? 'Edit' : ADD_BALANCE}
       </TextAction>

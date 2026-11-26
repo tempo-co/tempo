@@ -376,7 +376,7 @@ test.describe('saved app', () => {
           path === '/index.html' ||
           path === '/manifest.webmanifest' ||
           path.startsWith('/assets/') ||
-          /\.(png|svg)$/.test(path),
+          /\.(png|svg|ico)$/.test(path),
       ),
     ).toBe(true);
     const savedRoots = (await readCache(page))!.clientState.queries.map(

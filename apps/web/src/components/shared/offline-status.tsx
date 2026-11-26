@@ -23,7 +23,7 @@ export function OfflineStatus() {
     <p
       role='status'
       title='Tempo is unreachable. Changes cannot be saved until it reconnects.'
-      className='ml-auto flex shrink-0 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground'
+      className='ml-auto flex shrink-0 items-center gap-1.5 text-body-small whitespace-nowrap text-muted-foreground'
     >
       <CloudOff className='size-3.5' aria-hidden />
       Offline

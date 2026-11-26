@@ -115,10 +115,10 @@ test.describe('bank connections', () => {
       await expect(bankLogo.locator('img')).toHaveAttribute('src', PROVIDER_LOGO_URL);
       await expect(bankLogo).toHaveCSS(
         'background-color',
-        theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+        theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(238, 240, 245)',
       );
       await expect(bankLogo).toHaveCSS('border-top-width', '1px');
-      await expect(bankLogo).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+      await expect(bankLogo).toHaveCSS('border-top-color', 'rgb(214, 217, 228)');
     }
 
     const accountRow = connectionCard.getByRole('link', {name: 'Daily spending transactions'});
@@ -512,7 +512,7 @@ test.describe('bank connections', () => {
       boxOf(connectionCard),
       boxOf(accountRow),
     ]);
-    expect(headingBox.height).toBe(32);
+    expect(headingBox.height).toBe(26);
     expect(connectButtonBox.x + connectButtonBox.width).toBeLessThanOrEqual(393 - 16);
     expect(cardBox.x).toBe(16);
     expect(cardBox.x + cardBox.width).toBe(393 - 16);
@@ -1006,10 +1006,10 @@ test.describe('mocked Enable Banking bank connection', () => {
       const bankPlate = connectionCard.getByTestId('bank-connection-logo');
       await expect(bankPlate).toHaveCSS(
         'background-color',
-        theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+        theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(238, 240, 245)',
       );
       await expect(bankPlate).toHaveCSS('border-top-width', '1px');
-      await expect(bankPlate).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+      await expect(bankPlate).toHaveCSS('border-top-color', 'rgb(214, 217, 228)');
       const themedImage = bankPlate.locator('img:visible');
       await expect(themedImage).toHaveAttribute('src', /example-neutral\.svg$/);
       await expect(themedImage).toHaveJSProperty('naturalWidth', 160);
@@ -1293,10 +1293,10 @@ test.describe('mocked Enable Banking bank connection', () => {
         for (const slot of await page.getByTestId('bank-connection-logo').all()) {
           await expect(slot).toHaveCSS(
             'background-color',
-            theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(246, 241, 232)',
+            theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(238, 240, 245)',
           );
           await expect(slot).toHaveCSS('border-top-width', '1px');
-          await expect(slot).toHaveCSS('border-top-color', 'rgb(217, 210, 198)');
+          await expect(slot).toHaveCSS('border-top-color', 'rgb(214, 217, 228)');
         }
         await page.screenshot({
           path: testInfo.outputPath(`bank-logo-layout-${width}-${theme}.png`),

@@ -9,7 +9,7 @@ Paths are relative to `apps/web` unless they start at the repository root.
 - `docs/frontend-conventions.md`: before changing feedback/toasts, destructive styles, phone layouts, settings lists, copy, query caches or `src/components/ui`.
 - `docs/product-ui-rules.md`: before deciding what a screen, card, chart, list or filter shows.
 - `docs/pwa.md`: the manifest, icons, base path or offline shell. `docs/file-import.md`: the statement file import's screens on Connections.
-- `DESIGN.md`: palette, typography and component tokens. `PRODUCT.md`: product scope and product rules.
+- `DESIGN.md`: read before any UI change (colours, type, sizes, components, patterns); it is the design system's single document. `PRODUCT.md`: product scope and product rules.
 
 ## Commands and traps
 

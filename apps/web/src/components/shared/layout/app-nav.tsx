@@ -86,7 +86,7 @@ function Badge({badge, className}: {badge: NavBadge; className?: string}) {
     <span
       aria-hidden='true'
       className={cn(
-        'grid h-[1.125rem] min-w-[1.125rem] place-items-center rounded-full bg-primary px-1 numeric text-[0.6875rem] leading-none font-semibold text-primary-foreground',
+        'grid h-4.5 min-w-4.5 place-items-center rounded-full bg-primary px-1 numeric text-caption font-semibold text-primary-foreground',
         className,
       )}
     >
@@ -122,7 +122,7 @@ export function AppTopNav() {
             aria-current={active ? 'page' : undefined}
             aria-label={badge ? `${item.label}, ${badge.label}` : undefined}
             className={cn(
-              'relative flex h-12 items-center gap-2 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+              'relative flex h-12 items-center gap-2 px-3 text-body text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               active &&
                 'font-medium text-foreground after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary',
             )}
@@ -197,7 +197,7 @@ export function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className='flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-accent data-[state=open]:ring-2 data-[state=open]:ring-border max-sm:size-11 pointer-coarse:size-11'
+        className='flex size-9 shrink-0 touch-manipulation items-center justify-center rounded-full bg-secondary text-body-small font-semibold text-secondary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-accent data-[state=open]:ring-2 data-[state=open]:ring-border max-sm:size-11 pointer-coarse:size-11'
         aria-label={`Account menu, ${currentAccount.name} (${currentAccount.email})`}
         data-testid='account-menu-trigger'
       >
@@ -210,10 +210,16 @@ export function AccountMenu() {
           {currentAccount.email}
         </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' sideOffset={8} className='w-60 max-w-[calc(100vw-2rem)]'>
+      <DropdownMenuContent
+        align='end'
+        sideOffset={8}
+        className='w-60 max-w-[calc(100vw-(--spacing(8)))]'
+      >
         <DropdownMenuLabel className='grid font-normal'>
-          <span className='truncate text-sm font-semibold'>{currentAccount.name}</span>
-          <span className='truncate text-xs text-muted-foreground'>{currentAccount.email}</span>
+          <span className='truncate text-body font-semibold'>{currentAccount.name}</span>
+          <span className='truncate text-body-small text-muted-foreground'>
+            {currentAccount.email}
+          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

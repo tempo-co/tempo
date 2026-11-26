@@ -62,7 +62,7 @@ function CandidateTile({
       ) : (
         <BankLogo
           bank={{name: candidate.bankName, ...artwork}}
-          className='size-9 rounded-md text-xs shadow-none'
+          className='size-9 rounded-md text-body-small shadow-none'
           imageClassName='p-1'
         />
       )}
@@ -130,10 +130,10 @@ export function AccountQuestions({
         ];
         return (
           <fieldset key={key} className='grid min-w-0 grid-cols-1 gap-2' disabled={disabled}>
-            <legend className='mb-1 text-sm font-medium'>
+            <legend className='mb-1 text-body font-medium'>
               {question.bank} · {question.currency}
             </legend>
-            <p className='text-sm text-muted-foreground'>
+            <p className='text-body-small text-muted-foreground'>
               {question.layoutPreview
                 ? `This file has no header and names no account, so it may not be from ${question.bank}. Check the transactions below look right.`
                 : code === 'target_account_unconfirmed' && first
@@ -150,7 +150,7 @@ export function AccountQuestions({
                   <label
                     key={option.value}
                     className={cn(
-                      'grid min-h-15 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 px-3 py-3 hover:bg-accent/60 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring',
+                      'grid min-h-15 cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 px-3 py-2 hover:bg-accent/60 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring',
                       checked && 'bg-accent/60',
                     )}
                   >
@@ -173,8 +173,8 @@ export function AccountQuestions({
                     </span>
                     {option.tile}
                     <span className='min-w-0'>
-                      <span className='block text-sm wrap-anywhere'>{option.title}</span>
-                      <span className='block text-xs wrap-anywhere text-muted-foreground'>
+                      <span className='block text-body wrap-anywhere'>{option.title}</span>
+                      <span className='block text-body-small wrap-anywhere text-muted-foreground'>
                         {option.detail}
                       </span>
                     </span>

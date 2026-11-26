@@ -41,7 +41,7 @@ export function WhereYouStand({
       role='region'
       aria-label='Where you stand'
       aria-busy={!overview || (!view.loaded && !view.isError) || undefined}
-      className='grid gap-6 p-5 sm:p-6 @[60rem]:grid-cols-[minmax(0,1fr)_19rem]'
+      className='grid gap-4 p-4 @[60rem]:grid-cols-[minmax(0,1fr)_19rem]'
     >
       {/* Beside the details, the balance chart grows to the details' height so neither column ends early. */}
       <div className='flex min-w-0 flex-col gap-5'>
@@ -74,7 +74,7 @@ export function WhereYouStand({
           </BalanceChartSkeleton>
         )}
       </div>
-      <div className='grid min-w-0 content-start gap-6 border-t pt-5 @[60rem]:border-t-0 @[60rem]:border-l @[60rem]:pt-0 @[60rem]:pl-6'>
+      <div className='grid min-w-0 content-start gap-6 border-t pt-4 @[60rem]:border-t-0 @[60rem]:border-l @[60rem]:pt-0 @[60rem]:pl-4'>
         <SpanDetails key={span} overview={overview} view={view.loaded} />
         <RepeatsBlock today={today} className='border-t pt-5' />
       </div>
@@ -156,7 +156,7 @@ function Total({overview, view}: {overview: Overview | null; view: SpanView | nu
         <p className={cn(hero, 'text-5xl')}>
           <TextBone className='w-[3.6em]' />
         </p>
-        <p className='mt-2 text-sm'>
+        <p className='mt-2 text-body'>
           <TextBone className='w-56' />
         </p>
       </>
@@ -170,7 +170,7 @@ function Total({overview, view}: {overview: Overview | null; view: SpanView | nu
       {/* Whole and on one line: a long total steps down a size on a phone rather than wrap a digit. */}
       <p className={cn(hero, total.length > 9 ? 'text-4xl' : 'text-5xl')}>{total}</p>
       {/* Without a change, or while a span loads, the line stays, empty, so the chart below keeps its place. */}
-      <p className='mt-2 text-sm' aria-hidden={change == null || undefined}>
+      <p className='mt-2 text-body' aria-hidden={change == null || undefined}>
         {change == null ? (
           '\u00a0'
         ) : (
@@ -213,7 +213,7 @@ function SpanSwitch({value, onChange}: {value: Span; onChange: (value: Span) => 
         <ToggleGroupItem
           key={option.value}
           value={option.value}
-          className='h-auto min-h-11 min-w-11 rounded-none px-3 font-normal text-muted-foreground hover:bg-accent hover:text-muted-foreground focus-visible:-outline-offset-2 data-[state=on]:bg-foreground data-[state=on]:font-medium data-[state=on]:text-background data-[state=on]:hover:bg-foreground data-[state=on]:hover:text-background sm:min-h-9'
+          className='h-auto min-h-11 min-w-11 rounded-none px-3 font-normal text-muted-foreground hover:bg-accent hover:text-muted-foreground focus-visible:-outline-offset-2 data-[state=on]:bg-foreground data-[state=on]:font-medium data-[state=on]:text-background data-[state=on]:hover:bg-foreground data-[state=on]:hover:text-background sm:min-h-8'
         >
           {option.label}
         </ToggleGroupItem>
@@ -304,7 +304,7 @@ function Fact({
         className={cn(
           'numeric text-lg font-semibold max-[22rem]:text-base',
           typeof value === 'string' && 'whitespace-nowrap',
-          long && 'text-base max-[22rem]:text-sm',
+          long && 'text-base max-[22rem]:text-body',
           tone,
         )}
       >

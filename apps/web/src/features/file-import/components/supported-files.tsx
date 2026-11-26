@@ -42,7 +42,7 @@ export function SupportedFiles() {
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <div className='grid grid-cols-1 gap-4 pb-4 text-sm md:pb-0'>
+          <div className='grid grid-cols-1 gap-4 pb-4 text-body md:pb-0'>
             <section aria-labelledby='supported-files-standard' className='grid grid-cols-1 gap-1'>
               <h3 id='supported-files-standard' className='font-medium'>
                 Standard formats
@@ -117,7 +117,7 @@ function LayoutRow({layout}: {layout: BankImportLayout}) {
     <li className='flex min-h-11 items-center justify-between gap-3'>
       <span className='min-w-0'>
         <span className='block truncate'>{layout.bankName}</span>
-        <span className='block text-xs text-muted-foreground'>
+        <span className='block text-body-small text-muted-foreground'>
           Added {addedDay(layout.createdAt)}
         </span>
       </span>

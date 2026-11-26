@@ -22,7 +22,7 @@ import {UNDO_FAILED, useUndoImport} from './use-undo-import';
 /** How many imports show before Show all. */
 const SHOWN = 5;
 /** The settings-list row: 16px each side, so the always-visible action keeps its 16px too. */
-const ROW = 'grid min-h-[60px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3';
+const ROW = 'grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2';
 
 /**
  * The owner's imports, newest first, under the connection cards: shown once there is one. An undone import stays
@@ -47,7 +47,7 @@ export function ImportsList({
           <ul
             role='status'
             aria-label='Loading imports'
-            className='divide-y overflow-hidden rounded-card border bg-card'
+            className='divide-y overflow-hidden rounded-lg border bg-card'
           >
             <ImportRowSkeleton />
             <ImportRowSkeleton />
@@ -69,7 +69,7 @@ export function ImportsList({
   return (
     <ImportsSection>
       <ul
-        className='divide-y overflow-hidden rounded-card border bg-card'
+        className='divide-y overflow-hidden rounded-lg border bg-card'
         data-testid='bank-imports-list'
       >
         {shown.map((summary) => (
@@ -126,11 +126,11 @@ function ImportRow({summary, onOpen}: {summary: BankImportSummary; onOpen: () =>
           <button
             type='button'
             onClick={onOpen}
-            className='block w-full truncate text-left text-sm after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring'
+            className='block w-full truncate text-left text-body after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring'
           >
             {importHeadline(summary)}
           </button>
-          <span className='block truncate text-xs text-muted-foreground'>
+          <span className='block truncate text-body-small text-muted-foreground'>
             {details.join(' · ')}
             {!undone && summary.rowsDoubtful > 0 && (
               <>
@@ -174,10 +174,10 @@ function ImportRowSkeleton() {
     <li aria-hidden='true' className={ROW}>
       <Bone className='size-9 rounded-full' />
       <span className='min-w-0'>
-        <span className='block text-sm'>
+        <span className='block text-body'>
           <TextBone className='w-[9em]' />
         </span>
-        <span className='block text-xs'>
+        <span className='block text-body-small'>
           <TextBone className='w-[14em]' />
         </span>
       </span>

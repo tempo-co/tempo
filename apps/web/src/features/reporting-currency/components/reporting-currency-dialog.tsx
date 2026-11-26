@@ -77,14 +77,14 @@ export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
         {/* The hint takes its line from the list, so the buttons stay put and no empty line sits above them. */}
-        <div className='flex h-[min(52dvh,24rem)] min-h-0 flex-col px-4 md:px-0'>
+        <div className='flex h-[min(52dvh,--spacing(96))] min-h-0 flex-col px-4 md:px-0'>
           <CurrencyList
             settings={settings}
             value={selected}
             onSelect={setSelected}
             disabled={isPending}
           />
-          <p className='text-sm text-muted-foreground not-empty:pt-3' aria-live='polite'>
+          <p className='text-body-small text-muted-foreground not-empty:pt-3' aria-live='polite'>
             {selected === null
               ? 'Choose a currency before saving.'
               : changes

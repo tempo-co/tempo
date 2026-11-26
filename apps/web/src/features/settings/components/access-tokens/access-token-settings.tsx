@@ -38,7 +38,7 @@ export function AccessTokenSettings() {
         )
       }
     >
-      {isPending && <Skeleton className='h-24 w-full rounded-card border bg-card' />}
+      {isPending && <Skeleton className='h-24 w-full rounded-lg border bg-card' />}
       {isError && (
         <LoadErrorState title="Couldn't load access tokens" error={error} onRetry={refetch} />
       )}

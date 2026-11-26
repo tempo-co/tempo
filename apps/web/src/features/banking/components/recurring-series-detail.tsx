@@ -69,7 +69,7 @@ export function RecurringSeriesDetail({
         <SeriesTile series={series} className='h-10 w-10' />
         <div className='min-w-0 flex-1'>
           <h3 className='text-section-title break-words'>{series.name}</h3>
-          <p className='mt-0.5 text-sm text-muted-foreground'>
+          <p className='mt-0.5 text-body-small text-muted-foreground'>
             {RECURRING_CADENCE_LABELS[series.cadence]}
             {series.hidden && ' · hidden'}
             {series.status === 'ENDED' && ' · ended'}
@@ -81,14 +81,14 @@ export function RecurringSeriesDetail({
             {formatAmount(series)}
           </span>
           {monthly && (
-            <span className='block numeric text-xs text-muted-foreground'>{monthly}</span>
+            <span className='block numeric text-body-small text-muted-foreground'>{monthly}</span>
           )}
         </p>
       </header>
 
       <Badges series={series} />
 
-      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
+      <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4'>
         <Fact
           label={
             isPast(series)
@@ -131,7 +131,7 @@ export function RecurringSeriesDetail({
       <PaymentHistory series={series} />
 
       {continuation && (
-        <p className='flex items-start gap-2 text-sm text-muted-foreground'>
+        <p className='flex items-start gap-2 text-body-small text-muted-foreground'>
           {continuation.linked ? (
             <Link2 aria-hidden className='mt-0.5 size-4 shrink-0' />
           ) : (
@@ -215,9 +215,9 @@ function Badges({series}: {series: RecurringSeries}) {
 /** A label over one value; both stay on one line each, however narrow the cell. */
 function Fact({label, value, numeric = false}: {label: string; value: string; numeric?: boolean}) {
   return (
-    <div data-testid='recurring-fact' className='min-w-0 bg-card px-3 py-2.5'>
-      <dt className='truncate text-xs text-muted-foreground'>{label}</dt>
-      <dd className={cn('mt-0.5 truncate text-sm font-medium', numeric && 'numeric')}>{value}</dd>
+    <div data-testid='recurring-fact' className='min-w-0 bg-card px-3 py-2.5 max-[22rem]:px-2'>
+      <dt className='truncate text-body-small text-muted-foreground'>{label}</dt>
+      <dd className={cn('mt-0.5 truncate text-body font-medium', numeric && 'numeric')}>{value}</dd>
     </div>
   );
 }
@@ -325,10 +325,12 @@ function PaymentChart({
 
   return (
     <section aria-label='Payment history' className='grid grid-cols-1 gap-2'>
-      <h4 className='text-xs font-medium text-muted-foreground'>Last {points.length} payments</h4>
+      <h4 className='text-body-small font-medium text-muted-foreground'>
+        Last {points.length} payments
+      </h4>
       <ChartContainer
         className='aspect-auto h-32 w-full'
-        config={{amount: {color: 'hsl(var(--chart-primary))'}}}
+        config={{amount: {color: 'var(--color-chart-primary)'}}}
         role='img'
         aria-label={`${points.length} payments from ${formatBankTransactionCompactDate(first.date)} to ${formatBankTransactionCompactDate(last.date)}, between ${formatMoney(Math.min(...points.map((p) => p.amount)), series.currency)} and ${formatMoney(Math.max(...points.map((p) => p.amount)), series.currency)}.`}
       >
@@ -348,12 +350,12 @@ function PaymentChart({
             }
           />
           <ChartTooltip
-            cursor={{fill: 'hsl(var(--foreground))', fillOpacity: 0.05}}
+            cursor={{fill: 'var(--color-foreground)', fillOpacity: 0.05}}
             content={({active, payload}) => {
               const point = payload?.[0]?.payload as (typeof points)[number] | undefined;
               if (!active || !point) return null;
               return (
-                <div className='grid gap-0.5 rounded-md border bg-card p-2 text-xs shadow-sm'>
+                <div className='grid gap-0.5 rounded-md border bg-card p-2 text-body-small shadow-sm'>
                   <span className='text-muted-foreground'>
                     {formatBankTransactionCompactDate(point.date)}
                   </span>
@@ -368,7 +370,7 @@ function PaymentChart({
             {points.map((point, index) => (
               <Cell
                 key={`${point.date}-${index}`}
-                fill={index === unusualIndex ? 'hsl(var(--warning))' : 'var(--color-amount)'}
+                fill={index === unusualIndex ? 'var(--color-warning)' : 'var(--color-amount)'}
               />
             ))}
           </Bar>

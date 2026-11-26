@@ -93,7 +93,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(alert.title || 'Tempo', {
       body: alert.body || '',
       tag: alert.tag,
-      icon: BASE + 'pwa-icon-192.png',
+      icon: BASE + 'icon-192.png',
       data: {url: appUrl(alert.url || BASE)},
     }),
   ]));

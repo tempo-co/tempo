@@ -40,7 +40,7 @@ function LogIn() {
         className='flex w-full flex-col'
       >
         <LogInForm redirectTo={redirect} defaultEmail={email} />
-        <p className='pt-3 text-center text-sm text-muted-foreground'>
+        <p className='pt-3 text-center text-body-small text-muted-foreground'>
           Don&apos;t have an account?{' '}
           <Button variant='link' asChild className='h-fit px-1 py-0'>
             <Link to='/signup' className='text-foreground' data-testid='signup-link'>

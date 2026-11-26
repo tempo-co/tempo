@@ -45,8 +45,8 @@ export function SessionCard({session}: SessionCardProps) {
               'aria-hidden': true,
             })}
             <span className='min-w-0 flex-1'>
-              <span className='block truncate text-sm font-medium'>{session.name}</span>
-              <span className='mt-0.5 flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground'>
+              <span className='block truncate text-body font-medium'>{session.name}</span>
+              <span className='mt-0.5 flex flex-wrap items-center gap-x-1.5 text-body-small text-muted-foreground'>
                 {session.isCurrent ? (
                   <span className='inline-flex items-center gap-1.5 font-medium text-success'>
                     <span aria-hidden='true' className='block size-1.5 rounded-full bg-success' />
@@ -74,7 +74,7 @@ export function SessionCard({session}: SessionCardProps) {
           <ResponsiveDialogTitle className='wrap-anywhere'>{session.name}</ResponsiveDialogTitle>
         </ResponsiveDialogHeader>
         <ResponsiveDialogBody>
-          <dl className='divide-y text-sm'>
+          <dl className='divide-y text-body'>
             <div className='grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 py-3 capitalize'>
               <dt className='text-muted-foreground'>Device</dt>
               <dd className='text-right wrap-anywhere'>{session.deviceType}</dd>

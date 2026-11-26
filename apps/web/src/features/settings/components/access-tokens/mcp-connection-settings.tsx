@@ -18,7 +18,7 @@ export function McpConnectionSettings() {
       />
       <ol
         aria-label='Connection steps'
-        className='mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground'
+        className='mt-4 list-decimal space-y-2 pl-5 text-body-small text-muted-foreground'
       >
         <li>
           Create an <strong className='font-medium text-foreground'>access token</strong> and store

@@ -32,7 +32,7 @@ export function pct(ratio: number) {
 }
 
 /**
- * The rem a character of a `text-sm` figure takes, rounded up from about 0.46rem so there is some to spare. A table
+ * The rem a character of a `text-body` figure takes, rounded up from about 0.46rem so there is some to spare. A table
  * whose figures can be semibold uses {@link BOLD_FIGURE_CHAR}.
  */
 export const FIGURE_CHAR = 0.5;

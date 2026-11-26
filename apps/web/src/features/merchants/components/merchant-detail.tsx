@@ -52,7 +52,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
         <div className='min-w-0'>
           <h3 className='text-section-title wrap-anywhere'>{merchant.name}</h3>
           {merchant.variants.length > 1 && (
-            <p className='mt-0.5 text-sm text-muted-foreground'>
+            <p className='mt-0.5 text-body-small text-muted-foreground'>
               {merchant.variants.length} names grouped by brand
             </p>
           )}
@@ -62,12 +62,12 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
       <section aria-label='All-time totals' className='grid grid-cols-1 gap-5'>
         <dl className='flex flex-wrap justify-between gap-x-8 gap-y-4'>
           <div className='min-w-0'>
-            <dt className='text-xs text-muted-foreground'>Spent all time</dt>
+            <dt className='text-body-small text-muted-foreground'>Spent all time</dt>
             <dd className='numeric text-3xl font-semibold tracking-tight'>
               {formatMoney(merchant.spent, currency)}
             </dd>
             {toCents(merchant.refunded) > 0 && (
-              <dd className='text-xs text-muted-foreground'>
+              <dd className='text-body-small text-muted-foreground'>
                 <span className='numeric'>{formatMoney(merchant.paid, currency)}</span> paid,{' '}
                 <span className='numeric'>{formatMoney(merchant.refunded, currency)}</span> refunded
               </dd>
@@ -75,14 +75,14 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
           </div>
           {hasIncome && (
             <div className='min-w-0 sm:text-right'>
-              <dt className='text-xs text-muted-foreground'>Received</dt>
+              <dt className='text-body-small text-muted-foreground'>Received</dt>
               <dd className='numeric text-3xl font-semibold tracking-tight text-success'>
                 +{formatMoney(merchant.received, currency)}
               </dd>
             </div>
           )}
         </dl>
-        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-card border bg-border sm:grid-cols-4'>
+        <dl className='grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4'>
           <Fact label='Payments' value={merchant.paymentCount.toLocaleString()} numeric />
           <Fact
             label='Average payment'
@@ -108,7 +108,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
           <Fact label='How often' value={frequency ?? '—'} />
         </dl>
         {excluded > 0 && (
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-body-small text-muted-foreground'>
             {countLabel(excluded, 'transaction')} without a converted amount{' '}
             {excluded === 1 ? 'is' : 'are'} not counted.
           </p>
@@ -121,7 +121,7 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
         <section className='grid grid-cols-1 gap-3' aria-label='Grouped names'>
           <div>
             <h2 className='text-card-title'>Grouped names</h2>
-            <p className='mt-1 text-xs text-muted-foreground'>
+            <p className='mt-1 text-body-small text-muted-foreground'>
               These appear under one brand, so their totals add up above.
             </p>
           </div>
@@ -129,11 +129,11 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
             {merchant.variants.map((variant) => (
               <li
                 key={variant.key}
-                className='grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-sm'
+                className='grid min-h-15 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-body'
               >
                 <span className='min-w-0'>
                   <span className='block wrap-anywhere'>{variant.name}</span>
-                  <span className='block text-xs text-muted-foreground'>
+                  <span className='block text-body-small text-muted-foreground'>
                     {countLabel(variant.count, 'transaction')}
                   </span>
                 </span>
@@ -155,8 +155,8 @@ export function MerchantDetail({merchant, onBack}: {merchant: MerchantGroup; onB
 function Fact({label, value, numeric = false}: {label: string; value: string; numeric?: boolean}) {
   return (
     <div data-testid='merchant-fact' className='min-w-0 bg-card px-3 py-2.5'>
-      <dt className='truncate text-xs text-muted-foreground'>{label}</dt>
-      <dd className={cn('mt-0.5 truncate text-sm font-medium', numeric && 'numeric')}>{value}</dd>
+      <dt className='truncate text-body-small text-muted-foreground'>{label}</dt>
+      <dd className={cn('mt-0.5 truncate text-body font-medium', numeric && 'numeric')}>{value}</dd>
     </div>
   );
 }
@@ -199,7 +199,7 @@ function PeriodsCard({merchant, hasIncome}: {merchant: MerchantGroup; hasIncome:
       ) : isPending || !loaded ? (
         <Skeleton className='h-56' role='img' aria-label='Loading spending over time' />
       ) : !hasActivity ? (
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-body-small text-muted-foreground'>
           Nothing in the last {shown.length} {interval}s.
         </p>
       ) : (
@@ -262,14 +262,14 @@ function PeriodsChart({
       <ChartContainer
         className='aspect-auto h-56 w-full'
         config={{
-          spent: {color: 'hsl(var(--chart-primary))'},
-          received: {color: 'hsl(var(--chart-secondary))'},
+          spent: {color: 'var(--color-chart-primary)'},
+          received: {color: 'var(--color-chart-secondary)'},
         }}
         role='img'
         aria-label={`Spending per ${interval}, ${periodLabel(shown[0], interval)} to ${periodLabel(shown[shown.length - 1], interval)}. The table below lists every bar.`}
       >
         <BarChart data={data} margin={{left: 0, right: 12, top: 8, bottom: 0}} barGap={1}>
-          <CartesianGrid vertical={false} stroke='hsl(var(--border))' />
+          <CartesianGrid vertical={false} stroke='var(--color-border)' />
           <XAxis
             dataKey='start'
             tickLine={false}
@@ -289,12 +289,12 @@ function PeriodsChart({
             tickFormatter={(value: number) => axis.format(value)}
           />
           <ChartTooltip
-            cursor={{fill: 'hsl(var(--foreground))', fillOpacity: 0.04}}
+            cursor={{fill: 'var(--color-foreground)', fillOpacity: 0.04}}
             content={({active, label}) => {
               const period = shown.find((item) => item.start === label);
               if (!active || !period) return null;
               return (
-                <div className='grid min-w-40 gap-1 rounded-md border bg-card p-2.5 text-xs shadow-sm'>
+                <div className='grid min-w-40 gap-1 rounded-md border bg-card p-2.5 text-body-small shadow-sm'>
                   <p className='font-semibold'>
                     {periodLabel(period, interval)}
                     {!period.complete && (
@@ -338,7 +338,7 @@ function PeriodsChart({
       <div className='sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:max-w-full focus-within:overflow-x-auto'>
         <table
           aria-label={`Spending per ${interval}`}
-          className='w-full text-right text-sm [&_td]:px-2 [&_td]:py-1 [&_td]:numeric [&_th]:px-2 [&_th]:py-2'
+          className='w-full text-right text-body [&_td]:px-2 [&_td]:py-1 [&_td]:numeric [&_th]:px-2 [&_th]:py-2'
         >
           <thead>
             <tr>

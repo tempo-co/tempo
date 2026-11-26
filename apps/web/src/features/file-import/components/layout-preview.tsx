@@ -28,7 +28,7 @@ import {OTHER_BANK, dateCheckCopy, mappingInWords, previewRowTitle} from '../uti
 import {IMPORT_TILE} from './file-choice';
 
 /** The shared 60px row shape, as a plain row: preview rows open nothing. */
-const ROW = 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3';
+const ROW = 'grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2';
 
 /**
  * A proposed layout read through the owner's own file: how it reads the columns, the first and last rows as they
@@ -78,7 +78,7 @@ export function LayoutPreview({
         <h3 id='bank-import-layout-columns' className='text-label text-muted-foreground'>
           How Tempo reads it
         </h3>
-        <p className='text-sm text-pretty wrap-anywhere'>{mappingInWords(mapping).join(' · ')}</p>
+        <p className='text-body text-pretty wrap-anywhere'>{mappingInWords(mapping).join(' · ')}</p>
       </section>
 
       {dateCheck && (
@@ -148,11 +148,11 @@ export function LayoutPreview({
               </>
             )}
             {bankError ? (
-              <p id={bankHint} role='alert' className='text-xs text-destructive'>
+              <p id={bankHint} role='alert' className='text-body-small text-destructive'>
                 {bankError}
               </p>
             ) : (
-              <p id={bankHint} className='text-xs text-muted-foreground'>
+              <p id={bankHint} className='text-body-small text-muted-foreground'>
                 Files of this layout are listed under this name.
               </p>
             )}
@@ -175,7 +175,7 @@ export function LayoutPreview({
                   ))}
               </SelectContent>
             </Select>
-            <p className='text-xs text-muted-foreground'>The file doesn&apos;t say.</p>
+            <p className='text-body-small text-muted-foreground'>The file doesn&apos;t say.</p>
           </div>
         )}
       </div>
@@ -211,7 +211,7 @@ export function PreviewRows({
           <PreviewRow key={`first-${index}`} row={row} currency={rowCurrency(row)} />
         ))}
         {hiddenRows > 0 && (
-          <li className='py-2 text-center text-xs text-muted-foreground'>
+          <li className='py-2 text-center text-body-small text-muted-foreground'>
             {formatCount(hiddenRows)} more
           </li>
         )}
@@ -219,7 +219,7 @@ export function PreviewRows({
           <PreviewRow key={`last-${index}`} row={row} currency={rowCurrency(row)} />
         ))}
       </ol>
-      <dl className='grid grid-cols-1 gap-1 text-sm' data-testid='bank-import-layout-totals'>
+      <dl className='grid grid-cols-1 gap-1 text-body' data-testid='bank-import-layout-totals'>
         {totals.flatMap((total) => {
           const formatter = getCurrencyFormatter(total.currency);
           const format = (value: string) => formatter.format(Number(value));
@@ -236,7 +236,7 @@ export function PreviewRows({
         })}
       </dl>
       {preview.accounts.length > 0 && (
-        <p className='text-sm wrap-anywhere text-muted-foreground'>
+        <p className='text-body-small wrap-anywhere text-muted-foreground'>
           Account {preview.accounts.join(', ')}
         </p>
       )}
@@ -252,8 +252,8 @@ function PreviewRow({row, currency}: {row: BankImportLayoutPreviewRow; currency:
         <FileText strokeWidth={2} />
       </span>
       <span className='min-w-0'>
-        <span className='block truncate text-sm'>{previewRowTitle(row)}</span>
-        <span className='block truncate text-xs text-muted-foreground'>
+        <span className='block truncate text-body'>{previewRowTitle(row)}</span>
+        <span className='block truncate text-body-small text-muted-foreground'>
           {[
             formatBankTransactionCompactDate(row.date),
             row.description && row.counterparty,
@@ -264,7 +264,7 @@ function PreviewRow({row, currency}: {row: BankImportLayoutPreviewRow; currency:
             .join(' · ')}
         </span>
       </span>
-      <span className='grid justify-items-end text-sm'>
+      <span className='grid justify-items-end text-body'>
         <CurrencyAmount amount={amount} currency={currency} />
         <span className='sr-only'>{amount < 0 ? 'money out' : 'money in'}</span>
       </span>

@@ -151,7 +151,7 @@ export function BankTransactionFilters({
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent
           align='end'
-          className='flex h-[min(28rem,var(--radix-popover-content-available-height))] w-[38rem] flex-col p-0'
+          className='flex h-[min(--spacing(112),var(--radix-popover-content-available-height))] w-152 flex-col p-0'
           data-testid='bank-transaction-filters'
         >
           <div className='grid min-h-0 flex-1 grid-cols-[12.5rem_minmax(0,1fr)]'>
@@ -171,13 +171,13 @@ export function BankTransactionFilters({
                     aria-selected={selected}
                     onClick={() => setActive(facet.key)}
                     className={cn(
-                      'grid min-h-11 content-center rounded-sm px-3 py-1.5 text-left text-sm hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                      'grid min-h-11 content-center rounded-sm px-3 py-1.5 text-left text-body hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
                       selected && 'bg-accent',
                     )}
                   >
                     <span className={cn(selected && 'font-medium')}>{facet.label}</span>
                     {facet.summary && (
-                      <span className='truncate text-xs text-primary'>{facet.summary}</span>
+                      <span className='truncate text-body-small text-primary'>{facet.summary}</span>
                     )}
                   </button>
                 );
@@ -209,7 +209,7 @@ export function BankTransactionFilters({
       <DrawerTrigger asChild>{trigger}</DrawerTrigger>
       <DrawerContent
         data-testid='bank-transaction-filters'
-        className='h-[min(85dvh,46rem)] overflow-hidden p-0'
+        className='h-[min(85dvh,--spacing(184))] overflow-hidden p-0'
       >
         <DrawerHeader className='flex h-14 flex-row items-center gap-1 border-b px-2 py-0 text-left'>
           {shown ? (
@@ -241,8 +241,8 @@ export function BankTransactionFilters({
                     onClick={() => setActive(facet.key)}
                     className='flex min-h-14 w-full items-center gap-3 px-2 text-left'
                   >
-                    <span className='flex-1 text-sm'>{facet.label}</span>
-                    <span className='max-w-[55%] truncate text-sm text-primary'>
+                    <span className='flex-1 text-body'>{facet.label}</span>
+                    <span className='max-w-[55%] truncate text-body text-primary'>
                       {facet.summary ?? <span className='text-muted-foreground'>Any</span>}
                     </span>
                     <ChevronRight aria-hidden='true' className='size-4 text-muted-foreground' />
@@ -252,7 +252,7 @@ export function BankTransactionFilters({
             </ul>
           )}
         </ScrollArea>
-        <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        <DrawerFooter className='mt-0 flex-row items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(--spacing(3)+env(safe-area-inset-bottom))]'>
           {resetButton(shown, 'mr-auto')}
           <Button variant='ghost' onClick={onClearFilters} disabled={!isFilteringApplied}>
             Clear all
