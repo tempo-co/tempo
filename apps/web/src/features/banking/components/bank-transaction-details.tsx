@@ -374,7 +374,7 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
                   </span>
                 </>
               );
-              // Dividers stay at the content edge; a link's hover fill reaches past it like the Recurring dialog's payments.
+              // Dividers stay at the content edge; a link's hover fill reaches past it like the series details' payments.
               const rowClassName = 'flex h-15 items-center gap-3';
               return (
                 <li key={payment.id} className='border-t'>
