@@ -25,7 +25,7 @@ It fails when a verified bank has no passing file read by one of the readers the
 
 ## The corpus folder
 
-- corpus.json: one entry per file, with its id, path and bank id (a `BANK_LIST` id, or the id a later layout will use);
+- corpus.json: one entry per file, with its id, path and bank id (a `BANK_LIST` id, or the id a later layout will use), and under `ownerProven` the verified banks proven only on the owner's own export, which never enters the corpus: the check names each instead of requiring a file;
 - files/: the files, as published apart from the repairs SOURCES.md records;
 - truth/: one truth file per entry, written by tools/truth.py from readers that share no code with Tempo (Python's csv module with a hand-written column spec per CSV file; readers written from the CAMT, MT940 and OFX specifications);
 - SOURCES.md: per file its bank, source, licence, why it is included and any repair. A file broken only by its anonymisation (hand-edited balances, invalid IBAN check digits) is kept with only that field repaired.
