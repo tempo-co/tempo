@@ -321,7 +321,6 @@ export class BankTransactionService {
 	}
 }
 
-/** The stored categorization columns as the API reports them; a row categorization has not reached is PENDING. */
 /** A row a category change would also change, as the correction previews list it. */
 export function toCategoryImpactTransaction(row: BankTransaction): BankTransactionCategoryImpactTransaction {
 	return {
@@ -335,6 +334,7 @@ export function toCategoryImpactTransaction(row: BankTransaction): BankTransacti
 	};
 }
 
+/** The stored categorization columns as the API reports them; a row categorization has not reached is PENDING. */
 function toCategorizationFields(
 	transaction: Pick<BankTransaction, 'category' | 'categoryStatus' | 'categorySource'>,
 ): Pick<BankTransactionResponse, 'category' | 'categoryStatus' | 'categorySource'> {

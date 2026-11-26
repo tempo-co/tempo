@@ -1,4 +1,4 @@
-import {Injectable, NotFoundException} from '@nestjs/common';
+import {Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {
 	BankTransactionBulkCategoryPreview,
@@ -12,6 +12,7 @@ import {Account} from '@modules/account/account.entity';
 
 import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
 import {BankTransaction} from '../bank-transaction.entity';
+import {safeErrorName} from '../banking.utils';
 import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import type {BulkCategoryFollowUps} from '../categorization/manual-category-follow-up';
 import {ManualCategoryService} from '../categorization/manual-category.service';
@@ -27,6 +28,8 @@ import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
  */
 @Injectable()
 export class BulkCategoryService {
+	private readonly logger = new Logger(BulkCategoryService.name);
+
 	constructor(
 		@InjectRepository(BankTransaction)
 		private readonly repository: Repository<BankTransaction>,
@@ -100,7 +103,12 @@ export class BulkCategoryService {
 					followUpRows.map(({id}) => id),
 				),
 		);
-		await this.scheduler.enqueueForTransactions(recheckIds);
+		// The write is committed: a failed enqueue leaves the rechecked rows PENDING for the scheduler's sweep.
+		try {
+			await this.scheduler.enqueueForTransactions(recheckIds);
+		} catch (error) {
+			this.logger.warn(`Enqueueing rows a bulk category rechecks failed: ${safeErrorName(error)}`);
+		}
 		return {updated};
 	}
 

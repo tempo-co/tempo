@@ -59,6 +59,14 @@ test.describe('bulk category', () => {
 
     const bar = page.getByRole('toolbar', {name: 'Selected transactions'});
     await expect(bar).toContainText('3 selected');
+    // The step stands for the rows it was asked for: dropping one of them ends it.
+    await bar.getByRole('button', {name: 'Category'}).click();
+    await page.getByRole('menuitem', {name: 'Eating out'}).click();
+    await expect(page.getByTestId('bulk-category-step')).toBeVisible();
+    await row(page, CAFE_TO_CHECK[2]).getByRole('checkbox').click();
+    await expect(page.getByTestId('bulk-category-step')).toBeHidden();
+    await expect(bar).toContainText('2 selected');
+    await row(page, CAFE_TO_CHECK[2]).getByRole('checkbox').click();
     await bar.getByRole('button', {name: 'Category'}).click();
     await page.getByRole('menuitem', {name: 'Eating out'}).click();
 

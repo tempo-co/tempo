@@ -118,8 +118,20 @@ function TransactionsPage() {
       },
     );
   };
-  const bulkStep = bulkDraft && (
-    <BulkCategoryStep draft={bulkDraft} onDone={endSelection} onCancel={() => setBulkDraft(null)} />
+  // The step stands for the rows it was asked for: picking or dropping a row, or another view, ends it.
+  const activeDraft =
+    bulkDraft &&
+    bulkDraft.transactionIds.length === picked &&
+    bulkDraft.transactionIds.every((id) => selection.isSelected(id))
+      ? bulkDraft
+      : null;
+  if (bulkDraft && !activeDraft) setBulkDraft(null);
+  const bulkStep = activeDraft && (
+    <BulkCategoryStep
+      draft={activeDraft}
+      onDone={endSelection}
+      onCancel={() => setBulkDraft(null)}
+    />
   );
 
   const clearAll = () =>

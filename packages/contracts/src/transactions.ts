@@ -264,6 +264,9 @@ export type BankTransactionCategoryUpdate = {
 	applyToTransactionIds?: string[];
 };
 
+/** Most selected rows one bulk category takes. */
+export const BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS = 500;
+
 /** `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. */
 export type BankTransactionBulkCategoryPreviewRequest = {
 	transactionIds: string[];

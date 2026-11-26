@@ -53,7 +53,9 @@ test.describe('bank transactions', () => {
     await page.getByRole('button', {name: 'Clear filters'}).click();
     await expect(page.getByText('Coffee shop')).toBeVisible();
 
-    await firstTransactionRow.click({position: {x: 8, y: 8}});
+    await firstTransactionRow
+      .getByRole('button', {name: 'View Coffee shop transaction details'})
+      .click({position: {x: 8, y: 8}});
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(page).toHaveURL(/\/transactions(?:\?.*)?$/);
     const openedUrl = new URL(page.url());

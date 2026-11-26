@@ -1,4 +1,7 @@
-import type {BankTransactionCategory} from '@tempo/contracts';
+import {
+  BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS,
+  type BankTransactionCategory,
+} from '@tempo/contracts';
 import {Tag, X} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 
@@ -23,9 +26,6 @@ import {PICKABLE_CATEGORIES} from '../utils/bank-transaction-category-meta';
 import {formatBankTransactionCategory} from '../utils/formatters';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 
-/** Most rows one bulk action takes, as the API allows. */
-export const MAX_BULK_ROWS = 500;
-
 /**
  * The bar under the list while rows are picked: "3 selected", a way to clear the selection, and the actions that
  * apply to every picked row. It sticks to the bottom of the view, above the phone tab bar.
@@ -40,7 +40,7 @@ export function BankTransactionBulkBar({
   /** The bulk actions, each a button in the bar. */
   children: ReactNode;
 }) {
-  const tooMany = count > MAX_BULK_ROWS;
+  const tooMany = count > BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS;
   return (
     <div
       role='toolbar'
@@ -65,7 +65,7 @@ export function BankTransactionBulkBar({
         {/* On its own line, so a narrow bar keeps its actions in view. */}
         {tooMany && (
           <span className='block font-normal text-muted-foreground'>
-            Up to {MAX_BULK_ROWS} at once
+            Up to {BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS} at once
           </span>
         )}
       </p>
@@ -93,7 +93,7 @@ export function BulkCategoryAction({
   onPick: (category: BankTransactionCategory) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const disabled = isChecking || count > MAX_BULK_ROWS;
+  const disabled = isChecking || count > BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS;
   const trigger = (
     <Button
       variant='ghost'
