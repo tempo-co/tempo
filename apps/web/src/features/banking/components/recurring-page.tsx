@@ -1,4 +1,9 @@
-import type {RecurringSeries, RecurringSeriesList, RecurringSeriesLists} from '@tempo/contracts';
+import type {
+  RecurringSeries,
+  RecurringSeriesDirection,
+  RecurringSeriesList,
+  RecurringSeriesLists,
+} from '@tempo/contracts';
 import {format} from 'date-fns';
 import {
   CalendarClock,
@@ -450,15 +455,16 @@ function Catalogue({
     <>
       {(
         [
-          ['Bills', lists.expenses],
-          ['Income', lists.income],
+          ['Bills', 'EXPENSE', lists.expenses],
+          ['Income', 'INCOME', lists.income],
         ] as const
       ).map(
-        ([title, list]) =>
+        ([title, direction, list]) =>
           list.series.length > 0 && (
             <CatalogueCard
               key={title}
               title={title}
+              direction={direction}
               list={list}
               asOf={asOf}
               selectedKey={selectedKey}
@@ -472,12 +478,14 @@ function Catalogue({
 
 function CatalogueCard({
   title,
+  direction,
   list,
   asOf,
   selectedKey,
   onOpen,
 }: {
   title: string;
+  direction: RecurringSeriesDirection;
   list: RecurringSeriesList;
   asOf: string;
   selectedKey: string | null;
@@ -485,7 +493,7 @@ function CatalogueCard({
 }) {
   const shown = list.series.filter(({hidden}) => !hidden);
   const hidden = list.series.filter((series) => series.hidden);
-  const isIncome = title === 'Income';
+  const isIncome = direction === 'INCOME';
   const rows = (series: RecurringSeries[], muted: boolean) => (
     <ul className='divide-y divide-border/60'>
       {series.map((entry) => (

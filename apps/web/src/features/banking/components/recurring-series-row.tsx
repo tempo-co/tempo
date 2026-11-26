@@ -53,7 +53,7 @@ export function RecurringSeriesRow({
               key={flag}
               variant={flag === 'ended' ? 'secondary' : 'outline'}
               className={cn(
-                'shrink-0 px-2 py-0 font-medium',
+                'shrink-0 px-2 py-0',
                 flag !== 'ended' && 'border-warning/60 text-warning',
               )}
             >

@@ -167,7 +167,7 @@ export function RecurringCalendar({
                       type='button'
                       onClick={() => toggleDay(date)}
                       aria-expanded={date === openDay}
-                      className='rounded-sm px-1 text-left text-caption text-primary hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+                      className='rounded-sm px-1 text-left text-caption text-primary hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:min-h-11'
                     >
                       +{onDay.length - DAY_CHIPS} more
                     </button>
@@ -229,7 +229,7 @@ function CalendarChip({
       aria-current={selected || undefined}
       aria-label={`${series.name}, ${isIncome ? '+' : ''}${amount}, ${MONTH_KIND_LABELS[kind]}`}
       className={cn(
-        'grid w-full min-w-0 rounded-sm bg-card px-1 py-0.5 text-left text-caption leading-tight hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-[current=true]:outline-2 aria-[current=true]:-outline-offset-2 aria-[current=true]:outline-primary',
+        'grid w-full min-w-0 rounded-sm bg-card px-1 py-0.5 text-left text-caption leading-tight hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-[current=true]:outline-2 aria-[current=true]:-outline-offset-2 aria-[current=true]:outline-primary pointer-coarse:min-h-11',
         kind === 'paid' && 'text-muted-foreground',
         kind === 'late' && 'bg-warning-muted text-warning',
       )}

@@ -342,7 +342,7 @@ page background, a `text-section-title` title over a muted `text-body-small` des
 `DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
 radius; items are `text-body` with segment corners, tooltips `text-body-small`.
 
-Details rail: a sticky 360px `card` from `lg`, a `ResponsiveDialog` below.
+Details rail: a 360px `card` column from `lg`, a `ResponsiveDialog` below.
 
 ### Badges
 
