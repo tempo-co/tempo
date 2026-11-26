@@ -15,8 +15,8 @@ import {useReportingCurrency} from '@/features/reporting-currency/api/use-report
 
 export type BankTransactionFilterKey = (typeof BANK_TRANSACTION_FILTER_KEYS)[number];
 
-/** One filter in force as the chips and the Filters panel name it. `phoneOnly` filters have a toolbar control on larger screens. */
-export type FilterLabel = {key: BankTransactionFilterKey; label: string; phoneOnly?: boolean};
+/** One filter in force as the chips and "+ Add filter" name it. */
+export type FilterLabel = {key: BankTransactionFilterKey; label: string};
 
 const list = (labels: string[], noun: string) =>
   labels.length <= 2 ? labels.join(', ') : `${labels.length} ${noun}`;
@@ -35,14 +35,13 @@ function dateLabel(range: NonNullable<BankTransactionFilterParams['date']>) {
     : from;
 }
 
-/** One short label per filter in force, in the order the chips show them; the Filters panel summarizes with them. */
+/** One short label per filter in force, in the order the chips show them; "+ Add filter" summarizes with them. */
 export function useBankTransactionFilterLabels(filters: BankTransactionFilterParams) {
   const {accounts, needsAccountName} = useActiveBankAccounts();
   const currency = useReportingCurrency().data?.currency ?? 'reporting currency';
   const chips: FilterLabel[] = [];
-  if (filters.needsAttention) chips.push({key: 'needsAttention', label: 'To review'});
-  if (filters.date?.from)
-    chips.push({key: 'date', label: dateLabel(filters.date), phoneOnly: true});
+  if (filters.needsAttention) chips.push({key: 'needsAttention', label: 'To check'});
+  if (filters.date?.from) chips.push({key: 'date', label: dateLabel(filters.date)});
   if (filters.categories?.length)
     chips.push({
       key: 'categories',

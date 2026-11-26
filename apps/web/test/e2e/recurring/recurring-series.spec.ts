@@ -714,7 +714,7 @@ test('drills recurring series through to exactly their payments', async ({page})
       );
       await list.getByRole('listitem').last().getByRole('link').click();
       await expect(page).toHaveURL(new RegExp(`transactionId=${payments[0].id}`));
-      await expect(page.getByRole('dialog', {name: entry.name})).toContainText('-€9.00');
+      await expect(page.getByTestId('bank-transaction-inspector')).toContainText('-€9.00');
       await page.goBack();
       await expect(detail(page)).toBeVisible();
     }

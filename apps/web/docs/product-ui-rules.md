@@ -32,13 +32,15 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 - A category keeps its own small icon beside its label, even when the row's tile shows a merchant logo.
 - Fact grids are two lines: a label over one value. Fold secondary detail into the label ("Next · in 29 days"). A value that can grow without bound moves to a wrapping badge. Estimates are whole amounts with "about" ("about €63"); in a fact grid the "about" goes in the label.
 - Detail views list their items inline, newest first, with Load more and the shared row, and keep the open entity in the URL (with `replace`).
+- A row to check shows "To check" in the warning colour in place of a category: there is no guess to show.
+- A page's rail shows the view's own cards while nothing is open (Transactions: the view's totals and the To check count). A step started in the details, such as updating other transactions, replaces them until it is saved or cancelled.
 - Optional columns keep their grid track: render an empty cell so the next column starts at the same x in every state.
 
 ## Filters and pickers
 
 - Parent and child checkboxes: the parent selects or clears all children and shows a mixed state when some are selected.
 - Filters are removable chips with "+ Add filter" and Clear, kept in the address. An option list opened from a chip has exactly one scroll area; on phones it is one stepped bottom sheet at a fixed height, rows at least 44 px.
-- One-press filter shortcuts ("To review") sit in the toolbar, not alone in the chips row.
+- A view of the rows that wait for the owner (To check) is a tab with its count beside All, not a filter chip.
 - Long-list pickers (country, bank) on phones are one stepped bottom sheet with the likely value preselected and 56 px rows. Never auto-focus search, on any device.
 - Restyle, don't replace: flags stay flags (small 4:3, small radius) and badges keep the pill radius.
 

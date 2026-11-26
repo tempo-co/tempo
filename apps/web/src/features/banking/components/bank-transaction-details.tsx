@@ -35,7 +35,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
     : transaction.ownTransfer?.counterpart;
 
   return (
-    <div data-testid='bank-transaction-details' className='min-w-0 px-5 pb-5 sm:px-8 sm:pb-7'>
+    <div data-testid='bank-transaction-details' className='@container min-w-0 px-5 pb-5'>
       {isMovement ? (
         <Movement transaction={transaction} counterpart={counterpart} />
       ) : (
@@ -85,7 +85,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
                 {transaction.description || 'Not provided by your bank'}
               </p>
             </div>
-            <dl className='grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2'>
+            <dl className='grid grid-cols-1 gap-x-6 gap-y-4 @md:grid-cols-2'>
               <Detail
                 label='Transaction date'
                 value={
@@ -194,7 +194,7 @@ function Movement({
       .map(([, url]) => url),
   );
   const accountClassName =
-    'grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 py-3 sm:row-span-4 sm:grid-rows-subgrid';
+    'grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 py-3 @md:row-span-4 @md:grid-rows-subgrid';
   const own = (
     <div data-testid='movement-own' className={accountClassName}>
       <MovementAccount
@@ -209,7 +209,7 @@ function Movement({
     <Link
       to='.'
       search={(prev) => ({...prev, transactionId: counterpart.id})}
-      state={(prev) => ({transactionOpenedAt: prev.transactionOpenedAt ?? prev.__TSR_index})}
+      state={(prev) => ({transactionOpenedAt: prev.transactionOpenedAt})}
       data-testid='movement-counterpart'
       className={`${accountClassName} hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`}
     >
@@ -225,7 +225,7 @@ function Movement({
       />
     </Link>
   ) : (
-    <div className='min-w-0 py-3 text-body-small text-muted-foreground sm:row-span-4'>
+    <div className='min-w-0 py-3 text-body-small text-muted-foreground @md:row-span-4'>
       {isExchange ? 'Other side not matched' : 'Other side not in your connected accounts'}
     </div>
   );
@@ -234,13 +234,13 @@ function Movement({
       <h2 className='text-card-title'>
         {isExchange ? 'One currency to another' : 'Between your accounts'}
       </h2>
-      <div className='mt-3 flex flex-col sm:grid sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-1'>
+      <div className='mt-3 flex flex-col @md:grid @md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] @md:gap-x-5 @md:gap-y-1'>
         {incoming ? other : own}
         <ArrowRight
-          className='hidden size-5 self-center text-muted-foreground sm:row-span-4 sm:block'
+          className='hidden size-5 self-center text-muted-foreground @md:row-span-4 @md:block'
           aria-hidden='true'
         />
-        <ArrowDown className='ml-2.5 size-5 text-muted-foreground sm:hidden' aria-hidden='true' />
+        <ArrowDown className='ml-2.5 size-5 text-muted-foreground @md:hidden' aria-hidden='true' />
         {incoming ? own : other}
       </div>
       {isExchange && (
@@ -386,9 +386,7 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
                     <Link
                       to='.'
                       search={(prev) => ({...prev, transactionId: payment.id})}
-                      state={(prev) => ({
-                        transactionOpenedAt: prev.transactionOpenedAt ?? prev.__TSR_index,
-                      })}
+                      state={(prev) => ({transactionOpenedAt: prev.transactionOpenedAt})}
                       data-testid='recurring-payment'
                       className={`${rowClassName} -mx-3 px-3 hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`}
                     >

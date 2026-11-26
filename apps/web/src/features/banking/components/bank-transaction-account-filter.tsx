@@ -14,7 +14,7 @@ import {BankAccountLabel} from './bank-account-label';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
 /**
- * The account options for the Filters panel. With one known account there is nothing to choose, so the panel leaves
+ * The account options for "+ Add filter". With one known account there is nothing to choose, so "+ Add filter" leaves
  * the filter out (`showsAccountFilter`); while accounts load or fail, it says so instead.
  */
 export function BankTransactionAccountFilter({filters}: {filters: BankTransactionFilterParams}) {

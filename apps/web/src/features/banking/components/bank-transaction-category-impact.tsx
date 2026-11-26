@@ -5,42 +5,34 @@ import {
   BankTransactionCategoryImpact,
 } from '@tempo/contracts';
 import {ArrowRight, Check, ChevronDown, Minus, Sparkles} from 'lucide-react';
-import {useId, useMemo, useState} from 'react';
+import {useEffect, useId, useMemo, useRef, useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {PendingLabel} from '@/components/shared/pending-label';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogDescription,
-  ResponsiveDialogFooter,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-} from '@/components/ui/responsive-dialog';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {cn} from '@/utils/cn';
 import {formatCurrency} from '@/utils/format-currency';
 
+import {useUpdateBankTransactionCategory} from '../api/use-update-bank-transaction-category';
 import {
   formatBankTransactionCategory,
   formatBankTransactionDate,
   toBankTransactionCategory,
 } from '../utils/formatters';
+import type {CategoryDraft} from './bank-transaction-category-draft';
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {MerchantLogoTile} from './merchant-logo-tile';
 
 type ImpactRow = BankTransactionCategoryImpact['transactions'][number];
 
-type BankTransactionCategoryImpactDialogProps = {
+type BankTransactionCategoryImpactStepProps = {
   /** The transaction being corrected, before the correction is saved. */
-  transaction: Pick<BankTransaction, 'displayDescription' | 'category' | 'merchantLogoUrl'>;
-  category: BankTransactionCategory;
-  impact: BankTransactionCategoryImpact;
-  isPending: boolean;
-  onCancel: () => void;
-  onConfirm: (selectedIds: string[]) => void;
+  transaction: Pick<BankTransaction, 'id' | 'displayDescription' | 'category' | 'merchantLogoUrl'>;
+  draft: CategoryDraft;
+  /** Called once the correction is saved, or when it is cancelled. */
+  onDone: () => void;
 };
 
 // Each row's checkbox and disclosure draw their own focus outline, so the row only takes the hover wash.
@@ -165,7 +157,7 @@ function SwapGroup({
       <div
         className={cn(
           // On phones the count sits under the swap, so the swap keeps the row's full width.
-          'grid min-h-15 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]',
+          'grid min-h-15 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 px-3 py-2 @sm:grid-cols-[auto_minmax(0,1fr)_auto]',
           ROW_INTERACTION,
         )}
       >
@@ -182,7 +174,7 @@ function SwapGroup({
           <Swap from={from} to={to} />
         </label>
         <TextAction
-          className='text-muted-foreground hover:text-foreground max-sm:col-start-2 max-sm:-ml-2 sm:-mr-2'
+          className='text-muted-foreground hover:text-foreground @max-sm:col-start-2 @max-sm:-ml-2 @sm:-mr-2'
           aria-expanded={open}
           aria-label={`${rows.length} ${fromLabel} ${noun(rows.length)}`}
           onClick={() => setOpen((value) => !value)}
@@ -247,14 +239,41 @@ function SwapGroup({
   );
 }
 
-export function BankTransactionCategoryImpactDialog({
+/**
+ * "Update other transactions": the step a category correction takes when other payments from the same payee could
+ * follow it. It fills the transaction's details panel (the rail, or the phone sheet) until it is saved or cancelled;
+ * Escape cancels it without closing the panel.
+ */
+export function BankTransactionCategoryImpactStep({
   transaction,
-  category,
-  impact,
-  isPending,
-  onCancel,
-  onConfirm,
-}: BankTransactionCategoryImpactDialogProps) {
+  draft: {category, impact},
+  onDone,
+}: BankTransactionCategoryImpactStepProps) {
+  const {updateBankTransactionCategory, isPending} = useUpdateBankTransactionCategory();
+  const titleId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const onConfirm = async (applyToTransactionIds: string[]) => {
+    try {
+      await updateBankTransactionCategory({id: transaction.id, category, applyToTransactionIds});
+      onDone();
+    } catch {
+      // The mutation toast reports the error; keep the step and its selection so the owner can retry.
+    }
+  };
+  const onCancel = onDone;
+  useEffect(() => headingRef.current?.focus({preventScroll: true}), []);
+  // Captured on the window, ahead of the sheet's own Escape, so Escape leaves this step and keeps the panel open; while
+  // the save runs it does neither.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      event.preventDefault();
+      if (!isPending) onCancel();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isPending, onCancel]);
   // Held from opening: the saved transaction reaches the cache before the dialog closes.
   const [from] = useState(transaction.category);
   const rows = impact.transactions;
@@ -291,97 +310,92 @@ export function BankTransactionCategoryImpactDialog({
   const scope = capped ? 'newest' : 'all';
 
   return (
-    <ResponsiveDialog open onOpenChange={(open) => !open && !isPending && onCancel()}>
-      <ResponsiveDialogContent
-        data-testid='category-impact-dialog'
-        className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 md:max-w-xl'
+    <section
+      aria-labelledby={titleId}
+      data-testid='category-impact'
+      className='flex min-h-0 flex-1 flex-col'
+    >
+      {/* Header and list scroll as one, so a long name or a short screen never squeezes the list out. */}
+      <ScrollArea
+        type='auto'
+        data-testid='category-impact-body'
+        className='grid min-h-0 grid-rows-[minmax(0,1fr)] [&_[data-radix-scroll-area-viewport]>div]:block! [&>[data-radix-scroll-area-viewport]]:min-h-0 [&>[data-radix-scroll-area-viewport]]:overscroll-contain'
       >
-        {/* Header and list scroll as one, so a long name or a short screen never squeezes the list out. */}
-        <ScrollArea
-          type='auto'
-          data-testid='category-impact-body'
-          className='grid min-h-0 grid-rows-[minmax(0,1fr)] [&_[data-radix-scroll-area-viewport]>div]:block! [&>[data-radix-scroll-area-viewport]]:min-h-0 [&>[data-radix-scroll-area-viewport]]:overscroll-contain'
-        >
-          <ResponsiveDialogHeader className='border-b p-5 text-left md:pr-12'>
-            <ResponsiveDialogTitle className='wrap-anywhere'>
-              {recheck
-                ? `Let AI re-check ${others} other ${sameName ? `${name} ` : ''}${noun(shown)}?`
-                : `Move other ${name} ${noun(2)} to ${target} too?`}
-            </ResponsiveDialogTitle>
-            <ResponsiveDialogDescription className='flex flex-wrap items-center gap-x-2 gap-y-1 pt-2'>
-              <span>This {noun(1)} moves</span>
-              <Swap from={from} to={category} />
-            </ResponsiveDialogDescription>
-          </ResponsiveDialogHeader>
-          <div className='p-5'>
-            <p className='mb-3 text-body-small wrap-anywhere text-muted-foreground'>
-              {recheck
-                ? 'Each can end up in a different category.'
-                : `${others.charAt(0).toUpperCase()}${others.slice(1)} other ${sameName ? `${name} ` : ''}${noun(shown)} can follow:`}
+        <header className='grid gap-2 border-b p-5'>
+          <h2
+            id={titleId}
+            ref={headingRef}
+            tabIndex={-1}
+            className='text-section-title wrap-anywhere focus-visible:outline-none'
+          >
+            {recheck
+              ? `Let AI re-check ${others} other ${sameName ? `${name} ` : ''}${noun(shown)}?`
+              : `Move other ${name} ${noun(2)} to ${target} too?`}
+          </h2>
+          <p className='flex flex-wrap items-center gap-x-2 gap-y-1 text-body-small text-muted-foreground'>
+            <span>This {noun(1)} moves</span>
+            <Swap from={from} to={category} />
+          </p>
+        </header>
+        <div className='@container p-5'>
+          <p className='mb-3 text-body-small wrap-anywhere text-muted-foreground'>
+            {recheck
+              ? 'Each can end up in a different category.'
+              : `${others.charAt(0).toUpperCase()}${others.slice(1)} other ${sameName ? `${name} ` : ''}${noun(shown)} can follow:`}
+          </p>
+          <fieldset disabled={isPending} className='min-w-0'>
+            <legend className='sr-only'>Other {noun(2)} to change</legend>
+            <ul className='space-y-2'>
+              {groups.map(([from, groupRows]) => (
+                <SwapGroup
+                  key={from ?? 'none'}
+                  from={from}
+                  to={recheck ? null : applied}
+                  rows={groupRows}
+                  selected={selected}
+                  noun={noun}
+                  logoUrl={transaction.merchantLogoUrl}
+                  onToggle={toggle}
+                />
+              ))}
+            </ul>
+          </fieldset>
+          {capped && (
+            <p className='mt-3 text-body-small text-muted-foreground'>
+              The {impact.total - shown} older {noun(impact.total - shown)} stay as they are.
             </p>
-            <fieldset disabled={isPending} className='min-w-0'>
-              <legend className='sr-only'>Other {noun(2)} to change</legend>
-              <ul className='space-y-2'>
-                {groups.map(([from, groupRows]) => (
-                  <SwapGroup
-                    key={from ?? 'none'}
-                    from={from}
-                    to={recheck ? null : applied}
-                    rows={groupRows}
-                    selected={selected}
-                    noun={noun}
-                    logoUrl={transaction.merchantLogoUrl}
-                    onToggle={toggle}
-                  />
-                ))}
-              </ul>
-            </fieldset>
-            {capped && (
-              <p className='mt-3 text-body-small text-muted-foreground'>
-                The {impact.total - shown} older {noun(impact.total - shown)} stay as they are.
-              </p>
-            )}
-          </div>
-        </ScrollArea>
-        <ResponsiveDialogFooter className='shrink-0 gap-2 border-t p-5'>
-          <Button
-            disabled={isPending || count === 0}
-            // A long category name wraps on narrow phones instead of being cut off.
-            className='h-auto min-h-10 py-2 text-center whitespace-normal md:order-3'
-            onClick={() => onConfirm(rows.filter(({id}) => selected.has(id)).map(({id}) => id))}
-          >
-            {isPending ? (
-              <PendingLabel>Saving…</PendingLabel>
-            ) : recheck ? (
-              all ? (
-                `Re-check ${scope} ${count}`
-              ) : (
-                `Re-check ${count}`
-              )
-            ) : all ? (
-              `Move ${scope} ${count} to ${target}`
+          )}
+        </div>
+      </ScrollArea>
+      {/* Stacked: the rail and the sheet are narrow, so the primary action comes first and takes the width. */}
+      <footer className='grid shrink-0 gap-2 border-t p-5'>
+        <Button
+          disabled={isPending || count === 0}
+          // A long category name wraps on narrow phones instead of being cut off.
+          className='h-auto min-h-10 py-2 text-center whitespace-normal'
+          onClick={() => void onConfirm(rows.filter(({id}) => selected.has(id)).map(({id}) => id))}
+        >
+          {isPending ? (
+            <PendingLabel>Saving…</PendingLabel>
+          ) : recheck ? (
+            all ? (
+              `Re-check ${scope} ${count}`
             ) : (
-              `Move ${count} to ${target}`
-            )}
-          </Button>
-          <Button
-            variant='outline'
-            disabled={isPending}
-            className='md:order-2'
-            onClick={() => onConfirm([])}
-          >
-            Only this one
-          </Button>
-          <Button
-            variant='ghost'
-            disabled={isPending}
-            className='md:order-1 md:mr-auto'
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-        </ResponsiveDialogFooter>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
+              `Re-check ${count}`
+            )
+          ) : all ? (
+            `Move ${scope} ${count} to ${target}`
+          ) : (
+            `Move ${count} to ${target}`
+          )}
+        </Button>
+        <Button variant='outline' disabled={isPending} onClick={() => void onConfirm([])}>
+          Only this one
+        </Button>
+        <Button variant='ghost' disabled={isPending} onClick={onCancel}>
+          Cancel
+        </Button>
+      </footer>
+    </section>
   );
 }
