@@ -58,8 +58,10 @@ export class AddOwnTransferRecognition20261001120000 implements MigrationInterfa
 		const owners = (await queryRunner.query(`SELECT DISTINCT "accountId" FROM "bank_connections"`)) as Array<{
 			accountId: string;
 		}>;
+		// An upgrade from before this migration runs it before the bank identity column exists.
+		const bankIdentityColumn = await queryRunner.hasColumn('bank_accounts', 'bankIdentity');
 		for (const {accountId} of owners) {
-			await recomputeOwnTransfers(queryRunner, accountId);
+			await recomputeOwnTransfers(queryRunner, accountId, undefined, {bankIdentityColumn});
 		}
 	}
 

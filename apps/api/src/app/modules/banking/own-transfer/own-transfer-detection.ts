@@ -8,6 +8,7 @@ export type {OwnTransferEvidence, OwnTransferOverride};
 export const OWN_TRANSFER_EVIDENCE = {
 	IBAN: 'IBAN',
 	NAME: 'NAME',
+	DESCRIPTION: 'DESCRIPTION',
 	MANUAL: 'MANUAL',
 } as const satisfies {[E in OwnTransferEvidence]: E};
 
@@ -25,6 +26,8 @@ export type OwnTransferAccount = {
 	iban: string | null;
 	/** Account holder name as reported by the bank. */
 	holderName: string | null;
+	/** The accounts one bank reports together (`bankGroupOf`); null when the account records no bank. */
+	bankGroup: string | null;
 };
 
 export type OwnTransferTransaction = {
@@ -57,6 +60,8 @@ type Leg = {
 	sign: -1 | 1;
 	ibanTargets: Set<string>;
 	evidence: OwnTransferEvidence | null;
+	/** The bank group and normalized description that let a booked leg pair without evidence of its own. */
+	descriptionKey: string | null;
 };
 
 type PairCandidate = {gap: number; firstDay: number; low: Leg; high: Leg};
@@ -88,8 +93,10 @@ const DAY_MS = 86_400_000;
  * A leg has evidence when its counterparty IBAN is another owned account in the same currency, when its
  * counterparty name is the account holder's name (never for card payments), or when the owner marked it.
  * Legs pair across accounts on the exact opposite amount in the same currency within the date window; the
- * second leg needs its own evidence unless the first leg's IBAN points at its account. A pending leg takes part only
- * with evidence of its own; once it books, the booked row is recomputed like any other.
+ * second leg needs its own evidence unless the first leg's IBAN points at its account. Two booked legs without that
+ * pair as well when one bank reports both accounts, on the same day, with the same description (case and spacing
+ * aside), unless one is a card payment. A pending leg takes part only with evidence of its own; once it books, the booked row is recomputed like
+ * any other.
  */
 export function detectOwnTransfers({
 	accounts,
@@ -134,6 +141,7 @@ export function detectOwnTransfers({
 			sign: amount?.sign ?? 1,
 			ibanTargets,
 			evidence,
+			descriptionKey: describeLeg(transaction, account),
 		});
 	}
 
@@ -147,7 +155,7 @@ export function detectOwnTransfers({
 
 	const candidates: PairCandidate[] = [];
 	for (const leg of legs) {
-		if (!leg.evidence || !leg.amountKey || Number.isNaN(leg.day)) continue;
+		if (!leg.amountKey || Number.isNaN(leg.day)) continue;
 		for (const other of legsByAmount.get(leg.amountKey) ?? []) {
 			if (other.sign === leg.sign) continue;
 			if (other.transaction.bankAccountId === leg.transaction.bankAccountId) continue;
@@ -155,7 +163,7 @@ export function detectOwnTransfers({
 			if (gap > OWN_TRANSFER_PAIR_WINDOW_DAYS) continue;
 			if (leg.ibanTargets.size > 0 && !leg.ibanTargets.has(other.transaction.bankAccountId)) continue;
 			if (other.ibanTargets.size > 0 && !other.ibanTargets.has(leg.transaction.bankAccountId)) continue;
-			if (!other.evidence && !leg.ibanTargets.has(other.transaction.bankAccountId)) continue;
+			if (!provesPair(leg, other, gap)) continue;
 
 			const [low, high] = leg.transaction.id < other.transaction.id ? [leg, other] : [other, leg];
 			candidates.push({gap, firstDay: Math.min(leg.day, other.day), low, high});
@@ -233,6 +241,30 @@ function getEvidence(
 	return transaction.override === OWN_TRANSFER_OVERRIDES.MARKED ? OWN_TRANSFER_EVIDENCE.MANUAL : null;
 }
 
+/** Whether two opposite legs make a transfer: both carry evidence, an IBAN names the other, or the description does. */
+function provesPair(first: Leg, second: Leg, gap: number): boolean {
+	return (
+		(first.evidence !== null && second.evidence !== null) ||
+		first.ibanTargets.has(second.transaction.bankAccountId) ||
+		second.ibanTargets.has(first.transaction.bankAccountId) ||
+		sharesDescription(first, second, gap)
+	);
+}
+
+function sharesDescription(first: Leg, second: Leg, gap: number): boolean {
+	return gap === 0 && first.descriptionKey !== null && first.descriptionKey === second.descriptionKey;
+}
+
+/**
+ * A leg's bank group and description, compared without case or extra whitespace; null when either is missing, and for
+ * card payments, whose description names the shop (a purchase and a refund to another account would match).
+ */
+function describeLeg(transaction: OwnTransferTransaction, account: OwnTransferAccount): string | null {
+	if (account.bankGroup === null || transaction.transactionType === BANK_TRANSACTION_TYPES.CARD_PAYMENT) return null;
+	const description = transaction.description?.trim().replace(/\s+/g, ' ').toUpperCase();
+	return description ? JSON.stringify([account.bankGroup, description]) : null;
+}
+
 function getPairEvidence(first: Leg, second: Leg): OwnTransferEvidence {
 	if (
 		first.ibanTargets.has(second.transaction.bankAccountId) ||
@@ -243,7 +275,9 @@ function getPairEvidence(first: Leg, second: Leg): OwnTransferEvidence {
 	if (first.evidence === OWN_TRANSFER_EVIDENCE.MANUAL || second.evidence === OWN_TRANSFER_EVIDENCE.MANUAL) {
 		return OWN_TRANSFER_EVIDENCE.MANUAL;
 	}
-	return OWN_TRANSFER_EVIDENCE.NAME;
+	return first.evidence !== null && second.evidence !== null
+		? OWN_TRANSFER_EVIDENCE.NAME
+		: OWN_TRANSFER_EVIDENCE.DESCRIPTION;
 }
 
 /** Whether a name is one of the account holder names, compared the way name evidence compares them. */

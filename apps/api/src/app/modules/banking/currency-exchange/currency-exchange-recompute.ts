@@ -1,3 +1,4 @@
+import {bankGroupOf} from '../bank-group';
 import {
 	BANK_TRANSACTION_FINANCIAL_EVENT_RULE_VERSION,
 	BANK_TRANSACTION_FINANCIAL_EVENT_SOURCES,
@@ -8,10 +9,8 @@ import {BATCH_WRITE_CHUNK_SIZE, buildPostgresValuesList, chunkArray} from '../ba
 import {categoryResetSql} from '../categorization/category-fields';
 import {compareIds} from '../own-transfer/own-transfer-detection';
 import type {OwnTransferSqlExecutor} from '../own-transfer/own-transfer-recompute';
-import {BANK_CONNECTION_PROVIDERS} from '../services/banking-sync.constants';
 import {
 	CurrencyExchangeCandidate,
-	CurrencyExchangeGroup,
 	CurrencyExchangeLeg,
 	confirmCurrencyExchanges,
 	pairCurrencyExchanges,
@@ -52,15 +51,6 @@ const CURRENCY_EXCHANGE = BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHAN
 const OWNER_ACCOUNTS_SQL = `SELECT account."id" FROM "bank_accounts" account
 	JOIN "bank_connections" connection ON connection."id" = account."bankConnectionId"
 	WHERE connection."accountId" = $1`;
-
-/**
- * A bank connection's legs form one group. The imported-files connection holds the files of every bank, so there legs
- * group by the bank their account records, and a leg whose account records none joins no group.
- */
-function exchangeGroup({connectionId, provider, bankIdentity}: LegRow): CurrencyExchangeGroup {
-	if (provider !== BANK_CONNECTION_PROVIDERS.FILE) return connectionId;
-	return bankIdentity === null ? null : `${connectionId}:${bankIdentity}`;
-}
 
 /**
  * Recomputes which of one owner's rows are currency exchanges, and their pairs. Must run inside a transaction: the
@@ -113,7 +103,7 @@ export async function recomputeCurrencyExchanges(
 			bankTransactionSubCode: row.bankTransactionSubCode,
 			bankTransactionDescription: row.bankTransactionDescription,
 		});
-		return marker ? [{...row, exchangeGroup: exchangeGroup(row), ...marker}] : [];
+		return marker ? [{...row, exchangeGroup: bankGroupOf(row), ...marker}] : [];
 	});
 	const confirmed = confirmCurrencyExchanges(candidates);
 	const pairs = pairCurrencyExchanges(

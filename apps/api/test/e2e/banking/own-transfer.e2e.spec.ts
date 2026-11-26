@@ -247,5 +247,56 @@ describe('Own-transfer recompute', () => {
 			accounts.map(({id}) => ({bankAccountId: id, ownTransferEvidence: 'NAME', description: 'Example Shop'})),
 		);
 		expect(nameOnly).toBeGreaterThan(2);
+		// Same-day legs sharing a description paired by it, so the scoped reads cover that rule too.
+		const byDescription = await fixtures.transactions.countBy(
+			accounts.map(({id}) => ({bankAccountId: id, ownTransferEvidence: 'DESCRIPTION'})),
+		);
+		expect(byDescription).toBeGreaterThan(2);
 	}, 30_000);
+
+	it('pairs same-day legs by their shared description within one bank connection and within one imported bank', async () => {
+		const {owner, connection, bankAccount} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+		const [pocket] = await fixtures.createBankAccounts(connection, [{iban: null, name: HOLDER}]);
+		const files = await fixtures.createConnection(owner, {
+			provider: 'file',
+			aspspName: 'Imported files',
+			aspspCountry: 'ZZ',
+		});
+		const [fileMain, fileSavings, fileOtherBank] = await fixtures.createBankAccounts(files, [
+			{currency: 'EUR', bankIdentity: 'name:example bank'},
+			{currency: 'EUR', bankIdentity: 'name:example bank'},
+			{currency: 'EUR', bankIdentity: 'name:sample bank'},
+		]);
+		const leg = (account: {id: string}, amount: string, description: string) =>
+			fixtures.createTransaction(account, {
+				amount,
+				currency: 'EUR',
+				creditDebitIndicator: amount.startsWith('-') ? 'DBIT' : 'CRDT',
+				bookingDate: '2026-02-03',
+				transactionStatus: 'BOOK',
+				transactionType: 'TRANSFER',
+				description,
+			});
+		const connectionOut = await leg(bankAccount, '-100.00', 'To EUR Pocket');
+		const connectionIn = await leg(pocket, '100.00', 'To EUR Pocket');
+		const fileOut = await leg(fileMain, '-30.00', 'Transfer to savings');
+		const fileIn = await leg(fileSavings, '30.00', 'TRANSFER TO SAVINGS');
+		const otherBankOut = await leg(fileMain, '-40.00', 'Transfer to savings');
+		const otherBankIn = await leg(fileOtherBank, '40.00', 'Transfer to savings');
+
+		await recompute(owner.id);
+
+		const stored = await fixtures.transactions.find({
+			select: {id: true, ownTransferEvidence: true, ownTransferCounterpartId: true},
+			where: [connectionOut, connectionIn, fileOut, fileIn, otherBankOut, otherBankIn].map(({id}) => ({id})),
+		});
+		expect(Object.fromEntries(stored.map(({id, ...own}) => [id, own]))).toEqual({
+			[connectionOut.id]: {ownTransferEvidence: 'DESCRIPTION', ownTransferCounterpartId: connectionIn.id},
+			[connectionIn.id]: {ownTransferEvidence: 'DESCRIPTION', ownTransferCounterpartId: connectionOut.id},
+			[fileOut.id]: {ownTransferEvidence: 'DESCRIPTION', ownTransferCounterpartId: fileIn.id},
+			[fileIn.id]: {ownTransferEvidence: 'DESCRIPTION', ownTransferCounterpartId: fileOut.id},
+			[otherBankOut.id]: {ownTransferEvidence: null, ownTransferCounterpartId: null},
+			[otherBankIn.id]: {ownTransferEvidence: null, ownTransferCounterpartId: null},
+		});
+	});
 });
