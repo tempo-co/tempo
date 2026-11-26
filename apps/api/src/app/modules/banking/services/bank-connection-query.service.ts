@@ -19,7 +19,11 @@ import {BankSyncRun} from '../bank-sync-run.entity';
 import {selectPreferredBalance} from '../banking.utils';
 import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {convertEcbAmountSql, newestEcbRatePairSql} from './bank-transaction-amount-conversion.utils';
-import {BANK_CONNECTION_PROVIDERS, BANK_SYNC_STATUSES} from './banking-sync.constants';
+import {
+	BANK_CONNECTION_PROVIDERS,
+	BANK_SYNC_STATUSES,
+	UNFINISHED_AUTHORIZATION_STATUSES,
+} from './banking-sync.constants';
 import {FileAccountBalanceService} from './file-account-balance.service';
 
 type ConvertedBalance = {amount: string; rateDate: string | null};
@@ -44,6 +48,8 @@ export class BankConnectionQueryService {
 		const connections = await this.bankConnectionRepository
 			.createQueryBuilder('connection')
 			.where('connection.accountId = :accountId', {accountId})
+			// An attempt that never finished authorizing holds no accounts: a finished one merges into the bank's connection.
+			.andWhere('connection.status NOT IN (:...unfinished)', {unfinished: UNFINISHED_AUTHORIZATION_STATUSES})
 			.orderBy('connection.createdAt', 'DESC')
 			.getMany();
 

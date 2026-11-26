@@ -22,6 +22,7 @@ import {
 	BANK_CONNECTION_PROVIDERS,
 	BANK_CONNECTION_STATUSES,
 	DESTRUCTIVE_CONNECTION_STATUSES,
+	UNFINISHED_AUTHORIZATION_STATUSES,
 } from './banking-sync.constants';
 import {DerivedDataRefreshService} from './derived-data-refresh.service';
 import {FileAccountBalanceService} from './file-account-balance.service';
@@ -30,9 +31,7 @@ import {findOwnedConnection} from './find-owned-connection';
 import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 const REMOVABLE_CONNECTION_STATUSES = [
-	BANK_CONNECTION_STATUSES.PENDING_AUTHORIZATION,
-	BANK_CONNECTION_STATUSES.CANCELLED,
-	BANK_CONNECTION_STATUSES.FAILED,
+	...UNFINISHED_AUTHORIZATION_STATUSES,
 	...DESTRUCTIVE_CONNECTION_STATUSES,
 ] as const;
 

@@ -1694,7 +1694,7 @@ describe('BankConnectionController', () => {
 		getAccountTransactions.mockReset();
 	});
 
-	it('keeps the live connection untouched when re-authorization is cancelled', async () => {
+	it('keeps the live connection untouched and lists only it when re-authorization is cancelled, fails or is left open', async () => {
 		await bankConnectionRepository
 			.createQueryBuilder()
 			.delete()
@@ -1705,10 +1705,20 @@ describe('BankConnectionController', () => {
 
 		const cancelledState = await authorize();
 		await callback({state: cancelledState, error: 'access_denied'}, 'cancelled');
+		const failedState = await authorize();
+		await callback({state: failedState, error: 'server_error'}, 'error');
+		await authorize();
 
 		const liveConnection = await bankConnectionRepository.findOneBy({id: connection.id});
 		expect(liveConnection).toMatchObject({status: 'AUTHORIZED', providerSessionId: encryptedSessionId});
 		expect(await bankAccountRepository.count({where: {bankConnection: {id: connection.id}}})).toBe(1);
+		const attempts = await bankConnectionRepository.find({
+			where: {account: {id: account.id}, status: In(['CANCELLED', 'FAILED', 'PENDING_AUTHORIZATION'])},
+		});
+		expect(attempts.map(({status}) => status).sort()).toEqual(['CANCELLED', 'FAILED', 'PENDING_AUTHORIZATION']);
+
+		const listed = await verifiedAgent.get('/bank-connections').expect(200);
+		expect(listed.body.map(({id}: {id: string}) => id)).toEqual([connection.id]);
 	});
 
 	it('refreshes an expired connection on re-authorization', async () => {
