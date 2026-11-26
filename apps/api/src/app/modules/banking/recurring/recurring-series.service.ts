@@ -9,6 +9,7 @@ import type {
 	RecurringSeriesDirection,
 	RecurringSeriesList,
 	RecurringSeriesLists,
+	RecurringSeriesThisMonth,
 	RecurringSummary,
 	RecurringThisMonth,
 } from '@tempo/contracts';
@@ -171,25 +172,28 @@ export class RecurringSeriesService {
 		};
 	}
 
-	/** Base-currency cents each series' payments add up to in `asOf`'s calendar month, through `asOf`. */
+	/** Each series' payments in `asOf`'s calendar month through `asOf`, oldest first, in base-currency cents. */
 	private async paidThisMonth(
 		accountId: Account['id'],
 		detected: readonly UndatedRecurringSeries[],
 		asOf: string,
-	): Promise<Map<string, bigint>> {
+	): Promise<Map<string, MonthPayment[]>> {
 		const seriesById = new Map(detected.flatMap((entry) => entry.transactionIds.map((id) => [id, entry.key])));
-		const paid = new Map<string, bigint>();
+		const paid = new Map<string, MonthPayment[]>();
 		if (seriesById.size === 0) return paid;
 		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
 			.select('transaction.id', 'id')
+			.addSelect('"transaction"."bookingDate"::text', 'date')
 			.addSelect('ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents')
 			.andWhere('transaction.id = ANY(:ids)', {ids: [...seriesById.keys()]})
 			.andWhere('transaction.bookingDate BETWEEN :from AND :asOf', {from: `${asOf.slice(0, 7)}-01`, asOf})
-			.andWhere('transaction.amountInBaseCurrency IS NOT NULL')
-			.getRawMany<{id: string; baseAmountCents: string}>();
-		for (const {id, baseAmountCents} of rows) {
+			.orderBy('transaction.bookingDate', 'ASC')
+			.addOrderBy('transaction.id', 'ASC')
+			.getRawMany<{id: string; date: string; baseAmountCents: string | null}>();
+		for (const {id, date, baseAmountCents} of rows) {
 			const key = seriesById.get(id)!;
-			paid.set(key, (paid.get(key) ?? 0n) + BigInt(baseAmountCents));
+			const payment = {date, cents: baseAmountCents === null ? null : BigInt(baseAmountCents)};
+			paid.set(key, [...(paid.get(key) ?? []), payment]);
 		}
 		return paid;
 	}
@@ -513,7 +517,7 @@ function listFor(
 	direction: RecurringSeriesDirection,
 	baseCurrency: string | null,
 	asOf: string,
-	{paid, logos}: {paid: ReadonlyMap<string, bigint>; logos: ReadonlyMap<string, string>},
+	{paid, logos}: {paid: ReadonlyMap<string, MonthPayment[]>; logos: ReadonlyMap<string, string>},
 ): RecurringSeriesList {
 	const series = detected
 		.filter((entry) => entry.direction === direction)
@@ -532,44 +536,62 @@ function listFor(
 		);
 
 	// Every detected series counts until the owner hides it.
-	const counted = series.filter(({entry, hidden}) => !hidden && entry.status === 'ACTIVE');
+	const isCounted = ({entry, hidden}: (typeof series)[number]) => !hidden && entry.status === 'ACTIVE';
+	const counted = series.filter(isCounted);
 	const monthlyTotal = counted.reduce((sum, {entry}) => sum + (entry.monthlyEquivalent ?? 0n), 0n);
+	const months = new Map(counted.map(({entry}) => [entry.key, seriesMonth(entry, paid.get(entry.key) ?? [], asOf)]));
 
 	return {
 		series: series.map(({entry, hidden, continuation}) =>
-			toResponse(entry, hidden, continuation, logos.get(entry.key) ?? null),
+			toResponse(entry, hidden, continuation, logos.get(entry.key) ?? null, months.get(entry.key) ?? null),
 		),
 		monthlyTotal: formatCents(monthlyTotal),
 		unconvertedCount: counted.filter(({entry}) => entry.monthlyEquivalent === null).length,
-		thisMonth: thisMonth(
-			counted.map(({entry}) => entry),
-			paid,
-			asOf,
-		),
+		thisMonth: monthTotals(asOf, [...months.values()]),
 		baseCurrency,
 	};
 }
 
+/** A payment in base-currency cents; null until converted, or when a series has no usual base amount yet. */
+type MonthPayment = {date: string; cents: bigint | null};
+type SeriesMonth = {paid: MonthPayment[]; due: (MonthPayment & {late: boolean})[]};
+
 /**
- * The counted series' payments so far in `asOf`'s calendar month, and their usual amount for each payment still
- * expected before it ends, late ones included. Converted payments count as paid; a series without a usual base amount
- * adds nothing still due, as it adds nothing to the total.
+ * A counted series' payments so far in `asOf`'s calendar month, and its usual amount for each payment still expected
+ * before the month ends, late ones included.
  */
-function thisMonth(
-	counted: readonly DetectedRecurringSeries[],
-	paid: ReadonlyMap<string, bigint>,
-	asOf: string,
-): RecurringThisMonth {
+function seriesMonth(entry: DetectedRecurringSeries, paid: MonthPayment[], asOf: string): SeriesMonth {
 	const month = asOf.slice(0, 7);
 	const monthEnd = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
-	let paidCents = 0n;
-	let remainingCents = 0n;
-	for (const entry of counted) {
-		paidCents += paid.get(entry.key) ?? 0n;
-		if (entry.usualBaseAmount === null) continue;
-		remainingCents += entry.usualBaseAmount * BigInt(expectedDatesThrough(entry, monthEnd).length);
-	}
-	return {month, paid: formatCents(paidCents), remaining: formatCents(remainingCents)};
+	return {
+		paid,
+		due: expectedDatesThrough(entry, monthEnd).map((date) => ({
+			date,
+			cents: entry.usualBaseAmount,
+			late: asOf > date,
+		})),
+	};
+}
+
+/**
+ * The counted series' months added up. Converted payments count as paid; a series without a usual base amount adds
+ * nothing still due, as it adds nothing to the total.
+ */
+function monthTotals(asOf: string, months: readonly SeriesMonth[]): RecurringThisMonth {
+	const sum = (payments: readonly MonthPayment[]) => payments.reduce((total, {cents}) => total + (cents ?? 0n), 0n);
+	return {
+		month: asOf.slice(0, 7),
+		paid: formatCents(months.reduce((total, {paid}) => total + sum(paid), 0n)),
+		remaining: formatCents(months.reduce((total, {due}) => total + sum(due), 0n)),
+	};
+}
+
+function toSeriesThisMonth({paid, due}: SeriesMonth): RecurringSeriesThisMonth {
+	const amount = (cents: bigint | null) => (cents === null ? null : formatCents(cents));
+	return {
+		paid: paid.map(({date, cents}) => ({date, amount: amount(cents)})),
+		due: due.map(({date, cents, late}) => ({date, amount: amount(cents), late})),
+	};
 }
 
 /**
@@ -624,6 +646,7 @@ function toResponse(
 	hidden: boolean,
 	continuation: RecurringContinuation | null,
 	merchantLogoUrl: string | null,
+	month: SeriesMonth | null,
 ): RecurringSeries {
 	return {
 		key: entry.key,
@@ -649,6 +672,7 @@ function toResponse(
 		continuation,
 		category: entry.category,
 		merchantLogoUrl,
+		thisMonth: month && toSeriesThisMonth(month),
 	};
 }
 

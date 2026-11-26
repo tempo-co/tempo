@@ -1191,7 +1191,7 @@ describe('RecurringSeries', () => {
 		}
 	});
 
-	it('counts this month’s paid and still-due bills, including one late from last month', async () => {
+	it('gives each counted series this month’s payments and what is still due, late ones first, and totals them', async () => {
 		const fresh = await createBankingOwner(app, {baseCurrency: 'EUR'});
 		const {connection, bankAccount: bank} = fresh;
 		try {
@@ -1211,9 +1211,21 @@ describe('RecurringSeries', () => {
 						...(index === 0 ? {amountInBaseCurrency: null} : {}),
 					}),
 				),
+				// Paid in October, coming up on 20 November.
+				...MONTHS.slice(1).map((month) =>
+					bookedRow(`${month}-20`, '-40.00', {
+						counterpartyName: 'Example Internet',
+						description: 'Example Internet',
+					}),
+				),
 			]);
-			const {expenses} = (await fresh.agent.get('/recurring-series').query({asOf: '2026-11-01'}).expect(200))
-				.body as {expenses: ListBody};
+			const read = async () =>
+				(
+					(await fresh.agent.get('/recurring-series').query({asOf: '2026-11-01'}).expect(200)).body as {
+						expenses: ListBody & {series: (SeriesBody & {thisMonth: unknown})[]};
+					}
+				).expenses;
+			const expenses = await read();
 
 			expect(byName(expenses.series, 'Example Water')).toEqual([
 				expect.objectContaining({status: 'ACTIVE', flags: ['LATE'], nextExpectedDate: '2026-10-28'}),
@@ -1222,8 +1234,31 @@ describe('RecurringSeries', () => {
 				expect.objectContaining({status: 'ACTIVE', monthlyEquivalent: null}),
 			]);
 			// The club's converted November payment counts as paid; its usual amount is unknown, so nothing is
-			// counted as still due for it. Both of the water bill's payments are still due.
-			expect(expenses.thisMonth).toEqual({month: '2026-11', paid: '20.00', remaining: '60.00'});
+			// counted as still due for it. Both of the water bill's payments are still due, the late one first.
+			expect(byName(expenses.series, 'Example Water')[0].thisMonth).toEqual({
+				paid: [],
+				due: [
+					{date: '2026-10-28', amount: '30.00', late: true},
+					{date: '2026-11-28', amount: '30.00', late: false},
+				],
+			});
+			expect(byName(expenses.series, 'Example Club')[0].thisMonth).toEqual({
+				paid: [{date: '2026-11-01', amount: '20.00'}],
+				due: [],
+			});
+			expect(byName(expenses.series, 'Example Internet')[0].thisMonth).toEqual({
+				paid: [],
+				due: [{date: '2026-11-20', amount: '40.00', late: false}],
+			});
+			expect(expenses.thisMonth).toEqual({month: '2026-11', paid: '20.00', remaining: '100.00'});
+
+			// A hidden series is left out of the month, as it is of the totals.
+			await hide(fresh.agent, byName(expenses.series, 'Example Internet')[0].key).expect(204);
+			const afterHide = await read();
+			expect(byName(afterHide.series, 'Example Internet')).toEqual([
+				expect.objectContaining({hidden: true, thisMonth: null}),
+			]);
+			expect(afterHide.thisMonth).toEqual({month: '2026-11', paid: '20.00', remaining: '60.00'});
 		} finally {
 			await fixtures.connections.delete(connection.id);
 		}
