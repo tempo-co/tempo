@@ -288,7 +288,7 @@ function YearValue({
           classes,
           'hover:outline-1 hover:outline-foreground focus-visible:outline-2 focus-visible:outline-ring',
         )}
-        style={{background: item.alpha ? `hsl(var(--primary) / ${item.alpha})` : undefined}}
+        style={{background: item.alpha ? `color-mix(in srgb, var(--color-chart-heat) ${item.alpha * 100}%, transparent)` : undefined}}
       >
         {lead}
         {amount}

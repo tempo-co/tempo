@@ -2,9 +2,9 @@ import {CreditCard, Files, Landmark, PiggyBank, Wallet} from 'lucide-react';
 
 import {cn} from '@/utils/cn';
 
-/** The 36px round Clay tile that starts an account row, as it starts a transaction row. */
+/** The 36px round leading tile that starts an account row, as it starts a transaction row. */
 export const ACCOUNT_TILE =
-  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink';
+  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground';
 
 /** The glyph of an account's type (ISO 20022 cash account type): savings, card, current, or any other. */
 export function AccountTypeIcon({type, className}: {type: string | null; className?: string}) {
@@ -16,7 +16,7 @@ export function AccountTypeIcon({type, className}: {type: string | null; classNa
   return <Landmark {...props} />;
 }
 
-/** Imported files in place of a bank logo: the files glyph in the Clay tile, square like the logo's plate. */
+/** Imported files in place of a bank logo: the files glyph in the leading tile, square like the logo's plate. */
 export function ImportedFilesTile({className, testId}: {className?: string; testId?: string}) {
   return (
     <span

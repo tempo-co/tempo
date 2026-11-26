@@ -328,7 +328,7 @@ function PaymentChart({
       <h4 className='text-xs font-medium text-muted-foreground'>Last {points.length} payments</h4>
       <ChartContainer
         className='aspect-auto h-32 w-full'
-        config={{amount: {color: 'hsl(var(--chart-primary))'}}}
+        config={{amount: {color: 'var(--color-chart-primary)'}}}
         role='img'
         aria-label={`${points.length} payments from ${formatBankTransactionCompactDate(first.date)} to ${formatBankTransactionCompactDate(last.date)}, between ${formatMoney(Math.min(...points.map((p) => p.amount)), series.currency)} and ${formatMoney(Math.max(...points.map((p) => p.amount)), series.currency)}.`}
       >
@@ -348,7 +348,7 @@ function PaymentChart({
             }
           />
           <ChartTooltip
-            cursor={{fill: 'hsl(var(--foreground))', fillOpacity: 0.05}}
+            cursor={{fill: 'var(--color-foreground)', fillOpacity: 0.05}}
             content={({active, payload}) => {
               const point = payload?.[0]?.payload as (typeof points)[number] | undefined;
               if (!active || !point) return null;
@@ -368,7 +368,7 @@ function PaymentChart({
             {points.map((point, index) => (
               <Cell
                 key={`${point.date}-${index}`}
-                fill={index === unusualIndex ? 'hsl(var(--warning))' : 'var(--color-amount)'}
+                fill={index === unusualIndex ? 'var(--color-warning)' : 'var(--color-amount)'}
               />
             ))}
           </Bar>

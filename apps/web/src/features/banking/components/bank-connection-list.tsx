@@ -390,7 +390,7 @@ function connectionName(connection: BankConnection) {
   return isFileConnection(connection) ? 'Imported files' : connection.aspspName;
 }
 
-/** The card's leading tile: the bank's logo, or for imported files the files glyph in the Clay tile. */
+/** The card's leading tile: the bank's logo, or for imported files the files glyph in the leading tile. */
 function ConnectionTile({
   connection,
   artwork,
@@ -400,7 +400,7 @@ function ConnectionTile({
   artwork?: BankArtwork;
   testId?: string;
 }) {
-  // The Clay tile in the bank logo's square, so both kinds of card start alike.
+  // The leading tile in the bank logo's square, so both kinds of card start alike.
   if (isFileConnection(connection)) return <ImportedFilesTile testId={testId} />;
   return (
     <BankLogo

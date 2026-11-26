@@ -43,7 +43,12 @@ test.describe('Theme Switcher', () => {
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('light');
   });
 
-  test('should switch to dark theme', async ({appearanceSettingsPage}) => {
+  test('should switch to dark theme, toasts included, over a light system theme', async ({
+    page,
+    appearanceSettingsPage,
+    accountSettingsPage,
+  }) => {
+    await page.emulateMedia({colorScheme: 'light'});
     // first switch to light to ensure a state change will occur
     await appearanceSettingsPage.lightThemeButton.click();
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/light/);
@@ -52,6 +57,20 @@ test.describe('Theme Switcher', () => {
     await expect(appearanceSettingsPage.htmlElement).toHaveClass(/dark/);
     expect(await appearanceSettingsPage.getStoredTheme()).toBe('dark');
     await expectSelected(appearanceSettingsPage, 'dark');
+    await page.reload();
+    await expect(appearanceSettingsPage.htmlElement).toHaveClass(/dark/);
+    await expectSelected(appearanceSettingsPage, 'dark');
+
+    // A refused save raises a toast without changing the shared account.
+    await page.route('**/accounts/me', (route) =>
+      route.request().method() === 'PATCH'
+        ? route.fulfill({status: 429, json: {retryAfterSeconds: 30}})
+        : route.fallback(),
+    );
+    await accountSettingsPage.navigate();
+    await accountSettingsPage.changeName('Example Name');
+    await expect(page.getByText('Rate limit exceeded', {exact: true})).toBeVisible();
+    await expect(page.locator('[data-sonner-toaster]')).toHaveAttribute('data-sonner-theme', 'dark');
   });
 
   test('should switch to system theme', async ({page, appearanceSettingsPage}) => {

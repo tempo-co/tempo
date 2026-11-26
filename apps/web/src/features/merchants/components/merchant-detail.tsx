@@ -262,14 +262,14 @@ function PeriodsChart({
       <ChartContainer
         className='aspect-auto h-56 w-full'
         config={{
-          spent: {color: 'hsl(var(--chart-primary))'},
-          received: {color: 'hsl(var(--chart-secondary))'},
+          spent: {color: 'var(--color-chart-primary)'},
+          received: {color: 'var(--color-chart-secondary)'},
         }}
         role='img'
         aria-label={`Spending per ${interval}, ${periodLabel(shown[0], interval)} to ${periodLabel(shown[shown.length - 1], interval)}. The table below lists every bar.`}
       >
         <BarChart data={data} margin={{left: 0, right: 12, top: 8, bottom: 0}} barGap={1}>
-          <CartesianGrid vertical={false} stroke='hsl(var(--border))' />
+          <CartesianGrid vertical={false} stroke='var(--color-border)' />
           <XAxis
             dataKey='start'
             tickLine={false}
@@ -289,7 +289,7 @@ function PeriodsChart({
             tickFormatter={(value: number) => axis.format(value)}
           />
           <ChartTooltip
-            cursor={{fill: 'hsl(var(--foreground))', fillOpacity: 0.04}}
+            cursor={{fill: 'var(--color-foreground)', fillOpacity: 0.04}}
             content={({active, label}) => {
               const period = shown.find((item) => item.start === label);
               if (!active || !period) return null;

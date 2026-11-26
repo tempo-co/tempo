@@ -48,7 +48,7 @@ export function StateMessage({
           size === 'page' ? 'size-10 [&_svg]:size-5' : 'size-9 [&_svg]:size-[18px]',
           tone === 'error'
             ? 'border-destructive/30 bg-destructive/10 text-destructive'
-            : 'border-transaction-tile-edge bg-transaction-tile-field text-transaction-tile-ink',
+            : 'border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground',
         )}
       >
         <Icon strokeWidth={2} />
