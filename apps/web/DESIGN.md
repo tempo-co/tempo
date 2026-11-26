@@ -337,7 +337,7 @@ Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate 
 
 ### Overlays
 
-`ResponsiveDialog` is a `Dialog` on desktop (with `side`, a full-height right `Sheet`) and a bottom `Drawer` on phones: `rounded-lg` on the
+`ResponsiveDialog` is a `Dialog` on desktop (`side`: a right `Sheet`) and a bottom `Drawer` on phones: `rounded-lg` on the
 page background, a `text-section-title` title over a muted `text-body-small` description.
 `DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
 radius; items are `text-body` with segment corners, tooltips `text-body-small`.
