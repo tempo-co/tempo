@@ -12,7 +12,7 @@ CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/
 | `install.sh` | Copies the above to the production server; `--check` lists installed files that differ from the checkout |
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
 | `wisp-api-egress.sh` | Egress firewall for the API uid and production's container networks (see Egress firewall) |
-| `wizard.sh`, `table-check.sh` | A new server's setup and the move onto it (see New host); the move's per-table check |
+| `wizard.sh` | A new server's setup and its env file (see New host) |
 | `test-deploy.sh`, `test-sync-pins.sh` | Offline tests of `deploy.sh` and `sync-pins.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or installed file |
 | `test-backup.sh` | Offline tests of `backup.sh`, `restore-drill.sh` and `failure-email.sh`, run by CI's `Ops checks`: stub `docker` and `restic` and use a local fake mail server |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API, web and Caddy |
@@ -93,7 +93,7 @@ Certificates are issued once both names resolve to the host; until then Caddy re
 
 ### New host
 
-`ops/wizard.sh setup` takes a fresh Ubuntu 26.04 LTS server to this baseline, showing each root command for the owner to approve. From the laptop: `gate` checks the move gate, `rehearse` runs the move and puts the server back, `move` is move night. Details: [`docs/new-host.md`](../docs/new-host.md).
+`ops/wizard.sh setup` brings a fresh Ubuntu 26.04 LTS server to this baseline and `ops/wizard.sh env` fills its env file, each root command approved by the owner: [`docs/new-host.md`](../docs/new-host.md).
 
 ### Network boundary
 
@@ -104,6 +104,10 @@ The `proxy` network has a fixed subnet so Caddy gets the static address `10.213.
 ### Container privileges
 
 Every production container runs with `no-new-privileges` and drops all Linux capabilities. The API runs as uid and gid 10001, set by number in the host-owned Compose file so an image cannot switch itself to root. Production uses the root Docker daemon without user namespaces, so a container uid is the same host uid: 10001 belongs to no host account, while the image's own `node` user (1000) would be the production server's admin user, who can use sudo. The API reads the banking key as that uid, so the key file at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` belongs to that admin user and group 10001, mode 0440, which also keeps it readable for uid 1000 during a switch or rollback. A uid change goes into the Compose file and the key's group together. The official PostgreSQL, Redis and Nginx images start as root to fix ownership and switch to their service user, so they keep only `CHOWN`, `SETUID` and `SETGID` (PostgreSQL also `DAC_OVERRIDE` and `FOWNER`). Caddy keeps only `NET_BIND_SERVICE`, which its binary needs to bind ports 80 and 443. Like network changes, these reach running containers only when recreated: after `sudo ops/install.sh production`, recreate PostgreSQL, Redis, API and web, then Caddy. Set the key's group before the API moves to a new uid; it also works for the old one, so a rollback only reinstalls the previous Compose file.
+
+### Read-only database access
+
+`wisp_readonly` reads every `public` table, read-only, 30-second timeout. Dumps omit roles; a rebuilt server recreates it (`docs/backups.md`).
 
 ### Read-only Redis access
 

@@ -35,12 +35,9 @@ The restored data includes production logins, which is why staging is reachable 
 
 ## Database feed
 
-`STAGING_FEED` in `~/.config/tempo-staging/feed.env` (template `feed.env.example`) picks where a refresh takes production data from:
+A refresh takes production data from the production server's nightly owner-only copy (`../README.md`, Staging copy). It fetches the newest over SSH as `STAGING_FEED_SSH` from `~/.config/tempo-staging/feed.env` (template `feed.env.example`; the server's `wisp-staging-feed` account), with the key and pinned host key in `~/.config/tempo-staging/feed-ssh/` (`id_ed25519`, `known_hosts`). It decrypts the copy with the secret key in `~/.config/tempo-staging/feed-gnupg/` into a private work directory under `~/.local/state/tempo-staging/`, deleted when the run ends, and fails unless the restored copy holds exactly one account.
 
-- `server-copy`: the production server's nightly owner-only copy (`../README.md`, Staging copy). The refresh fetches the newest over SSH as `STAGING_FEED_SSH` (the server's `wisp-staging-feed` account), with the key and pinned host key in `~/.config/tempo-staging/feed-ssh/` (`id_ed25519`, `known_hosts`). It decrypts the copy with the secret key in `~/.config/tempo-staging/feed-gnupg/` into a private work directory under `~/.local/state/tempo-staging/`, deleted when the run ends, and fails unless the restored copy holds exactly one account.
-- `local-backups`, also when the file or setting is missing: the newest `tempo-<YYYYMMDD-HHMMSS>.dump` in `~/backups/tempo`.
-
-Setting up `server-copy` on both machines: [`docs/staging-feed.md`](../../docs/staging-feed.md).
+Setting it up on both machines: [`docs/staging-feed.md`](../../docs/staging-feed.md).
 
 ## Tailnet device
 
