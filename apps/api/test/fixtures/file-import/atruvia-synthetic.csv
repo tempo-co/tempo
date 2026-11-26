@@ -1,0 +1,4 @@
+﻿Bezeichnung Auftragskonto;IBAN Auftragskonto;BIC Auftragskonto;Bankname Auftragskonto;Buchungstag;Valutadatum;Name Zahlungsbeteiligter;IBAN Zahlungsbeteiligter;BIC (SWIFT-Code) Zahlungsbeteiligter;Buchungstext;Verwendungszweck;Betrag;Waehrung;Saldo nach Buchung;Bemerkung;Gekennzeichneter Umsatz;Glaeubiger ID;Mandatsreferenz
+Girokonto;DE89370400440532013000;GENODEF1XXX;Example Volksbank eG;06.10.2026;06.10.2026;Example Energy eG;DE02120300000000202051;GENODEF1XXX;Basislastschrift;Abschlag Oktober;-1.060,00;EUR;1.390,00;Strom;;;
+Girokonto;DE89370400440532013000;GENODEF1XXX;Example Volksbank eG;02.10.2026;01.10.2026;Example Employer GmbH;NL91ABNA0417164300;GENODEF1XXX;Überweisungsgutschr.;Gehalt Oktober;2.500,00;EUR;2.450,00;;;;
+Girokonto;DE89370400440532013000;GENODEF1XXX;Example Volksbank eG;01.10.2026;01.10.2026;Example Bakery;;;Kartenzahlung girocard;Example Bakery Examplestadt;-50,00;EUR;-50,00;;;;

@@ -1,0 +1,4 @@
+"Datum","Empfänger","Kontonummer","Transaktionstyp","Verwendungszweck","Kategorie","Betrag (EUR)","Betrag (Fremdwährung)","Fremdwährung","Wechselkurs"
+"2026-10-01","Example Shop","","MasterCard Zahlung","","Lebensmittel","-23.40","","",""
+"2026-10-02","Example Employer GmbH","DE02120300000000202051","Gutschrift","Gehalt Oktober","Einkommen","2500.00","","",""
+"2026-10-05","Example Friend","NL91ABNA0417164300","Überweisung","Pizza","Überweisungen","-12.00","","",""

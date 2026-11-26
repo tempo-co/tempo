@@ -1,0 +1,15 @@
+"Umsatzanzeige Sparda-Bank Example eG"
+
+"Kontoinhaber:";"Example Holder"
+"Kontonummer:";"1234567"
+
+"Umsätze ab";"Enddatum";"Kontonummer";"Saldo";"Währung"
+"01.10.2026";"06.10.2026";"1234567";"1.416,60";"EUR"
+"Weitere Infos";"Keine"
+
+
+"Buchungstag";"Wertstellungstag";"Verwendungszweck";"Umsatz";"Währung"
+"01.10.2026";"01.10.2026";"EXAMPLE SHOP EXAMPLESTADT KARTENZAHLUNG";"-23,40";"EUR";""
+"02.10.2026";"01.10.2026";"GEHALT OKTOBER EXAMPLE EMPLOYER GMBH";"2.500,00";"EUR";""
+"05.10.2026";"05.10.2026";"ABSCHLAG OKTOBER EXAMPLE ENERGY AG";"-1.060,00";"EUR";""
+"* noch nicht ausgeführte Umsätze"

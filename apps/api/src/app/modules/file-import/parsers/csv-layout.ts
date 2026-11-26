@@ -82,6 +82,7 @@ export type CsvByDirection = {moneyIn: number; moneyOut: number};
 export const PENDING_WORDS: ReadonlySet<string> = new Set([
 	'pending',
 	'vorgemerkt',
+	'umsatz vorgemerkt',
 	'offen',
 	'nicht gebucht',
 	'in bearbeitung',

@@ -1,0 +1,4 @@
+Datum;Auftraggeber / Empfänger;Verwendungszweck;Kategorie;IBAN / Kontonummer;Bank;Produkt;Betrag
+01.10.2026;Example Shop;Kartenzahlung Example Shop;Lebensmittel;DE89370400440532013000;Deutsche Bank;Persönliches Konto;-23,40
+02.10.2026;Example Employer GmbH;Gehalt Oktober;Einkommen;DE89370400440532013000;Deutsche Bank;Persönliches Konto;2.500,00
+05.10.2026;Example Energy AG;Abschlag Oktober;Wohnen;DE89370400440532013000;Deutsche Bank;Persönliches Konto;-60,00

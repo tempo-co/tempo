@@ -1,0 +1,5 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Glaeubiger ID";"Mandatsreferenz";"Kundenreferenz (End-to-End)";"Sammlerreferenz";"Lastschrift Ursprungsbetrag";"Auslagenersatz Ruecklastschrift";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"BIC (SWIFT-Code)";"Betrag";"Waehrung";"Info"
+"DE89370400440532013000";"05.10.26";"05.10.26";"FOLGELASTSCHRIFT";"Strom Oktober Vertrag 4711";"DE98ZZZ09999999999";"M-0001";"E2E-0001";"";"";"";"Example Energy AG";"DE02120300000000202051";"BYLADEM1001";"-60,00";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"02.10.26";"01.10.26";"GUTSCHR. UEBERWEISUNG";"Gehalt Oktober";"";"";"NOTPROVIDED";"";"";"";"Example Employer GmbH";"NL91ABNA0417164300";"ABNANL2A";"2.500,00";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"07.10.26";"07.10.26";"KARTENZAHLUNG";"Example Shop Examplestadt";"";"";"";"";"";"";"Example Shop";"";"";"-12,50";"EUR";"Umsatz vorgemerkt"
+"DE89370400440532013000";"01.10.26";"01.10.26";"ECHTZEIT-UEBERWEISUNG";"Miete Oktober";"";"";"";"";"";"";"Example Landlord";"GB33BUKB20201555555555";"BUKBGB22";"-850,00";"EUR";"Umsatz gebucht"

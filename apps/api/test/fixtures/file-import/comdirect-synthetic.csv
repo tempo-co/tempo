@@ -1,0 +1,9 @@
+
+"Umsätze Girokonto";"Zeitraum: 30 Tage";
+
+"Buchungstag";"Wertstellung (Valuta)";"Vorgang";"Buchungstext";"Umsatz in EUR";
+"offen";"--";"Kartenverfügung";"Buchungstext: EXAMPLE SHOP EXAMPLESTADT";"-12,50";
+"05.10.2026";"05.10.2026";"Lastschrift / Belastung";"Auftraggeber: Example Energy AG Buchungstext: Abschlag";"-1.060,00";
+"02.10.2026";"01.10.2026";"Übertrag / Überweisung";"Auftraggeber: Example Employer GmbH Buchungstext: Gehalt";"2.500,00";
+
+

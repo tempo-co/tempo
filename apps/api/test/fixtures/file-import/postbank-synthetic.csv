@@ -1,0 +1,12 @@
+﻿Umsätze;;;;;;;;;;;;;;;;;
+Konto;Filial-/Kontonummer;IBAN;Währung;;;;;;;;;;;;;;
+Girokonto Example Kunde;123 4567890 00;DE89370400440532013000;EUR;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;
+1.10.2026 - 6.10.2026;;;;;;;;;;;;;;;;;
+Letzter Kontostand;;;;1.435,80;EUR;;;;;;;;;;;;
+Vorgemerkte und noch nicht gebuchte Umsätze sind nicht Bestandteil dieser Übersicht.;;;;;;;;;;;;;;;;;
+Buchungstag;Wert;Umsatzart;Begünstigter / Auftraggeber;Verwendungszweck;IBAN / Kontonummer;BIC;Kundenreferenz;Mandatsreferenz;Gläubiger ID;Fremde Gebühren;Betrag;Abweichender Empfänger;Anzahl der Aufträge;Anzahl der Schecks;Soll;Haben;Währung
+6.10.2026;6.10.2026;SEPA Lastschrift;Example Energy AG;Abschlag Oktober;DE02120300000000202051;BYLADEM1001;;;;;-1.060,00;;;;-1.060,00;;EUR
+2.10.2026;1.10.2026;SEPA Überweisung;Example Employer GmbH;Gehalt Oktober;NL91ABNA0417164300;ABNANL2A;;;;;2.500,00;;;;;2.500,00;EUR
+1.10.2026;1.10.2026;Kartenzahlung;Example Bakery;Example Bakery Examplestadt;;;;;;;-4,2;;;;-4,2;;EUR
+Kontostand;6.10.2026;;;1.435,80;EUR;;;;;;;;;;;;
