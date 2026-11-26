@@ -574,7 +574,7 @@ test.describe('Notification settings', () => {
     await expect.poll(() => requests.length).toBe(1);
     // The saved account lets Tempo open without a connection.
     await expect
-      .poll(() => page.evaluate(() => localStorage.getItem('tempo-offline-cache')))
+      .poll(() => page.evaluate(() => localStorage.getItem('wisp-offline-cache')))
       .not.toBeNull();
 
     await page.route(`${API_URL}/**`, (route) => route.abort('internetdisconnected'));
@@ -644,7 +644,7 @@ test.describe('Notification settings', () => {
       await page.goto('/settings/appearance');
       // The saved account lets Tempo open without a connection.
       await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('tempo-offline-cache')))
+        .poll(() => page.evaluate(() => localStorage.getItem('wisp-offline-cache')))
         .not.toBeNull();
       await expect.poll(() => reads.count).toBe(1);
 

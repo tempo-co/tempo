@@ -399,7 +399,7 @@ test.describe('bank transactions', () => {
       .poll(() =>
         page.evaluate(
           (id) =>
-            localStorage.getItem('tempo-offline-cache')?.includes(`["bank-transaction","${id}"]`),
+            localStorage.getItem('wisp-offline-cache')?.includes(`["bank-transaction","${id}"]`),
           DETAIL_TRANSACTION_ID,
         ),
       )

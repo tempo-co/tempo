@@ -22,7 +22,7 @@ function logOutOnServer(page: Page) {
   });
 }
 
-const CACHE_KEY = 'tempo-offline-cache';
+const CACHE_KEY = 'wisp-offline-cache';
 type SavedCache = {
   timestamp: number;
   clientState: {queries: {queryKey: string[]; state: {dataUpdatedAt: number}}[]};
@@ -47,7 +47,7 @@ const flushPersistence = (page: Page) => page.clock.runFor(1000);
 const logoutLocks = (page: Page) =>
   page.evaluate(async () => {
     const {held = [], pending = []} = await navigator.locks.query();
-    const count = (locks: LockInfo[]) => locks.filter(({name}) => name === 'tempo-logout').length;
+    const count = (locks: LockInfo[]) => locks.filter(({name}) => name === 'wisp-logout').length;
     return {held: count(held), pending: count(pending)};
   });
 const nameSaveOutcome = (page: Page) =>
@@ -363,7 +363,7 @@ test.describe('saved app', () => {
     const cachedPaths = await page.evaluate(async () => {
       const paths: string[] = [];
       for (const name of await caches.keys()) {
-        if (!name.startsWith('tempo-shell-')) continue;
+        if (!name.startsWith('wisp-shell-')) continue;
         const cache = await caches.open(name);
         for (const request of await cache.keys()) paths.push(new URL(request.url).pathname);
       }
@@ -519,7 +519,7 @@ test('logout clears private data even when its pending marker cannot be stored',
       value: string,
     ) => void;
     Storage.prototype.setItem = function (key: string, value: string) {
-      if (key === 'tempo-pending-logout') throw new DOMException('Full', 'QuotaExceededError');
+      if (key === 'wisp-pending-logout') throw new DOMException('Full', 'QuotaExceededError');
       original.call(this, key, value);
     };
   });
@@ -573,7 +573,7 @@ test('two reconnecting tabs finish a pending logout only once', async ({
   await expect.poll(() => logoutLocks(page)).toEqual({held: 0, pending: 0});
   expect(requests).toBe(1);
   for (const tab of [page, other])
-    expect(await tab.evaluate(() => localStorage.getItem('tempo-pending-logout'))).toBe(null);
+    expect(await tab.evaluate(() => localStorage.getItem('wisp-pending-logout'))).toBe(null);
   expect(await serverSessionStatus(page)).toBe(401);
   await expect(homePage.accountName).not.toBeVisible();
   await expect(otherHome.accountName).not.toBeVisible();
