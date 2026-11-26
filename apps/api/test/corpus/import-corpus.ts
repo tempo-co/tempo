@@ -89,10 +89,21 @@ export type FileResult = {
 	passed: boolean;
 };
 
-export function loadCorpus(dir: string): {entries: CorpusEntry[]; truth: (id: string) => Truth} {
-	const manifest = JSON.parse(readFileSync(join(dir, 'corpus.json'), 'utf8')) as {files: CorpusEntry[]};
+/** A verified bank proven only on the owner's own export, which never enters the corpus. */
+export type OwnerProvenBank = {bank: string; note: string};
+
+export function loadCorpus(dir: string): {
+	entries: CorpusEntry[];
+	ownerProven: OwnerProvenBank[];
+	truth: (id: string) => Truth;
+} {
+	const manifest = JSON.parse(readFileSync(join(dir, 'corpus.json'), 'utf8')) as {
+		files: CorpusEntry[];
+		ownerProven?: OwnerProvenBank[];
+	};
 	return {
 		entries: manifest.files,
+		ownerProven: manifest.ownerProven ?? [],
 		truth: (id) => JSON.parse(readFileSync(join(dir, 'truth', `${id}.json`), 'utf8')) as Truth,
 	};
 }

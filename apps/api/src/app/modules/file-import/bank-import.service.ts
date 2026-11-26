@@ -55,6 +55,7 @@ import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-im
 import {BankImportLayoutService, previewOfRows, previewRow} from './bank-import-layout.service';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
 import {BankImport} from './bank-import.entity';
+import {readerMisses, recordLayoutMisses} from './layout-misses';
 import {ImportOutcome, decideOnFinalDays} from './never-sent-rows';
 import type {CsvLayout} from './parsers/csv-layout';
 import {CSV_LAYOUTS} from './parsers/csv-layouts';
@@ -100,7 +101,12 @@ export const ACCOUNT_CHOICE_NEW = 'new';
 /** The owner's answers to `accountQuestions`: `<bank>:<currency>` to a bank account id or `new`. */
 export type AccountChoices = ReadonlyMap<string, string>;
 /** Where the request says a drop goes: one named account, or a choice per statement that names no account. */
-export type BankImportRequest = {bankAccountId?: BankAccount['id'] | null; accountChoices?: AccountChoices};
+/** `bankId`: the bank the owner picked (`BankImportPickedBank`), already checked against the list. */
+export type BankImportRequest = {
+	bankAccountId?: BankAccount['id'] | null;
+	accountChoices?: AccountChoices;
+	bankId?: string | null;
+};
 
 /**
  * The statements of one account in one drop: its rows per format (a bank CSV export per layout), in matching order
@@ -216,11 +222,12 @@ export class BankImportService {
 	async importFiles(
 		ownerId: Account['id'],
 		files: readonly Buffer[],
-		{bankAccountId = null, accountChoices = new Map()}: BankImportRequest = {},
+		{bankAccountId = null, accountChoices = new Map(), bankId = null}: BankImportRequest = {},
 	): Promise<BankImportSummary> {
 		const {statements, evidenceFiles, kinds, learnedBanks, headerlessLayouts} = await this.parseDrop(
 			ownerId,
 			files,
+			bankId,
 		);
 		const accountRows = groupByAccount(statements, learnedBanks, evidenceFiles);
 		const allRows = statements.flatMap(({rows}) => rows);
@@ -263,6 +270,7 @@ export class BankImportService {
 						// imported-files connection takes only its own accounts, and the record still undoes the rest.
 						bankConnectionId: (syncedAccount?.connection ?? fileConnection!).id,
 						fileHash: hashDrop(files),
+						bankId,
 						// A drop of one kind of file records its format and, for a bank's CSV export, its layout.
 						format: kinds.size === 1 ? [...kinds.values()][0].format : 'mixed',
 						layout: kinds.size === 1 ? [...kinds.values()][0].layout : null,
@@ -304,6 +312,8 @@ export class BankImportService {
 				);
 
 				await recordBankIdentities(manager, ownerId, accountStatements);
+				// Recorded with the import, so a drop refused here and sent again counts once.
+				await recordLayoutMisses(manager, ownerId, bankId, readerMisses(bankId, kinds.values(), learnedBanks));
 
 				// Rows one statement of the drop repeats from another are already present, as on a later drop.
 				const counts: LadderCounts = {
@@ -835,6 +845,7 @@ export class BankImportService {
 	private async parseDrop(
 		ownerId: Account['id'],
 		files: readonly Buffer[],
+		bankId: string | null,
 	): Promise<{
 		statements: NormalizedStatement[];
 		/** The 1-based file each statement's bank evidence came from: its own, or the copy that stated its BIC. */
@@ -857,6 +868,9 @@ export class BankImportService {
 			if (!outcome.ok) {
 				// Counted by code and the layout a near miss names; never anything of the file.
 				this.logger.log(`Bank import refused: ${outcome.code}${outcome.layout ? ` (${outcome.layout})` : ''}`);
+				await recordLayoutMisses(this.dataSource.manager, ownerId, bankId, [
+					{outcome: 'refused', refusalCode: outcome.code},
+				]);
 				throw new BankImportRefusalException(outcome.code, index + 1, undefined, outcome.layout);
 			}
 			const {formats, layouts} = outcome.result;
@@ -1674,6 +1688,7 @@ function toSummary(record: BankImport, accounts: readonly BankAccount[]): BankIm
 	const accountIds = [...new Set(record.bankAccountIds)];
 	return {
 		id: record.id,
+		bankId: record.bankId,
 		format: record.format,
 		layout: record.layout,
 		filesCount: record.filesCount,

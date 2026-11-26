@@ -573,3 +573,40 @@ export const BANK_LIST: readonly Bank[] = [
 /** What to look for at a bank the list does not name. */
 export const OTHER_BANK_EXPORT_TEXT =
 	'Look first for a download named CAMT (camt.053), MT940 or OFX: Tempo reads those most reliably. If your bank offers only CSV or Excel, choose CSV, or Excel saved as .xlsx; old .xls files are not read. Never choose PDF. In the website or app, open your account, then its transaction list, set the widest date range the bank allows, and look for a Download or Export button, usually above the list. If you cannot find one, search the help section for "export" or "download transactions".';
+
+/** The pick for a bank the list does not name ("Another bank"); no bank in `BANK_LIST` takes this id. */
+export const OTHER_BANK_ID = 'other';
+
+/**
+ * The bank a user picked before importing, sent as the optional multipart text field `bankId` of
+ * `POST /bank-imports` and `POST /bank-imports/layout-proposals`: a `BANK_LIST` id or `OTHER_BANK_ID`. Any other value
+ * is refused (400). The import records it, and a layout confirmed from the proposal keeps it.
+ */
+export type BankImportPickedBank = {bankId?: string};
+
+/** Whether `id` is a bank the user may pick: one in `BANK_LIST`, or `OTHER_BANK_ID`. */
+export function isPickableBankId(id: string): boolean {
+	return id === OTHER_BANK_ID || BANK_LIST.some((bank) => bank.id === id);
+}
+
+/** The kinds of file a bank may offer, as a "Tell us your bank" request names them. */
+export const BANK_REQUEST_FILE_TYPES = ['csv', 'excel', 'camt', 'mt940', 'ofx', 'qif', 'pdf', 'other'] as const;
+export type BankRequestFileType = (typeof BANK_REQUEST_FILE_TYPES)[number];
+
+/** The longest bank name a request may carry. */
+export const BANK_REQUEST_MAX_NAME_LENGTH = 60;
+/** The requests one user may send in 24 hours; more are refused with 429. */
+export const BANK_REQUEST_MAX_PER_DAY = 5;
+
+/**
+ * `POST /bank-imports/bank-requests` (204, no body): asks Tempo to read a bank's files. No file is sent and no reply
+ * follows. The name is kept as plain text, never read as instructions.
+ */
+export type CreateBankRequest = {
+	/** 1 to `BANK_REQUEST_MAX_NAME_LENGTH` characters once trimmed. */
+	bankName: string;
+	/** ISO 3166-1 alpha-2, upper case. */
+	country: string;
+	/** At least one, each once. */
+	fileTypes: BankRequestFileType[];
+};
