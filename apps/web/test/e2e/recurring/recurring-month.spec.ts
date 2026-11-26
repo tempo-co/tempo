@@ -1,17 +1,10 @@
+import type {Page} from '@playwright/test';
 import type {RecurringSeriesLists} from '@tempo/contracts';
 
 import {RECURRING_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, APP_ORIGIN_HEADERS, expect, test} from '../../fixtures';
 import {expectNoHorizontalOverflow} from '../../utils/layout';
-import {
-  calendarDay,
-  calendarPayment,
-  closeDetails,
-  detail,
-  group,
-  row,
-  summaryOf,
-} from '../../utils/recurring';
+import {closeDetails, detail, group, row, summaryOf} from '../../utils/recurring';
 
 // The owner seeded with this month's payments (apps/api/scripts/seed-data/seed-recurring-data.ts); only this flow reads
 // it, and it puts back what it hides.
@@ -19,6 +12,25 @@ test.use({storageState: RECURRING_USER_AUTH_FILE, timezoneId: 'Europe/Amsterdam'
 
 const AS_OF = '2026-10-15';
 const ENERGY = {name: 'Example Energy'};
+
+const calendarDay = (page: Page, date: string) => page.getByTestId(`recurring-day-${date}`);
+
+/**
+ * A payment on the calendar. From a tablet up it is a chip on its day; on a phone a day is too narrow to tap one
+ * payment in, so this taps the day and finds the payment in the list under the calendar.
+ */
+async function calendarPayment(
+  page: Page,
+  width: number,
+  {date, name, amount, kind}: {date: string; name: string; amount: string; kind: string},
+) {
+  if (width >= 768)
+    return calendarDay(page, date).getByRole('button', {name: `${name}, ${amount}, ${kind}`});
+  await calendarDay(page, date).getByRole('button').click();
+  return page
+    .getByRole('region', {name: /^Payments on /})
+    .getByRole('button', {name: new RegExp(`^${name}, .* · ${kind} .*, ${amount}$`)});
+}
 
 for (const viewport of [
   {width: 1280, height: 800},
