@@ -26,7 +26,7 @@ import {safeErrorName} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
-import {daysInMonth, formatCents} from '../summary/bank-transaction-summary';
+import {daysInMonth, formatCents, previousMonths} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
 import {RecurringContinuationUnlink} from './recurring-continuation-unlink.entity';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';
@@ -36,6 +36,7 @@ import {
 	atDate,
 	detectUndatedRecurringSeries,
 	expectedDatesThrough,
+	paymentMonth,
 } from './recurring-series-detection';
 import {isOrdinaryRetailExpense} from './recurring-series-eligibility';
 import {RecurringSeriesHide} from './recurring-series-hide.entity';
@@ -172,13 +173,17 @@ export class RecurringSeriesService {
 		};
 	}
 
-	/** Each series' payments in `asOf`'s calendar month through `asOf`, oldest first, in base-currency cents. */
+	/**
+	 * Each series' payments through `asOf` that count in `asOf`'s calendar month, oldest first, in base-currency cents.
+	 * A payment made a few days early at the end of last month counts here; one made early for next month does not.
+	 */
 	private async paidThisMonth(
 		accountId: Account['id'],
 		detected: readonly UndatedRecurringSeries[],
 		asOf: string,
 	): Promise<Map<string, MonthPayment[]>> {
-		const seriesById = new Map(detected.flatMap((entry) => entry.transactionIds.map((id) => [id, entry.key])));
+		const seriesById = new Map(detected.flatMap((entry) => entry.transactionIds.map((id) => [id, entry])));
+		const month = asOf.slice(0, 7);
 		const paid = new Map<string, MonthPayment[]>();
 		if (seriesById.size === 0) return paid;
 		const rows = await createOwnerScopedQuery(this.bankTransactionRepository, accountId)
@@ -186,14 +191,19 @@ export class RecurringSeriesService {
 			.addSelect('"transaction"."bookingDate"::text', 'date')
 			.addSelect('ROUND(ABS("transaction"."amountInBaseCurrency") * 100)::text', 'baseAmountCents')
 			.andWhere('transaction.id = ANY(:ids)', {ids: [...seriesById.keys()]})
-			.andWhere('transaction.bookingDate BETWEEN :from AND :asOf', {from: `${asOf.slice(0, 7)}-01`, asOf})
+			// From last month too: a calendar slot's tolerance is shorter than a month.
+			.andWhere('transaction.bookingDate BETWEEN :from AND :asOf', {
+				from: `${previousMonths(month, 1)[0]}-01`,
+				asOf,
+			})
 			.orderBy('transaction.bookingDate', 'ASC')
 			.addOrderBy('transaction.id', 'ASC')
 			.getRawMany<{id: string; date: string; baseAmountCents: string | null}>();
 		for (const {id, date, baseAmountCents} of rows) {
-			const key = seriesById.get(id)!;
+			const entry = seriesById.get(id)!;
+			if (paymentMonth(entry, date) !== month) continue;
 			const payment = {date, cents: baseAmountCents === null ? null : BigInt(baseAmountCents)};
-			paid.set(key, [...(paid.get(key) ?? []), payment]);
+			paid.set(entry.key, [...(paid.get(entry.key) ?? []), payment]);
 		}
 		return paid;
 	}

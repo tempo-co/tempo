@@ -878,6 +878,72 @@ test('lets a drill be cleared when its series is no longer found', async ({page}
   await expect(page.getByText("Couldn't load transactions")).toBeHidden();
 });
 
+for (const width of [1280, 390]) {
+  test(`lists last month's late payment and this month's paid early above the calendar at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width, height: 844});
+    await page.clock.setFixedTime(new Date('2026-10-15T10:00:00Z'));
+    const state = await mockRecurring(page);
+    state.expenses = [
+      // October's rent, due on the 1st, was paid on 29 September and counts as paid in October.
+      series({
+        key: GYM_KEY,
+        name: 'Example Rentals',
+        typicalAmount: '650.00',
+        latestAmount: '650.00',
+        monthlyEquivalent: '650.00',
+        anchorDay: 1,
+        lastDate: '2026-09-29',
+        nextExpectedDate: '2026-11-01',
+        thisMonth: {paid: [{date: '2026-09-29', amount: '650.00'}], due: []},
+      }),
+      // September's phone bill has not arrived, and October's is due too.
+      series({
+        key: PHONE_KEY,
+        name: 'Example Phone',
+        anchorDay: 28,
+        nextExpectedDate: '2026-09-28',
+        flags: ['LATE'],
+        thisMonth: {
+          paid: [],
+          due: [
+            {date: '2026-09-28', amount: '30.00', late: true},
+            {date: '2026-10-28', amount: '30.00', late: false},
+          ],
+        },
+      }),
+    ];
+    await page.goto('/recurring');
+
+    await expect(summaryOf(page)).toContainText('Paid€650.00');
+    await expect(row(group(page, 'Paid'), GYM_KEY)).toContainText('Monthly · paid 29 Sep');
+    await page.getByRole('radio', {name: 'Calendar'}).click();
+    const late = page.getByText('Still late from September', {exact: true});
+    const early = page.getByText('Paid early, in September', {exact: true});
+    await expect(late).toBeVisible();
+    await expect(early).toBeVisible();
+    if (width >= 768) {
+      await expect(late.locator('..').getByRole('button')).toHaveAccessibleName(
+        'Example Phone, €30.00, late',
+      );
+      await expect(early.locator('..').getByRole('button')).toHaveAccessibleName(
+        'Example Rentals, €650.00, paid',
+      );
+    } else {
+      await expect(page.getByRole('list', {name: 'Still late from September'})).toContainText(
+        'Example Phone',
+      );
+      await expect(page.getByRole('list', {name: 'Paid early, in September'})).toContainText(
+        'Example Rentals',
+      );
+    }
+    // October's own phone bill is on its day.
+    await expect(page.getByTestId('recurring-day-2026-10-28')).toContainText('Example Phone');
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
 test('says so when nothing recurring is found and when loading fails', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
   await mockJson(

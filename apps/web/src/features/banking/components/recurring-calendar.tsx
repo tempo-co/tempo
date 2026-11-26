@@ -15,8 +15,9 @@ const DAY_CHIPS = 3;
 const PHONE_DAY_LABELS = 2;
 
 /**
- * This month as a calendar, weeks from Monday: each payment on the day it was paid or is expected. A late payment
- * from an earlier month is listed above the grid, since its day is not on it. A day with more payments than fit, and
+ * This month as a calendar, weeks from Monday: each payment on the day it was paid or is expected. A payment still
+ * late from an earlier month, or this month's paid a few days early in the last one, is listed above the grid, since
+ * its day is not on it. A day with more payments than fit, and
  * any day on a phone, lists its payments under the grid as rows.
  */
 export function RecurringCalendar({
@@ -45,7 +46,14 @@ export function RecurringCalendar({
   const weekdays = Array.from({length: 7}, (_, index) =>
     addDays(startOfWeek(first, {weekStartsOn: 1}), index),
   );
-  const earlier = items.filter((item) => item.date < `${month}-01`);
+  const monthName = (list: CalendarItem[]) => format(parseCalendarDate(list[0].date), 'MMMM');
+  const before = items.filter((item) => item.date < `${month}-01`);
+  const stillLate = before.filter(({kind}) => kind !== 'paid');
+  const paidEarly = before.filter(({kind}) => kind === 'paid');
+  const earlier = [
+    {label: stillLate.length > 0 ? `Still late from ${monthName(stillLate)}` : '', list: stillLate},
+    {label: paidEarly.length > 0 ? `Paid early, in ${monthName(paidEarly)}` : '', list: paidEarly},
+  ].filter(({list}) => list.length > 0);
   const dayItems = openDay ? items.filter((item) => item.date === openDay) : [];
   const rows = (list: CalendarItem[], label: string) => (
     <ul aria-label={label} className='divide-y divide-border/60 rounded-lg border'>
@@ -60,18 +68,19 @@ export function RecurringCalendar({
   return (
     <Card className='grid grid-cols-1 gap-3 p-4 max-sm:px-2'>
       <h2 className='text-card-title max-sm:px-2'>{format(first, 'MMMM')}</h2>
-      {earlier.length > 0 &&
-        (phone ? (
-          <div className='grid grid-cols-1 gap-2'>
-            <p className='px-2 text-body-small text-muted-foreground'>
-              Still late from {format(parseCalendarDate(earlier[0].date), 'MMMM')}
-            </p>
-            {rows(earlier, `Still late from ${format(parseCalendarDate(earlier[0].date), 'MMMM')}`)}
+      {earlier.map(({label, list}) =>
+        phone ? (
+          <div key={label} className='grid grid-cols-1 gap-2'>
+            <p className='px-2 text-body-small text-muted-foreground'>{label}</p>
+            {rows(list, label)}
           </div>
         ) : (
-          <div className='flex flex-wrap items-center gap-2 text-body-small text-muted-foreground'>
-            <span>Still late from {format(parseCalendarDate(earlier[0].date), 'MMMM')}</span>
-            {earlier.map((item) => (
+          <div
+            key={label}
+            className='flex flex-wrap items-center gap-2 text-body-small text-muted-foreground'
+          >
+            <span>{label}</span>
+            {list.map((item) => (
               <span key={item.id} className='w-32 max-w-full'>
                 <CalendarChip
                   item={item}
@@ -82,7 +91,8 @@ export function RecurringCalendar({
               </span>
             ))}
           </div>
-        ))}
+        ),
+      )}
       <div
         aria-hidden
         className='grid grid-cols-7 gap-1 text-center text-caption text-muted-foreground'

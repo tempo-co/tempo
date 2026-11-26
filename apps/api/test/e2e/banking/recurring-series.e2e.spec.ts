@@ -1218,10 +1218,14 @@ describe('RecurringSeries', () => {
 						description: 'Example Internet',
 					}),
 				),
+				// Due on the 1st; November's rent was paid a few days early, on 29 October.
+				...[...MONTHS.slice(1).map((month) => `${month}-01`), '2026-10-29'].map((date) =>
+					bookedRow(date, '-50.00', {counterpartyName: 'Example Rentals', description: 'Example Rentals'}),
+				),
 			]);
-			const read = async () =>
+			const read = async (asOf = '2026-11-01') =>
 				(
-					(await fresh.agent.get('/recurring-series').query({asOf: '2026-11-01'}).expect(200)).body as {
+					(await fresh.agent.get('/recurring-series').query({asOf}).expect(200)).body as {
 						expenses: ListBody & {series: (SeriesBody & {thisMonth: unknown})[]};
 					}
 				).expenses;
@@ -1250,7 +1254,16 @@ describe('RecurringSeries', () => {
 				paid: [],
 				due: [{date: '2026-11-20', amount: '40.00', late: false}],
 			});
-			expect(expenses.thisMonth).toEqual({month: '2026-11', paid: '20.00', remaining: '100.00'});
+			// A payment a few days early counts in the month it was due, and not in the month it was made.
+			expect(byName(expenses.series, 'Example Rentals')[0].thisMonth).toEqual({
+				paid: [{date: '2026-10-29', amount: '50.00'}],
+				due: [],
+			});
+			expect(byName((await read('2026-10-31')).series, 'Example Rentals')[0].thisMonth).toEqual({
+				paid: [{date: '2026-10-01', amount: '50.00'}],
+				due: [],
+			});
+			expect(expenses.thisMonth).toEqual({month: '2026-11', paid: '70.00', remaining: '100.00'});
 
 			// A hidden series is left out of the month, as it is of the totals.
 			await hide(fresh.agent, byName(expenses.series, 'Example Internet')[0].key).expect(204);
@@ -1258,7 +1271,7 @@ describe('RecurringSeries', () => {
 			expect(byName(afterHide.series, 'Example Internet')).toEqual([
 				expect.objectContaining({hidden: true, thisMonth: null}),
 			]);
-			expect(afterHide.thisMonth).toEqual({month: '2026-11', paid: '20.00', remaining: '60.00'});
+			expect(afterHide.thisMonth).toEqual({month: '2026-11', paid: '70.00', remaining: '60.00'});
 		} finally {
 			await fixtures.connections.delete(connection.id);
 		}

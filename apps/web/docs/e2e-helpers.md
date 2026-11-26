@@ -20,7 +20,7 @@ The shared helpers of the Playwright suite under `test/`, and the rules for reus
 
 ## Reusing fixtures
 
-- Tests that change account data or depend on an account having no bank data use `freshAccount` rather than a seeded account, so they do not depend on test order and stay safe to retry. Do not change seeded data another test reads. A flow that needs stored bank data the API cannot create signs in as an owner seeded for it alone and puts back what it changes, also at the start of a retry (`test/e2e/recurring/recurring-month.spec.ts`).
+- Tests that change account data or depend on an account having no bank data use `freshAccount` rather than a seeded account, so they do not depend on test order and stay safe to retry. Do not change seeded data another test reads. The exception is a flow that needs stored bank data the API cannot create: it signs in as an owner seeded for it alone and puts back what it changes, also at the start of a retry (`test/e2e/recurring/recurring-month.spec.ts`).
 - Password changes and session revocation must not invalidate an identity another test or browser project reuses. Request `freshAccount` in the setup hook before navigating.
 - Keep meaningful dates, amounts, category states, conversion evidence and linked identities explicit in the spec, not in fixture defaults. Use local helpers for repetition within one spec and shared helpers only for a contract multiple specs need.
 - Do not cast incomplete responses to a contract type or share a mutable fixture between tests. Do not use API entity factories or full database seeds to construct HTTP mocks: they represent different boundaries.
