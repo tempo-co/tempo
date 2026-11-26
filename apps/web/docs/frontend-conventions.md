@@ -28,7 +28,7 @@ Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 
 ## Merchant logo tiles
 
-- Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Its `transaction-tile` field, foreground and border colours are defined in `src/index.css` and `DESIGN.md`; do not recolor the ordinary `BankTransactionCategoryIcon` globally.
+- Use `MerchantLogoTile` for leading transaction and recurring tiles, including category/activity fallbacks. Logos and activity glyphs sit on its neutral `transaction-tile` field, foreground and border colours (`src/index.css`, `DESIGN.md`); a category fallback takes its category's colour from `BANK_TRANSACTION_CATEGORY_META`. Do not recolor the ordinary `BankTransactionCategoryIcon` globally.
 - The tile loads `/mask-v3` as an ordinary `img` without `crossOrigin` (CSS masks would drop the API cookies) and tints it with an SVG `SourceAlpha` filter whose `floodColor` references `--color-transaction-tile-foreground`; inherited `currentColor` leaves WebKit's tint stale after a theme change. Keep SVG definitions zero-sized and out of layout.
 - Missing or failed derivatives show the fallback glyph. Failure state is keyed to the full source URL so a new version can recover. Never fall back to a full-color original or add merchant-specific artwork rules.
 
@@ -112,7 +112,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 - A finished sync marks that data stale only when a connection leaves its in-progress status or its `lastSyncedAt` advances (`hasSyncAdvanced` in `src/features/banking/api/use-get-all-bank-connections.ts`), never on a first read or an unchanged poll. Ingestion finishing does not mean categorization, conversion or matching has.
 - Aggregates have their own key root (`['bank-dashboard']`, `src/features/banking/api/aggregate-query-keys.ts`). Code that scans the transaction-list root with `getQueriesData` reads every entry as a page list and breaks on another shape; grep `getQueriesData` and `setQueriesData` before caching under an existing root.
 - A mutation that changes a server-filtered field can patch cached lists for an immediate result, then invalidates the derived data, since the server decides membership and totals (`src/features/banking/api/use-update-bank-transaction-category.ts`).
-- `keepPreviousData` is set per query. Where a period label or a total is shown, gate on `isPlaceholderData`, as the Transactions page does (`src/routes/bank-transactions/index.tsx`), so old figures never stand under a new label.
+- `keepPreviousData` is set per query. Where a period label or a total is shown, gate on `isPlaceholderData`, as the Transactions page does (`src/routes/transactions/index.tsx`), so old figures never stand under a new label.
 - A Transactions filter that reaches the API is an entry in `BANK_TRANSACTION_FILTER_KEYS` (`src/features/banking/types/bank-transaction.ts`). That list feeds the request, the filter count, Clear filters and the chip labels, so a param read outside it reaches none of them.
 
 ## Library traps

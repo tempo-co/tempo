@@ -375,7 +375,7 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
       <header className='flex flex-wrap items-center justify-between gap-x-4 gap-y-2'>
         <h2 className='text-card-title'>{countLabel(total, 'transaction')}</h2>
         <TextAction asChild className='-mr-2'>
-          <Link to='/bank-transactions' search={{merchantGroup: merchant.id}}>
+          <Link to='/transactions' search={{merchantGroup: merchant.id}}>
             Open in Transactions
           </Link>
         </TextAction>
@@ -400,7 +400,7 @@ function Transactions({merchant}: {merchant: MerchantGroup}) {
                 <TransactionListRow
                   transaction={transaction}
                   link={{
-                    to: '/bank-transactions',
+                    to: '/transactions',
                     search: {merchantGroup: merchant.id, transactionId: transaction.id},
                   }}
                 />

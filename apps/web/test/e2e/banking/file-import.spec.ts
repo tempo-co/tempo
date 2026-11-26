@@ -440,7 +440,7 @@ test.describe('statement file import on Connections', () => {
       await fulfillJson(route, {statusCode: 404, message: 'Not Found'}, 404);
     });
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const connect = page.getByRole('button', {name: 'Connect a bank'});
     await expect(page.getByRole('region', {name: 'Mock ASPSP'})).toBeVisible();
     const before = await boxOf(connect);
@@ -484,7 +484,7 @@ test.describe('statement file import on Connections', () => {
       fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
     );
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await waitOutRetries();
 
     await expect(page.getByRole('button', {name: 'Import a file'})).toBeVisible();
@@ -497,7 +497,7 @@ test.describe('statement file import on Connections', () => {
       route.fulfill({status: 502, contentType: 'text/html', body: '<h1>502 Bad Gateway</h1>'}),
     );
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const answered = await waitOutRetries();
     // Nothing on screen marks a failure that leaves import unknown, so, as in the import-off test, the page gets a
     // moment after the last answer to show anything: a status-only check shows the button within that moment.
@@ -525,7 +525,7 @@ test.describe('statement file import on Connections', () => {
       ],
     });
 
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     // Sync stays the page's main path; import sits beside it.
     const connect = page.getByRole('button', {name: 'Connect a bank'});
     const importButton = page.getByRole('button', {name: 'Import a file'});
@@ -603,7 +603,7 @@ test.describe('statement file import on Connections', () => {
         ),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -641,7 +641,7 @@ test.describe('statement file import on Connections', () => {
         ),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -707,7 +707,7 @@ test.describe('statement file import on Connections', () => {
       neverSentRows: rows,
       holdAdd: () => held,
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
 
@@ -834,7 +834,7 @@ test.describe('statement file import on Connections', () => {
       if (request.rowIds.includes(last)) await held;
       await route.fallback();
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
     const summaryBody = dialog.getByTestId('bank-import-summary');
@@ -917,7 +917,7 @@ test.describe('statement file import on Connections', () => {
       reads += 1;
       return reads === 2 ? reread(route) : route.fallback();
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
     const list = dialog.getByTestId('bank-import-never-sent');
@@ -997,7 +997,7 @@ test.describe('statement file import on Connections', () => {
     ];
     const summary = importSummary({rowsAdded: 209, rowsDoubtful: 0, rowsRemovedBySync: 3});
     const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     // The list of imports says nothing about them.
     const listRow = page.getByTestId('bank-import-row');
@@ -1074,7 +1074,7 @@ test.describe('statement file import on Connections', () => {
     ];
     const summary = importSummary({rowsDoubtful: 0, rowsNotInBank: 1, rowsRemovedBySync: 2});
     const api = await mockFileImport(page, {imports: [summary], neverSentRows: rows});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page
       .getByTestId('bank-import-row')
       .getByRole('button', {name: '3 files · 212 new'})
@@ -1109,7 +1109,7 @@ test.describe('statement file import on Connections', () => {
     const api = await mockFileImport(page, {
       uploads: [refused({code: 'parse_failed', file: 2}), created(importSummary({filesCount: 1}))],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -1138,7 +1138,7 @@ test.describe('statement file import on Connections', () => {
     await mockFileImport(page, {
       uploads: [refused({code: 'legacy_xls_not_supported', file: 1, statusCode: 415})],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xls')]);
 
@@ -1155,7 +1155,7 @@ test.describe('statement file import on Connections', () => {
     await mockFileImport(page, {
       uploads: [refused({code: 'layout_not_recognized', file: 1, layout: 'rabobank-nl'})],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
 
     // An Escape pressed as the list opens, before the dialogs settle, closes only the list.
@@ -1218,7 +1218,7 @@ test.describe('statement file import on Connections', () => {
     page,
   }) => {
     await mockFileImport(page, {uploads: [refused({code: 'layout_unknown', file: 1})]});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
 
     await dialog
@@ -1246,7 +1246,7 @@ test.describe('statement file import on Connections', () => {
       ],
       proposals: [proposed(layoutProposal(), held)],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -1339,7 +1339,7 @@ test.describe('statement file import on Connections', () => {
           ),
         ],
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
       const dialog = await openImport(page);
       await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
       await dialog.getByRole('button', {name: 'Work out the columns'}).click();
@@ -1380,7 +1380,7 @@ test.describe('statement file import on Connections', () => {
         ),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -1447,7 +1447,7 @@ test.describe('statement file import on Connections', () => {
       proposals: [proposed(layoutProposal())],
       banksFailures: 1,
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
@@ -1496,7 +1496,7 @@ test.describe('statement file import on Connections', () => {
       proposals: [proposed(layoutProposal({bankName: 'example  bank'}))],
       banks: ['ABN AMRO', 'ING'],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
@@ -1523,7 +1523,7 @@ test.describe('statement file import on Connections', () => {
         proposed(layoutProposal()),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     let dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -1597,7 +1597,7 @@ test.describe('statement file import on Connections', () => {
           ),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     const input = dialog.getByTestId('bank-import-file-input');
     await input.setInputFiles([statement('transactions.csv')]);
@@ -1640,7 +1640,7 @@ test.describe('statement file import on Connections', () => {
         },
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByRole('button', {name: 'Supported files'}).click();
 
@@ -1660,7 +1660,7 @@ test.describe('statement file import on Connections', () => {
     page,
   }) => {
     const api = await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     // Three files under 10 MB each, 27 MB together.
     await dialog.getByTestId('bank-import-file-input').setInputFiles(
@@ -1748,7 +1748,7 @@ test.describe('statement file import on Connections', () => {
         created(importSummary({filesCount: 1})),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
 
@@ -1840,7 +1840,7 @@ test.describe('statement file import on Connections', () => {
         created(importSummary({filesCount: 1})),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
 
@@ -1920,7 +1920,7 @@ test.describe('statement file import on Connections', () => {
     const api = await mockFileImport(page, {
       uploads: [refused(question), refused(question), created(importSummary({filesCount: 1}))],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     let dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.csv')]);
     await expect(dialog.getByText('You have more than one account this could be.')).toHaveCount(2);
@@ -1990,7 +1990,7 @@ test.describe('statement file import on Connections', () => {
       ),
     ];
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page
       .getByTestId('bank-import-row')
       .getByRole('button', {name: '3 files · 212 new'})
@@ -2099,7 +2099,7 @@ test.describe('statement file import on Connections', () => {
         return fulfillJson(route, {statusCode: status, message: 'Synthetic failure'}, status);
       },
     );
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page
       .getByTestId('bank-import-row')
       .getByRole('button', {name: '3 files · 212 new'})
@@ -2176,7 +2176,7 @@ test.describe('statement file import on Connections', () => {
       ),
     );
     const api = await mockFileImport(page, {imports: [summary], doubtfulRows: rows});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     await page
       .getByTestId('bank-import-row')
       .getByRole('button', {name: '3 files · 212 new'})
@@ -2282,7 +2282,7 @@ test.describe('statement file import on Connections', () => {
       undoFails = false;
       return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const list = page.getByTestId('bank-imports-list');
     await expect(page.getByRole('heading', {name: 'Imports'})).toBeVisible();
@@ -2388,7 +2388,7 @@ test.describe('statement file import on Connections', () => {
       },
       held,
     );
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xml')]);
 
@@ -2455,7 +2455,7 @@ test.describe('statement file import on Connections', () => {
     await page.route(`${API_URL}/bank-connections/*/accounts/*/balance`, (route) =>
       fulfillJson(route, {statusCode: 409, message: 'Refused.', code: 'balance_from_bank'}, 409),
     );
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xml')]);
     const prompt = dialog.getByTestId('bank-import-balances');
@@ -2511,7 +2511,7 @@ test.describe('statement file import on Connections', () => {
         },
       ];
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const card = page.getByRole('region', {name: 'Imported files'});
     const rowOf = (name: string) =>
       card
@@ -2612,7 +2612,7 @@ test.describe('statement file import on Connections', () => {
     });
     await mockBankConnections(page, [IMPORTED_FILES, MOCK_CONNECTION]);
     await mockFileImport(page);
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     const card = page.getByRole('region', {name: 'Imported files'});
     await expect(card).toBeVisible();
@@ -2641,7 +2641,7 @@ test.describe('statement file import on Connections', () => {
   }) => {
     await mockBankConnections(page, []);
     const api = await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
 
     await expect(page.getByRole('heading', {name: 'No accounts yet'})).toBeVisible();
     await expect(
@@ -2670,7 +2670,7 @@ test.describe('statement file import on Connections', () => {
 
   test("imports files dropped on the dialog's drop area", async ({page}) => {
     const api = await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     const area = dialog.getByTestId('bank-import-drop-area');
 
@@ -2714,7 +2714,7 @@ test.describe('statement file import on Connections', () => {
         },
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -2746,7 +2746,7 @@ test.describe('statement file import on Connections', () => {
         },
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -2788,7 +2788,7 @@ test.describe('statement file import on Connections', () => {
         (route) => route.fulfill({status: 413, contentType: 'text/html', body: '<html>413</html>'}),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -2817,7 +2817,7 @@ test.describe('statement file import on Connections', () => {
         created(importSummary({filesCount: 2})),
       ],
     });
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -2842,7 +2842,7 @@ test.describe('statement file import on Connections', () => {
 
   test('a lost connection keeps the chosen files for another try', async ({page}) => {
     await mockFileImport(page, {uploads: [(route) => route.abort('failed')]});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
@@ -2894,7 +2894,7 @@ test.describe('statement file import on Connections', () => {
       layouts: [{id: LAYOUT_ID, bankName: proposal.bankName!, createdAt: TODAY.toISOString()}],
     });
     await page.setViewportSize({width: 390, height: 844});
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement(`${long}.csv`)]);
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
@@ -3024,7 +3024,7 @@ test.describe('statement file import on Connections', () => {
           },
         ],
       });
-      await page.goto('/bank-connections');
+      await page.goto('/accounts');
 
       const connect = page.getByRole('button', {name: 'Connect a bank'});
       const importButton = page.getByRole('button', {name: 'Import a file'});

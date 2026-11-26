@@ -121,7 +121,8 @@ test.describe('Settings navigation', () => {
     await page.setViewportSize({width: 320, height: 700});
     await page.goto('/settings/security');
     const tabBar = page.getByTestId('app-tab-bar');
-    await expect(tabBar.locator('a[aria-current="page"]')).toHaveText('Settings');
+    // Settings opens from the header, so no tab marks it.
+    await expect(tabBar.locator('a[aria-current="page"]')).toHaveCount(0);
 
     await delayRouteCode(page);
     await tabBar.getByRole('link', {name: 'Home'}).click();

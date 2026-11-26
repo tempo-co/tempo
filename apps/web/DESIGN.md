@@ -152,8 +152,8 @@ utility first.
 Hairlines (`border`) are decorative separation and are not held to 3:1; anything a person must find
 to operate uses `input`. `faint` clears 3:1 only on cards, so it never carries text or meaning.
 
-Status is never colour alone: pair it with text, an icon or another cue. Never communicate
-transaction direction, sync state, categorisation state or an error by hue alone.
+Status is never colour alone: pair direction, sync state, categorisation state or an error with
+text, an icon or another cue.
 
 ### Charts and categories
 
@@ -162,9 +162,10 @@ Data series use `chart-primary` (ink) and `chart-secondary` (a quiet grey) whose
 amount (ink on light, a dimmer grey on dark so light text stays readable). Midnight marks only a
 selected period or an action, never a data series.
 
-Each category keeps one colour across the app: the icon in `category-*` on a tile of the same colour
-at 10% with a 30% edge (`src/features/banking/utils/bank-transaction-category-meta.ts`). The colours
-keep each category's hue in both themes, are distinct from one another, and are tuned light first.
+Each category keeps one colour and icon everywhere, from
+`src/features/banking/utils/bank-transaction-category-meta.ts`: the icon in `category-*` on its
+colour at 10% with a 30% edge, and `color` for charts and dots. Colours are distinct per category
+and theme (`test/unit/category-colours.spec.ts`).
 The category label, its source (`Suggested by AI` or `Manual`) and pending or failed status are
 always text as well.
 
@@ -196,15 +197,12 @@ Headline figures (a balance, a transaction's amount) are `numeric` display sizes
 Spacing is Tailwind's 4px scale: card padding 16px (`p-4`), cards on a page 12px apart (`gap-3`),
 columns inside a card 16px apart (`gap-4`).
 
-The authenticated shell is a sticky `48px` header aligned to the ~`80rem` content column; below `md`,
-navigation moves to a fixed bottom tab bar. Settings uses a ~`40rem` reading column. From `md` up,
-the page reserves the scrollbar's gutter, so the column stays put between short and long pages and
-when a dialog locks scrolling. Every page title starts at the top of that column (Home, which has
-none, starts its content there), and an action beside a title overhangs the title's row instead of
-making it taller, so titles and the content under them don't move between pages. Responsive
-behaviour is structural, not scaled: navigation becomes a tab bar, tables scroll horizontally (or,
-when a phone needs only their latest column, become rows that open in place into the rest), rows
-stay understandable without hover.
+The shell (Navigation) puts a ~`80rem` content column beside the sidebar, or under a phone header
+above a tab bar; Settings uses a ~`40rem` column. From `md` up the page reserves the scrollbar's
+gutter, so the column stays put. Every page title starts at the top of the column (Home's content
+starts there), and an action beside a title overhangs its row instead of making it taller.
+Responsive behaviour is structural, not scaled: tables scroll sideways or become rows that open in
+place, and rows stay understandable without hover.
 
 Controls are 32px tall; phone and coarse-pointer targets are at least 44px
 (`max-sm:min-h-11 pointer-coarse:min-h-11`, with `min-w-11` where they can be narrow).
@@ -247,7 +245,8 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
   (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
   (`90dvh`, `8em`), `var(--…)` and 1px pass.
 - **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
-- **Layout:** `test/e2e/home/layout.spec.ts`, Home from 1440 to 320px in both themes.
+- **Layout:** `test/e2e/home/layout.spec.ts`, Home from 1440 to 320px and the shell at 1440, 390
+  and 320px, in both themes, each with demo and worst-case data.
 
 An exception needs a reason:
 
@@ -290,11 +289,17 @@ labels ("Connect a bank", "Re-authorize"). Every size grows to 44px on phones an
 for "All", "Show fewer" and "Open in Transactions". Pending states pair motion with text
 ("Connecting...").
 
+### Tabs, switches and tables
+
+`Tabs`: a 32px `muted` track (44px on phones), `text-body-small` triggers, the chosen one on
+`card`. `Switch`: 20 by 36px, `primary` when on. `Table`: `text-body` cells with 16px sides and
+32px `text-label` headers. `Sheet`: a side or bottom overlay styled like the dialog.
+
 ### Toggles and segmented controls
 
 `ToggleGroup` and `Toggle`, `text-body-small` labels; sizes `default` 32px and `sm` 28px (44px on
-phones and coarse pointers); variants `default` and `outline`. Separate segments (interval, bills or
-income) are `outline` `sm` with segment corners and `secondary` on the chosen one. A joined control
+phones and coarse pointers); variants `default` and `outline`. Pick-one buttons are a
+`ToggleGroup`. Separate segments (interval, bills or income) are `outline` `sm` with segment corners and `secondary` on the chosen one. A joined control
 (the span switch) rounds its outer group and clips square segments, the chosen one in `foreground`.
 
 ### Cards and grouped surfaces
@@ -319,15 +324,14 @@ descriptions truncate where the row opens a view that shows them in full; a sele
 dialog wraps its description instead, so similar names can be told apart. Rows that navigate show a
 keyboard-visible focus state.
 
-Every transaction and recurring row starts with a round `36px` leading tile (`transaction-tile`:
-the sunk field, a muted icon and a hairline edge): the merchant's monochrome alpha logo when
-available, otherwise the category glyph (the activity glyph for own transfers and currency
-exchanges). Account rows, import surfaces and empty states lead with the same tile. The row is the
+Every transaction and recurring row starts with a round `36px` leading tile: the merchant's
+monochrome logo on the neutral `transaction-tile` (sunk field, muted mark, hairline), otherwise the
+category glyph on its category tile. Own transfers, exchanges and uncategorised rows, account rows,
+import surfaces and empty states use the neutral tile. The row is the
 shared `60px` row (`min-h-15`, `px-3 py-2`): a `text-body` title over a muted `text-body-small` line, plus
 any `1px` divider; a wrapping selection row grows only for its description. The transaction
 inspector keeps its `40px` tile. Logo loading, tinting and fallbacks: `docs/frontend-conventions.md`.
-There are no per-merchant exceptions. Logos are display only: names, identification and sourcing
-stay unchanged.
+No per-merchant exceptions; logos are display only.
 
 Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate in both themes.
 
@@ -395,11 +399,9 @@ optional detail line and the next action. Never centre the state or float a larg
   names the state (`CloudOff` for a server failure, `WifiOff` offline, `SearchX` no match,
   `FileQuestion` not found, the feature's own glyph for nothing yet), never the action; the rotate
   glyph belongs on Try again.
-- **Sizes.** `page` replaces a list or page and is its own card (16px padding), with a
-  `text-card-title` heading.
-  `section` sits inside a card or dialog without a second frame, with a `text-body` medium title and
-  small buttons, and keeps the section's loaded height. A one-line gap inside a list ("No recurring
-  bills found yet.") stays plain muted text with no tile.
+- **Sizes.** `page` replaces a list or page as its own card with a `text-card-title` heading.
+  `section` sits inside a card or dialog without a frame, with a `text-body` medium title and small
+  buttons, at the section's loaded height. A one-line gap in a list stays plain muted text.
 - **Detail.** A failed load adds one monospace `text-label` line with the status code (or "No
   response") and the time it failed: `503 · 14:02`. The 404 page shows `404 · <path>`.
 - **Failed loads.** `LoadErrorState` derives the glyph, description and detail from the error and
@@ -413,29 +415,31 @@ optional detail line and the next action. Never centre the state or float a larg
 
 ### Navigation
 
-Navigation is a quiet index with no breadcrumbs; the page title and the active item say where you
-are. From `md` up the header carries the logo, Home, Connections and Transactions in `text-body`
-with a `primary` underline on the active item, and an initials account menu (name, email, Settings, Log out) on the
-right. Below `md` a four-tab bottom bar (Home, Connections, Transactions, Settings) keeps every
-destination one tap away: icon over label, active tab in `primary` with a top rule and heavier
-label, padded for the safe area. Toasts sit above it.
+Navigation is a quiet index with no breadcrumbs; the title and the active item say where you are.
+Pages: `/`, `/transactions`, `/insights`, `/recurring`, `/accounts`, `/settings/<section>`; the old
+`/bank-connections` and `/bank-transactions` redirect with their query.
 
-Settings is one page titled "Settings" with text section tabs (Account, Security, Integrations,
-Appearance) on a bottom rule inside the `40rem` column: all four fit narrow phones, sharing the full
-width with 48px targets in `text-body` (`text-body-small` below 360px); desktop tabs stay
-content-sized. The active section gets the same `primary`
-underline as the header; no icons, no side column, no segmented control.
+- **Desktop (`md` up):** the shadcn `Sidebar`, 240px on the page with a hairline edge, collapsing
+  to 56px of icons (kept per device; always icons below 1024px). Top: logo, collapse button, Add data in `primary`. Then the
+  pages in `text-body` (the current one on `card` with a hairline) and Plan dimmed, marked "later".
+  Bottom: the name and email, truncated, and the Settings gear. No avatar or account menu.
+- **Phones:** a sticky 48px header with the logo, Add data (+) and Settings (gear) as 44px actions,
+  and a bottom bar of four tabs (Home, Transactions, Insights, Accounts): icon over label, the active
+  one in `primary` with a top rule, padded for the safe area. Toasts sit above it.
+- **Badges:** the count to review on Transactions (`99+` above 99), a `warning` dot on Accounts for
+  a bank that needs attention; the link's name says what each means.
+
+Settings is one page titled "Settings", Log out beside the title, with text section tabs on a
+bottom rule in the `40rem` column: on phones they share the width with 48px targets, and the active
+one has a `primary` underline.
 
 ### Settings lists and forms
 
-Under the tabs, settings are grouped rows: a `text-card-title` group heading, then one bordered
-list of `divide-y` rows at least 64px tall with 16px sides (a `text-body` medium label over a muted
-`text-body-small` value, and a small outline action of a shared minimum width), the same pattern as
-bank account lists. Groups sit 12px apart. Row actions stay visible without hover. Edits open a responsive
-overlay with an explicit Save: a bottom drawer on phones and a dialog on desktop. Session and
-access-token details use the same responsive presentation. Account deletion is its own one-row group
-with an outline button; destructive actions use the shared destructive variant. Selected values (the
-theme picker) use a `primary` ring, never the navigation underline.
+Settings are grouped rows: a `text-card-title` heading over one bordered `divide-y` list of rows at
+least 64px tall with 16px sides (a `text-body` medium label over a muted `text-body-small` value,
+and a small outline action of a shared width), 12px between groups. Actions stay visible without
+hover. Edits open a responsive overlay with an explicit Save. Account deletion is its own one-row
+group. Selected values (the theme picker) use a `primary` ring.
 
 ## Writing
 

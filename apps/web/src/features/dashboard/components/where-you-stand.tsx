@@ -276,7 +276,7 @@ function SpanDetails({overview, view}: {overview: Overview | null; view: SpanVie
         />
       </dl>
       <TextAction asChild className='-ml-2'>
-        <Link to='/bank-transactions' search={periodDrill(view.from, overview.today)}>
+        <Link to='/transactions' search={periodDrill(view.from, overview.today)}>
           Transactions in this span
         </Link>
       </TextAction>

@@ -1,6 +1,9 @@
 import {Link, Outlet, createFileRoute, useLocation} from '@tanstack/react-router';
+import {LogOut} from 'lucide-react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
+import {Button} from '@/components/ui/button';
+import {useLogOut} from '@/hooks/use-logout';
 import {cn} from '@/utils/cn';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
@@ -21,12 +24,27 @@ const sections = [
 function SettingsIndex() {
   // The location being opened, which Link also marks: matchRoute keeps the previous section until the next one loads.
   const pathname = useLocation({select: (location) => location.pathname});
+  const {logOut, isPending} = useLogOut();
 
   return (
     <AppBodyLayout>
       <div className='mx-auto w-full max-w-160'>
-        <h1 className='text-page-title'>Settings</h1>
-        {/* Same underline language as the header nav, one level down. */}
+        <div className='flex items-center justify-between gap-4'>
+          <h1 className='text-page-title'>Settings</h1>
+          {/* Overhangs the title's row, so the title sits where every page's does. */}
+          <Button
+            variant='ghost'
+            size='sm'
+            className='-my-0.5 max-sm:-my-2.5'
+            onClick={() => void logOut()}
+            disabled={isPending}
+            data-testid='log-out-button'
+          >
+            <LogOut aria-hidden='true' />
+            Log out
+          </Button>
+        </div>
+        {/* Text section tabs on a bottom rule. */}
         <nav aria-label='Settings sections' className='mt-4 border-b'>
           {/* Phones share the full width; wider screens align the first label with the title. */}
           <ul className='-mb-px flex sm:-ml-3'>

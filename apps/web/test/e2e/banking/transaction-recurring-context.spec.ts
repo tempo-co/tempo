@@ -130,7 +130,7 @@ for (const width of [320, 390, 1440]) {
         recurring = null;
         return fulfillJson(route, saved);
       });
-      await page.goto(`/bank-transactions?transactionId=${ID}`);
+      await page.goto(`/transactions?transactionId=${ID}`);
       const inspector = page.getByTestId('bank-transaction-inspector');
       await expect(
         inspector.getByRole('button', {name: 'Recurring payment', exact: true}),
@@ -197,7 +197,7 @@ for (const width of [320, 390, 1440]) {
       await expect(fold.getByRole('link')).toHaveCount(3);
       await expect(fold.getByRole('link', {name: 'All payments', exact: true})).toHaveAttribute(
         'href',
-        `/bank-transactions?recurring=open&series=${series.key}`,
+        `/transactions?recurring=open&series=${series.key}`,
       );
       const after = await boxOf(category);
       expect(after.x).toBe(before.x);
@@ -263,7 +263,7 @@ for (const width of [320, 390, 1440]) {
     test('shows ended recurring history with its last payments', async ({page}) => {
       await mockDetails(page);
       await mockJson(page, `**/bank-transactions/${ID}/recurring?**`, {...series, status: 'ENDED'});
-      await page.goto(`/bank-transactions?transactionId=${ID}`);
+      await page.goto(`/transactions?transactionId=${ID}`);
       const fold = page.getByTestId('recurring-fold');
       await expect(fold.locator('p').first()).toHaveText('Monthly · Ended');
       await fold.getByRole('button', {name: 'Recurring payment', exact: true}).click();
@@ -285,7 +285,7 @@ for (const width of [320, 390, 1440]) {
             })
           : fulfillJson(route, series),
       );
-      await page.goto(`/bank-transactions?transactionId=${ID}`);
+      await page.goto(`/transactions?transactionId=${ID}`);
       const inspector = page.getByTestId('bank-transaction-inspector');
       await expect(inspector.getByText('Recurring details unavailable.')).toBeVisible();
       await expect(inspector.getByTestId('bank-transaction-detail-amount')).toContainText('12.99');

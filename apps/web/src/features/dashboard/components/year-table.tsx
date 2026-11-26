@@ -235,10 +235,10 @@ function YearSparkline({months}: {months: MonthPoint[]}) {
 
 /**
  * A figure column's width: what its longest figure needs (`--fit`) on a phone; wider up, 18% of the table, which
- * leaves the year room for its line, and a fifth from a laptop's width. A fixed table takes a length or a
- * percentage, but treats a mix such as `max(20%, 6rem)` as no width at all.
+ * leaves the year room for its line; and a fifth from a tablet's width, where the sidebar narrows the page. A fixed
+ * table takes a length or a percentage, but treats a mix such as `max(20%, 6rem)` as no width at all.
  */
-const FIGURE_WIDTH = 'w-(--fit) min-[34rem]:w-[18%] lg:w-1/5';
+const FIGURE_WIDTH = 'w-(--fit) min-[34rem]:w-[18%] md:w-1/5';
 
 /** A column width that fits the longest of `texts` in the table's figures, plus `padding` rem. */
 function fit(texts: string[], padding: number) {

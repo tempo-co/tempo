@@ -17,7 +17,7 @@ test.describe('Home without banks', () => {
       'where the money went, once one account has synced.',
     );
     await homePage.connectBankLink.click();
-    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect(page).toHaveURL(/\/accounts$/);
   });
 });
 
@@ -89,7 +89,7 @@ test.describe('Home', () => {
 test.describe('Home navigation badges', () => {
   test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
 
-  test('Transactions counts what needs review and Connections flags a bank to reconnect', async ({
+  test('Transactions counts what needs review and Accounts flags a bank to reconnect', async ({
     page,
     homePage,
   }) => {
@@ -108,13 +108,13 @@ test.describe('Home navigation badges', () => {
     const transactions = primary.getByRole('link', {name: 'Transactions, 3 to review'});
     await expect(transactions).toHaveText('Transactions3');
     await expect(
-      primary.getByRole('link', {name: 'Connections, a bank needs attention'}),
+      primary.getByRole('link', {name: 'Accounts, a bank needs attention'}),
     ).toBeVisible();
     // A retained expired bank still counts towards the totals.
     await expect(homePage.totalBalance).toHaveText('€24,300');
 
     await transactions.click();
-    await expect(page).toHaveURL(/\/bank-transactions/);
+    await expect(page).toHaveURL(/\/transactions/);
   });
 
   /** An authorized bank whose consent ends `days` after now. */
@@ -130,7 +130,7 @@ test.describe('Home navigation badges', () => {
     syncStatus: 'EXPIRED',
   };
 
-  test('Connections flags a bank whose consent ends within a week, and its card offers re-authorizing', async ({
+  test('Accounts flags a bank whose consent ends within a week, and its card offers re-authorizing', async ({
     page,
   }) => {
     await mockSyntheticHome(page, {
@@ -141,11 +141,11 @@ test.describe('Home navigation badges', () => {
     const connections = page
       .getByRole('navigation', {name: 'Primary'})
       .first()
-      .getByRole('link', {name: 'Connections, a bank needs re-authorizing soon'});
+      .getByRole('link', {name: 'Accounts, a bank needs re-authorizing soon'});
     await expect(connections).toBeVisible();
 
     await connections.click();
-    await expect(page).toHaveURL(/\/bank-connections$/);
+    await expect(page).toHaveURL(/\/accounts$/);
     const notice = page.getByTestId('bank-connection-problem');
     await expect(notice).toContainText('Consent ends in 3 days');
     await expect(notice).toContainText('Re-authorize to keep syncing');
@@ -161,7 +161,7 @@ test.describe('Home navigation badges', () => {
       ],
     });
     await mockJson(page, '**/bank-connections/aspsps', []);
-    await page.goto('/bank-connections');
+    await page.goto('/accounts');
     const notice = page.getByTestId('bank-connection-problem');
     await expect(notice).toHaveCount(1);
     await expect(notice).toContainText('Consent ends in 3 days');
@@ -172,7 +172,7 @@ test.describe('Home navigation badges', () => {
     {
       name: 'consent ending in 10 days carries no badge',
       connections: [consentEndingIn('00000000-0000-4000-8000-0000000000c4', 10)],
-      label: 'Connections',
+      label: 'Accounts',
     },
     {
       name: 'several banks ending soon read as a count',
@@ -180,7 +180,7 @@ test.describe('Home navigation badges', () => {
         consentEndingIn('00000000-0000-4000-8000-0000000000c5', 1),
         consentEndingIn('00000000-0000-4000-8000-0000000000c6', 6),
       ],
-      label: 'Connections, 2 banks need re-authorizing soon',
+      label: 'Accounts, 2 banks need re-authorizing soon',
     },
     {
       name: 'a bank with a sync problem whose consent also ends soon is named for both',
@@ -191,15 +191,15 @@ test.describe('Home navigation badges', () => {
           lastSuccessfulSyncAt: '2026-11-03T11:00:00.000Z',
         },
       ],
-      label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
+      label: 'Accounts, a bank needs attention and a bank needs re-authorizing soon',
     },
     {
       name: 'a broken bank and one ending soon are named together',
       connections: [expired, consentEndingIn('00000000-0000-4000-8000-0000000000c7', 3)],
-      label: 'Connections, a bank needs attention and a bank needs re-authorizing soon',
+      label: 'Accounts, a bank needs attention and a bank needs re-authorizing soon',
     },
   ]) {
-    test(`Connections badge: ${name}`, async ({page}) => {
+    test(`Accounts badge: ${name}`, async ({page}) => {
       await mockSyntheticHome(page, {connections});
       await page.goto('/');
       const link = page
@@ -207,7 +207,7 @@ test.describe('Home navigation badges', () => {
         .first()
         .getByRole('link', {name: label, exact: true});
       await expect(link).toBeVisible();
-      await expect(link.locator('i')).toHaveCount(label === 'Connections' ? 0 : 1);
+      await expect(link.locator('i')).toHaveCount(label === 'Accounts' ? 0 : 1);
     });
   }
 
@@ -227,7 +227,7 @@ test.describe('Home navigation badges', () => {
     await expect(primary.getByRole('link', {name: 'Transactions', exact: true})).toHaveText(
       'Transactions',
     );
-    await expect(primary.getByRole('link', {name: 'Connections', exact: true})).toBeVisible();
+    await expect(primary.getByRole('link', {name: 'Accounts', exact: true})).toBeVisible();
   });
 
   test('the phone tab bar carries the same badges', async ({page}) => {
@@ -238,9 +238,7 @@ test.describe('Home navigation badges', () => {
     await page.goto('/');
     const tabs = page.getByRole('navigation', {name: 'Primary'}).last();
     await expect(tabs.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
-    await expect(
-      tabs.getByRole('link', {name: 'Connections, a bank needs attention'}),
-    ).toBeVisible();
+    await expect(tabs.getByRole('link', {name: 'Accounts, a bank needs attention'})).toBeVisible();
   });
 });
 

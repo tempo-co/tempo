@@ -858,7 +858,7 @@ test('lets a drill be cleared when its series is no longer found', async ({page}
       ? fulfillJson(route, {statusCode: 429, message: 'ThrottlerException: Too Many Requests'}, 429)
       : fulfillJson(route, {transactions: [], total: 0});
   });
-  await page.goto(`/bank-transactions?recurringSeriesKey=${GYM_KEY}`);
+  await page.goto(`/transactions?recurringSeriesKey=${GYM_KEY}`);
   await expect(page.getByText("Couldn't load transactions")).toBeVisible();
 
   await page.getByRole('button', {name: 'Clear filters'}).click();

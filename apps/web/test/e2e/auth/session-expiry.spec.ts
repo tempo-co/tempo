@@ -17,7 +17,7 @@ test.describe('auth errors during a session', () => {
       connections.map((connection) => ({...connection, status: 'EXPIRED'})),
     );
     const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
-    await page.goto('/bank-transactions');
+    await page.goto('/transactions');
     await expect(page.getByText('Coffee shop')).toBeVisible();
     // Finish the initial connection load before expiring the Tempo session.
     await (await connectionsResponse).finished();
