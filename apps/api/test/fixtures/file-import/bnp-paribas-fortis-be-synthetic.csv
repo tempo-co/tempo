@@ -1,0 +1,5 @@
+Volgnummer;Uitvoeringsdatum;Valutadatum;Bedrag;Valuta rekening;Rekeningnummer;Type verrichting;Tegenpartij;Naam van de tegenpartij;Mededeling;Details;Status;Reden van weigering
+
+2026-0012;06/10/2026;06/10/2026;-1.060,00;EUR;BE68539007547034;Europese domiciliering;BE71096123456769;Example Energie NV;Voorschot oktober;EUROPESE DOMICILIERING VALUTADATUM : 06/10/2026;Geaccepteerd;
+2026-0011;02/10/2026;01/10/2026;2.500,00;EUR;BE68539007547034;Overschrijving in euro;NL91ABNA0417164300;Example Werkgever BV;Loon oktober;NL91 ABNA 0417 1643 00 BIC ABNANL2A MEDEDELING : Loon oktober VALUTADATUM : 01/10/2026;Geaccepteerd;
+2026-0010;01/10/2026;01/10/2026;-50,00;EUR;BE68539007547034;Betaling met bankkaart;BETALING MET BANKKAART;EXAMPLE BAKKERIJ;000000001;MET KAART 0000 00XX XXXX X000 0 EXAMPLE BAKKERIJ 1000 01-10-2026 VALUTADATUM : 01/10/2026;Geaccepteerd;
