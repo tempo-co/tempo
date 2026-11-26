@@ -21,6 +21,7 @@ import {
 	SQL_BASE_AMOUNT,
 	SQL_INCOME_SOURCE,
 	SQL_PERIOD_START,
+	SQL_UNCATEGORIZED,
 	applyBankTransactionFilters,
 	createOwnerScopedQuery,
 	findFirstTransactionDate,
@@ -28,7 +29,7 @@ import {
 
 const CATEGORY_KEY = `COALESCE("transaction"."category", '${BANK_TRANSACTION_UNCATEGORIZED}')`;
 
-type PartRow = {start: string; key: string; amount: string};
+type PartRow = {start: string; key: string; amount: string; count: number};
 type SourceRow = {key: string; label: string; latestId: string};
 
 /** Where the owner's money went and came from over the years, on the summary's definitions. */
@@ -43,7 +44,8 @@ export class BankTransactionHistoryService {
 	/**
 	 * Spending by category or income by source per month or year. Each period's total equals cash flow's for it:
 	 * spending is net of refunds (a refund-only `REFUND` part is negative), own transfers and currency exchanges are
-	 * left out, and rows without a base-currency amount are not counted.
+	 * left out, and rows without a base-currency amount are not counted. `allCategories` instead counts every row the
+	 * list's category filter matches, in either direction, with its net base-currency amount.
 	 */
 	async getBreakdown(
 		owner: ReportingOwner,
@@ -53,15 +55,19 @@ export class BankTransactionHistoryService {
 		const baseCurrency = totalsCurrency(owner);
 		const starts = periodStarts(interval, from, to, asOf);
 		if (!starts) throw new BadRequestException(BANKING_TRANSACTION_BREAKDOWN_RANGE);
-		const flow = by === 'category' ? 'SPENDING' : 'INCOME';
-		const key = by === 'category' ? CATEGORY_KEY : SQL_INCOME_SOURCE;
+		const key = by === 'source' ? SQL_INCOME_SOURCE : CATEGORY_KEY;
 		const flowQuery = () => {
 			const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
-			applyBankTransactionFilters(query, {
-				date: {from: starts[0], to},
-				baseAmount: 'PRESENT',
-				cashFlows: [flow],
-			});
+			if (by === 'allCategories') {
+				// Every row the list's category filter matches: a category, else uncategorized unless a financial event.
+				applyBankTransactionFilters(query, {date: {from: starts[0], to}});
+				query.andWhere(`("transaction"."category" IS NOT NULL OR ${SQL_UNCATEGORIZED})`);
+			} else
+				applyBankTransactionFilters(query, {
+					date: {from: starts[0], to},
+					baseAmount: 'PRESENT',
+					cashFlows: [by === 'category' ? 'SPENDING' : 'INCOME'],
+				});
 			return query.setParameter('interval', interval);
 		};
 
@@ -70,7 +76,8 @@ export class BankTransactionHistoryService {
 			flowQuery()
 				.select(SQL_PERIOD_START, 'start')
 				.addSelect(key, 'key')
-				.addSelect(`ROUND(SUM(${SQL_BASE_AMOUNT}), 2)::text`, 'amount')
+				.addSelect(`ROUND(COALESCE(SUM(${SQL_BASE_AMOUNT}), 0), 2)::text`, 'amount')
+				.addSelect('COUNT(*)::int', 'count')
 				.groupBy('1')
 				.addGroupBy('2')
 				.getRawMany<PartRow>(),
@@ -101,8 +108,8 @@ export class BankTransactionHistoryService {
 		const periods = periodWindows(interval, starts, to, asOf, firstTransactionDate).map(
 			(window): BankTransactionBreakdownPeriod => {
 				const periodParts = (partsByStart.get(window.start) ?? [])
-					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount)}))
-					.filter((part) => part.cents !== 0n)
+					.map((row) => ({key: row.key, cents: sign * parseCents(row.amount), count: row.count}))
+					.filter((part) => part.cents !== 0n || by === 'allCategories')
 					.sort((left, right) =>
 						left.cents !== right.cents
 							? left.cents > right.cents
@@ -119,6 +126,7 @@ export class BankTransactionHistoryService {
 						key: part.key,
 						label: labelByKey.get(part.key) ?? part.key,
 						amount: formatCents(part.cents),
+						count: part.count,
 						...looks.get(part.key),
 					})),
 				};

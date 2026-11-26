@@ -9,7 +9,7 @@ test.describe('Account Settings: Delete account', () => {
     loginPage,
   }) => {
     await page.setViewportSize({width: 393, height: 852});
-    await accountSettingsPage.navigate();
+    await accountSettingsPage.navigateToYourData();
 
     await accountSettingsPage.deleteAccountButton.click();
     const deleteCancelButton = page.getByRole('button', {name: 'Cancel'});

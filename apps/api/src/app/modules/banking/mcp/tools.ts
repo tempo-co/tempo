@@ -233,7 +233,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'spending_breakdown',
 		{
-			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's. ${asOfDefault} ${rangeLimits(BREAKDOWN_INTERVALS)} ${BANK_DATA_NOTICE}`,
+			description: `Spending by category (by: category, net of refunds) or income by source (by: source) per month or year, each period's total equal to cash_flow's; by: allCategories counts every transaction by category in either direction instead. ${asOfDefault} ${rangeLimits(BREAKDOWN_INTERVALS)} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				interval: z.enum(BREAKDOWN_INTERVALS),
 				by: z.enum(BREAKDOWN_DIMENSIONS),

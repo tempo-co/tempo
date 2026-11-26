@@ -124,7 +124,7 @@ test('redirects to login when the session expires before an account deletion is 
 }) => {
   // Finish the initial load before expiring the session so late responses cannot restore cookies.
   const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
-  await accountSettingsPage.navigate();
+  await accountSettingsPage.navigateToYourData();
   await expect(homePage.accountEmail).toHaveText(freshAccount.email);
   await (await connectionsResponse).finished();
 

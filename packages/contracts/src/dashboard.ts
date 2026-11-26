@@ -114,8 +114,11 @@ export type BankBalanceTrend = {
 
 export const BREAKDOWN_INTERVALS = ['month', 'year'] as const;
 export type BreakdownInterval = (typeof BREAKDOWN_INTERVALS)[number];
-/** `category`: spending (net of refunds) by category; `source`: income by merchant. */
-export const BREAKDOWN_DIMENSIONS = ['category', 'source'] as const;
+/**
+ * `category`: spending (net of refunds) by category; `source`: income by merchant; `allCategories`: every transaction
+ * by its category in either direction, as the list's category filter matches them.
+ */
+export const BREAKDOWN_DIMENSIONS = ['category', 'source', 'allCategories'] as const;
 export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number];
 
 /** `GET /bank-transactions/breakdown` query. */
@@ -135,8 +138,13 @@ export type BankTransactionBreakdownPart = {
 	key: string;
 	/** The category again, or the source's most common display name. */
 	label: string;
-	/** Spending is positive; a part that only holds refunds is negative. */
+	/**
+	 * Spending is positive; a part that only holds refunds is negative. `allCategories` keeps the ledger's sign (money
+	 * in positive) and leaves rows without a base-currency amount out of the amount but not the count.
+	 */
 	amount: string;
+	/** The transactions in the part. */
+	count: number;
 	/** Sources only: the logo of the merchant of the source's latest income, null without a trusted one. */
 	merchantLogoUrl?: string | null;
 	/** Sources only: the latest income's category, the icon shown without a logo. */
@@ -150,9 +158,9 @@ export type BankTransactionBreakdownPeriod = {
 	end: string;
 	/** False when the period is cut at `to` or starts before the first booked transaction. */
 	complete: boolean;
-	/** The period's spending or income, equal to cash flow's for the same period. */
+	/** The period's spending or income, equal to cash flow's for the same period; under `allCategories`, its parts' net. */
 	total: string;
-	/** Largest first; parts that net to zero are left out. */
+	/** Largest first; parts that net to zero are left out, except under `allCategories`, which keeps every row. */
 	parts: BankTransactionBreakdownPart[];
 };
 
