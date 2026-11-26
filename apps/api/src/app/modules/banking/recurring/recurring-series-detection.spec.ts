@@ -1220,6 +1220,33 @@ describe('detectRecurringSeries', () => {
 		expect(detectRecurringSeries(rows, TODAY)).toEqual([]);
 	});
 
+	it('does not suggest a yearly pair when its amount is paid again between its payments', () => {
+		const coincidence = ['2025-03-10', '2025-11-02', '2026-03-12'].map((date) =>
+			payment(date, '20.00', {merchantKey: 'EXPENSE:example station', category: 'TRANSPORTATION'}),
+		);
+		const established = [
+			...['2024-03-10', '2025-03-11', '2026-03-12'].map((date) =>
+				payment(date, '15.00', {merchantKey: 'EXPENSE:example registrar'}),
+			),
+			payment('2025-07-01', '15.00', {merchantKey: 'EXPENSE:example registrar'}),
+		];
+		const [spring, autumn] = [
+			['2025-03-10', '2026-03-12', '240.00'],
+			['2025-09-10', '2026-09-11', '240.00'],
+		].map(([from, to, amount]) =>
+			[from, to].map((date) => payment(date, amount, {merchantKey: 'EXPENSE:example insurer'})),
+		);
+
+		expect(detectRecurringSeries([...coincidence, ...established, ...spring, ...autumn], TODAY)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({cadence: 'YEARLY', transactionIds: established.slice(0, 3).map(({id}) => id)}),
+				expect.objectContaining({cadence: 'YEARLY', transactionIds: spring.map(({id}) => id)}),
+				expect.objectContaining({cadence: 'YEARLY', transactionIds: autumn.map(({id}) => id)}),
+			]),
+		);
+		expect(detectRecurringSeries(coincidence, TODAY)).toEqual([]);
+	});
+
 	it('keeps tracking a variable bill after an early run of a stable amount ends', () => {
 		const rows = [
 			...monthly(3, MAY_TO_OCT.slice(0, 3), '100.00', {merchantKey: 'EXPENSE:example energy'}),

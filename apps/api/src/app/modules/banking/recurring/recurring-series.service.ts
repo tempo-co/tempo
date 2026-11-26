@@ -48,7 +48,7 @@ const REFUND = 'REFUND' satisfies BankTransactionCategory;
  * `recurring-series-detection`, `recurring-payee-identity`, `recurring-continuation` or `recurring-series-eligibility`,
  * or the payload shape in `toPayload`. Stored detections from other rules are not reused.
  */
-export const RECURRING_DETECTION_RULES_VERSION = '12';
+export const RECURRING_DETECTION_RULES_VERSION = '13';
 const UPCOMING_COUNT = 3;
 /** Above this many change notes, a read folds the owner's notes into one; their sum stays the same. */
 const CHANGE_NOTES_FOLDED_AFTER = 32;
