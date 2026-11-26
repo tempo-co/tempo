@@ -1,3 +1,4 @@
+import type {BankGroup} from '../bank-group';
 import {compareIds} from '../own-transfer/own-transfer-detection';
 
 /**
@@ -5,7 +6,7 @@ import {compareIds} from '../own-transfer/own-transfer-detection';
  * connection; on the imported-files connection, which holds files of many banks, only legs of accounts recording the
  * same bank do (`bank-identity.ts`). Null for a leg whose account records no bank there: it pairs with nothing.
  */
-export type CurrencyExchangeGroup = string | null;
+export type CurrencyExchangeGroup = BankGroup;
 
 export type CurrencyExchangeLeg = {
 	id: string;

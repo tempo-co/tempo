@@ -1,5 +1,6 @@
 import type {OwnTransferEvidence, OwnTransferOverride} from '@tempo/contracts';
 
+import type {BankGroup} from '../bank-group';
 import {extractStructuredCounterpartyName, normalizeBankTransactionText} from '../bank-transaction-display';
 import {BANK_TRANSACTION_TYPES} from '../bank-transaction-type';
 
@@ -27,7 +28,7 @@ export type OwnTransferAccount = {
 	/** Account holder name as reported by the bank. */
 	holderName: string | null;
 	/** The accounts one bank reports together (`bankGroupOf`); null when the account records no bank. */
-	bankGroup: string | null;
+	bankGroup: BankGroup;
 };
 
 export type OwnTransferTransaction = {
@@ -95,8 +96,8 @@ const DAY_MS = 86_400_000;
  * Legs pair across accounts on the exact opposite amount in the same currency within the date window; the
  * second leg needs its own evidence unless the first leg's IBAN points at its account. Two booked legs without that
  * pair as well when one bank reports both accounts, on the same day, with the same description (case and spacing
- * aside), unless one is a card payment. A pending leg takes part only with evidence of its own; once it books, the booked row is recomputed like
- * any other.
+ * aside), unless one is a card payment. A pending leg takes part only with evidence of its own; once it books, the
+ * booked row is recomputed like any other.
  */
 export function detectOwnTransfers({
 	accounts,
@@ -141,7 +142,7 @@ export function detectOwnTransfers({
 			sign: amount?.sign ?? 1,
 			ibanTargets,
 			evidence,
-			descriptionKey: describeLeg(transaction, account),
+			descriptionKey: descriptionPairKey(transaction, account),
 		});
 	}
 
@@ -259,7 +260,7 @@ function sharesDescription(first: Leg, second: Leg, gap: number): boolean {
  * A leg's bank group and description, compared without case or extra whitespace; null when either is missing, and for
  * card payments, whose description names the shop (a purchase and a refund to another account would match).
  */
-function describeLeg(transaction: OwnTransferTransaction, account: OwnTransferAccount): string | null {
+function descriptionPairKey(transaction: OwnTransferTransaction, account: OwnTransferAccount): string | null {
 	if (account.bankGroup === null || transaction.transactionType === BANK_TRANSACTION_TYPES.CARD_PAYMENT) return null;
 	const description = transaction.description?.trim().replace(/\s+/g, ' ').toUpperCase();
 	return description ? JSON.stringify([account.bankGroup, description]) : null;
