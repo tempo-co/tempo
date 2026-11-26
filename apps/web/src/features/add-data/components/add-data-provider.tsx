@@ -13,6 +13,7 @@ import {
   AddDataContext,
   type ConnectResult,
   type Opener,
+  type SheetState,
   useAddData,
 } from '../use-add-data';
 import type {SheetHandle} from './add-data-sheet';
@@ -21,9 +22,6 @@ import type {SheetHandle} from './add-data-sheet';
 const AddDataSheet = lazy(() =>
   import('./add-data-sheet').then((module) => ({default: module.AddDataSheet})),
 );
-
-/** What the loaded sheet reports back: whether it is open, and whether an import is running. */
-export type SheetState = {open: boolean; busy: boolean};
 
 /**
  * Add data for the signed-in shell: the actions every page calls, and files dropped on any page. The sheet itself
@@ -38,7 +36,8 @@ export function AddDataProvider({children}: {children: ReactNode}) {
   const [wanted, setWanted] = useState(false);
   const [sheet, setSheet] = useState<SheetState>({open: false, busy: false});
   const sheetRef = useRef<SheetHandle | null>(null);
-  // The latest ask made while the sheet was still loading, answered as it arrives: a drop's files wait here.
+  // The ask made while the sheet was still loading, answered as it arrives. A drop's files wait here, and a later
+  // ask does not replace them: the sheet opens at their import either way.
   const pending = useRef<AddDataAsk | null>(null);
   // Where focus goes back to when the sheet closes, since it opens from many places.
   const openerRef = useRef<HTMLElement | null>(null);
@@ -49,7 +48,7 @@ export function AddDataProvider({children}: {children: ReactNode}) {
     // From the click, not the focused element: Safari on iPhone does not focus a tapped button.
     openerRef.current = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     if (sheetRef.current) return sheetRef.current.answer(next);
-    pending.current = next;
+    if (pending.current?.kind !== 'drop') pending.current = next;
     setWanted(true);
   }, []);
   // The loaded sheet takes the ask that waited for it.

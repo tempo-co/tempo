@@ -18,6 +18,9 @@ export type AddDataAsk =
   | {kind: 'drop'; files: File[]}
   | {kind: 'returned'; result: 'cancelled' | 'error'; bank: ConnectingBank | null};
 
+/** What the loaded sheet reports back: whether it is open, and whether an import is running. */
+export type SheetState = {open: boolean; busy: boolean};
+
 export type AddData = {
   /** Add data in the sidebar or the phone header: the ways in, or straight to the one there is. */
   openMenu: (opener?: Opener) => void;

@@ -67,11 +67,16 @@ test.describe('Add data', () => {
       await route.continue();
     });
 
-    await dropOnPage(page, {name: 'example-statement.xml', content: STATEMENT});
-    await expect.poll(() => sheetAsked).toBe(true);
     const sheet = page.getByTestId('add-data-sheet');
-    await expect(sheet).toHaveCount(0);
-    release();
+    try {
+      await dropOnPage(page, {name: 'example-statement.xml', content: STATEMENT});
+      await expect.poll(() => sheetAsked).toBe(true);
+      await expect(sheet).toHaveCount(0);
+      // Asking for Add data while the drop waits keeps the dropped file.
+      await page.getByRole('button', {name: 'Add data'}).click();
+    } finally {
+      release();
+    }
     await expect(sheet.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     // A side sheet over the page, not a centred dialog: it runs the window's full height.
     const box = (await sheet.boundingBox())!;

@@ -21,8 +21,7 @@ import {BUSY, isUnsettled, useFileImport} from '@/features/file-import/component
 import {IMPORT_TILE} from '@/features/file-import/utils/import-tile';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 
-import type {AddDataAsk} from '../use-add-data';
-import type {SheetState} from './add-data-provider';
+import type {AddDataAsk, SheetState} from '../use-add-data';
 
 type View = 'menu' | 'import' | 'connect';
 
