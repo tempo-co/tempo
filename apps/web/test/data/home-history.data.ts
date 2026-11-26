@@ -11,6 +11,7 @@ import type {
   BankTransactionSummary,
   BankTransactionTotals,
   BankTransactionsResponse,
+  MerchantGroupsResponse,
   MerchantRanking,
   RecurringSeries,
   RecurringSeriesLists,
@@ -610,10 +611,7 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
     const query = params(route);
     return fulfillJson(
       route,
-      history.totalsBetween(
-        query.get('filter[date][from]')!,
-        query.get('filter[date][to]')!,
-      ),
+      history.totalsBetween(query.get('filter[date][from]')!, query.get('filter[date][to]')!),
     );
   });
   await page.route('**/bank-transactions/cash-flow?**', (route) =>
@@ -634,7 +632,7 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
   });
 }
 
-/** Answers every request Home and its month dialog make from {@link homeHistory}. */
+/** Answers every request Home, its month dialog and Insights make from {@link homeHistory}. */
 export async function mockHomeHistory(
   page: Page,
   history: HomeHistory = homeHistory(),
@@ -648,6 +646,14 @@ export async function mockHomeHistory(
   await page.route('**/recurring-series?**', (route) => fulfillJson(route, recurring.lists));
   await page.route('**/merchants/ranking?**', (route) =>
     fulfillJson(route, homeRanking(params(route).get('period') ?? '')),
+  );
+  // Insights' top merchants of a period; specs that open a merchant answer their own.
+  await page.route('**/merchants?**', (route) =>
+    fulfillJson(route, {
+      baseCurrency: 'EUR',
+      merchants: [],
+      total: 0,
+    } satisfies MerchantGroupsResponse),
   );
   await page.route('**/bank-transactions?**', (route) => {
     if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();

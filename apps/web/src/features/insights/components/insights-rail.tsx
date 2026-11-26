@@ -108,9 +108,14 @@ export function BillsCard({today}: {today: string}) {
   const accepted = useFiguresCurrencyAccepted();
   const summary = loaded && accepted(loaded.baseCurrency) ? loaded : undefined;
   return (
-    <Card role='region' aria-label='Bills' aria-busy={!summary || undefined} className={CARD}>
+    <Card
+      role='region'
+      aria-label='Bills per month'
+      aria-busy={!summary || undefined}
+      className={CARD}
+    >
       <RailHeader
-        title='Bills'
+        title='Bills per month'
         action={
           <TextAction asChild className='-mr-2 gap-0.5'>
             <Link to='/recurring'>
@@ -127,15 +132,12 @@ export function BillsCard({today}: {today: string}) {
           onRetry={refetch}
         />
       ) : (
-        <p className='flex flex-wrap items-baseline gap-x-2'>
-          <span className='numeric text-xl font-semibold tracking-tight'>
-            {summary ? (
-              formatMoney(summary.expenseMonthlyTotal, summary.baseCurrency)
-            ) : (
-              <TextBone className='w-[5em]' />
-            )}
-          </span>
-          <span className='text-body-small text-muted-foreground'>a month</span>
+        <p className='numeric text-xl font-semibold tracking-tight'>
+          {summary ? (
+            formatMoney(summary.expenseMonthlyTotal, summary.baseCurrency)
+          ) : (
+            <TextBone className='w-[5em]' />
+          )}
         </p>
       )}
     </Card>

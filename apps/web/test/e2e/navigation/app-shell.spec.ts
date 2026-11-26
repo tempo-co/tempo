@@ -85,13 +85,16 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
 
   const tabBar = page.getByTestId('app-tab-bar');
   await expect(page.getByTestId('app-sidebar')).toBeHidden();
-  await expect(tabBar.getByRole('link')).toHaveText([
+  // A screen reader hears each tab's label, Transactions with its review count; the count badge itself is hidden.
+  const tabs = tabBar.getByRole('link');
+  await expect(tabs).toHaveCount(4);
+  for (const [index, name] of [
     'Home',
-    /^Transactions/,
+    'Transactions, 3 to review',
     'Insights',
     'Accounts',
-  ]);
-  await expect(tabBar.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
+  ].entries())
+    await expect(tabs.nth(index)).toHaveAccessibleName(name);
 
   for (const {label, url} of [
     {label: 'Transactions', url: /\/transactions(?:\?|$)/},
