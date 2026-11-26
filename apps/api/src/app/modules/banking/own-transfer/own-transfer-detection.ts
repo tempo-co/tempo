@@ -142,7 +142,7 @@ export function detectOwnTransfers({
 			sign: amount?.sign ?? 1,
 			ibanTargets,
 			evidence,
-			descriptionKey: descriptionPairKey(transaction, account),
+			descriptionKey: descriptionPairKey(transaction, account, ibanTargets, holderKeys),
 		});
 	}
 
@@ -257,13 +257,31 @@ function sharesDescription(first: Leg, second: Leg, gap: number): boolean {
 }
 
 /**
- * A leg's bank group and description, compared without case or extra whitespace; null when either is missing, and for
- * card payments, whose description names the shop (a purchase and a refund to another account would match).
+ * A leg's bank group and description, compared without case or extra whitespace. Null when either is missing, for card
+ * payments, whose description names the shop (a purchase and a refund to another account would match), and for a leg
+ * that names another party (rent paid out and rent received in would match).
  */
-function descriptionPairKey(transaction: OwnTransferTransaction, account: OwnTransferAccount): string | null {
+function descriptionPairKey(
+	transaction: OwnTransferTransaction,
+	account: OwnTransferAccount,
+	ibanTargets: Set<string>,
+	holderKeys: Set<string>,
+): string | null {
 	if (account.bankGroup === null || transaction.transactionType === BANK_TRANSACTION_TYPES.CARD_PAYMENT) return null;
+	if (namesAnotherParty(transaction, ibanTargets, holderKeys)) return null;
 	const description = transaction.description?.trim().replace(/\s+/g, ' ').toUpperCase();
 	return description ? JSON.stringify([account.bankGroup, description]) : null;
+}
+
+/** A counterparty IBAN that is none of the owner's accounts, or a provider counterparty name that is not the holder's. */
+function namesAnotherParty(
+	transaction: OwnTransferTransaction,
+	ibanTargets: Set<string>,
+	holderKeys: Set<string>,
+): boolean {
+	if (transaction.counterpartyIban && ibanTargets.size === 0) return true;
+	const counterpartyName = normalizeBankTransactionText(transaction.counterpartyName);
+	return counterpartyName !== null && !matchesHolder(counterpartyName, holderKeys);
 }
 
 function getPairEvidence(first: Leg, second: Leg): OwnTransferEvidence {

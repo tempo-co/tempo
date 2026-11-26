@@ -150,6 +150,8 @@ describe('detectOwnTransfers', () => {
 		},
 		{name: 'while one leg is pending', incoming: {transactionStatus: 'PDNG'}},
 		{name: 'when one leg is a card payment', outgoing: {transactionType: 'CARD_PAYMENT'}},
+		{name: 'when one leg names an account that is not theirs', outgoing: {counterpartyIban: STRANGER_IBAN}},
+		{name: 'when one leg names another person', incoming: {counterpartyName: 'John Sample'}},
 		{name: 'when one leg was unmarked', incoming: {override: OWN_TRANSFER_OVERRIDES.UNMARKED}},
 	])(
 		'leaves same-amount legs unpaired $name',
