@@ -1247,6 +1247,8 @@ export const CSV_LAYOUTS: readonly CsvLayout[] = [
 		bookingDate: 0,
 		amount: {kind: 'debitCredit', debitColumn: 2, creditColumn: 1},
 		description: [3, 4],
+		// Stato says "Autorizzato" on a card payment not booked yet.
+		pendingColumn: 5,
 	},
 	{
 		id: 'fineco-it-value-date',
@@ -1281,6 +1283,8 @@ export const CSV_LAYOUTS: readonly CsvLayout[] = [
 		bookingDate: 0,
 		amount: {kind: 'debitCredit', debitColumn: 2, creditColumn: 1},
 		description: [3, 4],
+		// Stato says "Autorizzato" on a card payment not booked yet.
+		pendingColumn: 5,
 	},
 	{
 		id: 'credit-agricole-it',
