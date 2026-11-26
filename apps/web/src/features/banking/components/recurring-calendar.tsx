@@ -17,8 +17,8 @@ const PHONE_DAY_LABELS = 2;
 /**
  * This month as a calendar, weeks from Monday: each payment on the day it was paid or is expected. A payment still
  * late from an earlier month, or this month's paid a few days early in the last one, is listed above the grid, since
- * its day is not on it. A day with more payments than fit, and
- * any day on a phone, lists its payments under the grid as rows.
+ * its day is not on it. A day with more payments than fit, and any day on a phone, lists its payments under the grid
+ * as rows.
  */
 export function RecurringCalendar({
   asOf,
@@ -46,14 +46,18 @@ export function RecurringCalendar({
   const weekdays = Array.from({length: 7}, (_, index) =>
     addDays(startOfWeek(first, {weekStartsOn: 1}), index),
   );
-  const monthName = (list: CalendarItem[]) => format(parseCalendarDate(list[0].date), 'MMMM');
   const before = items.filter((item) => item.date < `${month}-01`);
-  const stillLate = before.filter(({kind}) => kind !== 'paid');
-  const paidEarly = before.filter(({kind}) => kind === 'paid');
-  const earlier = [
-    {label: stillLate.length > 0 ? `Still late from ${monthName(stillLate)}` : '', list: stillLate},
-    {label: paidEarly.length > 0 ? `Paid early, in ${monthName(paidEarly)}` : '', list: paidEarly},
-  ].filter(({list}) => list.length > 0);
+  const earlier = (
+    [
+      ['Still late from', before.filter(({kind}) => kind !== 'paid')],
+      ['Paid early, in', before.filter(({kind}) => kind === 'paid')],
+    ] as const
+  )
+    .filter(([, list]) => list.length > 0)
+    .map(([prefix, list]) => ({
+      label: `${prefix} ${format(parseCalendarDate(list[0].date), 'MMMM')}`,
+      list,
+    }));
   const dayItems = openDay ? items.filter((item) => item.date === openDay) : [];
   const rows = (list: CalendarItem[], label: string) => (
     <ul aria-label={label} className='divide-y divide-border/60 rounded-lg border'>

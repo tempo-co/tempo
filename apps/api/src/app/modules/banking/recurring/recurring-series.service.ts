@@ -175,7 +175,7 @@ export class RecurringSeriesService {
 
 	/**
 	 * Each series' payments through `asOf` that count in `asOf`'s calendar month, oldest first, in base-currency cents.
-	 * A payment made a few days early at the end of last month counts here; one made early for next month does not.
+	 * A payment a few days off its due date across a month boundary counts in the month it was due (`paymentMonth`).
 	 */
 	private async paidThisMonth(
 		accountId: Account['id'],
