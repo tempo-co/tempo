@@ -202,7 +202,7 @@ function DetailRow({
   );
 }
 
-/** Each account the import went to, as its Connections card and row show it: bank logo, name and what tells it apart. */
+/** Each account the import went to, as its Accounts row shows it: bank logo, name and what tells it apart. */
 function ImportAccounts({
   summary,
   known,
@@ -242,8 +242,8 @@ function ImportAccounts({
 }
 
 /**
- * The account's bank logo (imported files: the files tile) as on its Connections card, with its type in a small
- * tile on the corner as on its Connections row. An account the loaded list lacks gets the plain account tile.
+ * The account's bank logo (imported files: the files tile) as on its Accounts row, with its type in a small
+ * tile on the corner. An account the loaded list lacks gets the plain account tile.
  */
 function AccountTile({match, logos}: {match?: KnownAccount; logos: BankLogos}) {
   if (!match)

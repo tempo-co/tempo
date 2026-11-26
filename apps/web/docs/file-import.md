@@ -68,11 +68,11 @@ No copy calls import a fallback or assumes a bank is connected.
   more** (as Load more) under them; it focuses the first row it adds, and choices on every shown
   row count toward Save. When every row is on a synced account, a second muted line under the
   intro says they are almost always in Tempo already and leaving them open loses nothing.
-- **Imports list.** Under the connection cards once an import exists: a small heading, then one
+- **Imports list.** On Accounts' Imports tab, and on an account page for the imports that wrote to it: a small heading, then one
   bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
   new" over the day, the accounts and any rows still to check (attention tone), with an
-  always-visible outline Undo named with its date. An undone import stays listed, muted, without
-  the button. Undo confirms with the destructive variant and says what goes and what stays.
+  always-visible outline Undo named with its date, after Review while rows are still to check. An
+  undone import stays listed, muted, without the buttons. Undo confirms with the destructive variant and says what goes and what stays.
 - **Column preview.** The bank a layout is saved under is a `Select` labelled Bank: the owner's own banks
   (`GET /bank-imports/layout-proposals/:proposalId/banks`: their connected or once-connected banks, the
   banks their imported-files accounts record by name and their saved layouts' banks; only names this
@@ -84,6 +84,6 @@ No copy calls import a fallback or assumes a bank is connected.
   Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
   the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API
   refuses says why under the control.
-- **Imported files.** The imported-files connection uses the bank card with the `Files` leading tile
-  and "From statement files". It never shows consent, sync or re-authorization states, and its
-  Details hold the accounts and Remove only.
+- **Imported files.** An imported-files account has the `Files` leading tile and "statement files"
+  as its source, and its freshness line runs up to its newest import's last day. It never shows
+  consent, sync or reconnecting; its page offers Import a newer file and Remove imported files.

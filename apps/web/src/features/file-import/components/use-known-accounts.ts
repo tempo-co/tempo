@@ -14,7 +14,7 @@ export type KnownAccount = {
 };
 
 /**
- * The owner's accounts by id, as the Connections page names them, read from the loaded connection list. An
+ * The owner's accounts by id, as Accounts names them, read from the loaded connection list. An
  * import's summary names an account only by its provider name, which is often just the holder's name.
  */
 export function useKnownAccounts() {

@@ -52,7 +52,7 @@ function useAddData() {
   const navigate = useNavigate();
   return () => void navigate({to: '/accounts'});
 }
-const SETTINGS = '/settings/account';
+const SETTINGS = '/settings';
 
 type NavBadge = {count: number | null; label: string};
 

@@ -198,7 +198,7 @@ Spacing is Tailwind's 4px scale: card padding 16px (`p-4`), cards on a page 12px
 columns inside a card 16px apart (`gap-4`).
 
 The shell (Navigation) puts a ~`80rem` content column beside the sidebar, or under a phone header
-above a tab bar; Settings uses a ~`40rem` column. From `md` up the page reserves the scrollbar's
+above a tab bar; Settings sections use a ~`40rem` column. From `md` up the page reserves the scrollbar's
 gutter, so the column stays put. Every page title starts at the top of the column (Home's content
 starts there), and an action beside a title overhangs its row instead of making it taller.
 Responsive behaviour is structural, not scaled: tables scroll sideways or become rows that open in
@@ -245,8 +245,8 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
   (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
   (`90dvh`, `8em`), `var(--…)` and 1px pass.
 - **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
-- **Layout:** `test/e2e/home/layout.spec.ts` (Home, the shell) and
-  `test/e2e/recurring/layout.spec.ts`, 1440 to 320px, both themes, demo and worst-case data.
+- **Layout:** `test/e2e/home/layout.spec.ts` (Home, the shell), `test/e2e/recurring/layout.spec.ts`
+  and `test/e2e/settings/layout.spec.ts`: 1440 to 320px, both themes, demo and worst-case data.
 
 An exception needs a reason:
 
@@ -268,7 +268,7 @@ mode. A box-shadow ring in `primary` marks a selected value (the theme picker), 
 ### Buttons
 
 `Button`: `text-body-small` medium labels, control radius, 16px icons with an 8px gap, specific
-labels ("Connect a bank", "Re-authorize"). Every size grows to 44px on phones and coarse pointers.
+labels ("Connect a bank", "Reconnect"). Every size grows to 44px on phones and coarse pointers.
 
 | Size | Height | Use |
 | --- | --- | --- |
@@ -351,8 +351,7 @@ Details rail: a 360px `card` column from `lg`, a `ResponsiveDialog` below.
 
 ### Alerts
 
-An inline message about the thing it sits in (a refused import, a bank to re-authorize, a failed
-save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text: 1px
+An inline message about the thing it sits in (a refused import, a failed save) is an `Alert` (`src/components/ui/alert.tsx`), never a hand-styled box or bare red text: 1px
 border, control radius, `10px 12px` padding, a leading 16px glyph, a `text-body` medium title, a muted
 `text-body-small` description, actions under the text on phones and to the right from `sm` up.
 
@@ -431,9 +430,9 @@ Pages: `/`, `/transactions`, `/insights`, `/recurring`, `/accounts`, `/settings/
 - **Badges:** the count to review on Transactions (`99+` above 99), a `warning` dot on Accounts for
   a bank that needs attention; the link's name says what each means.
 
-Settings is one page titled "Settings", Log out beside the title, with text section tabs on a
-bottom rule in the `40rem` column: on phones they share the width with 48px targets, and the active
-one has a `primary` underline.
+Each Settings section (`src/features/settings/sections.ts`) has an address. Desktop: a 208px
+section list (176px below `lg`), the open one on `card` with a hairline, beside the section;
+`/settings` opens Profile. Phones list sections as 64px rows; each has a "‹ Settings" link.
 
 ### Settings lists and forms
 

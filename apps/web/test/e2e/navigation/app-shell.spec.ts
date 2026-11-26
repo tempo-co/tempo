@@ -20,7 +20,7 @@ const desktopPages = [
   {label: 'Transactions', url: /\/transactions(?:\?|$)/, heading: 'Bank transactions'},
   {label: 'Insights', url: /\/insights(?:\?|$)/, heading: 'Insights'},
   {label: 'Recurring', url: /\/recurring(?:\?|$)/, heading: 'Recurring'},
-  {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Bank connections'},
+  {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Accounts'},
   {label: 'Home', url: HOME, heading: null},
 ];
 
@@ -67,7 +67,7 @@ test('the desktop sidebar reaches every page, collapses for good and opens Setti
   await expect(page).toHaveURL(/\/insights(?:\?|$)/);
 
   await sidebar.getByRole('link', {name: 'Settings'}).click();
-  await expect(page).toHaveURL(/\/settings\/account$/);
+  await expect(page).toHaveURL(/\/settings\/profile$/);
   await expect(page.getByRole('heading', {level: 1})).toHaveText('Settings');
   await expect(nav.locator('[aria-current="page"]')).toHaveCount(0);
 
@@ -110,7 +110,7 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
   await header.getByRole('button', {name: 'Add data'}).click();
   await expect(page).toHaveURL(/\/accounts(?:\?|$)/);
   await header.getByRole('link', {name: 'Settings'}).click();
-  await expect(page).toHaveURL(/\/settings\/account$/);
+  await expect(page).toHaveURL(/\/settings$/);
   await expect(tabBar.locator('[aria-current="page"]')).toHaveCount(0);
 
   // The page reserves room for the fixed tab bar, so the last content is never hidden behind it.

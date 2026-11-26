@@ -200,12 +200,12 @@ test.describe('saved app', () => {
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
     await page.goto('/accounts');
-    const cards = page.getByRole('region', {name: 'ABN AMRO'});
+    const cards = page.getByRole('region', {name: 'Cash'});
     await expect(cards.first()).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
     await expect(savedStatus(page)).toBeVisible();
     await expect(cards.first()).toBeVisible();
-    await expect(page.getByText("Couldn't load bank connections")).not.toBeVisible();
+    await expect(page.getByText("Couldn't load accounts")).not.toBeVisible();
   });
 
   test('reports a failed refresh when Tempo answers with an error', async ({page}) => {
@@ -216,9 +216,9 @@ test.describe('saved app', () => {
       await route.fulfill({json: connections.map((c) => ({...c, syncStatus: 'QUEUED'}))});
     });
     await page.goto('/accounts');
-    await expect(page.getByRole('region', {name: 'ABN AMRO'})).toBeVisible();
+    await expect(page.getByRole('region', {name: 'Cash'})).toBeVisible();
     await expect.poll(() => requests, {timeout: 12_000}).toBeGreaterThan(1);
-    await expect(page.getByRole('heading', {name: "Couldn't load bank connections"})).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Couldn't load accounts"})).toBeVisible();
     await expect(savedStatus(page)).not.toBeVisible();
   });
 
@@ -586,7 +586,7 @@ test('an account save finishing after logout in another tab does not restore sav
   homePage,
 }) => {
   await context.clock.install();
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await page.getByTestId('edit-name-button').click();
   const name = page.getByTestId('name-input');
   await expect(name).toHaveValue(freshAccount.name);
@@ -627,7 +627,7 @@ test('a save finishing after logout and a new login does not sign out the new ac
   loginPage,
 }) => {
   const next = await createVerifiedAccount(request);
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await page.getByTestId('edit-name-button').click();
   const name = page.getByTestId('name-input');
   await expect(name).toHaveValue(freshAccount.name);
@@ -758,7 +758,7 @@ test('does not queue an offline account change for replay after reconnect', asyn
   freshAccount,
 }) => {
   test.setTimeout(20000);
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await expect(page.getByTestId('edit-name-button')).toBeVisible();
   let writes = 0;
   page.on('request', (request) => {

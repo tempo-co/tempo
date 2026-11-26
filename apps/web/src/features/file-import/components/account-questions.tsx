@@ -24,7 +24,7 @@ import {PreviewRows} from './layout-preview';
 /** The `accountChoices` value for the imported-files account of the question's bank and currency. */
 export const NEW_ACCOUNT = 'new';
 
-/** The account as the Connections page names it, and where it is. */
+/** The account as Accounts names it, and where it is. */
 const candidateDetail = (candidate: BankImportAccountCandidate) =>
   [accountSubline(candidate), candidate.imported ? 'Imported files' : candidate.bankName]
     .filter(Boolean)
