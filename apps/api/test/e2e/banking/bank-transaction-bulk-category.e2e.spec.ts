@@ -104,6 +104,7 @@ describe('Bulk category', () => {
 
 		// The shop's earlier choice disagrees, and with AI categorization off nothing is rechecked, so it lists no rows.
 		expect(response.body).toEqual({
+			selected: 4,
 			total: 2,
 			transactions: [
 				{
@@ -190,6 +191,48 @@ describe('Bulk category', () => {
 		}
 	});
 
+	it('changes every row of the owner’s that the filter matches, and the rows its preview lists', async () => {
+		const {agent, rows, reload, snapshot} = await seed();
+		const before = await snapshot();
+		// The cafe rows from 8 September on: the second owner's cafe row matches the filter too, but is not theirs.
+		const filter = {search: 'Example Cafe', date: {from: '2026-09-08'}};
+
+		const preview = await agent.post(PREVIEW_PATH).send({filter, category: 'SHOPPING'}).expect(200);
+
+		expect(preview.body).toEqual({
+			selected: 3,
+			total: 1,
+			transactions: [
+				expect.objectContaining({id: rows.cafeSame.id, action: 'APPLY', appliedCategory: 'SHOPPING'}),
+			],
+		});
+		expect(await snapshot()).toEqual(before);
+
+		const response = await agent.patch(UPDATE_PATH).send({filter, category: 'SHOPPING', scope: 'ALL'}).expect(200);
+
+		expect(response.body).toEqual({updated: 4});
+		for (const name of ['cafeA', 'cafeB', 'cafeOther'] as const) {
+			expect({name, ...(await reload(name))}).toMatchObject({
+				name,
+				category: 'SHOPPING',
+				categorySource: 'MANUAL',
+			});
+		}
+		expect(await reload('cafeSame')).toMatchObject({category: 'SHOPPING', categorySource: 'HISTORY'});
+		const after = await snapshot();
+		for (const name of [
+			'bakery',
+			'bakeryChoice',
+			'bakeryOther',
+			'shop',
+			'shopChoice',
+			'shopOther',
+			'otherOwnersCafe',
+		] as const) {
+			expect({name, ...after[name]}).toEqual({name, ...before[name]});
+		}
+	});
+
 	it('refuses a selection holding another owner’s transaction or an unknown id, and writes nothing', async () => {
 		const {agent, otherAgent, rows, selection, snapshot} = await seed();
 		const before = await snapshot();
@@ -207,6 +250,10 @@ describe('Bulk category', () => {
 			.patch(UPDATE_PATH)
 			.send({transactionIds: selection, category: 'EATING_OUT', scope: 'ALL'})
 			.expect(404);
+		// A filter that matches none of the owner's rows selects nothing to change.
+		const filter = {search: 'Example Bakery', date: {to: '2026-09-01'}};
+		await agent.post(PREVIEW_PATH).send({filter, category: 'EATING_OUT'}).expect(404);
+		await agent.patch(UPDATE_PATH).send({filter, category: 'EATING_OUT', scope: 'ALL'}).expect(404);
 
 		expect(await snapshot()).toEqual(before);
 	});
@@ -220,6 +267,17 @@ describe('Bulk category', () => {
 		],
 		['an unknown category', {transactionIds: [randomUUID()], category: 'NOT_A_CATEGORY', scope: 'ALL'}, /category/],
 		['an unknown scope', {transactionIds: [randomUUID()], category: 'EATING_OUT', scope: 'SOME'}, /scope/],
+		['no selection', {category: 'EATING_OUT', scope: 'ALL'}, /transactionIds or filter/],
+		[
+			'both ids and a filter',
+			{transactionIds: [randomUUID()], filter: {}, category: 'EATING_OUT', scope: 'ALL'},
+			/transactionIds or filter/,
+		],
+		[
+			'a filter the list refuses',
+			{filter: {categories: ['NOT_A_CATEGORY']}, category: 'EATING_OUT', scope: 'ALL'},
+			/categories/,
+		],
 	])('rejects %s', async (_, body, message) => {
 		const {agent} = await seed();
 		expectValidationMessage(await agent.patch(UPDATE_PATH).send(body).expect(400), message);

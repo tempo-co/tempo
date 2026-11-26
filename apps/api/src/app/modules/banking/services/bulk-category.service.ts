@@ -11,14 +11,25 @@ import {EntityManager, Repository} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 
 import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
+import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
 import {CategorizationScheduler} from '../categorization/categorization-scheduler.service';
 import type {BulkCategoryFollowUps} from '../categorization/manual-category-follow-up';
 import {ManualCategoryService} from '../categorization/manual-category.service';
+import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {AccountHistoryWriterService} from './account-history-writer.service';
+import {applyBankTransactionFilters} from './bank-transaction-filters';
 import {toCategoryImpactTransaction} from './bank-transaction.service';
 import {BANK_CONNECTION_PROVIDERS} from './banking-sync.constants';
+
+/** The rows a bulk category is for: the selected ids, or every row the Transactions list's filters match. */
+export type BulkCategorySelection = {transactionIds: readonly string[]} | {filter: BankTransactionFilterQueryDto};
+
+/** A selection as the write finds it: ids, or the filter with the recurring series' payments it names. */
+type ResolvedSelection =
+	| {transactionIds: readonly string[]}
+	| {filter: BankTransactionFilterQueryDto; recurringIds: readonly string[] | undefined};
 
 /**
  * One category for several of the owner's rows at once: the preview of the other rows from their payees, and the write
@@ -36,15 +47,17 @@ export class BulkCategoryService {
 		private readonly manualCategoryService: ManualCategoryService,
 		private readonly scheduler: CategorizationScheduler,
 		private readonly accountHistoryWriter: AccountHistoryWriterService,
+		private readonly recurringSeriesService: RecurringSeriesService,
 	) {}
 
 	/** Lists the other rows from the selected rows' payees that changing all of them would change; writes nothing. */
 	async preview(
 		accountId: Account['id'],
-		transactionIds: readonly string[],
+		selection: BulkCategorySelection,
 		category: BankTransactionCategory,
 	): Promise<BankTransactionBulkCategoryPreview> {
-		const selected = await findOwnedTransactions(this.repository.manager, accountId, transactionIds);
+		const resolved = await this.resolve(accountId, selection);
+		const selected = await findSelected(this.repository.manager, accountId, resolved);
 		const followUps = await this.manualCategoryService.planBulkCategory(accountId, selected, category);
 		const {transactions, total} = await this.manualCategoryService.findBulkCategoryFollowUps(
 			accountId,
@@ -61,20 +74,23 @@ export class BulkCategoryService {
 				};
 			}),
 			total,
+			selected: selected.length,
 		};
 	}
 
 	/**
 	 * Gives the selected rows the category, and with `ALL` the rows the preview lists too, in one history write: a
-	 * selection holding a row that is not the owner's is refused (404) and nothing is written.
+	 * selection holding a row that is not the owner's, or a filter that matches none, is refused (404) and nothing is
+	 * written. A filter is matched again inside the write.
 	 */
 	async update(
 		accountId: Account['id'],
-		transactionIds: readonly string[],
+		selection: BulkCategorySelection,
 		category: BankTransactionCategory,
 		scope: BankTransactionBulkCategoryScope,
 	): Promise<BankTransactionBulkCategoryResult> {
-		const selected = await findOwnedTransactions(this.repository.manager, accountId, transactionIds);
+		const resolved = await this.resolve(accountId, selection);
+		const selected = await findSelected(this.repository.manager, accountId, resolved);
 		const followUps = await this.manualCategoryService.planBulkCategory(accountId, selected, category);
 		const followUpRows =
 			scope === 'ALL'
@@ -98,7 +114,7 @@ export class BulkCategoryService {
 				this.writeSelection(
 					manager,
 					accountId,
-					transactionIds,
+					resolved,
 					followUps,
 					followUpRows.map(({id}) => id),
 				),
@@ -116,13 +132,52 @@ export class BulkCategoryService {
 	private async writeSelection(
 		manager: EntityManager,
 		accountId: Account['id'],
-		transactionIds: readonly string[],
+		selection: ResolvedSelection,
 		followUps: BulkCategoryFollowUps,
 		followUpIds: readonly string[],
 	) {
-		const selected = await findOwnedTransactions(manager, accountId, transactionIds);
+		const selected = await findSelected(manager, accountId, selection);
 		return this.manualCategoryService.writeBulkCategory(manager, accountId, selected, followUps, followUpIds);
 	}
+
+	/** A filter naming a recurring series selects that series' payments, as the list does. */
+	private async resolve(accountId: Account['id'], selection: BulkCategorySelection): Promise<ResolvedSelection> {
+		if ('transactionIds' in selection) return selection;
+		const seriesKey = selection.filter.recurringSeriesKey;
+		const recurringIds = seriesKey
+			? await this.recurringSeriesService.findTransactionIds(accountId, seriesKey)
+			: undefined;
+		return {filter: selection.filter, recurringIds};
+	}
+}
+
+/** The owner's selected rows; refuses (404) an id that is not theirs, or a filter that matches none of their rows. */
+async function findSelected(
+	manager: EntityManager,
+	accountId: Account['id'],
+	selection: ResolvedSelection,
+): Promise<BankTransaction[]> {
+	if ('transactionIds' in selection) return findOwnedTransactions(manager, accountId, selection.transactionIds);
+	// A series with no payments matches nothing; an empty id list would read as no series filter.
+	if (selection.recurringIds?.length === 0) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
+	const query = ownedTransactionsQuery(manager, accountId);
+	applyBankTransactionFilters(query, selection.filter, selection.recurringIds);
+	const transactions = await query.getMany();
+	if (transactions.length === 0) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);
+	return transactions;
+}
+
+/** The owner's rows with their account and connection, aliased as the list's filters expect. */
+function ownedTransactionsQuery(manager: EntityManager, accountId: Account['id']) {
+	return (
+		manager
+			.getRepository(BankTransaction)
+			.createQueryBuilder('transaction')
+			// The bank's name is part of the categorization input the manual choice is stored for.
+			.innerJoinAndSelect('transaction.bankAccount', 'bankAccount')
+			.innerJoinAndSelect('bankAccount.bankConnection', 'connection')
+			.where('connection.accountId = :accountId', {accountId})
+	);
 }
 
 /** The owner's rows with these ids; refuses (404) when any id is not one of them. */
@@ -132,13 +187,7 @@ async function findOwnedTransactions(
 	transactionIds: readonly string[],
 ): Promise<BankTransaction[]> {
 	const ids = [...new Set(transactionIds)];
-	const transactions = await manager
-		.getRepository(BankTransaction)
-		.createQueryBuilder('transaction')
-		// The bank's name is part of the categorization input the manual choice is stored for.
-		.innerJoinAndSelect('transaction.bankAccount', 'bankAccount')
-		.innerJoinAndSelect('bankAccount.bankConnection', 'connection')
-		.where('connection.accountId = :accountId', {accountId})
+	const transactions = await ownedTransactionsQuery(manager, accountId)
 		.andWhere('transaction.id IN (:...ids)', {ids})
 		.getMany();
 	if (transactions.length !== ids.length) throw new NotFoundException(BANKING_TRANSACTION_NOT_FOUND);

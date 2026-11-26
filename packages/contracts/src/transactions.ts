@@ -267,11 +267,14 @@ export type BankTransactionCategoryUpdate = {
 /** Most selected rows one bulk category takes. */
 export const BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS = 500;
 
-/** `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. */
-export type BankTransactionBulkCategoryPreviewRequest = {
-	transactionIds: string[];
-	category: BankTransactionCategory;
-};
+/**
+ * `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. The
+ * rows are either `transactionIds` (at most `BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS`) or every row the Transactions
+ * list's `filter` matches; a request sends exactly one.
+ */
+export type BankTransactionBulkCategoryPreviewRequest = {category: BankTransactionCategory} & (
+	{transactionIds: string[]; filter?: never} | {filter: BankTransactionFilter; transactionIds?: never}
+);
 
 /** One of the owner's other rows from the selected rows' payees that changing all of them would change. */
 export type BankTransactionBulkCategoryPreviewTransaction = BankTransactionCategoryImpactTransaction & {
@@ -287,6 +290,8 @@ export type BankTransactionBulkCategoryPreview = {
 	transactions: BankTransactionBulkCategoryPreviewTransaction[];
 	/** Every such row, including any past the cap; `ALL` changes only the listed ones. */
 	total: number;
+	/** How many rows the selection holds: the ids sent, or the rows the filter matches now. */
+	selected: number;
 };
 
 /** `SELECTED` changes only the selected rows; `ALL` also changes the rows the preview lists. */

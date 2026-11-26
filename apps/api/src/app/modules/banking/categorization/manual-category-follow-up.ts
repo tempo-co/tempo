@@ -120,7 +120,8 @@ export function whereBulkCategoryFollowUpCandidates<T extends WhereExpressionBui
 		followUpCategory: category,
 	});
 	whereFollowUpWritable(query, accountId);
-	query.andWhere('id NOT IN (:...selectedIds)', {selectedIds});
+	// An array parameter, so a filter's thousands of selected rows stay one bind value.
+	query.andWhere('NOT (id = ANY(:selectedIds))', {selectedIds});
 	if (transactionIds) {
 		query.andWhere(transactionIds.length > 0 ? 'id IN (:...followUpTransactionIds)' : 'FALSE', {
 			followUpTransactionIds: transactionIds,

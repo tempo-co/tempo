@@ -42,6 +42,7 @@ import {BankTransactionBreakdownQueryDto} from './dtos/bank-transaction-breakdow
 import {
 	BankTransactionBulkCategoryPreviewDto,
 	BankTransactionBulkCategoryUpdateDto,
+	toBulkCategorySelection,
 } from './dtos/bank-transaction-bulk-category.dto';
 import {BankBalanceTrendQueryDto, BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
@@ -170,7 +171,7 @@ export class BankTransactionController {
 		@CurrentAccount() account: Account,
 		@Body() dto: BankTransactionBulkCategoryPreviewDto,
 	): Promise<BankTransactionBulkCategoryPreview> {
-		return this.bulkCategoryService.preview(account.id, dto.transactionIds, dto.category);
+		return this.bulkCategoryService.preview(account.id, toBulkCategorySelection(dto), dto.category);
 	}
 
 	@Patch('bulk-category')
@@ -178,7 +179,7 @@ export class BankTransactionController {
 		@CurrentAccount() account: Account,
 		@Body() dto: BankTransactionBulkCategoryUpdateDto,
 	): Promise<BankTransactionBulkCategoryResult> {
-		return this.bulkCategoryService.update(account.id, dto.transactionIds, dto.category, dto.scope);
+		return this.bulkCategoryService.update(account.id, toBulkCategorySelection(dto), dto.category, dto.scope);
 	}
 
 	/** Lists the owner's other rows a category correction would change, without saving anything. */
