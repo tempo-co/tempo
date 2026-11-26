@@ -77,6 +77,7 @@ describe('Bank transaction history', () => {
 				// A person paying the owner back.
 				named('2026-02-10', '150.00', 'Jane Example', {category: 'TRANSFER_IN'}),
 				named('2026-03-02', '-20.00', 'Corner Shop', {category: 'GROCERIES'}),
+				named('2026-03-05', '-15.00', 'Corner Shop', {category: 'GROCERIES'}),
 			]);
 			await fixtures.createTransactions(other.bankAccount, [
 				named('2026-01-05', '-7777.00', 'Corner Shop', {category: 'GROCERIES'}),
@@ -84,7 +85,7 @@ describe('Bank transaction history', () => {
 			]);
 		});
 
-		it('splits each month’s spending by category, net of refunds, with cash flow’s totals', async () => {
+		it('splits each month’s spending by category, net of refunds, with cash flow’s totals and the rows counted', async () => {
 			const query = {interval: 'month', from: '2025-10-01', to: ASOF, asOf: ASOF};
 			const [{body}, {body: flow}] = await Promise.all([
 				agent
@@ -94,7 +95,7 @@ describe('Bank transaction history', () => {
 				agent.get(CASH_FLOW).query(query).expect(200),
 			]);
 
-			const part = (key: string, amount: string) => ({key, label: key, amount});
+			const part = (key: string, amount: string, count = 1) => ({key, label: key, amount, count});
 			expect(body).toEqual({
 				baseCurrency: 'EUR',
 				interval: 'month',
@@ -133,8 +134,8 @@ describe('Bank transaction history', () => {
 						start: '2026-03-01',
 						end: ASOF,
 						complete: false,
-						total: '20.00',
-						parts: [part('GROCERIES', '20.00')],
+						total: '35.00',
+						parts: [part('GROCERIES', '35.00', 2)],
 					},
 				],
 			});
@@ -208,8 +209,8 @@ describe('Bank transaction history', () => {
 							complete: false,
 							total: '2025.00',
 							parts: [
-								{...employer, amount: '2000.00'},
-								{...stall, amount: '25.00'},
+								{...employer, amount: '2000.00', count: 2},
+								{...stall, amount: '25.00', count: 1},
 							],
 						},
 						{
@@ -218,8 +219,8 @@ describe('Bank transaction history', () => {
 							complete: false,
 							total: '1150.00',
 							parts: [
-								{...employer, amount: '1000.00'},
-								{...person, amount: '150.00'},
+								{...employer, amount: '1000.00', count: 1},
+								{...person, amount: '150.00', count: 1},
 							],
 						},
 					],
@@ -252,6 +253,57 @@ describe('Bank transaction history', () => {
 			}
 		});
 
+		it('counts every category’s transactions in either direction, matching the list filtered by that category', async () => {
+			const counted = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await fixtures.createTransactions(counted.bankAccount, [
+				named('2026-01-05', '2500.00', 'Example Employer', {category: 'INCOME'}),
+				// A ticket bought and sold on: the category nets to zero but holds two transactions.
+				named('2026-01-10', '-30.00', 'Example Venue', {category: 'ENTERTAINMENT'}),
+				named('2026-01-12', '30.00', 'Example Venue', {category: 'ENTERTAINMENT'}),
+				named('2026-01-15', '-40.00', 'Example Store', {category: 'SHOPPING', amountInBaseCurrency: null}),
+				named('2026-02-01', '-500.00', 'Own Savings', {category: 'TRANSFER_OUT', ownTransferEvidence: 'IBAN'}),
+				named('2026-02-02', '-12.00', 'Unknown Place', {category: null}),
+				// A currency exchange takes no category, so no row of the list holds it either.
+				named('2026-02-03', '-100.00', 'Exchange', {
+					category: null,
+					categoryStatus: 'NOT_APPLICABLE',
+					...CURRENCY_EXCHANGE_EVENT,
+				}),
+			]);
+			const query = {interval: 'year', by: 'allCategories', from: '2026-01-01', to: ASOF, asOf: ASOF};
+
+			const {body} = await counted.agent.get(BREAKDOWN).query(query).expect(200);
+
+			const part = (key: string, amount: string, count: number) => ({key, label: key, amount, count});
+			expect(body).toEqual({
+				baseCurrency: 'EUR',
+				interval: 'year',
+				by: 'allCategories',
+				periods: [
+					{
+						start: '2026-01-01',
+						end: ASOF,
+						complete: false,
+						total: '1988.00',
+						parts: [
+							part('INCOME', '2500.00', 1),
+							part('ENTERTAINMENT', '0.00', 2),
+							part('SHOPPING', '0.00', 1),
+							part('UNCATEGORIZED', '-12.00', 1),
+							part('TRANSFER_OUT', '-500.00', 1),
+						],
+					},
+				],
+			});
+			for (const {key, count} of (body as {periods: BankTransactionBreakdownPeriod[]}).periods[0].parts) {
+				const {body: list} = await counted.agent
+					.get('/bank-transactions')
+					.query({'filter[date][from]': '2026-01-01', 'filter[date][to]': ASOF, 'filter[categories][]': key})
+					.expect(200);
+				expect([key, (list as BankTransactionsResponse).total]).toEqual([key, count]);
+			}
+		});
+
 		it('leaves out another owner’s rows', async () => {
 			const {body} = await otherAgent
 				.get(BREAKDOWN)
@@ -263,7 +315,7 @@ describe('Bank transaction history', () => {
 					end: ASOF,
 					complete: false,
 					total: '7777.00',
-					parts: [{key: 'GROCERIES', label: 'GROCERIES', amount: '7777.00'}],
+					parts: [{key: 'GROCERIES', label: 'GROCERIES', amount: '7777.00', count: 1}],
 				},
 			]);
 		});

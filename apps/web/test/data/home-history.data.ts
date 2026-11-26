@@ -216,6 +216,8 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     amounts: Record<string, number>,
     labelOf: (key: string) => string,
     looks: (key: string) => Partial<BankTransactionBreakdownPart> = () => ({}),
+    // One booking per key and month, so a year counts the months it appears in.
+    countOf: (key: string) => number = () => 1,
   ): BankTransactionBreakdownPeriod => ({
     start,
     end,
@@ -224,7 +226,13 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     parts: Object.entries(amounts)
       .filter(([, amount]) => amount !== 0)
       .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
-      .map(([key, amount]) => ({key, label: labelOf(key), amount: money(amount), ...looks(key)})),
+      .map(([key, amount]) => ({
+        key,
+        label: labelOf(key),
+        amount: money(amount),
+        count: countOf(key),
+        ...looks(key),
+      })),
   });
   const add = (into: Record<string, number>, from: Record<string, number>) => {
     for (const [key, amount] of Object.entries(from)) into[key] = (into[key] ?? 0) + amount;
@@ -247,6 +255,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
         amounts,
         labelOf,
         looks,
+        (key) => months.filter((month) => (of(month)[key] ?? 0) !== 0).length,
       );
     });
   const monthly = (
@@ -610,10 +619,7 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
     const query = params(route);
     return fulfillJson(
       route,
-      history.totalsBetween(
-        query.get('filter[date][from]')!,
-        query.get('filter[date][to]')!,
-      ),
+      history.totalsBetween(query.get('filter[date][from]')!, query.get('filter[date][to]')!),
     );
   });
   await page.route('**/bank-transactions/cash-flow?**', (route) =>

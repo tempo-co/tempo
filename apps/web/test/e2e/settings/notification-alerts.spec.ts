@@ -35,7 +35,7 @@ test.describe('Alerts from the service worker', () => {
   }) => {
     const origin = new URL(baseURL!).origin;
     await context.grantPermissions(['notifications'], {origin});
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
     await worker.evaluate(() => {
@@ -121,7 +121,7 @@ test.describe('Alerts from the service worker', () => {
   test('opens only Tempo pages from a notification', async ({page, context, baseURL}) => {
     const origin = new URL(baseURL!).origin;
     await context.grantPermissions(['notifications'], {origin});
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
     const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
 

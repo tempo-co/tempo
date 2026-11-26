@@ -164,12 +164,14 @@ async function recordToasts(page: Page) {
 }
 
 const deviceRow = (page: Page) =>
-  page.getByRole('region', {name: 'Notifications', exact: true}).getByRole('status');
+  page.getByRole('region', {name: 'Alerts', exact: true}).getByRole('status');
 
 test.use({storageState: {cookies: [], origins: []}});
 
 test.beforeEach(async ({page}) => {
   await page.route('**/accounts/me', (route) => route.fulfill({json: account}));
+  // Log out sits in Security, beside the session list.
+  await page.route('**/auth/sessions', (route) => route.fulfill({json: []}));
 });
 
 test.describe('Notification settings', () => {
@@ -180,7 +182,7 @@ test.describe('Notification settings', () => {
     await mockJson(page, `${API_URL}/notifications`, settings());
     const requests = await recordSubscriptionRequests(page);
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('Off.');
     expect((await pushState(page)).permissionRequests).toBe(0);
 
@@ -208,7 +210,7 @@ test.describe('Notification settings', () => {
     const requests = await recordSubscriptionRequests(page);
     const put = {method: 'PUT', body: {endpoint: ENDPOINT, keys: KEYS}};
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('On. Alerts you have turned on arrive here.');
     expect(requests).toEqual([put]);
     expect((await pushState(page)).permissionRequests).toBe(0);
@@ -248,7 +250,7 @@ test.describe('Notification settings', () => {
     });
     const requests = await recordSubscriptionRequests(page);
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('Off.');
     await page.waitForTimeout(1000);
     expect(requests).toEqual([]);
@@ -267,7 +269,7 @@ test.describe('Notification settings', () => {
     const requests = await recordSubscriptionRequests(page);
     const toasts = await recordToasts(page);
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect.poll(async () => (await pushState(page)).subscribeCalls).toBe(1);
     await expect(deviceRow(page)).toHaveText('Off.');
     expect(await toasts()).toEqual([]);
@@ -306,7 +308,7 @@ test.describe('Notification settings', () => {
         return fail(route);
       });
 
-      await page.goto('/settings/account');
+      await page.goto('/settings/notifications');
       await expect.poll(() => failed).toBe(true);
       await expect(deviceRow(page)).toHaveText('Off.');
       expect((await pushState(page)).subscribed).toBe(false);
@@ -338,7 +340,7 @@ test.describe('Notification settings', () => {
     const requests = await recordSubscriptionRequests(page);
     const toasts = await recordToasts(page);
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect.poll(async () => (await pushState(page)).subscribeCalls).toBe(1);
     await context.setOffline(true);
     await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
@@ -375,7 +377,7 @@ test.describe('Notification settings', () => {
         });
 
         try {
-          await page.goto('/settings/account');
+          await page.goto('/settings/notifications');
           await expect.poll(() => held.length).toBe(1);
           await page.evaluate((hold) => {
             (window as unknown as {__push: PushStub}).__push[hold] = true;
@@ -384,6 +386,10 @@ test.describe('Notification settings', () => {
           await expect.poll(async () => (await pushState(page)).held).toBe(1);
 
           if (interruption === 'logging out') {
+            await page
+              .getByRole('navigation', {name: 'Settings sections'})
+              .getByRole('link', {name: 'Security'})
+              .click();
             await page.getByTestId('log-out-button').click();
             // The attempt goes on while Tempo confirms the logout.
             await expect.poll(() => held.length).toBe(1);
@@ -417,7 +423,7 @@ test.describe('Notification settings', () => {
     await mockJson(page, `${API_URL}/notifications`, settings());
     const requests = await recordSubscriptionRequests(page);
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await page.getByRole('button', {name: 'Allow notifications'}).click();
 
     await expect(deviceRow(page)).toHaveText(
@@ -431,7 +437,7 @@ test.describe('Notification settings', () => {
     await stubPush(page);
     await mockJson(page, `${API_URL}/notifications`, settings({publicKey: null}));
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
 
     await expect(deviceRow(page)).toHaveText(
       'This Tempo server isn’t set up to send notifications.',
@@ -472,7 +478,7 @@ test.describe('Notification settings', () => {
         await mockJson(page, `${API_URL}/notifications`, settings());
         const requests = await recordSubscriptionRequests(page);
 
-        await page.goto('/settings/account');
+        await page.goto('/settings/notifications');
 
         await expect(deviceRow(page)).toHaveText(status);
         await expect(page.getByRole('button', {name: 'Allow notifications'})).toHaveCount(0);
@@ -494,8 +500,8 @@ test.describe('Notification settings', () => {
       return route.fulfill({json: settings({preferences: {bankConnections: false}})});
     });
 
-    await page.goto('/settings/account');
-    const alerts = page.getByRole('region', {name: 'Notifications', exact: true});
+    await page.goto('/settings/notifications');
+    const alerts = page.getByRole('region', {name: 'Alerts', exact: true});
     await expect(alerts.getByRole('checkbox')).toHaveCount(1);
     const banks = alerts.getByRole('checkbox', {name: /Bank alerts/});
     await expect(banks).toBeChecked();
@@ -534,7 +540,7 @@ test.describe('Notification settings', () => {
       return route.fulfill({json: {message: 'Logged out.'}});
     });
 
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('On. Alerts you have turned on arrive here.');
     // One row can need attention for several reasons; the icon counts it once, like the tab.
     await expect.poll(async () => (await pushState(page)).badges).toEqual([2]);
@@ -542,6 +548,10 @@ test.describe('Notification settings', () => {
     expect(requests).toEqual([{method: 'PUT', body: {endpoint: ENDPOINT, keys: KEYS}}]);
 
     await page.getByRole('link', {name: 'Settings', exact: true}).click();
+    await page
+      .getByRole('navigation', {name: 'Settings sections'})
+      .getByRole('link', {name: 'Security'})
+      .click();
     await page.getByTestId('log-out-button').click();
     await expect(page).toHaveURL(/\/login/);
     await expect.poll(async () => (await pushState(page)).badges.slice(-1)[0]).toBe(0);
@@ -554,7 +564,7 @@ test.describe('Notification settings', () => {
     // Signing in again resumes this device's alerts without asking.
     await setPushOnLoad(page, {subscribed: false});
     loggedOut = false;
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('On. Alerts you have turned on arrive here.');
     expect(requests).toEqual([
       {method: 'PUT', body: {endpoint: ENDPOINT, keys: KEYS}},
@@ -568,7 +578,7 @@ test.describe('Notification settings', () => {
     await stubPush(page, {permission: 'granted', subscribed: true});
     await mockJson(page, `${API_URL}/notifications`, settings());
     const requests = await recordSubscriptionRequests(page);
-    await page.goto('/settings/account');
+    await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('On. Alerts you have turned on arrive here.');
     await expect.poll(() => requests.length).toBe(1);
     // The saved account lets Tempo open without a connection.

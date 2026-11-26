@@ -69,7 +69,7 @@ test('a pending name save can be closed without cancelling the save', async ({pa
     await held;
     await route.fulfill({json: {...account, name: 'Another Example'}});
   });
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   const edit = page.getByTestId('edit-name-button');
   await expect(edit).toBeVisible();
   expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -97,7 +97,7 @@ test('a successful name save returns keyboard focus to Edit', async ({page}) => 
     if (route.request().method() !== 'PATCH') return route.fallback();
     await route.fulfill({json: {...account, name: 'Another Example'}});
   });
-  await page.goto('/settings/account');
+  await page.goto('/settings/profile');
   await page.getByTestId('edit-name-button').click();
   await page.getByTestId('name-input').fill('Another Example');
   await page.getByTestId('save-name-button').click();

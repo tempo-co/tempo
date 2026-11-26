@@ -1,75 +1,61 @@
 import {Link, Outlet, createFileRoute, useLocation} from '@tanstack/react-router';
-import {LogOut} from 'lucide-react';
+import {ChevronLeft} from 'lucide-react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
-import {Button} from '@/components/ui/button';
-import {useLogOut} from '@/hooks/use-logout';
-import {cn} from '@/utils/cn';
+import {SettingsSectionNav} from '@/features/settings/components/settings-nav';
+import {settingsSectionAt} from '@/features/settings/sections';
+import {useIsMobile} from '@/hooks/use-is-mobile';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/settings')({
-  component: SettingsIndex,
+  component: SettingsLayout,
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);
   },
 });
 
-const sections = [
-  {label: 'Account', route: '/settings/account'},
-  {label: 'Security', route: '/settings/security'},
-  {label: 'Integrations', route: '/settings/integrations'},
-  {label: 'Appearance', route: '/settings/appearance'},
-] as const;
-
-function SettingsIndex() {
+/**
+ * Desktop: the title over the section list and the open section. Phones: the list alone, or one section under a way
+ * back to it.
+ */
+function SettingsLayout() {
   // The location being opened, which Link also marks: matchRoute keeps the previous section until the next one loads.
-  const pathname = useLocation({select: (location) => location.pathname});
-  const {logOut, isPending} = useLogOut();
+  const section = useLocation({select: (location) => settingsSectionAt(location.pathname)});
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <AppBodyLayout>
+        {section ? (
+          <>
+            {/* Overhangs the title's row above it, so the title sits close to where every page's does. */}
+            <Link
+              to='/settings'
+              data-testid='settings-back'
+              className='-mt-2.5 -ml-2.5 flex h-11 w-fit items-center gap-1 rounded-md pr-2.5 pl-1.5 text-body text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+            >
+              <ChevronLeft className='size-4' aria-hidden='true' />
+              Settings
+            </Link>
+            <h1 className='text-page-title'>{section.label}</h1>
+          </>
+        ) : (
+          <h1 className='text-page-title'>Settings</h1>
+        )}
+        <div className='mt-6'>
+          <Outlet />
+        </div>
+      </AppBodyLayout>
+    );
+  }
 
   return (
     <AppBodyLayout>
-      <div className='mx-auto w-full max-w-160'>
-        <div className='flex items-center justify-between gap-4'>
-          <h1 className='text-page-title'>Settings</h1>
-          {/* Overhangs the title's row, so the title sits where every page's does. */}
-          <Button
-            variant='ghost'
-            size='sm'
-            className='-my-0.5 max-sm:-my-2.5'
-            onClick={() => void logOut()}
-            disabled={isPending}
-            data-testid='log-out-button'
-          >
-            <LogOut aria-hidden='true' />
-            Log out
-          </Button>
-        </div>
-        {/* Text section tabs on a bottom rule. */}
-        <nav aria-label='Settings sections' className='mt-4 border-b'>
-          {/* Phones share the full width; wider screens align the first label with the title. */}
-          <ul className='-mb-px flex sm:-ml-3'>
-            {sections.map((section) => {
-              const isActive =
-                pathname === section.route || pathname.startsWith(`${section.route}/`);
-              return (
-                <li key={section.route} className='max-sm:flex-auto'>
-                  <Link
-                    to={section.route}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={cn(
-                      'relative flex h-12 items-center justify-center px-1 text-body whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring max-[360px]:text-body-small sm:h-11 sm:px-3',
-                      isActive &&
-                        'font-medium text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary sm:after:inset-x-3',
-                    )}
-                  >
-                    {section.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-        <div className='mt-8'>
+      <h1 className='text-page-title'>Settings</h1>
+      <div className='mt-6 grid grid-cols-[--spacing(52)_minmax(0,--spacing(160))] items-start gap-8 max-lg:grid-cols-[--spacing(44)_minmax(0,1fr)] max-lg:gap-6'>
+        <SettingsSectionNav current={section} />
+        <div>
+          {section && <h2 className='mb-4 text-section-title'>{section.label}</h2>}
           <Outlet />
         </div>
       </div>
