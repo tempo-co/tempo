@@ -13,17 +13,17 @@ function serviceWith(address: string | undefined, send: jest.Mock) {
 }
 
 describe('OperatorAlertService', () => {
-	it('sends nothing and resolves when no operator address is configured', async () => {
+	it('sends nothing and resolves false when no operator address is configured', async () => {
 		const send = jest.fn();
 
-		await expect(serviceWith(undefined, send).send(alert)).resolves.toBeUndefined();
+		await expect(serviceWith(undefined, send).send(alert)).resolves.toBe(false);
 
 		expect(send).not.toHaveBeenCalled();
 	});
 
-	it('resolves when the email cannot be queued, so the failure it reports stays the caller’s', async () => {
+	it('resolves false when the email cannot be queued, so the failure it reports stays the caller’s', async () => {
 		const send = jest.fn().mockRejectedValue(new Error('Redis unavailable'));
 
-		await expect(serviceWith('operator@example.test', send).send(alert)).resolves.toBeUndefined();
+		await expect(serviceWith('operator@example.test', send).send(alert)).resolves.toBe(false);
 	});
 });

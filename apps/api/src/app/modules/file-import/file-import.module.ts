@@ -4,6 +4,7 @@ import {TypeOrmModule} from '@nestjs/typeorm';
 
 import {OperatorAlertModule} from '@core/operator-alert/operator-alert.module';
 import {BANK_COVERAGE_DIGEST_QUEUE} from '@core/queue/queue.constants';
+import {RedisModule} from '@core/redis/redis.module';
 import {BankingModule} from '@modules/banking/banking.module';
 
 import {BankImportUploadQueue} from './api/bank-import-upload-queue';
@@ -37,6 +38,7 @@ import {ParseRunnerService} from './runner/parse-runner.service';
 		BullModule.registerQueue({name: BANK_COVERAGE_DIGEST_QUEUE}),
 		BankingModule,
 		OperatorAlertModule,
+		RedisModule,
 	],
 	providers: [
 		BankImportService,

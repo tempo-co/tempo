@@ -1,8 +1,9 @@
 import {InjectQueue} from '@nestjs/bullmq';
-import {Injectable, Logger, OnModuleInit} from '@nestjs/common';
+import {Inject, Injectable, Logger, OnModuleInit} from '@nestjs/common';
 import {InjectDataSource} from '@nestjs/typeorm';
-import {BANK_LIST, OTHER_BANK_ID} from '@tempo/contracts';
+import {BANK_LIST, bankNameKey, bankNameSpelling} from '@tempo/contracts';
 import {Queue} from 'bullmq';
+import Redis from 'ioredis';
 import {DataSource} from 'typeorm';
 
 import {ConfigurationService} from '@core/config/config.service';
@@ -13,18 +14,33 @@ import {
 	BANK_COVERAGE_DIGEST_SCHEDULER_ID,
 	SEND_BANK_COVERAGE_DIGEST_JOB,
 } from '@core/queue/queue.constants';
+import {REDIS} from '@core/redis/redis.constants';
+import {dateInAppTimeZone} from '@core/time/app-time-zone';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const VERIFIED_BANK_IDS = BANK_LIST.filter((bank) => bank.status === 'verified').map((bank) => bank.id);
-const BANK_NAMES = new Map(BANK_LIST.map((bank) => [bank.id, bank.name]));
+/** The bank keys already emailed, and when the last digest was queued. */
+const REPORTED_KEY = 'file-import:bank-coverage-digest:reported';
+const LAST_SENT_KEY = 'file-import:bank-coverage-digest:last-sent-at';
+const LISTED_BANKS = new Map(BANK_LIST.map((bank) => [bank.id, bank]));
+const VERIFIED_NAME_KEYS = new Set(
+	BANK_LIST.filter((bank) => bank.status === 'verified').map((bank) => bankNameKey(bank.name)),
+);
 
-type NewBank = {label: string; country: string | null; accounts: number; hasLayout: boolean};
+type BankEvent = {
+	bankId: string | null;
+	bankName: string;
+	country: string | null;
+	accountId: string;
+	fromLayout: boolean;
+};
+type NewBank = {key: string; label: string; countries: string[]; accounts: number; hasLayout: boolean};
 type MissedBank = {bankId: string; misses: number; accounts: number};
 
 /**
- * Emails the operator, once a day, the banks a user asked for or confirmed a mapper layout under for the first time
- * the previous UTC day, and the verified banks whose files missed their own readers that day. A bank is new on the
- * day of its first request or layout, so it is listed once. Counts and bank names only.
+ * Emails the operator at most once a day: each bank that a request or a confirmed saved layout names and that no
+ * digest listed before, and the verified banks whose files missed their own readers since the last digest. A bank is
+ * its listed entry, or the typed name compared as `bankNameKey` does; a verified bank is listed only by its misses.
+ * Redis keeps the banks already emailed and the last send, so a late or failed run is caught up by the next one.
+ * Counts and bank names only.
  */
 @Injectable()
 export class BankCoverageDigestService implements OnModuleInit {
@@ -33,9 +49,17 @@ export class BankCoverageDigestService implements OnModuleInit {
 	constructor(
 		@InjectDataSource() private readonly dataSource: DataSource,
 		@InjectQueue(BANK_COVERAGE_DIGEST_QUEUE) private readonly queue: Queue,
+		@Inject(REDIS) private readonly redis: Redis,
 		private readonly operatorAlertService: OperatorAlertService,
 		private readonly configurationService: ConfigurationService,
 	) {}
+
+	isEnabled(): boolean {
+		return (
+			this.configurationService.get('FILE_IMPORT_ENABLED') === true &&
+			Boolean(this.configurationService.get('OPERATOR_ALERT_EMAIL'))
+		);
+	}
 
 	async onModuleInit(): Promise<void> {
 		await bootstrapJobScheduler(
@@ -45,100 +69,105 @@ export class BankCoverageDigestService implements OnModuleInit {
 				jobName: SEND_BANK_COVERAGE_DIGEST_JOB,
 				pattern: '0 6 * * *',
 			},
-			{
-				enabled:
-					this.configurationService.get('FILE_IMPORT_ENABLED') === true &&
-					Boolean(this.configurationService.get('OPERATOR_ALERT_EMAIL')),
-				configurationService: this.configurationService,
-				logger: this.logger,
-			},
+			{enabled: this.isEnabled(), configurationService: this.configurationService, logger: this.logger},
 		);
 	}
 
-	/** Sends the digest of the UTC day before `now`; a day with nothing to report sends nothing. */
+	/** Queues the digest unless one went out today or there is nothing new; marks what it listed as reported. */
 	async send(now = new Date()): Promise<void> {
-		const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-		const start = new Date(end.getTime() - DAY_MS);
-		const [newBanks, missedBanks] = await Promise.all([this.newBanks(start, end), this.missedBanks(start, end)]);
+		if (!this.isEnabled()) return;
+		const lastSent = await this.redis.get(LAST_SENT_KEY);
+		const since = lastSent ? new Date(lastSent) : new Date(0);
+		if (lastSent && dateInAppTimeZone(since) === dateInAppTimeZone(now)) return;
+
+		const reported = new Set(await this.redis.smembers(REPORTED_KEY));
+		const newBanks = (await this.banks()).filter((bank) => !reported.has(bank.key));
+		const missedBanks = await this.missedBanks(since, now);
 		if (newBanks.length === 0 && missedBanks.length === 0) return;
 
-		const day = start.toISOString().slice(0, 10);
-		const lines = [`Bank coverage on ${day} (UTC).`];
-		if (newBanks.length > 0)
-			lines.push(
-				'',
-				'Asked for or mapped for the first time:',
-				...newBanks.map(
-					(bank) =>
-						`- ${bank.label}${bank.country ? ` (${bank.country})` : ''}: ${accounts(bank.accounts)}, ` +
-						(bank.hasLayout ? 'a saved layout to build from' : 'no saved layout yet'),
-				),
-			);
-		if (missedBanks.length > 0)
-			lines.push(
-				'',
-				'Verified banks whose files their own readers did not read:',
-				...missedBanks.map(
-					(bank) =>
-						`- ${BANK_NAMES.get(bank.bankId) ?? bank.bankId} (${bank.bankId}): ` +
-						`${bank.misses} ${bank.misses === 1 ? 'miss' : 'misses'} from ${accounts(bank.accounts)}`,
-				),
-			);
-		await this.operatorAlertService.send(
-			{kind: 'bank-coverage', subject: 'Tempo: banks to add', text: lines.join('\n')},
+		const queued = await this.operatorAlertService.send(
+			{kind: 'bank-coverage', subject: 'Tempo: banks to add', text: digestText(newBanks, missedBanks)},
 			now,
 		);
+		if (!queued) return;
+		if (newBanks.length > 0) await this.redis.sadd(REPORTED_KEY, ...newBanks.map((bank) => bank.key));
+		await this.redis.set(LAST_SENT_KEY, now.toISOString());
 	}
 
-	/**
-	 * Banks whose first request or confirmed mapper layout falls in the window. A request or a layout under "Another
-	 * bank" names its bank by the typed name, case and spacing aside; a layout under an unverified listed bank by its
-	 * id. Layouts under a verified bank are misses of it instead.
-	 */
-	private async newBanks(start: Date, end: Date): Promise<NewBank[]> {
-		const rows = await this.dataSource.query<
-			{bankId: string | null; label: string; country: string | null; accounts: string; hasLayout: boolean}[]
-		>(
-			`SELECT min("bankId") AS "bankId", (array_agg(label ORDER BY "createdAt"))[1] AS label, min(country) AS country,
-				count(DISTINCT "accountId") AS accounts,
-				bool_or("fromLayout") AS "hasLayout"
-			FROM (
-				SELECT 'name:' || lower(btrim("bankName")) || ':' || country AS key, NULL AS "bankId", btrim("bankName") AS label,
-					country, "accountId", "createdAt", false AS "fromLayout"
-				FROM bank_requests
-				UNION ALL
-				SELECT CASE WHEN "bankId" = $3 THEN 'name:' || lower(btrim("bankName")) ELSE 'bank:' || "bankId" END,
-					NULLIF("bankId", $3), btrim("bankName"), NULL, "accountId", "createdAt", true
-				FROM bank_import_layouts
-				WHERE "bankId" IS NOT NULL AND NOT ("bankId" = ANY($4))
-			) events
-			GROUP BY key
-			HAVING min("createdAt") >= $1 AND min("createdAt") < $2
-			ORDER BY lower((array_agg(label ORDER BY "createdAt"))[1])`,
-			[start, end, OTHER_BANK_ID, VERIFIED_BANK_IDS],
+	/** Every bank a request or a confirmed saved layout names, with its accounts, except verified banks; across all accounts, as the operator digest counts them. */
+	private async banks(): Promise<NewBank[]> {
+		const events = await this.dataSource.query<BankEvent[]>(
+			`SELECT NULL AS "bankId", "bankName", country, "accountId", false AS "fromLayout", "createdAt"
+			FROM bank_requests
+			UNION ALL
+			SELECT "bankId", "bankName", NULL, "accountId", true, "createdAt"
+			FROM bank_import_layouts
+			ORDER BY "createdAt"`,
 		);
-		return rows.map(({bankId, label, country, accounts, hasLayout}) => {
-			const listed = BANK_LIST.find((bank) => bank.id === bankId);
-			return {
-				label: listed?.name ?? label,
-				country: listed ? listed.country : country,
-				accounts: Number(accounts),
-				hasLayout,
-			};
-		});
+		const banks = new Map<
+			string,
+			{label: string; countries: Set<string>; accounts: Set<string>; hasLayout: boolean}
+		>();
+		for (const event of events) {
+			const listed = event.bankId ? LISTED_BANKS.get(event.bankId) : undefined;
+			if (listed?.status === 'verified') continue;
+			const label = listed?.name ?? bankNameSpelling(event.bankName);
+			const key = bankNameKey(label);
+			if (VERIFIED_NAME_KEYS.has(key)) continue;
+			const bank = banks.get(key) ?? {label, countries: new Set(), accounts: new Set(), hasLayout: false};
+			const country = listed?.country ?? event.country;
+			if (country) bank.countries.add(country);
+			bank.accounts.add(event.accountId);
+			bank.hasLayout ||= event.fromLayout;
+			banks.set(key, bank);
+		}
+		return [...banks]
+			.map(([key, bank]) => ({
+				key,
+				label: bank.label,
+				countries: [...bank.countries].sort(),
+				accounts: bank.accounts.size,
+				hasLayout: bank.hasLayout,
+			}))
+			.sort((a, b) => a.key.localeCompare(b.key));
 	}
 
-	private async missedBanks(start: Date, end: Date): Promise<MissedBank[]> {
+	private async missedBanks(since: Date, until: Date): Promise<MissedBank[]> {
 		const rows = await this.dataSource.query<{bankId: string; misses: string; accounts: string}[]>(
 			`SELECT "bankId", count(*) AS misses, count(DISTINCT "accountId") AS accounts
 			FROM bank_import_layout_misses
-			WHERE "createdAt" >= $1 AND "createdAt" < $2
+			WHERE "createdAt" > $1 AND "createdAt" <= $2
 			GROUP BY "bankId"
 			ORDER BY "bankId"`,
-			[start, end],
+			[since, until],
 		);
 		return rows.map((row) => ({bankId: row.bankId, misses: Number(row.misses), accounts: Number(row.accounts)}));
 	}
+}
+
+function digestText(newBanks: NewBank[], missedBanks: MissedBank[]): string {
+	const lines = ['Bank coverage since the last digest.'];
+	if (newBanks.length > 0)
+		lines.push(
+			'',
+			'Asked for or mapped, not listed before:',
+			...newBanks.map(
+				(bank) =>
+					`- ${bank.label}${bank.countries.length > 0 ? ` (${bank.countries.join(', ')})` : ''}: ` +
+					`${accounts(bank.accounts)}, ${bank.hasLayout ? 'a saved layout to build from' : 'no saved layout yet'}`,
+			),
+		);
+	if (missedBanks.length > 0)
+		lines.push(
+			'',
+			'Verified banks whose files their own readers did not read:',
+			...missedBanks.map(
+				(bank) =>
+					`- ${LISTED_BANKS.get(bank.bankId)?.name ?? bank.bankId} (${bank.bankId}): ` +
+					`${bank.misses} ${bank.misses === 1 ? 'miss' : 'misses'} from ${accounts(bank.accounts)}`,
+			),
+		);
+	return lines.join('\n');
 }
 
 function accounts(count: number): string {

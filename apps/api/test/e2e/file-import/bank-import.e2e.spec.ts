@@ -4371,66 +4371,90 @@ describe('Bank imports', () => {
 		await ask({bankName: 'Example Bank', country: 'NL', fileTypes: ['other']}).expect(204);
 	});
 
-	it('emails the operator once a day about banks asked for or mapped for the first time, and verified banks that missed', async () => {
+	it('emails the operator at most once a day about banks not listed before and verified banks that missed since', async () => {
 		const now = new Date();
-		const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-		const yesterday = new Date(today - 12 * 60 * 60 * 1000);
-		const earlier = new Date(today - 3 * 24 * 60 * 60 * 1000);
+		const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000);
 		const first = await createOwner();
 		const second = await createOwner();
 		const layouts = app.get(getRepositoryToken(BankImportLayout));
 		const asked = (owner: Account, bankName: string, country: string, createdAt: Date) =>
 			bankRequests.save({accountId: owner.id, bankName, country, fileTypes: ['csv'], createdAt});
-		await asked(first.owner, 'Example Digest Bank', 'DE', yesterday);
-		await asked(second.owner, ' example digest bank', 'DE', new Date(yesterday.getTime() + 60_000));
-		await asked(first.owner, 'Example Earlier Bank', 'FR', earlier);
-		await asked(second.owner, 'Example Earlier Bank', 'FR', yesterday);
-		await layouts.save({
-			accountId: first.owner.id,
-			layout: {} as never,
-			bankName: 'BoursoBank',
-			bankId: 'boursobank',
-			createdAt: yesterday,
-		});
-		await layouts.save({
-			accountId: second.owner.id,
-			layout: {} as never,
-			bankName: 'Example Mapped Bank',
-			bankId: OTHER_BANK_ID,
-			createdAt: yesterday,
-		});
-		await misses.save([
-			{accountId: first.owner.id, bankId: 'ing-nl', outcome: 'mapper', refusalCode: null, createdAt: yesterday},
-			{accountId: second.owner.id, bankId: 'ing-nl', outcome: 'refused', refusalCode: null, createdAt: yesterday},
-			{accountId: second.owner.id, bankId: 'abn-amro', outcome: 'mapper', refusalCode: null, createdAt: now},
-		]);
-		await EmailUtils.clearEmails(MAILPIT_API_URL);
+		const confirmed = (owner: Account, bankName: string, bankId: string | null, createdAt: Date) =>
+			layouts.save({accountId: owner.id, layout: {} as never, bankName, bankId, createdAt});
+		const operatorEmails = async () => {
+			await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+			const response = await fetch(`${MAILPIT_API_URL}/api/v1/messages`);
+			const {messages} = (await response.json()) as {messages: {To: {Address: string}[]}[]};
+			return messages.filter((message) => message.To.some((to) => to.Address === OPERATOR_ALERT_E2E_EMAIL));
+		};
 		const digest = app.get(BankCoverageDigestService);
+		await asked(first.owner, 'Example Earlier Bank', 'FR', hoursAgo(80));
+		await misses.save({
+			accountId: first.owner.id,
+			bankId: 'abn-amro',
+			outcome: 'mapper',
+			refusalCode: null,
+			createdAt: hoursAgo(80),
+		});
+		await EmailUtils.clearEmails(MAILPIT_API_URL);
+
+		await digest.send(hoursAgo(72));
+
+		const earlier = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+		expect(earlier?.Text).toContain('Example Earlier Bank (FR): 1 account, no saved layout yet');
+		expect(earlier?.Text).toContain('ABN AMRO (abn-amro): 1 miss from 1 account');
+		await EmailUtils.clearEmails(MAILPIT_API_URL);
+		await asked(first.owner, 'Example Digest Bank', 'DE', hoursAgo(12));
+		await confirmed(second.owner, ' example  digest bank', OTHER_BANK_ID, hoursAgo(11));
+		await asked(second.owner, 'Example Earlier Bank', 'FR', hoursAgo(12));
+		await confirmed(first.owner, 'Example Bank Layout', 'boursobank', hoursAgo(12));
+		await confirmed(second.owner, 'Example Picked Bank', null, hoursAgo(12));
+		await asked(second.owner, 'rabobank', 'NL', hoursAgo(12));
+		await misses.save([
+			{
+				accountId: first.owner.id,
+				bankId: 'ing-nl',
+				outcome: 'mapper',
+				refusalCode: null,
+				createdAt: hoursAgo(12),
+			},
+			{
+				accountId: second.owner.id,
+				bankId: 'ing-nl',
+				outcome: 'refused',
+				refusalCode: null,
+				createdAt: hoursAgo(12),
+			},
+		]);
 
 		await digest.send(now);
 
 		const email = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
 		expect(email).toMatchObject({Subject: 'Tempo: banks to add'});
-		expect(email?.Text).toContain('Example Digest Bank (DE): 2 accounts, no saved layout yet');
+		expect(email?.Text).toContain('Example Digest Bank (DE): 2 accounts, a saved layout to build from');
 		expect(email?.Text).toContain('BoursoBank (FR): 1 account, a saved layout to build from');
-		expect(email?.Text).toContain('Example Mapped Bank: 1 account, a saved layout to build from');
+		expect(email?.Text).toContain('Example Picked Bank: 1 account, a saved layout to build from');
 		expect(email?.Text).toContain('ING (ing-nl): 2 misses from 2 accounts');
 		expect(email?.Text).not.toContain('Example Earlier Bank');
 		expect(email?.Text).not.toContain('abn-amro');
+		expect(email?.Text?.toLowerCase()).not.toContain('rabobank');
 		for (const owner of [first.owner, second.owner]) {
 			expect(email?.Text).not.toContain(owner.id);
 			expect(email?.Text).not.toContain(owner.email);
 		}
 
-		// Another run that day, and a day with nothing new, send nothing more.
-		await digest.send(now);
+		// A later day with nothing new sends nothing; another run on the day of a digest sends nothing, even with something new.
+		await digest.send(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+		await asked(first.owner, 'Example Later Bank', 'NL', now);
+		await digest.send(new Date(now.getTime() + 60_000));
+		expect(await operatorEmails()).toHaveLength(1);
+
+		// The next day's digest lists it.
 		await digest.send(new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000));
-		await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
-		const response = await fetch(`${MAILPIT_API_URL}/api/v1/messages`);
-		const {messages} = (await response.json()) as {messages: {To: {Address: string}[]}[]};
-		expect(
-			messages.filter((message) => message.To.some((to) => to.Address === OPERATOR_ALERT_E2E_EMAIL)),
-		).toHaveLength(1);
+		const later = await operatorEmails();
+		expect(later).toHaveLength(2);
+		const next = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
+		expect(next?.Text).toContain('Example Later Bank (NL): 1 account, no saved layout yet');
 	});
 
 	it('refuses an upload from another site', async () => {
