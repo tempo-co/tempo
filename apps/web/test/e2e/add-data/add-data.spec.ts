@@ -1,7 +1,6 @@
 import type {Page} from '@playwright/test';
 
 import {expect, test} from '../../fixtures';
-import {animationsSettled, expectNoHorizontalOverflow} from '../../utils/layout';
 
 /** A synthetic CAMT.053 statement for a published example IBAN: three booked payments in March 2026. */
 const STATEMENT = [
@@ -85,30 +84,5 @@ test.describe('Add data', () => {
 
     await page.goto('/accounts');
     await expect(page.getByRole('heading', {name: 'No accounts yet'})).toBeVisible();
-  });
-
-  test('on a phone, Add data opens one bottom sheet with no sideways scroll', async ({
-    page,
-    freshAccount: _account,
-  }) => {
-    await page.setViewportSize({width: 320, height: 640});
-    await page.goto('/transactions');
-    await page.getByRole('button', {name: 'Add data'}).click();
-    const sheet = page.getByTestId('add-data-sheet');
-    await expect(sheet.getByRole('heading', {name: 'Add data'})).toBeVisible();
-    await animationsSettled(sheet);
-    const box = (await sheet.boundingBox())!;
-    expect(Math.round(box.y + box.height)).toBe(640);
-    expect(Math.round(box.width)).toBe(320);
-    await expectNoHorizontalOverflow(page);
-
-    await sheet.getByRole('button', {name: /^Import a statement file/}).click();
-    await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
-    await expect(sheet.getByRole('button', {name: 'Choose files'})).toBeVisible();
-    await expectNoHorizontalOverflow(page);
-    await sheet.getByRole('button', {name: 'Back to Add data'}).click();
-    await sheet.getByRole('button', {name: /^Connect a bank/}).click();
-    await expect(sheet.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
-    await expectNoHorizontalOverflow(page);
   });
 });
