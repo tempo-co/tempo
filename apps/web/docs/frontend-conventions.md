@@ -99,7 +99,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Copy
 
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
-- Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The user's own banks and their export formats may be named, because that is how the user recognises them: connection cards show bank names, and the file-import Supported files list names the exports it reads ("ABN AMRO TXT", "Rabobank CSV").
+- Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The user's own banks and their export formats may be named, because that is how the user recognises them: account rows show bank names, and the file-import Supported files list names the exports it reads ("ABN AMRO TXT", "Rabobank CSV").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
 - When something is briefly busy or failed for a moment, say what the user can do, not which internal process is busy ("Tempo is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
 
@@ -121,7 +121,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Library traps
 
 - Radix `ScrollArea` wraps its content in a `display: table` box with `min-width: 100%`. Inside a grid track with the default `min-width: auto`, wide content then widens the whole sheet; give the grid `grid-cols-1` and measure the ancestors, not only the scrolled element.
-- Capture a dialog's focus-return target from `event.currentTarget` in the click handler (the Details button in `src/features/banking/components/bank-connection-list.tsx`), never from `document.activeElement`: Safari on iPhone does not focus a tapped button.
+- Capture a dialog's focus-return target from `event.currentTarget` in the click handler (a transaction row in `src/features/banking/components/bank-transaction-ledger.tsx`), never from `document.activeElement`: Safari on iPhone does not focus a tapped button.
 
 ## UI primitives
 

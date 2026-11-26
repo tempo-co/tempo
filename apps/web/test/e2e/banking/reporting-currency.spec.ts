@@ -13,8 +13,10 @@ import {
 import {expect, test} from '../../fixtures';
 import {HomePage} from '../../pages/home.page';
 import {LoginPage} from '../../pages/login.page';
+import {mockAccountsApi} from '../../utils/accounts';
 import {fulfillJson, mockBankConnections} from '../../utils/api-mocks';
 import {
+  accountRow,
   chooseDeleteEverything,
   openRemoval,
   routeMockedBankApp,
@@ -86,8 +88,8 @@ test.describe('fully mocked', () => {
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toContainText('Your accounts are in EUR and GBP.');
     // Under the title, above the banks.
-    const title = await boxOf(page.getByRole('heading', {name: 'Bank connections', level: 1}));
-    const bank = await boxOf(page.getByTestId(`bank-connection-${HOME_CONNECTION.id}`));
+    const title = await boxOf(page.getByRole('heading', {name: 'Accounts', level: 1}));
+    const bank = await boxOf(page.getByTestId('accounts-overview'));
     const box = await boxOf(setup);
     expect(box.y).toBeGreaterThan(title.y + title.height);
     expect(box.y + box.height).toBeLessThan(bank.y);
@@ -360,6 +362,8 @@ test.describe('fully mocked', () => {
       ],
     };
     let connections = [HOME_CONNECTION, gbpBank];
+    // The account page's own reads; the connections answer below.
+    await mockAccountsApi(page, () => ({connections: []}));
     await mockBankConnections(page, () => connections);
     const api = await mockReportingCurrency(page, ASKING);
     await page.route(`**/bank-connections/${gbpBank.id}`, async (route) => {
@@ -379,12 +383,11 @@ test.describe('fully mocked', () => {
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toBeVisible();
 
-    await chooseDeleteEverything(
-      await openRemoval(page, page.getByTestId(`bank-connection-${gbpBank.id}`)),
-    );
+    await chooseDeleteEverything(await openRemoval(page, gbpBank.bankAccounts[0].id));
     await page.getByRole('button', {name: 'Remove permanently', exact: true}).click();
 
-    await expect(page.getByTestId(`bank-connection-${gbpBank.id}`)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/accounts$/);
+    await expect(accountRow(page, gbpBank.bankAccounts[0].id)).toHaveCount(0);
     // Once the removal dialog has closed, the page is readable again and asks nothing.
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByText(QUESTION)).toHaveCount(0);
@@ -423,7 +426,7 @@ test.describe('fully mocked', () => {
     await page.goto('/');
     await expect(homePage.totalBalance).toContainText('€');
 
-    // Another tab or device changes the currency to USD, and its amounts are converted. Connections reads it.
+    // Another tab or device changes the currency to USD, and its amounts are converted. Accounts reads it.
     api.state = {...api.state, currency: 'USD'};
     currency = 'USD';
     let release!: () => void;
@@ -433,7 +436,7 @@ test.describe('fully mocked', () => {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Accounts', exact: true})
       .click();
-    await expect(page.getByRole('heading', {name: 'Bank connections', level: 1})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Accounts', level: 1})).toBeVisible();
     await expect.poll(() => api.reads).toBeGreaterThan(reads);
     await page.goBack();
 
