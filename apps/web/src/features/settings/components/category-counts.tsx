@@ -35,7 +35,7 @@ export function CategoryCounts() {
     <SettingsGroup
       id='categories-heading'
       title='All categories'
-      description='Spending and refunds are sorted into these categories. Each shows how many transactions it holds, as Insights counts them.'
+      description='Each category with how many of your spending and refund transactions it holds, as Insights counts them. Income is counted by source, so it isn’t counted here.'
     >
       {isError ? (
         <LoadErrorState title="Couldn't load the category counts" error={error} onRetry={refetch} />

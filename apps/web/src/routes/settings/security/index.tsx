@@ -1,8 +1,8 @@
 import {createFileRoute} from '@tanstack/react-router';
 
 import {Skeleton} from '@/components/ui/skeleton';
-import {SignInSettings} from '@/features/settings/components/password-change/sign-in-settings';
 import {SessionList} from '@/features/settings/components/session/session-list';
+import {SignInSettings} from '@/features/settings/components/sign-in-settings';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 
 export const Route = createFileRoute('/settings/security/')({

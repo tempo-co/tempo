@@ -109,7 +109,8 @@ async function capture(page: Page, view: string) {
   await mkdir(process.env.SETTINGS_CAPTURE_DIR, {recursive: true});
   await page.screenshot({
     path: join(process.env.SETTINGS_CAPTURE_DIR, `${view}.png`),
-    fullPage: true,
+    // A full-page capture would paint the phone tab bar mid-page.
+    fullPage: page.viewportSize()!.width >= 768,
   });
 }
 

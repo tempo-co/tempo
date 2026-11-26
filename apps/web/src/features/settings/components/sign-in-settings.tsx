@@ -1,8 +1,8 @@
 import {Button} from '@/components/ui/button';
 import {useLogOut} from '@/hooks/use-logout';
 
-import {SettingsGroup, SettingsList, SettingsRow} from '../settings-group';
-import {PasswordChangeDialog} from './password-change-dialog';
+import {PasswordChangeDialog} from './password-change/password-change-dialog';
+import {SettingsGroup, SettingsList, SettingsRow} from './settings-group';
 
 /** The password, and logging out of this device: it works even when the session list can't load. */
 export function SignInSettings() {

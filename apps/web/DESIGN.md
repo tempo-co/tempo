@@ -430,8 +430,8 @@ Pages: `/`, `/transactions`, `/insights`, `/recurring`, `/accounts`, `/settings/
   a bank that needs attention; the link's name says what each means.
 
 Each Settings section (`src/features/settings/sections.ts`) has an address. Desktop: a 208px
-section list, the open one on `card` with a hairline, is beside the open section; `/settings`
-opens Profile. Phones show the list as 64px rows; a section has a "‹ Settings" link.
+section list (176px below `lg`), the open one on `card` with a hairline, beside the section;
+`/settings` opens Profile. Phones list sections as 64px rows; each has a "‹ Settings" link.
 
 ### Settings lists and forms
 
