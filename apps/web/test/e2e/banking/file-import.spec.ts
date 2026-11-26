@@ -97,6 +97,7 @@ const statement = (name: string) => ({
 function importSummary(fields: Partial<BankImportSummary> = {}): BankImportSummary {
   return {
     id: '00000000-0000-4000-8000-000000000501',
+    bankId: null,
     format: 'camt053',
     layout: null,
     filesCount: 3,

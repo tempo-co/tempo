@@ -30,6 +30,17 @@ function refusal(text: string | Buffer, owned: CsvLayout[] = []): {code: string;
 	throw new Error('The file was read');
 }
 
+/** The refusal reading the text with these layouts alone ends in, as an owner's saved layouts are tried. */
+function ownedRefusal(text: string, layouts: CsvLayout[]): {code: string; layout: string | null} {
+	try {
+		const read = readCsvLayout(file(text), layouts, {owned: true, today: '2026-11-13'});
+		throw new Error(read ? 'The file was read' : 'No layout claimed the file');
+	} catch (error) {
+		if (error instanceof ParseRefusal) return {code: error.code, layout: error.layout};
+		throw error;
+	}
+}
+
 // A valid IBAN at a bank outside ASN Bank's family, whose exports share its shape.
 const OTHER_BANK_IBAN = 'NL91ABNA0417164300';
 
@@ -502,13 +513,15 @@ describe("an owner's saved layouts", () => {
 		// The same row read as booked is refused, and a pending row of another width is too.
 		const booked = {...layout};
 		delete booked.pendingColumn;
-		expect(refusal(text, [booked])).toEqual({code: 'layout_not_recognized', layout: 'learned-pending'});
-		expect(refusal(text.replace('"-41,25";', '"-41,25";"x";"y";'), [layout])).toEqual({
+		expect(ownedRefusal(text, [booked])).toEqual({code: 'layout_not_recognized', layout: 'learned-pending'});
+		expect(ownedRefusal(text.replace('"-41,25";', '"-41,25";"x";"y";'), [layout])).toEqual({
 			code: 'layout_not_recognized',
 			layout: 'learned-pending',
 		});
 		// Its header ends in an empty column, so a row one cell longer is a row shifted by a cell, never read.
-		expect(refusal(text.replace('Example bill";"-62,10";', 'Example bill";"1,00";"-62,10";'), [layout])).toEqual({
+		expect(
+			ownedRefusal(text.replace('Example bill";"-62,10";', 'Example bill";"1,00";"-62,10";'), [layout]),
+		).toEqual({
 			code: 'layout_not_recognized',
 			layout: 'learned-pending',
 		});
@@ -610,7 +623,7 @@ describe("an owner's saved layouts", () => {
 			['2026-10-02', null],
 			['2026-10-04', null],
 		]);
-		expect(refusal(text.replace('2026-10-02,,', ',,'), [layout])).toEqual({
+		expect(ownedRefusal(text.replace('2026-10-02,,', ',,'), [layout])).toEqual({
 			code: 'layout_not_recognized',
 			layout: 'learned-value-dates',
 		});

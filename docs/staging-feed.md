@@ -56,12 +56,12 @@ sudo chown wisp-staging-feed: ~wisp-staging-feed/.ssh/authorized_keys && sudo ch
 sudo systemctl enable --now wisp-staging-copy.timer && sudo systemctl start wisp-staging-copy.service
 ```
 
-Back on the laptop, pin the server's host key (check its fingerprint against the server's) and switch the feed:
+Back on the laptop, pin the server's host key (check its fingerprint against the server's) and name the feed account:
 
 ```bash
 cd ~/.config/tempo-staging
 ssh-keyscan -t ed25519 <server tailnet name> >feed-ssh/known_hosts
-printf 'STAGING_FEED=server-copy\nSTAGING_FEED_SSH=wisp-staging-feed@<server tailnet name>\n' >feed.env
+printf 'STAGING_FEED_SSH=wisp-staging-feed@<server tailnet name>\n' >feed.env
 ```
 
-The next `tempo-deploy staging` that changes an image restores from the server's copy. Removing `feed.env` (or setting `STAGING_FEED=local-backups`) switches back to the laptop's own backups.
+The next `tempo-deploy staging` that changes an image restores from the server's copy.

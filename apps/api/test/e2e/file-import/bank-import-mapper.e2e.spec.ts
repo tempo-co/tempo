@@ -10,6 +10,7 @@ import {Repository} from 'typeorm';
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
+import {BankImportLayoutMiss} from '@modules/file-import/bank-import-layout-miss.entity';
 import {BankImportLayoutProposal} from '@modules/file-import/bank-import-layout-proposal.entity';
 import {BankImportLayout} from '@modules/file-import/bank-import-layout.entity';
 import {LayoutMapper, LayoutMapperError} from '@modules/file-import/mapper/layout-mapper';
@@ -119,6 +120,7 @@ describe('Bank import column mapper', () => {
 	let accounts: Repository<Account>;
 	let proposals: Repository<BankImportLayoutProposal>;
 	let layouts: Repository<BankImportLayout>;
+	let misses: Repository<BankImportLayoutMiss>;
 	let bankAccounts: Repository<BankAccount>;
 	let transactions: Repository<BankTransaction>;
 
@@ -129,6 +131,7 @@ describe('Bank import column mapper', () => {
 		accounts = app.get(getRepositoryToken(Account));
 		proposals = app.get(getRepositoryToken(BankImportLayoutProposal));
 		layouts = app.get(getRepositoryToken(BankImportLayout));
+		misses = app.get(getRepositoryToken(BankImportLayoutMiss));
 		bankAccounts = fixtures.bankAccounts;
 		transactions = fixtures.transactions;
 	});
@@ -141,12 +144,23 @@ describe('Bank import column mapper', () => {
 		return {owner: await accounts.findOneByOrFail({id: fresh.id}), agent: fresh.agent};
 	}
 
-	function drop(agent: TestAgent, file: Buffer) {
-		return agent.post('/bank-imports').set('Origin', ORIGIN).attach('files', file, 'upload-0.bin');
+	/** `bankId`: the bank the owner picked, sent ahead of the file. */
+	function drop(agent: TestAgent, file: Buffer, {bankId}: {bankId?: string} = {}) {
+		const upload = agent.post('/bank-imports').set('Origin', ORIGIN);
+		if (bankId !== undefined) upload.field('bankId', bankId);
+		return upload.attach('files', file, 'upload-0.bin');
 	}
 
-	function propose(agent: TestAgent, file: Buffer) {
-		return agent.post('/bank-imports/layout-proposals').set('Origin', ORIGIN).attach('files', file, 'upload-0.bin');
+	function propose(agent: TestAgent, file: Buffer, {bankId}: {bankId?: string} = {}) {
+		const upload = agent.post('/bank-imports/layout-proposals').set('Origin', ORIGIN);
+		if (bankId !== undefined) upload.field('bankId', bankId);
+		return upload.attach('files', file, 'upload-0.bin');
+	}
+
+	/** The owner's layout misses, oldest first, as stored. */
+	async function missesOf(owner: Account) {
+		const rows = await misses.find({where: {accountId: owner.id}, order: {createdAt: 'ASC', id: 'ASC'}});
+		return rows.map(({bankId, outcome, refusalCode}) => ({bankId, outcome, refusalCode}));
 	}
 
 	function confirm(agent: TestAgent, proposalId: string, body: Record<string, unknown>) {
@@ -164,13 +178,18 @@ describe('Bank import column mapper', () => {
 		return (await confirm(agent, (proposal.body as ProposalResponse).id, body).expect(201)).body as {id: string};
 	}
 
-	it("works out a file's columns with one call on a masked sample, saves the confirmed layout for its owner only and imports the same drop with it", async () => {
+	it("works out a file's columns with one call on a masked sample, saves the confirmed layout for its owner only under the picked bank and imports the same drop with it", async () => {
 		const {owner, agent} = await createOwner();
 		expect((await agent.get('/bank-imports').expect(200)).body).toEqual({imports: [], mapper: true});
-		expect((await drop(agent, DEBIT_CREDIT_CSV).expect(422)).body).toMatchObject({code: 'layout_unknown', file: 1});
+		// GLS Bank is verified, but none of its readers (CAMT.053, the Atruvia CSV) reads this table, so it misses at every step.
+		const picked = {bankId: 'gls-bank'};
+		expect((await drop(agent, DEBIT_CREDIT_CSV, picked).expect(422)).body).toMatchObject({
+			code: 'layout_unknown',
+			file: 1,
+		});
 
 		mapLayout.mockResolvedValueOnce(ANSWER.debitCredit);
-		const proposed = await propose(agent, DEBIT_CREDIT_CSV).expect(201);
+		const proposed = await propose(agent, DEBIT_CREDIT_CSV, picked).expect(201);
 
 		expect(proposed.body).toEqual({
 			id: expect.any(String),
@@ -225,7 +244,7 @@ describe('Bank import column mapper', () => {
 		for (const value of DEBIT_CREDIT_CONTENT) expect(sent).not.toContain(value);
 		// The proposal keeps the header and masked shapes, not a row.
 		const stored = await proposals.findOneByOrFail({id: proposed.body.id});
-		expect(stored).toMatchObject({accountId: owner.id, status: 'proposed', failureCode: null});
+		expect(stored).toMatchObject({accountId: owner.id, status: 'proposed', failureCode: null, bankId: 'gls-bank'});
 		expect(stored.headerCells).toHaveLength(7);
 		expect(stored.columnShapes).toEqual([
 			'99.99.9999',
@@ -245,10 +264,12 @@ describe('Bank import column mapper', () => {
 		const saved = await confirm(agent, proposed.body.id, {bankName: ' Example  Bank '}).expect(201);
 		expect(saved.body).toEqual({id: expect.any(String), bankName: 'Example Bank', createdAt: expect.any(String)});
 		expect(await proposals.findOneByOrFail({id: proposed.body.id})).toMatchObject({status: 'confirmed'});
+		expect(await layouts.findOneByOrFail({id: saved.body.id})).toMatchObject({bankId: 'gls-bank'});
 		await confirm(agent, proposed.body.id, {bankName: 'Example Bank'}).expect(409);
 
-		const imported = await drop(agent, DEBIT_CREDIT_CSV).expect(201);
+		const imported = await drop(agent, DEBIT_CREDIT_CSV, picked).expect(201);
 		expect(imported.body).toMatchObject({
+			bankId: 'gls-bank',
 			format: 'csv',
 			layout: `learned-${saved.body.id}`,
 			rowsParsed: 4,
@@ -292,6 +313,13 @@ describe('Bank import column mapper', () => {
 		await confirm(other.agent, proposed.body.id, {bankName: 'Example Bank'}).expect(404);
 		await other.agent.delete(`/bank-imports/layouts/${saved.body.id}`).set('Origin', ORIGIN).expect(404);
 		expect(mapLayout).toHaveBeenCalledTimes(2);
+		// Only the drops and proposals that named the verified bank count, and nothing of the file is kept with them.
+		expect(await missesOf(owner)).toEqual([
+			{bankId: 'gls-bank', outcome: 'refused', refusalCode: 'layout_unknown'},
+			{bankId: 'gls-bank', outcome: 'mapper', refusalCode: null},
+			{bankId: 'gls-bank', outcome: 'saved_layout', refusalCode: null},
+		]);
+		expect(await missesOf(other.owner)).toEqual([]);
 	});
 
 	it('discards a rejected proposal and refuses to confirm one an hour old', async () => {
@@ -380,13 +408,14 @@ describe('Bank import column mapper', () => {
 		const {owner, agent} = await createOwner();
 		answer();
 
-		const refused = await propose(agent, BALANCE_CSV).expect(status);
+		const refused = await propose(agent, BALANCE_CSV, {bankId: 'ing-nl'}).expect(status);
 
 		expect(refused.body).toMatchObject({code, file: 1});
 		expect(mapLayout).toHaveBeenCalledTimes(1);
 		expect(await proposals.findBy({accountId: owner.id})).toEqual([
 			expect.objectContaining({status: 'failed', failureCode: code, layout: null}),
 		]);
+		expect(await missesOf(owner)).toEqual([{bankId: 'ing-nl', outcome: 'mapper', refusalCode: code}]);
 	});
 
 	it.each([

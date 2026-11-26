@@ -5324,5 +5324,2885 @@
 				]
 			}
 		]
+	},
+	"sparkasse-camt-v2-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "sparkasse-camt-v2",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 1,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-60.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energy AG",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "FOLGELASTSCHRIFT Strom Oktober Vertrag 4711",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "GUTSCHR. UEBERWEISUNG Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-850.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Landlord",
+						"counterpartyIban": "GB33BUKB20201555555555",
+						"remittanceInformation": null,
+						"description": "ECHTZEIT-UEBERWEISUNG Miete Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"sparkasse-mt940-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "sparkasse-mt940",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 1,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-1234.56",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Insurance AG",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "LASTSCHRIFT Beitrag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-02",
+						"transactionDate": null,
+						"amount": "50.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Tenant",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "GUTSCHRIFT Erstattung",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-5.90",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ENTGELTABSCHLUSS Kontofuehrung",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"sparkasse-creditcard-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "sparkasse-creditcard",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": "2026-09-29",
+						"amount": "-13.80",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "EXAMPLE BOOKSHOP LONDON GBR",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": "2026-09-30",
+						"amount": "-45.90",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "EXAMPLE HOTEL MÜNCHEN",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": "2026-10-03",
+						"amount": "20.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "GUTSCHRIFT EXAMPLE SHOP Erstattung",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "Sparkasse"
+			}
+		]
+	},
+	"atruvia-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "atruvia",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": "-50.00",
+						"bankReference": null,
+						"counterpartyName": "Example Bakery",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Kartenzahlung girocard Example Bakery Examplestadt",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": "2450.00",
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Überweisungsgutschr. Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-06",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": "1390.00",
+						"bankReference": null,
+						"counterpartyName": "Example Energy eG",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "Basislastschrift Abschlag Oktober Strom",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"ing-de-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "ing-de",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-1023.45",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "VISA EXAMPLE SHOP",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Lastschrift NR XXXX 1234 EXAMPLESTADT KAUFUMSATZ 03.10",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt/Rente Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-850.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Landlord",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Dauerauftrag / Terminueberweisung Miete Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"ing-de-saldo-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "ing-de-saldo",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-1023.45",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "VISA EXAMPLE SHOP",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Lastschrift NR XXXX 1234 EXAMPLESTADT KAUFUMSATZ 03.10",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt/Rente Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-850.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Landlord",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Dauerauftrag / Terminueberweisung Miete Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"deutsche-bank-19-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "deutsche-bank-19",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-1012.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Shop//Examplestadt/DE 2026-09-30T12:00:00",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-02",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-60.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energy AG",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "Deutsche Bank"
+			}
+		]
+	},
+	"deutsche-bank-6-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "deutsche-bank-6",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-1012.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "EXAMPLE SHOP EXAMPLESTADT",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-02",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "GEHALT OKTOBER EXAMPLE EMPLOYER",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-60.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ABSCHLAG OKTOBER EXAMPLE ENERGY",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "Deutsche Bank"
+			}
+		]
+	},
+	"deutsche-bank-planer-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "deutsche-bank-planer",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Shop",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Kartenzahlung Example Shop",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-60.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energy AG",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"postbank-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "postbank",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-06",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energy AG",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-4.20",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Bakery",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Bakery Examplestadt",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"commerzbank-8-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "commerzbank-8",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-1060.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Energy AG Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Employer GmbH Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Shop Examplestadt",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"commerzbank-9-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "commerzbank-9",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-1060.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Energy AG Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Employer GmbH; Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"dkb-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "dkb",
+				"accountIban": "DE89370400440532013000",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 1,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energy AG",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "GB33BUKB20201555555555",
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"n26-de-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "n26-de",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Shop",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": null,
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-12.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Friend",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Pizza",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "N26"
+			}
+		]
+	},
+	"n26-en-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "n26-en",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Shop",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": null,
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-02",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "DE02120300000000202051",
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-12.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Friend",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Pizza",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "N26"
+			}
+		]
+	},
+	"comdirect-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "comdirect",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 1,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Lastschrift / Belastung Auftraggeber: Example Energy AG Buchungstext: Abschlag",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Übertrag / Überweisung Auftraggeber: Example Employer GmbH Buchungstext: Gehalt",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "comdirect"
+			}
+		]
+	},
+	"targobank-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "targobank",
+				"accountIban": "DE02300209000106531065",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-12.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Echtzeitüberweisung   EXAMPLE FRIEND   DE02120300000000202051   Pizza",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gutschrift   EXAMPLE EMPLOYER GMBH   Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Lastschrift   EXAMPLE ENERGY AG   Abschlag Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"sparda-bank-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "sparda-bank",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "EXAMPLE SHOP EXAMPLESTADT KARTENZAHLUNG",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "GEHALT OKTOBER EXAMPLE EMPLOYER GMBH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ABSCHLAG OKTOBER EXAMPLE ENERGY AG",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "Sparda-Bank"
+			}
+		]
+	},
+	"vivid-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "vivid",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Shop",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Card payment 1234",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "Vivid Money"
+			},
+			{
+				"layout": "vivid",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "USD",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-4.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "USD",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Cafe",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Card payment 1234",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				],
+				"bank": "Vivid Money"
+			}
+		]
+	},
+	"raiffeisen-at-elba-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "raiffeisen-at-elba",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Raiffeisen Austria",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.45",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "EXAMPLE MARKT DANKT  0101  K1   01.10. 17:20",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober Example Arbeitgeber GmbH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-07",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Überweisung Example Energie AG Rechnung 10/2026",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"easybank-at-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "easybank-at",
+				"accountIban": "AT611904300234573201",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-09-30",
+						"transactionDate": null,
+						"amount": "-18.90",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Markt Wien    K1 01.10.     MC/000000001 EXAMPLE MARKT",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober     FE/000000002 EXAMDEFF DE89370400440532013000 Example Arbeitgeber GmbH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-08",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Abbuchung Einzugsermächtigung     OG/000000003 Example Energie AG",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"easybank-at-creditcard-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "easybank-at-creditcard",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "easybank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-09-30",
+						"transactionDate": null,
+						"amount": "-189.99",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Airline/info|00000000000000000000001",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-04",
+						"transactionDate": null,
+						"amount": "-23.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Shop|USD 25,00|00000000000000000000002",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": "2026-10-09",
+						"transactionDate": null,
+						"amount": "1250.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Zahlung Danke|00000000000000000000003",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"ing-at-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "ing-at",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "ING Austria",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Eingang: Example Arbeitgeber GmbH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1500.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Auszahlung - Example Bankomat",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-31",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "0.42",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Habenzinsen",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"oberbank-payer-payee-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "oberbank-at",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Oberbank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2100.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "GB33BUKB20201555555555",
+						"remittanceInformation": null,
+						"description": "Gehalt Example salary",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": "2026-10-03",
+						"transactionDate": null,
+						"amount": "-850.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Landlord",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Dauerauftrag Example rent",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-12",
+						"valueDate": "2026-10-12",
+						"transactionDate": null,
+						"amount": "-41.25",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bezahlung Karte Example Market 1234",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"intesa-sanpaolo-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "intesa-sanpaolo-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Intesa Sanpaolo",
+				"rows": [
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Addebito Example Energia bolletta ottobre",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico Esempio Srl stipendio ottobre",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-12.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento Example Shop Milano",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"unicredit-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "unicredit-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "UniCredit",
+				"rows": [
+					{
+						"bookingDate": "2026-10-10",
+						"valueDate": "2026-10-10",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ADDEBITO SEPA DD PER FATTURA A VOSTRO CARICO      EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BONIFICO A VOSTRO FAVORE      ESEMPIO SRL STIPENDIO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAGAMENTO POS EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"unicredit-it-two-line-header-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "unicredit-it-two-line-header",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "UniCredit",
+				"rows": [
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAGAMENTO POS EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BONIFICO ESEMPIO SRL",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": "2026-10-09",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ADDEBITO EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"unicredit-it-balances-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "unicredit-it-balances",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "UniCredit",
+				"rows": [
+					{
+						"bookingDate": "2026-10-29",
+						"valueDate": "2026-10-29",
+						"transactionDate": null,
+						"amount": "-17.20",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ADDEBITO EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-27",
+						"valueDate": "2026-10-27",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BONIFICO ESEMPIO SRL",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"fineco-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "fineco-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 1,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "FinecoBank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "SEPA Direct Debit EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico SEPA Italia Ord: ESEMPIO SRL Stipendio",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento POS EXAMPLE SHOP MILANO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"fineco-it-value-date-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "fineco-it-value-date",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "FinecoBank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-08",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "SEPA Direct Debit EXAMPLE ENERGIA Addebito SDD fattura",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico SEPA Italia Ord: ESEMPIO SRL Stipendio",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento POS EXAMPLE SHOP MILANO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"creditagricole-it-apostrophe-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "credit-agricole-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Crédit Agricole Italia",
+				"rows": [
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-02",
+						"transactionDate": null,
+						"amount": "-12.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento Example Shop",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico Example Employer",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": "2026-10-09",
+						"transactionDate": null,
+						"amount": "-62.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Addebito Example Energy",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"popolare-sondrio-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "popolare-sondrio-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Banca Popolare di Sondrio",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-08",
+						"transactionDate": null,
+						"amount": "-1.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "COMMISSIONI CANONE MENSILE",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "RICEZIONE BONIFICO ISTANTANEO ESEMPIO SRL STIPENDIO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAGAMENTO POS EXAMPLE SHOP SONDRIO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"handelsbanken-se-synthetic.xlsx": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "handelsbanken-se",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "SEK",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Handelsbanken",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": "2026-09-30",
+						"amount": "-32.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "SEK",
+						"balanceAfter": "267.90",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Swish EXEMPEL",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": "2026-10-02",
+						"amount": "1500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "SEK",
+						"balanceAfter": "1767.90",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Lön EXEMPEL AB",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": "2026-10-04",
+						"amount": "-238.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "SEK",
+						"balanceAfter": "1529.40",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Kortköp 261004 EXEMPEL BUTIK",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"fineco-it-xlsx-synthetic.xlsx": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "fineco-it-xlsx",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 1,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "FinecoBank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "SEPA Direct Debit EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico SEPA Italia Ord: ESEMPIO SRL Stipendio",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"kbc-be-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "kbc-be",
+				"accountIban": "BE68539007547034",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": "-50.00",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BETALING MET DEBETKAART 01-10 EXAMPLE BAKKERIJ",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": "2450.00",
+						"bankReference": null,
+						"counterpartyName": "Example Werkgever BV",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "EUROPESE OVERSCHRIJVING VAN NL91 ABNA 0417 1643 00 Loon oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-06",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": "1390.00",
+						"bankReference": null,
+						"counterpartyName": "Example Energie NV",
+						"counterpartyIban": "BE71096123456769",
+						"remittanceInformation": null,
+						"description": "EUROPESE DOMICILIERING VAN BE71 0961 2345 6769 +++090/9337/55493+++",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"kbc-creditcard-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "kbc-be-creditcard",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "KBC",
+				"rows": [
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": null,
+						"transactionDate": "2026-10-01",
+						"amount": "-4.20",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Shop",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": null,
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": null,
+						"transactionDate": "2026-10-02",
+						"amount": "-12.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Cafe",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": null,
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": null,
+						"transactionDate": "2026-10-04",
+						"amount": "-41.25",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Market",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": null,
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"belfius-be-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "belfius-be",
+				"accountIban": "BE68539007547034",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-06",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energie NV",
+						"counterpartyIban": "BE71096123456769",
+						"remittanceInformation": null,
+						"description": "EUROPESE DOMICILIERING VAN Example Energie NV REF. : 0000000001 VAL. 06-10 Voorschot oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Werkgever BV",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "STORTING VAN NL91 ABNA 0417 1643 00 Example Werkgever BV REF. : 0000000002 VAL. 01-10 Loon oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BETALING MET BANKKAART 01/10 EXAMPLE BAKKERIJ REF. : 0000000003 VAL. 01-10",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"ing-be-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "ing-be",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "ING Belgium",
+				"rows": [
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-06",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Europese domiciliëring Example Energie NV Voorschot oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Virement européen Example Werkgever BV Loon oktober",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Betaling met debetkaart Example Bakkerij Brussel",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"bnp-paribas-fortis-be-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "bnp-paribas-fortis-be",
+				"accountIban": "BE68539007547034",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-06",
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Energie NV",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Voorschot oktober EUROPESE DOMICILIERING VALUTADATUM : 06/10/2026",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Werkgever BV",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Loon oktober NL91 ABNA 0417 1643 00 BIC ABNANL2A MEDEDELING : Loon oktober VALUTADATUM : 01/10/2026",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "EXAMPLE BAKKERIJ",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "000000001 MET KAART 0000 00XX XXXX X000 0 EXAMPLE BAKKERIJ 1000 01-10-2026 VALUTADATUM : 01/10/2026",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"la-banque-postale-fr-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "la-banque-postale-fr",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "La Banque Postale",
+				"rows": [
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PRELEVEMENT EXAMPLE ENERGIE",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "VIREMENT DE EXAMPLE EMPLOYEUR",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ACHAT CB EXAMPLE BOULANGERIE",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"mbank-pl-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "mbank-pl",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "PLN",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "mBank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-62.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "PLN",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Energia Łódź",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "PLN",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Pracodawca Sp. z o.o.",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-12.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "PLN",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Żabka Example Wrocław  ZAKUP PRZY UŻYCIU KARTY W KRAJU",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"aib-ie-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "aib-ie",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "AIB",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": "-50.00",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAYMENT EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": "2450.00",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "LODGEMENT EXAMPLE EMPLOYER SALARY",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": "1390.00",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "DIRECT DEBIT EXAMPLE ENERGY",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"nordea-se-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "nordea-se",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "SEK",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Nordea",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-50.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "SEK",
+						"balanceAfter": "-50.00",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Kortköp 261001 EXEMPEL BAGERI",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "SEK",
+						"balanceAfter": "2450.00",
+						"bankReference": null,
+						"counterpartyName": "Exempel Arbetsgivare AB",
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Lön",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1060.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "SEK",
+						"balanceAfter": "1390.00",
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Autogiro EXEMPEL ENERGI",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
 	}
 }

@@ -1,0 +1,4 @@
+"Umsatz getätigt von";"Belegdatum";"Buchungsdatum";"Originalbetrag";"Originalwährung";"Umrechnungskurs";"Buchungsbetrag";"Buchungswährung";"Transaktionsbeschreibung";"Transaktionsbeschreibung Zusatz";"Buchungsreferenz";"Gebührenschlüssel";"Länderkennzeichen";"BAR-Entgelt+Buchungsreferenz";"AEE+Buchungsreferenz";"Abrechnungskennzeichen"
+"0001 XXXX XXXX 1234";"29.09.26";"01.10.26";"-12,00";"GBP";"1,15";"-13,80";"EUR";"EXAMPLE BOOKSHOP LONDON";"GBR";"202610000001";"";"";"";"";"000000001"
+"0001 XXXX XXXX 1234";"30.09.26";"02.10.26";"-45,90";"EUR";"";"-45,90";"EUR";"EXAMPLE HOTEL MÜNCHEN";"";"202610010001";"";"";"";"";"000000001"
+"0001 XXXX XXXX 1234";"03.10.26";"05.10.26";"20,00";"EUR";"";"20,00";"EUR";"GUTSCHRIFT EXAMPLE SHOP";"Erstattung";"202610020001";"";"";"";"";"000000001"

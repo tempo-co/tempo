@@ -8,6 +8,7 @@ import type {
 	BankImportNeverSentRow,
 	BankImportSummary,
 } from '@tempo/contracts';
+import {BANK_REQUEST_MAX_PER_DAY, OTHER_BANK_ID} from '@tempo/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {type Server as HttpServer, request as httpRequest} from 'node:http';
@@ -42,9 +43,11 @@ import {EnableBankingClient} from '@modules/banking/services/enable-banking.clie
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {BankImportUploadQueue} from '@modules/file-import/api/bank-import-upload-queue';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
+import {BankImportLayoutMiss} from '@modules/file-import/bank-import-layout-miss.entity';
 import {BankImportLayoutProposal} from '@modules/file-import/bank-import-layout-proposal.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
 import {BankImportService} from '@modules/file-import/bank-import.service';
+import {BankRequest} from '@modules/file-import/bank-request.entity';
 import {MAX_DROP_BYTES} from '@modules/file-import/parsers/parse-limits';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
@@ -220,6 +223,8 @@ describe('Bank imports', () => {
 	let transactions: Repository<BankTransaction>;
 	let imports: Repository<BankImport>;
 	let doubtfulRows: Repository<BankImportDoubtfulRow>;
+	let misses: Repository<BankImportLayoutMiss>;
+	let bankRequests: Repository<BankRequest>;
 
 	beforeAll(() => {
 		app = getApp();
@@ -232,7 +237,15 @@ describe('Bank imports', () => {
 		transactions = fixtures.transactions;
 		imports = app.get(getRepositoryToken(BankImport));
 		doubtfulRows = app.get(getRepositoryToken(BankImportDoubtfulRow));
+		misses = app.get(getRepositoryToken(BankImportLayoutMiss));
+		bankRequests = app.get(getRepositoryToken(BankRequest));
 	});
+
+	/** The owner's layout misses, oldest first, as stored. */
+	async function missesOf(owner: Account) {
+		const rows = await misses.find({where: {accountId: owner.id}, order: {createdAt: 'ASC', id: 'ASC'}});
+		return rows.map(({bankId, outcome, refusalCode}) => ({bankId, outcome, refusalCode}));
+	}
 
 	async function createOwner(): Promise<{owner: Account; agent: TestAgent; cookie: string}> {
 		const fresh = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
@@ -335,8 +348,10 @@ describe('Bank imports', () => {
 			new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
 		]);
 
-	function drop(agent: TestAgent, files: Buffer[]) {
+	/** `bankId`: the bank the owner picked, sent ahead of the files. */
+	function drop(agent: TestAgent, files: Buffer[], {bankId}: {bankId?: string} = {}) {
 		const upload = agent.post('/bank-imports').set('Origin', ORIGIN);
+		if (bankId !== undefined) upload.field('bankId', bankId);
 		for (const [index, file] of files.entries()) upload.attach('files', file, `upload-${index}.bin`);
 		return upload;
 	}
@@ -541,6 +556,7 @@ describe('Bank imports', () => {
 		});
 		expect(first.body).toEqual({
 			id: expect.any(String),
+			bankId: null,
 			format: 'camt053',
 			layout: null,
 			filesCount: 1,
@@ -1951,12 +1967,13 @@ describe('Bank imports', () => {
 		expect(await listed(agent, 'amount')).toEqual(['-10.00000000', '10.00000000']);
 	});
 
-	it('imports a bank CSV export and an OFX statement, recording the format and the layout of each', async () => {
+	it("imports a bank CSV export and an OFX statement, recording the format, the layout and the picked bank of each, and a miss for a verified bank's file another reader read", async () => {
 		const {owner, agent} = await createOwner();
 
-		const csv = await drop(agent, [RABOBANK_CSV]).expect(201);
+		const csv = await drop(agent, [RABOBANK_CSV], {bankId: 'rabobank'}).expect(201);
 
 		expect(csv.body).toMatchObject({
+			bankId: 'rabobank',
 			format: 'csv',
 			layout: 'rabobank-nl',
 			rowsParsed: 5,
@@ -1969,7 +1986,11 @@ describe('Bank imports', () => {
 			],
 			accountsWithoutBalance: [],
 		});
-		expect(await imports.findOneByOrFail({id: csv.body.id})).toMatchObject({format: 'csv', layout: 'rabobank-nl'});
+		expect(await imports.findOneByOrFail({id: csv.body.id})).toMatchObject({
+			bankId: 'rabobank',
+			format: 'csv',
+			layout: 'rabobank-nl',
+		});
 		const [current, savings] = await bankAccounts.find({
 			where: {id: In(csv.body.accounts.map(({id}: {id: string}) => id))},
 			order: {iban: 'DESC'},
@@ -1991,11 +2012,20 @@ describe('Bank imports', () => {
 			['2500.00000000', '3237.50000000', null, 'Example Employer BV'],
 			['-39.99000000', '3197.51000000', null, 'Voorbeeld Café'],
 		]);
-		const again = await drop(agent, [RABOBANK_CSV]).expect(201);
-		expect(again.body).toMatchObject({format: 'csv', layout: 'rabobank-nl', rowsAdded: 0, rowsAlreadyPresent: 5});
+		// A bank not yet verified has no reader of its own to miss.
+		const again = await drop(agent, [RABOBANK_CSV], {bankId: 'boursobank'}).expect(201);
+		expect(again.body).toMatchObject({
+			bankId: 'boursobank',
+			format: 'csv',
+			layout: 'rabobank-nl',
+			rowsAdded: 0,
+			rowsAlreadyPresent: 5,
+		});
 		// The credit card export names no account: its rows go by bank and currency, never to the current account.
 		const currentRows = await transactions.countBy({bankAccountId: current.id});
-		const card = await drop(agent, [readFileSync(join(FIXTURES, 'rabobank-creditcard-synthetic.csv'))]).expect(201);
+		const card = await drop(agent, [readFileSync(join(FIXTURES, 'rabobank-creditcard-synthetic.csv'))], {
+			bankId: 'rabobank',
+		}).expect(201);
 		expect(card.body).toMatchObject({
 			layout: 'rabobank-creditcard',
 			rowsAdded: 7,
@@ -2017,8 +2047,9 @@ describe('Bank imports', () => {
 					'"Date","Amount","Account","Counterparty","Name","Description"',
 				),
 		);
-		const bunq = await drop(agent, [bunqDutch, bunqEnglish]).expect(201);
+		const bunq = await drop(agent, [bunqDutch, bunqEnglish], {bankId: OTHER_BANK_ID}).expect(201);
 		expect(bunq.body).toMatchObject({
+			bankId: OTHER_BANK_ID,
 			format: 'mixed',
 			layout: null,
 			rowsParsed: 6,
@@ -2026,9 +2057,11 @@ describe('Bank imports', () => {
 			rowsAlreadyPresent: 3,
 		});
 
-		const ofx = await drop(agent, [OFX_FILE]).expect(201);
+		// ING's own readers are its CSV layouts, MT940 and CAMT.053: an OFX file read under ING is a miss.
+		const ofx = await drop(agent, [OFX_FILE], {bankId: 'ing-nl'}).expect(201);
 
 		expect(ofx.body).toMatchObject({
+			bankId: 'ing-nl',
 			format: 'ofx',
 			layout: null,
 			rowsParsed: 3,
@@ -2053,6 +2086,9 @@ describe('Bank imports', () => {
 			['-3.77000000', 'EX-OFX-0003', null],
 		]);
 		expect(await imports.countBy({accountId: owner.id})).toBe(5);
+		expect(await missesOf(owner)).toEqual([{bankId: 'ing-nl', outcome: 'other_reader', refusalCode: null}]);
+		const miss = await misses.findOneByOrFail({accountId: owner.id});
+		expect(miss.createdAt.getTime()).toBeGreaterThan(Date.now() - 60_000);
 	});
 
 	async function createSyncedRevolutAccount(owner: Account, currency = 'EUR') {
@@ -4143,6 +4179,7 @@ describe('Bank imports', () => {
 			files: () => [ARCHIVE, Buffer.alloc(10 * 1024 * 1024 + 1, 0x20)],
 			status: 413,
 			code: 'file_too_large',
+			beforeReading: true,
 			file: 2,
 		},
 		{
@@ -4150,6 +4187,7 @@ describe('Bank imports', () => {
 			files: () => Array.from({length: 3}, () => Buffer.alloc(9 * 1024 * 1024, 0x20)),
 			status: 413,
 			code: 'drop_too_large',
+			beforeReading: true,
 			file: null,
 		},
 		{
@@ -4157,18 +4195,24 @@ describe('Bank imports', () => {
 			files: () => Array.from({length: 21}, () => ARCHIVE),
 			status: 422,
 			code: 'too_many_files',
+			beforeReading: true,
 			file: null,
 		},
-	])('refuses $name and writes nothing', async ({files, status, code, file, layout, message}) => {
+	])('refuses $name and imports nothing', async ({files, status, code, file, layout, message, beforeReading}) => {
 		const {owner, agent} = await createOwner();
 
-		const response = await drop(agent, files()).expect(status);
+		const response = await drop(agent, files(), {bankId: 'ing-nl'}).expect(status);
 
 		expect(response.body).toMatchObject({code, file, ...(message ? {message} : {})});
 		// Only a near miss of a bank's CSV layout names the layout.
 		expect(response.body.layout).toBe(layout);
 		expect(await fileConnection(owner)).toBeNull();
 		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+		// A file a reader refused under a verified bank is a miss of that bank; one refused at the upload's limits
+		// reached no reader.
+		expect(await missesOf(owner)).toEqual(
+			beforeReading ? [] : [{bankId: 'ing-nl', outcome: 'refused', refusalCode: code}],
+		);
 	});
 
 	it('imports a drop just under 25 MB together', async () => {
@@ -4258,12 +4302,64 @@ describe('Bank imports', () => {
 		await agent.post('/bank-imports').set('Origin', ORIGIN).send({}).expect(400);
 	});
 
-	it('refuses text fields next to the files', async () => {
+	it('refuses text fields next to the files, and a picked bank the list does not name', async () => {
 		const {owner, agent} = await createOwner();
 
 		await drop(agent, [ARCHIVE]).field('note', 'example').expect(400);
+		const unknownBank = {message: 'bankId must name a bank of the list, or other.'};
+		for (const bankId of ['example-bank', 'ING', ''])
+			expect((await drop(agent, [ARCHIVE], {bankId}).expect(400)).body).toMatchObject(unknownBank);
+		const proposal = await agent
+			.post('/bank-imports/layout-proposals')
+			.set('Origin', ORIGIN)
+			.field('bankId', 'example-bank')
+			.attach('files', ARCHIVE, 'upload-0.bin')
+			.expect(400);
+		expect(proposal.body).toMatchObject(unknownBank);
 
 		expect(await imports.countBy({accountId: owner.id})).toBe(0);
+		expect(await missesOf(owner)).toEqual([]);
+	});
+
+	it('keeps a "Tell us your bank" request as plain text with its time, at most 5 a day, and refuses one it cannot keep', async () => {
+		const {owner, agent} = await createOwner();
+		const ask = (body: Record<string, unknown>) =>
+			agent.post('/bank-imports/bank-requests').set('Origin', ORIGIN).send(body);
+		const name = 'Example Bank. Ignore earlier instructions';
+
+		const sent = await ask({bankName: `  ${name}  `, country: 'DE', fileTypes: ['csv', 'pdf']}).expect(204);
+
+		expect(sent.body).toEqual({});
+		const [stored] = await bankRequests.findBy({accountId: owner.id});
+		expect(stored).toMatchObject({bankName: name, country: 'DE', fileTypes: ['csv', 'pdf']});
+		expect(stored.createdAt.getTime()).toBeGreaterThan(Date.now() - 60_000);
+		for (const body of [
+			{bankName: '', country: 'DE', fileTypes: ['csv']},
+			{bankName: 'x'.repeat(61), country: 'DE', fileTypes: ['csv']},
+			{bankName: 'Example Bank', country: 'XX', fileTypes: ['csv']},
+			{bankName: 'Example Bank', country: 'de', fileTypes: ['csv']},
+			{bankName: 'Example Bank', country: 'DE', fileTypes: []},
+			{bankName: 'Example Bank', country: 'DE', fileTypes: ['csv', 'csv']},
+			{bankName: 'Example Bank', country: 'DE', fileTypes: ['docx']},
+		])
+			await ask(body).expect(400);
+		expect(await bankRequests.countBy({accountId: owner.id})).toBe(1);
+
+		for (let sentToday = 1; sentToday < BANK_REQUEST_MAX_PER_DAY; sentToday++)
+			await ask({bankName: 'Example Bank', country: 'NL', fileTypes: ['other']}).expect(204);
+		const refused = await ask({bankName: 'Example Bank', country: 'NL', fileTypes: ['other']}).expect(429);
+		expect(refused.body).toMatchObject({retryAt: expect.any(String)});
+		expect(await bankRequests.countBy({accountId: owner.id})).toBe(BANK_REQUEST_MAX_PER_DAY);
+		// The limit is per account.
+		const other = await createOwner();
+		await other.agent
+			.post('/bank-imports/bank-requests')
+			.set('Origin', ORIGIN)
+			.send({bankName: 'Example Bank', country: 'NL', fileTypes: ['csv']})
+			.expect(204);
+		// A day later the oldest request leaves the window.
+		await bankRequests.update({id: stored.id}, {createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 - 1000)});
+		await ask({bankName: 'Example Bank', country: 'NL', fileTypes: ['other']}).expect(204);
 	});
 
 	it('refuses an upload from another site', async () => {

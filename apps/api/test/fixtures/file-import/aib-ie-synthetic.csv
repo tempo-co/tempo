@@ -1,0 +1,4 @@
+Posted Account, Posted Transactions Date, Description1, Description2, Description3, Debit Amount, Credit Amount,Balance,Posted Currency,Transaction Type,Local Currency Amount,Local Currency
+"931152 - 12345678","01/10/2026","PAYMENT","EXAMPLE SHOP","","50.00",,"-50.00",EUR,"Debit"," 50.00",EUR
+"931152 - 12345678","02/10/2026","LODGEMENT","EXAMPLE EMPLOYER","SALARY",,"2500.00","2450.00",EUR,"Credit"," 2500.00",EUR
+"931152 - 12345678","06/10/2026","DIRECT DEBIT","EXAMPLE ENERGY","","1060.00",,"1390.00",EUR,"Debit"," 1060.00",EUR

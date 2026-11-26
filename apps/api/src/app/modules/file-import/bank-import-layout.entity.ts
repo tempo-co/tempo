@@ -25,6 +25,10 @@ export class BankImportLayout {
 	@Column({type: 'varchar', length: 60})
 	bankName: string;
 
+	/** The bank the owner picked when asking for the layout (`BANK_LIST` id or `OTHER_BANK_ID`); null when none. */
+	@Column({type: 'varchar', length: 64, nullable: true})
+	bankId: string | null;
+
 	@CreateDateColumn({type: 'timestamptz'})
 	createdAt: Date;
 }

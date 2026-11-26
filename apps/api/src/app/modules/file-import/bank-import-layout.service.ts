@@ -31,6 +31,7 @@ import {
 import {BankImportLayoutProposal, LayoutProposalStatus} from './bank-import-layout-proposal.entity';
 import {BankImportLayout, savedLayoutId} from './bank-import-layout.entity';
 import {BankImportRefusalException} from './bank-import-refusal.exception';
+import {recordLayoutMisses} from './layout-misses';
 import {LayoutMapper, LayoutMapperError} from './mapper/layout-mapper';
 import {LayoutAnswer, MAX_MAPPER_INPUT_BYTES, toMapperInput} from './mapper/layout-mapper.contract';
 import {
@@ -189,9 +190,35 @@ export class BankImportLayoutService {
 	 * Finds the file's table in the parse child, asks the model once with its masked sample, checks the answer as a
 	 * layout and reads the whole file with it in the parse child. Every model call counts against the owner's daily
 	 * limit; a refusal before it (off, not a table, a table the limits do not allow, a header no layout can hold, a
-	 * request over `MAX_MAPPER_INPUT_BYTES`) does not.
+	 * request over `MAX_MAPPER_INPUT_BYTES`) does not. A request that picked a verified bank records a miss of that
+	 * bank's readers, with the refusal's code when it is refused.
 	 */
-	async propose(ownerId: Account['id'], file: Buffer): Promise<BankImportLayoutProposalResponse> {
+	async propose(
+		ownerId: Account['id'],
+		file: Buffer,
+		bankId: string | null = null,
+	): Promise<BankImportLayoutProposalResponse> {
+		try {
+			const proposal = await this.proposeLayout(ownerId, file, bankId);
+			await recordLayoutMisses(this.dataSource.manager, ownerId, bankId, [
+				{outcome: 'mapper', refusalCode: null},
+			]);
+			return proposal;
+		} catch (error) {
+			if (error instanceof BankImportRefusalException) {
+				await recordLayoutMisses(this.dataSource.manager, ownerId, bankId, [
+					{outcome: 'mapper', refusalCode: error.code},
+				]);
+			}
+			throw error;
+		}
+	}
+
+	private async proposeLayout(
+		ownerId: Account['id'],
+		file: Buffer,
+		bankId: string | null,
+	): Promise<BankImportLayoutProposalResponse> {
 		if (!this.mapperEnabled()) throw this.refuse('mapper_unavailable');
 		const sampled = await this.parseRunner.sample(file);
 		if (!sampled.ok) throw this.refuse(sampled.code);
@@ -217,7 +244,7 @@ export class BankImportLayoutService {
 			throw this.refuse('layout_not_mappable');
 		}
 		const owner = await this.dataSource.getRepository(Account).findOneByOrFail({id: ownerId});
-		const proposal = await this.reserve(ownerId, file, sample);
+		const proposal = await this.reserve(ownerId, file, sample, bankId);
 
 		let answer: LayoutAnswer;
 		try {
@@ -296,7 +323,7 @@ export class BankImportLayoutService {
 				throw new BankImportRefusalException('layout_not_mappable');
 			}
 			const saved = await layouts.save(
-				layouts.create({id, accountId: ownerId, layout: validation.layout, bankName}),
+				layouts.create({id, accountId: ownerId, layout: validation.layout, bankName, bankId: proposal.bankId}),
 			);
 			await manager.getRepository(BankImportLayoutProposal).update({id: proposal.id}, {status: 'confirmed'});
 			return toLayoutResponse(saved);
@@ -315,7 +342,12 @@ export class BankImportLayoutService {
 	 * Records the proposal before the model is asked, under the owner's row lock, so two requests at once cannot both
 	 * pass the daily limit.
 	 */
-	private reserve(ownerId: Account['id'], file: Buffer, sample: TableSample): Promise<BankImportLayoutProposal> {
+	private reserve(
+		ownerId: Account['id'],
+		file: Buffer,
+		sample: TableSample,
+		bankId: string | null,
+	): Promise<BankImportLayoutProposal> {
 		return this.dataSource.transaction(async (manager) => {
 			await lockOwner(manager, ownerId);
 			const proposals = manager.getRepository(BankImportLayoutProposal);
@@ -343,6 +375,7 @@ export class BankImportLayoutService {
 					columnShapes: sample.masked.columnShapes,
 					layout: null,
 					currencyNeeded: false,
+					bankId,
 					expiresAt: new Date(now.getTime() + PROPOSAL_LIFETIME_MS),
 				}),
 			);

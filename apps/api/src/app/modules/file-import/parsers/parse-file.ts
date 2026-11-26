@@ -2,6 +2,7 @@ import {looksLikeAbnAmroTxt, parseAbnAmroTxt} from './abn-amro-txt';
 import {looksLikeCamt053, parseCamt053} from './camt053';
 import {CsvLayout} from './csv-layout';
 import {readCsvLayout} from './csv-layout-reader';
+import {CSV_LAYOUTS} from './csv-layouts';
 import {looksLikeMt940, parseMt940} from './mt940';
 import {looksLikeOfx, parseOfx} from './ofx';
 import {MAX_ROWS_PER_DROP} from './parse-limits';
@@ -14,12 +15,15 @@ import {isZip, readZipEntries} from './zip-reader';
 /** The signature of the old binary Office file (OLE2 compound document) that `.xls` workbooks are. */
 const LEGACY_XLS_SIGNATURE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
+/** The built-in layouts of a workbook's first sheet. */
+const WORKBOOK_LAYOUTS = CSV_LAYOUTS.filter(({source}) => source === 'xlsx');
+
 /** One file's statements; `layout` is the bank CSV layout it was read with, if any. */
 type Document = {format: StatementFormat; layout?: string; statements: NormalizedStatement[]};
 
 /**
  * Decides the format from the content alone (never the name) and parses one uploaded file. A workbook is read as
- * a Revolut statement, or else with the owner's saved layouts. Any other zip is unpacked one level: every entry must
+ * a Revolut statement, or else with the built-in workbook layouts and then the owner's saved layouts. Any other zip is unpacked one level: every entry must
  * itself be a supported statement file, in any mix of formats, and an archive or workbook inside the archive is
  * refused.
  *
@@ -69,7 +73,7 @@ function parseWorkbook(bytes: Uint8Array, owned: readonly CsvLayout[]): Document
 		// Only a workbook laid out another way goes on; a Revolut statement that does not read stays refused.
 		if (!(error instanceof ParseRefusal && error.code === 'unsupported_format')) throw error;
 	}
-	return readOwned(bytes, owned, null);
+	return readBuiltIn(bytes, owned, WORKBOOK_LAYOUTS);
 }
 
 function parseDocument(bytes: Uint8Array, owned: readonly CsvLayout[]): Document {
@@ -80,9 +84,14 @@ function parseDocument(bytes: Uint8Array, owned: readonly CsvLayout[]): Document
 	if (looksLikeMt940(bytes)) return {format: 'mt940', statements: parseMt940(bytes)};
 	if (looksLikeAbnAmroTxt(bytes)) return {format: 'abnAmroTxt', statements: parseAbnAmroTxt(bytes)};
 	if (looksLikeOfx(bytes)) return {format: 'ofx', statements: parseOfx(bytes)};
+	return readBuiltIn(bytes, owned, CSV_LAYOUTS);
+}
+
+/** Reads a table with the built-in layouts, then the owner's. */
+function readBuiltIn(bytes: Uint8Array, owned: readonly CsvLayout[], layouts: readonly CsvLayout[]): Document {
 	let nearMiss: ParseRefusal | null = null;
 	try {
-		const csv = readCsvLayout(bytes);
+		const csv = readCsvLayout(bytes, layouts);
 		if (csv) return {format: 'csv', layout: csv.layout.id, statements: csv.statements};
 	} catch (error) {
 		// A near miss of a built-in layout may still be a layout the owner saved for it.

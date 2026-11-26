@@ -1,0 +1,4 @@
+"Booking Date","Value Date","Partner Name","Partner Iban",Type,"Payment Reference","Account Name","Amount (EUR)","Original Amount","Original Currency","Exchange Rate"
+2026-10-01,,"Example Shop",,"Presentment",,"Main Account",-23.40,,,
+2026-10-02,2026-10-02,"Example Employer GmbH",DE02120300000000202051,"Credit Transfer","Gehalt Oktober","Main Account",2500.00,,,
+2026-10-05,2026-10-05,"Example Friend",NL91ABNA0417164300,"Debit Transfer","Pizza","Main Account",-12.00,,,

@@ -1,0 +1,15 @@
+{
+	"moduleFileExtensions": ["js", "json", "ts"],
+	"rootDir": "..",
+	"testEnvironment": "node",
+	"testMatch": ["<rootDir>/test/corpus/*.spec.ts"],
+	"transform": {
+		"^.+\\.(t|j)s$": ["ts-jest", {"tsconfig": "<rootDir>/tsconfig.jest.json"}]
+	},
+	"moduleNameMapper": {
+		"^@core/(.*)$": "<rootDir>/src/app/core/$1",
+		"^@modules/(.*)$": "<rootDir>/src/app/modules/$1",
+		"^@tempo/contracts$": "<rootDir>/../../packages/contracts/src",
+		"^(\\.{1,2}/.*)\\.js$": "$1"
+	}
+}

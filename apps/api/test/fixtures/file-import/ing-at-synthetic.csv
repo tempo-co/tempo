@@ -1,0 +1,4 @@
+Kontonummer;Text;Datum;Währung;Soll;Haben
+00012345678;Eingang: Example Arbeitgeber GmbH;01.10.2026;EUR;0,00;2.150,00
+00012345678;Auszahlung - Example Bankomat;03.10.2026;EUR;1.500,00;0,00
+00012345678;Habenzinsen;31.10.2026;EUR;0,00;0,42
