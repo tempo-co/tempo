@@ -181,7 +181,7 @@ describe('Bank import column mapper', () => {
 	it("works out a file's columns with one call on a masked sample, saves the confirmed layout for its owner only under the picked bank and imports the same drop with it", async () => {
 		const {owner, agent} = await createOwner();
 		expect((await agent.get('/bank-imports').expect(200)).body).toEqual({imports: [], mapper: true});
-		// GLS Bank is verified on its CAMT.053 files, so its CSV export misses at every step.
+		// GLS Bank is verified, but none of its readers (CAMT.053, the Atruvia CSV) reads this table, so it misses at every step.
 		const picked = {bankId: 'gls-bank'};
 		expect((await drop(agent, DEBIT_CREDIT_CSV, picked).expect(422)).body).toMatchObject({
 			code: 'layout_unknown',
