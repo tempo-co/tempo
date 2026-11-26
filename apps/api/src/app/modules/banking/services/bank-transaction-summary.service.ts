@@ -7,6 +7,7 @@ import {
 	type BankTransactionCashFlow,
 	type BankTransactionCashFlowPeriod,
 	type BankTransactionCategoryFilterValue,
+	type BankTransactionDayTotals,
 	type BankTransactionReviewCounts,
 	type BankTransactionSummary,
 	type BankTransactionSummaryCategory,
@@ -78,6 +79,15 @@ type FlowRow = {
 	count: number;
 };
 type CategoryTotal = {cents: bigint; count: number};
+
+/** Spending and income as signed cent sums, the way the totals query reads them. */
+type TotalsRow = {spending: string; income: string};
+
+function toTotals(row: TotalsRow) {
+	const spending = -BigInt(row.spending);
+	const income = BigInt(row.income);
+	return {spending: formatCents(spending), income: formatCents(income), net: formatCents(income - spending)};
+}
 
 @Injectable()
 export class BankTransactionSummaryService {
@@ -328,36 +338,48 @@ export class BankTransactionSummaryService {
 	}
 
 	async getTotals(owner: ReportingOwner, {filter}: BankTransactionTotalsQueryDto): Promise<BankTransactionTotals> {
-		const {id} = owner;
-		const baseCurrency = totalsCurrency(owner);
-		const query = createOwnerScopedQuery(this.bankTransactionRepository, id);
+		const row = await (
+			await this.createTotalsQuery(owner.id, filter)
+		)
+			.addSelect('COUNT(*)::int', 'count')
+			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
+			.getRawOne<TotalsRow & {count: number; missingBaseAmount: number}>();
+		return {
+			baseCurrency: totalsCurrency(owner),
+			...toTotals(row!),
+			count: row!.count,
+			excluded: {missingBaseAmount: row!.missingBaseAmount},
+		};
+	}
+
+	/** The totals of each day the filtered list has rows on, newest first, as its day headers show them. */
+	async getDayTotals(
+		owner: ReportingOwner,
+		{filter}: BankTransactionTotalsQueryDto,
+	): Promise<BankTransactionDayTotals> {
+		const rows = await (
+			await this.createTotalsQuery(owner.id, filter)
+		)
+			.addSelect(`to_char("transaction"."date", 'YYYY-MM-DD')`, 'date')
+			.andWhere('"transaction"."date" IS NOT NULL')
+			.groupBy('"transaction"."date"')
+			.orderBy('"transaction"."date"', 'DESC')
+			.getRawMany<TotalsRow & {date: string}>();
+		return {baseCurrency: totalsCurrency(owner), days: rows.map((row) => ({date: row.date, ...toTotals(row)}))};
+	}
+
+	/** Spending and income in cents over the list's filters; callers add their own grouping. */
+	private async createTotalsQuery(accountId: Account['id'], filter: BankTransactionTotalsQueryDto['filter']) {
+		const query = createOwnerScopedQuery(this.bankTransactionRepository, accountId);
 		const recurringIds = filter?.recurringSeriesKey
-			? await this.recurringSeriesService.findTransactionIds(id, filter.recurringSeriesKey)
+			? await this.recurringSeriesService.findTransactionIds(accountId, filter.recurringSeriesKey)
 			: undefined;
 		applyBankTransactionFilters(query, filter, recurringIds);
 		// Round each amount to minor units before summing; never convert monetary SQL results to Number.
 		const cents = `ROUND(${SQL_BASE_AMOUNT} * 100)`;
-		const row = await query
-			.select('COUNT(*)::int', 'count')
-			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spending')
-			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'income')
-			.addSelect(`COUNT(*) FILTER (WHERE ${SQL_MISSING_BASE_AMOUNT})::int`, 'missingBaseAmount')
-			.getRawOne<{
-				count: number;
-				spending: string;
-				income: string;
-				missingBaseAmount: number;
-			}>();
-		const spending = -BigInt(row!.spending);
-		const income = BigInt(row!.income);
-		return {
-			baseCurrency,
-			spending: formatCents(spending),
-			income: formatCents(income),
-			net: formatCents(income - spending),
-			count: row!.count,
-			excluded: {missingBaseAmount: row!.missingBaseAmount},
-		};
+		return query
+			.select(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_SPENDING}), 0)::text`, 'spending')
+			.addSelect(`COALESCE(SUM(${cents}) FILTER (WHERE ${SQL_INCOME}), 0)::text`, 'income');
 	}
 
 	async getReviewCounts(accountId: Account['id']): Promise<BankTransactionReviewCounts> {

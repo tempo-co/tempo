@@ -32,7 +32,9 @@ test.describe('bank transactions', () => {
       .filter({hasText: 'Coffee shop'});
 
     await expect(page.getByText('Coffee shop')).toBeVisible();
-    await expect(page.getByTestId('bank-transactions-summary')).toHaveText(/^\d+ transactions$/);
+    await expect(page.getByTestId('bank-transactions-view-totals')).toContainText(
+      /\d+ transactions/,
+    );
     // Rows sit under their day, this year's without the year.
     const day = page.getByRole('region', {name: 'Monday 24 August', exact: true});
     await expect(day.getByRole('heading', {name: 'Monday 24 August'})).toBeVisible();
@@ -46,7 +48,7 @@ test.describe('bank transactions', () => {
     await page.getByTestId('bank-transactions-search').fill('does not exist');
     await expect(page.getByRole('heading', {name: 'No matching transactions'})).toBeVisible();
     await expect(page.getByText('Nothing matches “does not exist”.')).toBeVisible();
-    await expect(page.getByTestId('bank-transactions-summary')).toHaveText('0 transactions');
+    await expect(page.getByTestId('bank-transactions-view-totals')).toContainText('0 transactions');
 
     await page.getByRole('button', {name: 'Clear filters'}).click();
     await expect(page.getByText('Coffee shop')).toBeVisible();
@@ -193,7 +195,9 @@ test.describe('bank transactions', () => {
     await expect(
       page.getByTestId(/^bank-transaction-row-/).filter({hasText: 'Currency exchange'}),
     ).toHaveCount(1);
-    await expect(filters.getByRole('tab', {name: 'Cash flow Currency exchange'})).toBeVisible();
+    await expect(
+      page.getByRole('button', {name: 'Remove filter: Currency exchange'}),
+    ).toBeVisible();
     await page.keyboard.press('Escape');
 
     await page.goto('/transactions');
@@ -217,10 +221,11 @@ test.describe('bank transactions', () => {
 
   test('does not show the bank account filter when there is one account', async ({page}) => {
     await page.goto('/transactions');
-    const filters = await openTransactionFilter(page, 'Categories');
+    await page.getByTestId('bank-transaction-filters-trigger').click();
+    const filters = page.getByTestId('bank-transaction-filters');
 
-    await expect(filters.getByRole('tab', {name: /^Cash flow/})).toBeVisible();
-    await expect(filters.getByRole('tab', {name: /^Bank accounts/})).toHaveCount(0);
+    await expect(filters.getByRole('button', {name: /^Cash flow/})).toBeVisible();
+    await expect(filters.getByRole('button', {name: /^Bank accounts/})).toHaveCount(0);
   });
 
   test('does not count inactive accounts when deciding whether to show the filter', async ({
@@ -234,10 +239,11 @@ test.describe('bank transactions', () => {
     );
 
     await page.goto('/transactions');
-    const filters = await openTransactionFilter(page, 'Categories');
+    await page.getByTestId('bank-transaction-filters-trigger').click();
+    const filters = page.getByTestId('bank-transaction-filters');
 
-    await expect(filters.getByRole('tab', {name: /^Cash flow/})).toBeVisible();
-    await expect(filters.getByRole('tab', {name: /^Bank accounts/})).toHaveCount(0);
+    await expect(filters.getByRole('button', {name: /^Cash flow/})).toBeVisible();
+    await expect(filters.getByRole('button', {name: /^Bank accounts/})).toHaveCount(0);
   });
 
   test('says in the filters when bank accounts cannot be loaded', async ({page}) => {
@@ -247,7 +253,7 @@ test.describe('bank transactions', () => {
 
     await page.goto('/transactions');
     const filters = await openTransactionFilter(page, 'Bank accounts');
-    await expect(filters.getByRole('tabpanel', {name: 'Bank accounts'})).toHaveText(
+    await expect(filters.getByTestId('bank-transaction-filters-scroll-area')).toHaveText(
       'Bank accounts are unavailable.',
       {timeout: 15_000},
     );
@@ -445,9 +451,8 @@ test.describe('bank transactions', () => {
       const inspector = page.getByTestId('bank-transaction-inspector');
       await expect(inspector).toBeVisible();
       expect(new URL(page.url()).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
-      expect((await inspector.getAttribute('data-vaul-drawer')) !== null).toBe(
-        viewport.width < 768,
-      );
+      // Beside the list from 1024px; below it, a bottom sheet over the list.
+      expect(await inspector.getAttribute('role')).toBe(viewport.width < 1024 ? 'dialog' : null);
       await expect(inspector.getByRole('heading', {name: 'Coffee shop'})).toBeVisible();
       await expect(inspector.getByRole('region', {name: 'Category', exact: true})).toBeVisible();
       await expect(inspector.getByRole('region', {name: 'Account', exact: true})).toContainText(
@@ -472,7 +477,8 @@ test.describe('bank transactions', () => {
       const detailColumns = await bankDetailsFields.evaluate(
         (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
       );
-      expect(detailColumns).toBe(viewport.width < 640 ? 1 : 2);
+      // The rail and a phone's sheet are narrow, so the bank details stack in one column.
+      expect(detailColumns).toBe(1);
       await expectNoHorizontalOverflow(page);
 
       const inspectorBox = await boxOf(inspector);
@@ -568,8 +574,9 @@ test.describe('bank transactions', () => {
     await expect(page).toHaveURL(/bankAccountIds/);
     await expect(page.getByText('Coffee shop')).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByTestId('bank-transaction-filters')).toBeHidden();
 
-    await page.getByRole('button', {name: 'Date'}).first().click();
+    await openTransactionFilter(page, 'Date');
     for (let monthIndex = 0; monthIndex < 24; monthIndex += 1) {
       if (await page.getByText('August 2026', {exact: true}).isVisible()) break;
       await page.getByRole('button', {name: 'Go to previous month'}).click();
@@ -585,14 +592,13 @@ test.describe('bank transactions', () => {
     await page.setViewportSize({width: 1280, height: 720});
     await page.goto('/transactions');
 
-    const trigger = page.getByRole('button', {name: /^Date/}).first();
-    await trigger.click();
+    await openTransactionFilter(page, 'Date');
     const quickRanges = page.getByRole('radiogroup', {name: 'Quick ranges'});
     await quickRanges.getByRole('radio', {name: 'Last year'}).click();
 
     const lastYear = new Date().getFullYear() - 1;
     await expect(page).toHaveURL(/[?&]date=/);
-    await expect(trigger).toHaveAccessibleName(`Date: Jan 01, ${lastYear} - Dec 31, ${lastYear}`);
+    await expect(page.getByRole('button', {name: 'Remove filter: Last year'})).toBeVisible();
     await expect(quickRanges.getByRole('radio', {name: 'Last year'})).toBeChecked();
     await expect(page.getByRole('combobox', {name: 'Year:'})).toHaveValue(String(lastYear));
 
@@ -603,9 +609,11 @@ test.describe('bank transactions', () => {
     await page.getByRole('gridcell', {name: '10', exact: true}).click();
     await page.getByRole('gridcell', {name: '20', exact: true}).click();
 
-    await expect(trigger).toHaveAccessibleName(
-      `Date: Mar 10, ${targetYear} - Mar 20, ${targetYear}`,
-    );
+    await expect(
+      page.getByRole('button', {
+        name: `Remove filter: 10 Mar ${targetYear} – 20 Mar ${targetYear}`,
+      }),
+    ).toBeVisible();
     await expect(quickRanges.getByRole('radio', {name: 'Last year'})).not.toBeChecked();
   });
 
@@ -701,7 +709,8 @@ test.describe('bank transactions', () => {
     const reviewRow = page
       .getByTestId(/^bank-transaction-row-/)
       .filter({hasText: 'Provider purchase'});
-    await expect(reviewRow).toContainText('Needs review');
+    // A row the AI could not place shows no category: it waits in To check.
+    await expect(reviewRow).toContainText('To check');
 
     await page.getByRole('option', {name: 'Not categorized', exact: true}).click();
     const categoryWithUncategorizedParam = new URL(page.url()).searchParams.get('categories');
@@ -717,10 +726,8 @@ test.describe('bank transactions', () => {
     ).toBeVisible();
     await expect(page.getByText('Uncategorized purchase', {exact: true})).toBeVisible();
 
-    await expect(
-      filters.getByRole('tab', {name: 'Categories 4 categories', exact: true}),
-    ).toBeVisible();
-    // Reset sits in the panel's fixed footer: in view with the options scrolled to the top, beside Clear all.
+    await expect(page.getByRole('button', {name: 'Remove filter: 4 categories'})).toBeVisible();
+    // Reset sits in the control's fixed footer: in view with the options scrolled to the top.
     const resetCategories = filters.getByRole('button', {name: 'Reset Categories', exact: true});
     await expect(resetCategories).toBeInViewport();
     // Outside the scrolling options, so it never sits at the end of the list.
@@ -729,11 +736,6 @@ test.describe('bank transactions', () => {
         Boolean(button.closest('[data-radix-scroll-area-viewport]')),
       ),
     ).toBe(false);
-    const [resetBox, clearBox] = await Promise.all([
-      boxOf(resetCategories),
-      boxOf(filters.getByRole('button', {name: 'Clear all', exact: true})),
-    ]);
-    expect(resetBox.y).toBeCloseTo(clearBox.y, 0);
     await expect(filters.getByRole('option', {name: 'Reset'})).toHaveCount(0);
     await resetCategories.click();
     await expect(page).not.toHaveURL(/categories=/);
@@ -756,7 +758,9 @@ test.describe('bank transactions', () => {
     await expect(page.getByText('Salary', {exact: true})).toBeVisible();
     await expect(page.getByText('Coffee shop', {exact: true})).not.toBeVisible();
 
-    await filters.getByRole('button', {name: 'Clear all', exact: true}).click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', {name: 'Clear', exact: true}).click();
+    await expect(page).not.toHaveURL(/categorySources=/);
     const clearedUrl = new URL(page.url());
     expect(clearedUrl.searchParams.has('categories')).toBe(false);
     expect(clearedUrl.searchParams.has('categorySources')).toBe(false);
@@ -775,7 +779,7 @@ test.describe('bank transactions', () => {
     await expect(sheet.getByRole('heading', {name: 'Filters', exact: true})).toBeVisible();
     await sheet.evaluate((element) => Promise.all(element.getAnimations().map((a) => a.finished)));
     const listHeight = (await boxOf(sheet)).height;
-    // Phones have no date control of their own, so the date is the sheet's first filter; each names its values.
+    // The date is the first filter; each names its values.
     const facets = sheet.getByRole('list').getByRole('button');
     await expect(facets).toHaveText([
       /^DateAny/,
@@ -807,7 +811,7 @@ test.describe('bank transactions', () => {
       'Not categorized, Needs review',
     );
 
-    // The list step has no Reset; a filter's own step has one in the fixed footer, beside Clear all.
+    // The list step has no Reset; a filter's own step has one in the fixed footer, beside Done.
     await expect(sheet.getByRole('button', {name: /^Reset /})).toHaveCount(0);
     await openTransactionFilter(page, 'Category source');
     const resetSource = sheet.getByRole('button', {name: 'Reset Category source', exact: true});
@@ -827,23 +831,26 @@ test.describe('bank transactions', () => {
     await expect(resetSource).toHaveCount(0);
     await sheet.getByRole('option', {name: 'Manual', exact: true}).click();
     await expect(page).toHaveURL(/categorySources=/);
-    await expect(
-      page.getByTestId('bank-transaction-filters-trigger').getByText('2', {exact: true}),
-    ).toBeVisible();
 
-    // The booking date lives in the sheet on phones; its Reset is the footer's too.
+    // The booking date's Reset is the footer's too.
     await openTransactionFilter(page, 'Date');
     await sheet.getByRole('radio', {name: 'This month', exact: true}).click();
     await expect(page).toHaveURL(/[?&]date=/);
     await sheet.getByRole('button', {name: 'Reset Date', exact: true}).click();
     await expect(page).not.toHaveURL(/[?&]date=/);
 
-    await sheet.getByRole('button', {name: 'Clear all', exact: true}).click();
-    const clearedUrl = new URL(page.url());
-    expect(clearedUrl.searchParams.has('categories')).toBe(false);
-    expect(clearedUrl.searchParams.has('categorySources')).toBe(false);
     await sheet.getByRole('button', {name: 'Done', exact: true}).click();
     await expect(sheet).toBeHidden();
+    // Each filter set in the sheet shows as a chip under the search.
+    await expect(
+      page
+        .getByRole('list', {name: 'Filters in force'})
+        .getByRole('button', {name: /^Remove filter/}),
+    ).toHaveCount(2);
+    await page.getByRole('button', {name: 'Clear', exact: true}).click();
+    await expect(page).not.toHaveURL(/categorySources=/);
+    const clearedUrl = new URL(page.url());
+    expect(clearedUrl.searchParams.has('categories')).toBe(false);
     await expect(page.getByText('Salary', {exact: true})).toBeVisible();
   });
 
@@ -859,10 +866,11 @@ test.describe('bank transactions', () => {
       name: 'View Coffee shop transaction details',
     });
 
-    await expect(page.getByRole('heading', {name: 'Bank transactions'})).toBeVisible();
-    await expect(page.getByTestId('bank-transactions-summary')).toBeVisible();
-    // Phones keep search, Order and Filters on one line; the date moves into Filters.
-    await expect(page.getByRole('button', {name: /^Date/})).toBeHidden();
+    await expect(
+      page.getByRole('heading', {name: 'Transactions', exact: true, level: 1}),
+    ).toBeVisible();
+    await expect(page.getByTestId('bank-transactions-summary-strip')).toBeVisible();
+    // Phones keep search and Order on one line, with "+ Add filter" under them.
     const search = page.getByTestId('bank-transactions-search');
     const order = page.getByRole('button', {name: 'Order: Newest first'});
     const filtersTrigger = page.getByTestId('bank-transaction-filters-trigger');
@@ -870,8 +878,9 @@ test.describe('bank transactions', () => {
       [search, order, filtersTrigger].map(boxOf),
     );
     expect(orderBox).toMatchObject({width: 48, height: 48});
-    expect(filtersBox.height).toBe(48);
+    expect(filtersBox.height).toBeGreaterThanOrEqual(44);
     expect(searchBox.y).toBeCloseTo(orderBox.y, 0);
+    expect(filtersBox.y).toBeGreaterThan(searchBox.y + searchBox.height);
     expect(filtersBox.x + filtersBox.width).toBeLessThanOrEqual(393 - 16);
 
     // The category moves under the title, beside its icon; one account names no account.
@@ -996,20 +1005,21 @@ test.describe('bank transactions', () => {
 
     await choose('Largest out first', 'Oldest first', {by: 'date', order: 'ASC'});
     const days = page.getByRole('region', {name: /August/});
+    const dayHeadings = days.getByRole('heading', {level: 2});
     await expect(days.first()).toBeVisible();
-    const headings = await page.getByRole('heading', {level: 2}).allTextContents();
+    const headings = await dayHeadings.allTextContents();
     expect(headings[headings.length - 1]).toBe('Monday 24 August');
 
     await choose('Oldest first', 'Newest first', {by: 'date', order: 'DESC'});
     expect(new URL(page.url()).searchParams.has('sort')).toBe(false);
-    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
+    await expect(dayHeadings.first()).toHaveText('Monday 24 August');
 
     // A link ordered by a field the page no longer offers opens in the default order.
     await page.goto(
       `/transactions?sort=${encodeURIComponent(JSON.stringify({by: 'category', order: 'ASC'}))}`,
     );
     await expect(order('Newest first')).toBeVisible();
-    await expect(page.getByRole('heading', {level: 2}).first()).toHaveText('Monday 24 August');
+    await expect(dayHeadings.first()).toHaveText('Monday 24 August');
   });
 
   test('preserves original values for mixed-currency amount results', async ({page}) => {
@@ -1138,6 +1148,14 @@ test.describe('bank transactions', () => {
       else await route.continue();
     });
     await mockJson(page, '**/bank-transactions/*/recurring?**', null);
+    await mockJson(page, '**/bank-transactions/totals?**', {
+      baseCurrency: 'EUR',
+      spending: '24691357.80',
+      income: '0.00',
+      net: '-24691357.80',
+      count: 1284,
+      excluded: {missingBaseAmount: 0},
+    });
 
     const rows = page.getByTestId(/^bank-transaction-row-/);
     // An amount is never cut short: it fits its own box, which fits the row.
@@ -1166,7 +1184,14 @@ test.describe('bank transactions', () => {
       await page.setViewportSize(viewport);
       await page.goto('/transactions');
       await expect(rows).toHaveCount(4);
-      await expect(page.getByTestId('bank-transactions-summary')).toHaveText('1,284 transactions');
+      // The rail's totals beside the list, or the phone's summary strip above it.
+      await expect(
+        page.getByTestId(
+          viewport.width >= 1024
+            ? 'bank-transactions-view-totals'
+            : 'bank-transactions-summary-strip',
+        ),
+      ).toContainText('1,284 transactions');
       await expect(rows.nth(0)).toContainText('-€12,345,678.90');
       await expect(rows.nth(1)).toContainText('-CHF 12,345,678.90');
       // Each row's button fills its day card edge to edge (inside the 1px border), so hover and clicks do too.
@@ -1304,6 +1329,8 @@ test.describe('bank transaction inspector on a fresh account', () => {
       return fulfillJson(route, saved);
     });
 
+    // The rows have a Category column where the list beside the rail is wide enough.
+    await page.setViewportSize({width: 1440, height: 900});
     await page.goto('/transactions');
     await expect(page.getByTestId('current-account-email')).toHaveText(freshAccount.email);
 
@@ -1321,7 +1348,7 @@ test.describe('bank transaction inspector on a fresh account', () => {
     const categorySelect = inspector.getByRole('combobox', {name: 'Transaction category'});
     await expect(categorySelect).toBeVisible();
     await categorySelect.click();
-    await expect(page.getByRole('option')).toHaveCount(23);
+    await expect(page.getByRole('option')).toHaveCount(22);
     await expect(page.getByRole('option')).toHaveText([
       'Housing and utilities',
       'Home improvement',
@@ -1345,10 +1372,9 @@ test.describe('bank transaction inspector on a fresh account', () => {
       'Refund',
       'Transfer in',
       'Transfer out',
-      'Needs review',
     ]);
     // Every option has a category icon; the selected one also shows a check mark.
-    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(23);
+    await expect(page.getByRole('option').filter({has: page.locator('svg')})).toHaveCount(22);
     const targetOption = page.getByRole('option', {name: target.name, exact: true});
     await expect(targetOption.locator('svg').locator('..')).toHaveClass(target.className);
     await targetOption.click();

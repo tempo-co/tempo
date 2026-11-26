@@ -192,3 +192,18 @@ export type BankTransactionTotals = {
 	count: number;
 	excluded: {missingBaseAmount: number};
 };
+
+/** One day of `GET /bank-transactions/day-totals`, on the totals' definitions. */
+export type BankTransactionDayTotal = {
+	/** `YYYY-MM-DD`, the day the list dates the rows by. */
+	date: string;
+	spending: string;
+	income: string;
+	net: string;
+};
+
+/** `GET /bank-transactions/day-totals`: the totals of each day with filtered rows, newest first. */
+export type BankTransactionDayTotals = {
+	baseCurrency: string | null;
+	days: BankTransactionDayTotal[];
+};

@@ -10,6 +10,7 @@ import {toast} from 'sonner';
 import {HttpError, api, wasToasted} from '@/utils/api';
 
 import {BankTransactionFilterParams} from '../types/bank-transaction';
+import {isToCheck} from '../utils/formatters';
 import {invalidateBankDerivedData} from './invalidate-bank-derived-data';
 import {type CachedTransactionList, listedPages, mapListedPages} from './listed-transactions';
 import {bankQueryKeys} from './query-keys';
@@ -91,6 +92,8 @@ function matchesBankTransactionFilters(
   transaction: BankTransaction,
   filters: BankTransactionFilterParams | undefined,
 ) {
+  // A row picked a category for leaves To check at once.
+  if (filters?.needsAttention && !isToCheck(transaction)) return false;
   const categories = filters?.categories;
   if (
     categories &&

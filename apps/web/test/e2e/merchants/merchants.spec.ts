@@ -663,15 +663,11 @@ for (const scenario of [
     expect(currencyBox.y).toBeLessThan(amountBox.y + amountBox.height);
     expect(dateBox.y).toBeGreaterThanOrEqual(amountBox.y + amountBox.height);
     if (scenario.scale === 1) expect(Math.abs(dateBox.y - typeBox.y)).toBeLessThan(1);
-    if (scenario.width >= 768) {
-      expect(historyBox.x).toBeGreaterThan(amountBox.x + amountBox.width);
-      expect(historyBox.y).toBeLessThan(dateBox.y);
-    } else {
-      expect(historyBox.y).toBeGreaterThanOrEqual(
-        Math.max(dateBox.y + dateBox.height, typeBox.y + typeBox.height),
-      );
-      expect(historyBox.height).toBeGreaterThanOrEqual(44);
-    }
+    // In the rail and the sheet alike, the link sits under the date and type, a full-height target on phones.
+    expect(historyBox.y).toBeGreaterThanOrEqual(
+      Math.max(dateBox.y + dateBox.height, typeBox.y + typeBox.height),
+    );
+    if (scenario.width < 768) expect(historyBox.height).toBeGreaterThanOrEqual(44);
     for (const locator of [amount, currency, date, type, history]) {
       await expect(locator).toBeInViewport();
       const box = await boxOf(locator);
@@ -681,10 +677,14 @@ for (const scenario of [
     }
     const font = await amount.evaluate((el) => ({
       size: parseFloat(getComputedStyle(el).fontSize),
+      line: parseFloat(getComputedStyle(el).lineHeight),
       root: parseFloat(getComputedStyle(document.documentElement).fontSize),
     }));
-    expect(font.size).toBeGreaterThanOrEqual(font.root * 1.875);
-    if (scenario.amount) await expect(amount).toContainText('12,345,678.90');
+    // The headline amount keeps its display size; an eight-figure one steps down to stay on one line.
+    if (scenario.amount) {
+      await expect(amount).toContainText('12,345,678.90');
+      expect(amountBox.height).toBeLessThan(font.line * 1.5);
+    } else expect(font.size).toBeGreaterThanOrEqual(font.root * 1.875);
     await expectNoHorizontalOverflow(page);
     if (scenario.scale > 1) {
       await history.focus();
