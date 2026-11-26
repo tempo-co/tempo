@@ -8007,7 +8007,7 @@
 				"accountOtherId": null,
 				"accountCurrency": "PLN",
 				"sequenceNumber": null,
-				"entriesSkipped": 0,
+				"entriesSkipped": 1,
 				"openingBalance": null,
 				"closingBalance": null,
 				"bank": "mBank",

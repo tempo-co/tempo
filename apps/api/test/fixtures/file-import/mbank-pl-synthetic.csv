@@ -24,6 +24,7 @@ eKonto - 0000;
 PLN;2 500,00;-74,60;
 
 #Data operacji;#Opis operacji;#Rachunek;#Kategoria;#Kwota;
+2026-10-10;"Example Kawiarnia Kraków  ZAKUP PRZY UŻYCIU KARTY W KRAJU                                transakcja nierozliczona";"eKonto";"Jedzenie poza domem";-8,40 PLN;;
 2026-10-09;"Example Energia Łódź";"eKonto";"Rachunki";-62,10 PLN;;
 2026-10-05;"Example Pracodawca Sp. z o.o.";"eKonto";"Wpływy";2 500,00 PLN;;
 2026-10-02;"Żabka Example Wrocław  ZAKUP PRZY UŻYCIU KARTY W KRAJU";"eKonto";"Jedzenie poza domem";-12,50 PLN;;

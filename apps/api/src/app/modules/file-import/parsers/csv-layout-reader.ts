@@ -278,11 +278,13 @@ function readTable(
 	if (end < start) return null;
 	const lines = records.slice(start, end);
 	const pending = (cells: readonly TableCell[]) =>
-		layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '');
+		(layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '')) ||
+		(layout.pendingSuffix !== undefined &&
+			(cells[layout.pendingSuffix.column]?.text ?? '').endsWith(layout.pendingSuffix.text));
 	// A pending row is a row of the table all the same: one of another width is not skipped but refused.
 	const width = rowWidthOf(lines);
 	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout, width));
-	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout);
+	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout, width);
 	if (!statements) return null;
 	if (options.owned && !plausible(statements, options.today ?? new Date().toISOString().slice(0, 10))) return null;
 	if (statements.length > 0) statements[0].entriesSkipped = lines.length - body.length;
@@ -337,6 +339,8 @@ function readRows(
 	records: readonly TableCell[][],
 	above: readonly TableCell[][],
 	layout: CsvLayout,
+	/** The width of the whole table, pending rows included. */
+	width: RowWidth,
 ): NormalizedStatement[] | null {
 	let rows: ReadRow[];
 	try {
@@ -349,7 +353,6 @@ function readRows(
 		) {
 			throw new RowProblem();
 		}
-		const width = rowWidthOf(records);
 		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative, width));
 	} catch (error) {
 		if (error instanceof RowProblem) return null;

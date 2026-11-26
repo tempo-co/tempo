@@ -67,6 +67,11 @@ type CsvLayoutColumns = {
 	 * `offen` until the payment is booked) is not booked yet: it is skipped and counted as skipped, never read.
 	 */
 	pendingColumn?: number;
+	/**
+	 * A row whose cell in this column ends with this text (a description the bank ends with `transakcja nierozliczona`
+	 * until the payment settles) is not booked yet: skipped like a pending row.
+	 */
+	pendingSuffix?: {column: number; text: string};
 	/** Joined with spaces, empty values left out. */
 	description: number[];
 	bankTransactionCode?: number;
@@ -270,6 +275,7 @@ function layoutOf(value: unknown): CsvLayout {
 			'counterpartyName',
 			'counterpartyIban',
 			'pendingColumn',
+			'pendingSuffix',
 			'bankTransactionCode',
 		],
 	});
@@ -375,6 +381,7 @@ function layoutOf(value: unknown): CsvLayout {
 		...defined('counterpartyName', byDirection(layout.counterpartyName, 'counterpartyName')),
 		...defined('counterpartyIban', byDirection(layout.counterpartyIban, 'counterpartyIban')),
 		...defined('pendingColumn', optionalColumn(layout.pendingColumn, 'pendingColumn')),
+		...(layout.pendingSuffix === undefined ? {} : {pendingSuffix: pendingSuffixOf(layout.pendingSuffix, column)}),
 		description: layout.description.map((value: unknown) => column(value, 'description')),
 		...defined('bankTransactionCode', optionalColumn(layout.bankTransactionCode, 'bankTransactionCode')),
 	};
@@ -487,6 +494,11 @@ function record(
 		}
 	}
 	return value;
+}
+
+function pendingSuffixOf(value: unknown, column: (value: unknown, name: string) => number) {
+	const suffix = record(value, 'pendingSuffix', {required: ['column', 'text'], optional: []});
+	return {column: column(suffix.column, 'pendingSuffix.column'), text: text(suffix.text, 'pendingSuffix.text')};
 }
 
 function text(value: unknown, name: string): string {
