@@ -47,11 +47,14 @@ export type MerchantGroupListItem = {
 export type MerchantGroupsQuery = {
 	/** Matches the group's name or any of its merchant names. */
 	search?: string;
+	/** The first and last day (`YYYY-MM-DD`) of the rows to total; all time without them. */
+	from?: string;
+	to?: string;
 	offset?: number;
 	limit?: number;
 };
 
-/** `GET /merchants`: every group, most spent first. */
+/** `GET /merchants`: every group with rows in the range, most spent first. */
 export type MerchantGroupsResponse = {
 	baseCurrency: string | null;
 	merchants: MerchantGroupListItem[];
