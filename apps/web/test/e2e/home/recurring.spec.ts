@@ -87,30 +87,17 @@ for (const viewport of [
     // A long name stays inside the block, and a varying bill's next payment is an estimate.
     await expect(
       upcoming.filter({hasText: 'Example Energy Supplier With A Long Contract Name'}),
-    ).toContainText('≈ €78.50');
+    ).toContainText('about €79');
     await expect(upcoming.filter({hasText: 'Example Employer'})).toContainText('+€2,500.00');
     expect(new Set(dates)).toEqual(new Set(['2026-10-01']));
     await expectNoHorizontalOverflow(page);
 
-    // The full list opens over Home, and Back closes it.
+    // The full list is the Recurring page, and Back returns to Home.
     await repeats(page).getByRole('button', {name: 'All recurring payments'}).click();
-    const dialog = page.getByRole('dialog', {name: 'Recurring payments'});
-    await expect(dialog).toBeVisible();
-    await expect(page).toHaveURL(/[?&]recurring=open/);
+    await expect(page).toHaveURL(/\/recurring$/);
+    await expect(page.getByRole('heading', {name: 'Recurring', level: 1})).toBeVisible();
     await page.goBack();
-    await expect(dialog).toBeHidden();
     await expect(repeats(page)).toBeVisible();
-
-    // Closing it in the dialog leaves no extra Home entry behind: Back then leaves Home.
-    await repeats(page).getByRole('button', {name: 'All recurring payments'}).click();
-    await expect(dialog).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await expect(page).not.toHaveURL(/recurring=open/);
-    await page.goBack();
-    await expect(page).toHaveURL('about:blank');
-    await page.goto('/recurring');
-    await expect(page.getByRole('dialog', {name: 'Recurring payments'})).toBeHidden();
   });
 }
 
