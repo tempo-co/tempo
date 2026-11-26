@@ -20,8 +20,8 @@ export const Route = createRootRouteWithContext<{
 });
 
 /**
- * The merchants and recurring dialogs that any page could open are now Insights' rail and the Recurring page. Old
- * links and bookmarks to them open those pages, with the merchant or series they had open.
+ * Links that open a merchant (`?merchants=open`, `?merchant=`) or a recurring series (`?recurring=open`, `?series=`)
+ * over any page land on Insights or Recurring, with that merchant or series open.
  */
 function openRetiredDialogLinks({pathname, search}: ParsedLocation) {
   const {recurring, series, merchants, merchant} = search as Record<string, unknown>;

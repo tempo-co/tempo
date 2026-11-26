@@ -124,7 +124,7 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
   await expectNoHorizontalOverflow(page);
 });
 
-test('old Connections and Transactions links open Accounts and Transactions with their query', async ({
+test('old Connections, Transactions, merchants and recurring links open the pages that hold them', async ({
   page,
 }) => {
   await page.setViewportSize({width: 1440, height: 900});
@@ -137,4 +137,12 @@ test('old Connections and Transactions links open Accounts and Transactions with
   await page.goto('/bank-transactions?search=Example%20Market');
   await expect(page).toHaveURL(/\/transactions\?search=Example(?:\+|%20)Market$/);
   await expect(page.getByTestId('bank-transactions-search')).toHaveValue('Example Market');
+
+  // A merchant or series link over any page opens Insights or Recurring with it.
+  await page.goto('/transactions?merchants=open');
+  await expect(page).toHaveURL(/\/insights$/);
+  await expect(page.getByRole('heading', {name: 'Insights', level: 1})).toBeVisible();
+  const series = 'a'.repeat(32);
+  await page.goto(`/?recurring=open&series=${series}`);
+  await expect(page).toHaveURL(`/recurring?series=${series}`);
 });
