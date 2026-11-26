@@ -6586,5 +6586,884 @@
 				"bank": "Vivid Money"
 			}
 		]
+	},
+	"raiffeisen-at-elba-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "raiffeisen-at-elba",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Raiffeisen Austria",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.45",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "EXAMPLE MARKT DANKT  0101  K1   01.10. 17:20",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober Example Arbeitgeber GmbH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-07",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Überweisung Example Energie AG Rechnung 10/2026",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"easybank-at-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "easybank-at",
+				"accountIban": "AT611904300234573201",
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-09-30",
+						"transactionDate": null,
+						"amount": "-18.90",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Markt Wien    K1 01.10.     MC/000000001 EXAMPLE MARKT",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Gehalt Oktober     FE/000000002 EXAMDEFF DE89370400440532013000 Example Arbeitgeber GmbH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-08",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Abbuchung Einzugsermächtigung     OG/000000003 Example Energie AG",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"easybank-at-creditcard-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "easybank-at-creditcard",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "easybank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-09-30",
+						"transactionDate": null,
+						"amount": "-189.99",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Airline/info|00000000000000000000001",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-06",
+						"valueDate": "2026-10-04",
+						"transactionDate": null,
+						"amount": "-23.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Example Shop|USD 25,00|00000000000000000000002",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": "2026-10-09",
+						"transactionDate": null,
+						"amount": "1250.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Zahlung Danke|00000000000000000000003",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"ing-at-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "ing-at",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "ING Austria",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Eingang: Example Arbeitgeber GmbH",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1500.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Auszahlung - Example Bankomat",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-31",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "0.42",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Habenzinsen",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"oberbank-payer-payee-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "oberbank-at",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Oberbank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "2100.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Employer GmbH",
+						"counterpartyIban": "GB33BUKB20201555555555",
+						"remittanceInformation": null,
+						"description": "Gehalt Example salary",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-03",
+						"valueDate": "2026-10-03",
+						"transactionDate": null,
+						"amount": "-850.00",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": "Example Landlord",
+						"counterpartyIban": "NL91ABNA0417164300",
+						"remittanceInformation": null,
+						"description": "Dauerauftrag Example rent",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-12",
+						"valueDate": "2026-10-12",
+						"transactionDate": null,
+						"amount": "-41.25",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bezahlung Karte Example Market 1234",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"intesa-sanpaolo-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "intesa-sanpaolo-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Intesa Sanpaolo",
+				"rows": [
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Addebito Example Energia bolletta ottobre",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico Esempio Srl stipendio ottobre",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-01",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-12.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento Example Shop Milano",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"unicredit-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "unicredit-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "UniCredit",
+				"rows": [
+					{
+						"bookingDate": "2026-10-10",
+						"valueDate": "2026-10-10",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ADDEBITO SEPA DD PER FATTURA A VOSTRO CARICO      EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BONIFICO A VOSTRO FAVORE      ESEMPIO SRL STIPENDIO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAGAMENTO POS EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"unicredit-it-two-line-header-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "unicredit-it-two-line-header",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "UniCredit",
+				"rows": [
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAGAMENTO POS EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BONIFICO ESEMPIO SRL",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": "2026-10-09",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ADDEBITO EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"unicredit-it-balances-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "unicredit-it-balances",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "UniCredit",
+				"rows": [
+					{
+						"bookingDate": "2026-10-29",
+						"valueDate": "2026-10-29",
+						"transactionDate": null,
+						"amount": "-17.20",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "ADDEBITO EXAMPLE SHOP",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-27",
+						"valueDate": "2026-10-27",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "BONIFICO ESEMPIO SRL",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"fineco-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "fineco-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "FinecoBank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "SEPA Direct Debit EXAMPLE ENERGIA",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico SEPA Italia Ord: ESEMPIO SRL Stipendio",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": null,
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento POS EXAMPLE SHOP MILANO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"fineco-it-value-date-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "fineco-it-value-date",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "FinecoBank",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-08",
+						"transactionDate": null,
+						"amount": "-1204.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "SEPA Direct Debit EXAMPLE ENERGIA Addebito SDD fattura",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico SEPA Italia Ord: ESEMPIO SRL Stipendio",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento POS EXAMPLE SHOP MILANO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"creditagricole-it-apostrophe-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "credit-agricole-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Crédit Agricole Italia",
+				"rows": [
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-02",
+						"transactionDate": null,
+						"amount": "-12.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Pagamento Example Shop",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2500.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Bonifico Example Employer",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-09",
+						"valueDate": "2026-10-09",
+						"transactionDate": null,
+						"amount": "-62.10",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "Addebito Example Energy",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
+	},
+	"popolare-sondrio-it-synthetic.csv": {
+		"format": "csv",
+		"statements": [
+			{
+				"layout": "popolare-sondrio-it",
+				"accountIban": null,
+				"accountOtherId": null,
+				"accountCurrency": "EUR",
+				"sequenceNumber": null,
+				"entriesSkipped": 0,
+				"openingBalance": null,
+				"closingBalance": null,
+				"bank": "Banca Popolare di Sondrio",
+				"rows": [
+					{
+						"bookingDate": "2026-10-08",
+						"valueDate": "2026-10-08",
+						"transactionDate": null,
+						"amount": "-1.50",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "COMMISSIONI CANONE MENSILE",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-05",
+						"valueDate": "2026-10-05",
+						"transactionDate": null,
+						"amount": "2150.00",
+						"creditDebitIndicator": "CRDT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "RICEZIONE BONIFICO ISTANTANEO ESEMPIO SRL STIPENDIO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					},
+					{
+						"bookingDate": "2026-10-02",
+						"valueDate": "2026-10-01",
+						"transactionDate": null,
+						"amount": "-23.40",
+						"creditDebitIndicator": "DBIT",
+						"currency": "EUR",
+						"balanceAfter": null,
+						"bankReference": null,
+						"counterpartyName": null,
+						"counterpartyIban": null,
+						"remittanceInformation": null,
+						"description": "PAGAMENTO POS EXAMPLE SHOP SONDRIO",
+						"bankTransactionCode": null,
+						"bankTransactionSubCode": null,
+						"referenceNumber": null
+					}
+				]
+			}
+		]
 	}
 }

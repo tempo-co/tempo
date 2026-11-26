@@ -2,6 +2,8 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 import {camt053, createZip} from '../../../../../test/fixtures/statement-file.fixture';
+import {readCsvLayout} from './csv-layout-reader';
+import {CSV_LAYOUTS} from './csv-layouts';
 import {parseFile} from './parse-file';
 import {MAX_ARCHIVE_ENTRIES, MAX_ARCHIVE_UNPACKED_BYTES} from './parse-limits';
 import {NormalizedStatement, ParseRefusal, StatementFormat} from './parse-result';
@@ -49,6 +51,24 @@ describe('parseFile', () => {
 			})),
 		});
 	});
+
+	// Within one bank, the order of `CSV_LAYOUTS` decides (an easybank account export also reads as its card export).
+	it.each(Object.entries(EXPECTED).filter(([, {format}]) => format === 'csv'))(
+		"reads %s with no other bank's built-in layout",
+		(name, expected) => {
+			const own = CSV_LAYOUTS.find(({id}) => id === expected.statements[0].layout)!;
+			const claimedBy = CSV_LAYOUTS.filter((layout) => {
+				try {
+					return readCsvLayout(fixture(name), [layout]) !== null;
+				} catch {
+					return false;
+				}
+			});
+
+			expect(claimedBy.filter(({bank}) => bank !== own.bank).map(({id}) => id)).toEqual([]);
+			expect(claimedBy).toContain(own);
+		},
+	);
 
 	it('reads an archive holding statements in several formats', () => {
 		const archive = createZip([
