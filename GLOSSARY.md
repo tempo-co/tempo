@@ -16,6 +16,10 @@ _Avoid_: institution key, bank code
 Bringing the values Tempo computes from an owner's transaction history (reporting currency, currency exchanges, own transfers, categories, merchant logos) up to date after a write to that history.
 _Avoid_: post-sync hook, follow-up steps, after-write steps
 
+**To check**:
+An owner's transactions that wait for them to pick a category: those the AI could not place (Needs review) and those whose categorisation failed. A transaction leaves To check when the owner picks its category; Tempo keeps no guess for it, so there is nothing to confirm.
+_Avoid_: to review, needs attention, uncategorised
+
 **Verified bank**:
 A bank whose real export a built-in reader (a built-in CSV or XLSX layout, or the CAMT, MT940 or OFX reader) reads correctly, row for row. A real export is an owner's own, a public anonymised one of any year, or a bank-published example where the bank's help shows private customers can download that format. Hand-made samples and the column mapper never make a bank verified. The bank list (`packages/contracts/src/banks.ts`) names each verified bank's readers.
 _Avoid_: supported bank, working bank

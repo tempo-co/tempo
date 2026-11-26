@@ -14,7 +14,7 @@ function getSourceLabel(source: BankTransactionCategorizationSource) {
   return formatBankTransactionCategorySource(source) ?? source;
 }
 
-/** The category source options for the Filters panel. */
+/** The category source options for "+ Add filter". */
 export function BankTransactionCategorySourceFilter({
   filters,
 }: {

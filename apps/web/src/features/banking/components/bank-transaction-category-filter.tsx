@@ -19,7 +19,7 @@ import {
 import {BankTransactionCategoryIcon} from './bank-transaction-category-icon';
 import {FilterCheckIndicator} from './bank-transaction-multi-select-filter';
 
-/** The category options for the Filters panel, which scrolls them itself. */
+/** The category options for "+ Add filter", which scrolls them itself. */
 export function BankTransactionCategoryFilter({filters}: {filters: BankTransactionFilterParams}) {
   const {selectedValues, toggle: handleSelect} = useBankTransactionArrayFilter(
     filters,

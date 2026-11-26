@@ -38,7 +38,7 @@ Paths are relative to `apps/api` unless they start at the repository root.
 - No `forwardRef`. When two modules need each other, extract a leaf module around the shared dependency (as `BankingAuthorizationStateModule` does) and delegate to the owning service instead of duplicating its logic.
 - When a service moves into `core`, move the smallest shared contract (response type, error code, message constant) down with it, and type-check the test files too: the Nest build (`tsconfig.build.json`) excludes them.
 - Use `@core/*` and `@modules/*` across features and relative imports inside one.
-- HTTP request and response shapes come from `@tempo/contracts` (root `packages/contracts`). Controllers declare return types with them, request DTO classes keep their validators and `implements` the contract type, and response shapes are not redefined in the API. Rerun `npm run contracts:build` after editing the package.
+- HTTP request and response shapes come from `@tempo/contracts` (root `packages/contracts`). Controllers declare return types with them, request DTO classes keep their validators and `implements` the contract type, and response shapes are not redefined in the API. Rerun `npm run contracts:build` after editing the package; type-check with `npm run typecheck`, which rebuilds it first and includes the test files.
 - Expected races and refusals use the module's typed error codes (e.g. `BankingAuthorizationStateError('state_superseded')`) or Nest HTTP exceptions with a stated status, never a bare `Error`.
 - Every account-owned query includes the user's account id.
 - Queue changes touch the `src/app/core/queue/` constants/module and the feature processor/service together. Jobs carry ids, never financial payloads.

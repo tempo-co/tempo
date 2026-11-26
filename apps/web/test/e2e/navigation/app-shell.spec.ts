@@ -17,7 +17,7 @@ async function mockPages(page: Page) {
 
 const HOME = /^https?:\/\/[^/]+\/(?:\?|$)/;
 const desktopPages = [
-  {label: 'Transactions', url: /\/transactions(?:\?|$)/, heading: 'Bank transactions'},
+  {label: 'Transactions', url: /\/transactions(?:\?|$)/, heading: 'Transactions'},
   {label: 'Insights', url: /\/insights(?:\?|$)/, heading: 'Insights'},
   {label: 'Recurring', url: /\/recurring(?:\?|$)/, heading: 'Recurring'},
   {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Accounts'},
@@ -41,7 +41,7 @@ test('the desktop sidebar reaches every page, collapses for good and opens Setti
   await expect(sidebar.getByRole('link', {name: /Plan/})).toHaveCount(0);
   await expect(sidebar.getByText('Example Owner')).toBeVisible();
   await expect(sidebar.getByText('owner@example.com')).toBeVisible();
-  await expect(sidebar.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
+  await expect(sidebar.getByRole('link', {name: 'Transactions, 3 to check'})).toBeVisible();
 
   for (const {label, url, heading} of desktopPages) {
     const link = nav.getByRole('link', {name: new RegExp(`^${label}`)});
@@ -85,14 +85,14 @@ test('the phone tabs reach every page, with Settings and Add data in the header'
 
   const tabBar = page.getByTestId('app-tab-bar');
   await expect(page.getByTestId('app-sidebar')).toBeHidden();
-  // Transactions' text starts with its count once the review counts have loaded.
+  // The tab's accessible name carries its To check count once the counts have loaded.
+  await expect(tabBar.getByRole('link', {name: 'Transactions, 3 to check'})).toBeVisible();
   await expect(tabBar.getByRole('link')).toHaveText([
     'Home',
     /Transactions$/,
     'Insights',
     'Accounts',
   ]);
-  await expect(tabBar.getByRole('link', {name: 'Transactions, 3 to review'})).toBeVisible();
 
   for (const {label, url} of [
     {label: 'Transactions', url: /\/transactions(?:\?|$)/},

@@ -80,7 +80,7 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 - Phone screenshots are viewport shots, not `fullPage`: a full-page capture paints the fixed tab bar in the middle of the list.
 - Wait out open animations before screenshots or measuring with `animationsSettled` from `test/utils/layout.ts`; a mid-fade dialog looks transparent. Check the computed `backgroundColor`/`opacity` at rest before changing styles.
 - Theme: the storage key is `vite-ui-theme`. Set it with `page.addInitScript` and assert the rendered theme; a different key leaves both captures in the default theme.
-- The Transactions Filters control scrolls only inside its Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`): the desktop panel's options pane and the phone sheet's body. Filter components rendered with `variant='pane'` have no scroll box of their own. `openTransactionFilter` in `test/utils/transaction-filters.ts` opens one filter on either layout.
+- The Transactions "+ Add filter" control scrolls only inside its Radix scroll-area viewport (`[data-radix-scroll-area-viewport]`): the body of the desktop popover and of the phone sheet. The filter option components have no scroll box of their own. `openTransactionFilter` in `test/utils/transaction-filters.ts` opens one filter on either layout.
 
 ## Merchant logo rendering
 

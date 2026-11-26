@@ -38,7 +38,7 @@ test('searches with a long description and restores it from the URL', async ({pa
   await expect(search).toHaveValue(description);
   await search.fill(`${description}y`);
   await expect(search).toHaveValue(description);
-  await expect(page.getByRole('heading', {name: 'Bank transactions', exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Transactions', exact: true, level: 1})).toBeVisible();
   await page.getByRole('button', {name: 'Clear filters'}).first().click();
   await expect(page.getByRole('heading', {name: 'No transactions yet'})).toBeVisible();
   expect(new URL(page.url()).searchParams.has('search')).toBe(false);
