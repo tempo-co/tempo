@@ -566,7 +566,7 @@ test.describe('fully mocked', () => {
     await expect(top.getByText('Loading merchants')).toBeVisible();
     await expect(top.getByRole('listitem')).toHaveCount(0);
 
-    await open('/?recurring=open', '/recurring-series?');
+    await open('/recurring', '/recurring-series?');
     await expect(page.getByLabel('Loading recurring payments')).toBeVisible();
     await expect(page.getByTestId('recurring-summary')).toBeHidden();
 

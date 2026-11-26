@@ -247,7 +247,7 @@ export async function mockEmptyHome(page: Page) {
   await mockMerchantRanking(page);
 }
 
-/** Answers the recurring lists (the recurring dialog) with none. */
+/** Answers the recurring lists (the Recurring page) with none. */
 export function mockEmptyRecurringLists(page: Page) {
   const empty = {
     series: [],

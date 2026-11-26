@@ -25,3 +25,7 @@ export const SESSION_TEST_ACCOUNT_PASSWORD = 'session-test';
 export const OWN_TRANSFER_ACCOUNT_NAME = 'Own Transfer Account';
 export const OWN_TRANSFER_ACCOUNT_EMAIL = 'own-transfers@test.com';
 export const OWN_TRANSFER_ACCOUNT_PASSWORD = 'own-transfers';
+
+export const RECURRING_ACCOUNT_NAME = 'Recurring Account';
+export const RECURRING_ACCOUNT_EMAIL = 'recurring@test.com';
+export const RECURRING_ACCOUNT_PASSWORD = 'recurring';

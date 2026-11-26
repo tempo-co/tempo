@@ -1,12 +1,14 @@
-import {Outlet, createRootRouteWithContext} from '@tanstack/react-router';
+import {
+  Outlet,
+  type ParsedLocation,
+  createRootRouteWithContext,
+  redirect,
+} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/router-devtools';
-import {zodValidator} from '@tanstack/zod-adapter';
-import {Suspense, lazy, useState} from 'react';
 
 import {AppPhoneHeader, AppSidebar, AppTabBar} from '@/components/shared/layout/app-nav';
 import {OfflineStatus} from '@/components/shared/offline-status';
 import {SidebarInset, SidebarProvider} from '@/components/ui/sidebar';
-import {appDialogsSearchSchema} from '@/features/dashboard/types/app-dialogs-search';
 import {DeviceAlerts} from '@/features/notifications/components/device-alerts';
 
 export const Route = createRootRouteWithContext<{
@@ -14,28 +16,32 @@ export const Route = createRootRouteWithContext<{
   isEmailVerified: boolean;
 }>()({
   component: Root,
-  validateSearch: zodValidator(appDialogsSearchSchema),
+  beforeLoad: ({location}) => openRetiredDialogLinks(location),
 });
 
-// The dialog draws charts, so it and the chart library load only once a page opens it.
-const AppDialogs = lazy(() =>
-  import('@/features/dashboard/components/app-dialogs').then((module) => ({
-    default: module.AppDialogs,
-  })),
-);
-
-/** Mounts the dialog from the first time it is asked for, then keeps it, so it can animate closed. */
-function useDialogsWanted() {
-  const {recurring} = Route.useSearch();
-  const asked = recurring === 'open';
-  const [wanted, setWanted] = useState(asked);
-  if (asked && !wanted) setWanted(true);
-  return wanted;
+/**
+ * The merchants and recurring dialogs that any page could open are now Insights' rail and the Recurring page. Old
+ * links and bookmarks to them open those pages, with the merchant or series they had open.
+ */
+function openRetiredDialogLinks({pathname, search}: ParsedLocation) {
+  const {recurring, series, merchants, merchant} = search as Record<string, unknown>;
+  const page = pathname.replace(/\/$/, '');
+  if (page !== '/recurring' && (recurring === 'open' || typeof series === 'string'))
+    throw redirect({
+      to: '/recurring',
+      search: typeof series === 'string' ? {series} : {},
+      replace: true,
+    });
+  if (page !== '/insights' && (merchants === 'open' || typeof merchant === 'string'))
+    throw redirect({
+      to: '/insights',
+      search: typeof merchant === 'string' ? {merchant} : {},
+      replace: true,
+    });
 }
 
 function Root() {
   const {isAuthenticated, isEmailVerified} = Route.useRouteContext();
-  const dialogsWanted = useDialogsWanted();
 
   if (!isAuthenticated || !isEmailVerified) {
     return (
@@ -63,11 +69,6 @@ function Root() {
         </main>
       </SidebarInset>
       <AppTabBar />
-      {dialogsWanted && (
-        <Suspense fallback={null}>
-          <AppDialogs />
-        </Suspense>
-      )}
       <DeviceAlerts />
       {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
     </SidebarProvider>

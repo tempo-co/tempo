@@ -162,7 +162,7 @@ Data series use `chart-primary` (ink) and `chart-secondary` (a quiet grey) whose
 amount (ink on light, a dimmer grey on dark so light text stays readable). Midnight marks only a
 selected period or an action, never a data series.
 
-In and Out bars: In in `success`, Out in `chart-primary`.
+In bars are `success`, Out bars `chart-primary`.
 
 Each category keeps one colour and icon everywhere, from
 `src/features/banking/utils/bank-transaction-category-meta.ts`: the icon in `category-*` on its
@@ -247,8 +247,9 @@ Lucide icons, 16px in controls. A meaningful icon has a text equivalent; a decor
   (`text-[13px]`), in component source; use a role, a scale step or `--spacing(n)`. Relative values
   (`90dvh`, `8em`), `var(--…)` and 1px pass.
 - **Contrast:** `test/unit/theme-contrast.spec.ts`, the pairs under Colour.
-- **Layout:** `test/e2e/home/layout.spec.ts` (Home, Insights, shell) and
-  `test/e2e/settings/layout.spec.ts`: 1440 to 320px, both themes, demo and worst-case data.
+- **Layout:** `test/e2e/home/layout.spec.ts` (Home, Insights, shell),
+  `test/e2e/recurring/layout.spec.ts` and `test/e2e/settings/layout.spec.ts`: 1440 to 320px, both
+  themes, demo and worst-case data.
 
 An exception needs a reason:
 
@@ -344,8 +345,8 @@ page background, a `text-section-title` title over a muted `text-body-small` des
 `DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
 radius; items are `text-body` with segment corners, tooltips `text-body-small`.
 
-From `lg` up, opened details fill a sticky `20rem` right rail beside the list; below it, a bottom
-`Sheet` at the same address.
+Details rails from `lg`, at the details' address: Transactions a sticky `20rem` rail (a bottom
+`Sheet` below), Recurring a 360px `card` column (a `ResponsiveDialog` below).
 
 ### Badges
 

@@ -16,7 +16,7 @@ import {
 } from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson, mockJson} from '../../utils/api-mocks';
-import {boxOf, expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
+import {boxOf, brokenAmounts, expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 const layouts = [
   {width: 1440, theme: 'light'},
@@ -64,34 +64,6 @@ function worstCase() {
 }
 
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
-
-/** Visible amounts that are cut short, run out of their box or break across lines. */
-const brokenAmounts = (page: Page) =>
-  page.evaluate(() =>
-    Array.from(document.querySelectorAll<HTMLElement>('main .numeric, [role="dialog"] .numeric'))
-      .filter((element) => element.offsetParent !== null && element.children.length === 0)
-      .filter((element) => !element.closest('svg'))
-      .filter((element) => {
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        // Text on more than one line has client rects at more than one height.
-        const lines = new Set(
-          Array.from(range.getClientRects()).map((rect) => Math.round(rect.bottom)),
-        );
-        if (lines.size > 1) return true;
-        // The text stays inside every box around it, up to the one that scrolls or clips.
-        const text = range.getBoundingClientRect();
-        for (let box: HTMLElement | null = element; box; box = box.parentElement) {
-          const overflow = getComputedStyle(box).overflowX;
-          if (overflow === 'auto' || overflow === 'scroll') return false;
-          const rect = box.getBoundingClientRect();
-          if (text.left < rect.left - 1 || text.right > rect.right + 1) return true;
-          if (overflow !== 'visible') return false;
-        }
-        return false;
-      })
-      .map((element) => element.textContent),
-  );
 
 /** Visible links and buttons under 44px in either direction, inside `selector`. */
 const smallTargets = (page: Page, selector: string) =>
@@ -383,8 +355,8 @@ test('Home’s text actions and Load more buttons share one style with the month
   styles.push(await style(merchant.getByRole('link', {name: 'Open in Transactions'})));
   loadMores.push(await style(merchant.getByRole('button', {name: 'Load more'})));
   headings.push(await heading(merchant.getByRole('heading', {name: '45 transactions'})));
-  await page.goto(`/?recurring=open&series=${RENT_KEY}`);
-  const recurring = page.getByRole('dialog', {name: 'Recurring payments'});
+  await page.goto(`/recurring?series=${RENT_KEY}`);
+  const recurring = page.getByRole('region', {name: 'Recurring payment details'});
   styles.push(
     await style(
       recurring

@@ -4,6 +4,7 @@ import {
 	atDate,
 	detectRecurringSeries,
 	detectUndatedRecurringSeries,
+	paymentMonth,
 } from './recurring-series-detection';
 
 const TODAY = '2026-10-17';
@@ -53,6 +54,27 @@ describe('atDate', () => {
 			priceChange: {amount: '1.50', since: '2026-10-08'},
 		});
 		expect(undated.priceChange).toEqual({amount: '1.50', since: '2026-10-08'});
+	});
+});
+
+describe('paymentMonth', () => {
+	it('counts a payment within its rhythm’s tolerance of a slot in that slot’s month, and any other in its own', () => {
+		const monthly = {cadence: 'MONTHLY', anchorDay: 1, nextExpectedDate: '2026-12-01'} as const;
+		// Three days early for December, two days late for November, and 11 days before December's slot, past the
+		// six-day tolerance.
+		expect(paymentMonth(monthly, '2026-11-28')).toBe('2026-12');
+		expect(paymentMonth(monthly, '2026-11-03')).toBe('2026-11');
+		expect(paymentMonth(monthly, '2026-11-20')).toBe('2026-11');
+		// A yearly bill due 20 January, paid 17 days early: December holds no slot of it.
+		const yearly = {cadence: 'YEARLY', anchorDay: 20, nextExpectedDate: '2027-01-20'} as const;
+		expect(paymentMonth(yearly, '2027-01-03')).toBe('2027-01');
+		expect(paymentMonth(yearly, '2026-12-31')).toBe('2027-01');
+		// A quarterly bill due in January, April, July and October, paid early at the end of March.
+		const quarterly = {cadence: 'QUARTERLY', anchorDay: 5, nextExpectedDate: '2026-10-05'} as const;
+		expect(paymentMonth(quarterly, '2027-03-28')).toBe('2027-04');
+		expect(paymentMonth({cadence: 'WEEKLY', anchorDay: null, nextExpectedDate: '2026-12-01'}, '2026-11-30')).toBe(
+			'2026-11',
+		);
 	});
 });
 

@@ -416,6 +416,7 @@ const RECURRING_SERIES_BASE = {
   continuation: null,
   category: 'HOUSING_AND_UTILITIES',
   merchantLogoUrl: null,
+  thisMonth: null,
 } satisfies Partial<RecurringSeries>;
 
 export const RENT_KEY = 'a1'.repeat(16);
@@ -441,13 +442,22 @@ export function homeRecurring() {
     ...extra,
   });
   const expenses = [
-    series(RENT_KEY, 'Example Landlord', '1200.00', {nextExpectedDate: '2026-12-01'}),
+    series(RENT_KEY, 'Example Landlord', '1200.00', {
+      nextExpectedDate: '2026-12-01',
+      lastDate: '2026-11-01',
+      thisMonth: {paid: [{date: '2026-11-01', amount: '1200.00'}], due: []},
+    }),
     series(ENERGY_KEY, 'Example Energy', '35.00', {
       nextExpectedDate: '2026-11-03',
       anchorDay: 3,
       flags: ['LATE'],
+      thisMonth: {paid: [], due: [{date: '2026-11-03', amount: '35.00', late: true}]},
     }),
-    series(PHONE_KEY, 'Example Mobile', '15.00', {nextExpectedDate: '2026-11-14', anchorDay: 14}),
+    series(PHONE_KEY, 'Example Mobile', '15.00', {
+      nextExpectedDate: '2026-11-14',
+      anchorDay: 14,
+      thisMonth: {paid: [], due: [{date: '2026-11-14', amount: '15.00', late: false}]},
+    }),
   ];
   const lists: RecurringSeriesLists = {
     expenses: {
