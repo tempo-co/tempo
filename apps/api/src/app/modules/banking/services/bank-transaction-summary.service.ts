@@ -111,7 +111,7 @@ export class BankTransactionSummaryService {
 			this.dataCoverageService.findLastCoveredDay(owner, asOf),
 			findFirstTransactionDate(this.bankTransactionRepository, owner.id),
 		]);
-		const months = usualPaceMonths(month, firstTransactionDate);
+		const months = usualPaceMonths(month, firstTransactionDate, lastCoveredDay);
 		const from = months.length > 0 ? `${months[0]}-01` : monthStart;
 		// Through the last covered day; only the earlier months when it lies before this month.
 		const to = lastCoveredDay && lastCoveredDay >= monthStart ? lastCoveredDay : addDays(monthStart, -1);

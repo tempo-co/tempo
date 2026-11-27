@@ -53,13 +53,26 @@ export function summarizeBaseline(totals: readonly bigint[]): BaselineTotal {
 	};
 }
 
+/** How far back the usual pace looks for complete months when the data stopped coming in a while ago. */
+const USUAL_PACE_LOOKBACK_MONTHS = 24;
+
 /**
- * The complete months the usual pace of `month` averages: the newest `USUAL_PACE_MONTHS` before it that history covers
- * from their first day (`firstTransactionDate` on or before it), oldest first.
+ * The complete months the usual pace of `month` averages, oldest first: the newest `USUAL_PACE_MONTHS` before it that
+ * the data covers whole, from their first day (history starts on or before it) to their last (the last covered day is
+ * on or after it).
  */
-export function usualPaceMonths(month: string, firstTransactionDate: string | null): string[] {
-	if (!firstTransactionDate) return [];
-	return previousMonths(month, USUAL_PACE_MONTHS).filter((earlier) => `${earlier}-01` >= firstTransactionDate);
+export function usualPaceMonths(
+	month: string,
+	firstTransactionDate: string | null,
+	lastCoveredDay: string | null,
+): string[] {
+	if (!firstTransactionDate || !lastCoveredDay) return [];
+	return previousMonths(month, USUAL_PACE_LOOKBACK_MONTHS)
+		.filter(
+			(earlier) =>
+				`${earlier}-01` >= firstTransactionDate && `${earlier}-${daysInMonth(earlier)}` <= lastCoveredDay,
+		)
+		.slice(-USUAL_PACE_MONTHS);
 }
 
 export type HomePaceInput = {
@@ -85,7 +98,7 @@ export function buildHomePace({month, lastCoveredDay, firstTransactionDate, spen
 	const monthDays = daysInMonth(month);
 	// A last covered day before this month leaves none of it covered.
 	const throughDay = lastCoveredDay?.startsWith(month) ? Number(lastCoveredDay.slice(8)) : 0;
-	const months = usualPaceMonths(month, firstTransactionDate);
+	const months = usualPaceMonths(month, firstTransactionDate, lastCoveredDay);
 	const pace = buildSpendingPace({
 		daysInMonth: monthDays,
 		throughDay,

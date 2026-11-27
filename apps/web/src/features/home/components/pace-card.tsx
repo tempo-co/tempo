@@ -103,7 +103,8 @@ export function PaceCard({
       />
       <ChartKey upTo={covered ? upTo : null} usual={pace.usual !== null} />
       <dl className='flex flex-wrap gap-x-5 gap-y-1 text-body-small text-muted-foreground'>
-        {pace.usual && upTo && (
+        {/* Only for a day of this month: the usual by an earlier month's day would compare nothing. */}
+        {pace.usual && covered && upTo && (
           <Fact label={`Usual by ${upTo}`} value={wholeCents(usualBy, currency)} />
         )}
         {pace.usual && (

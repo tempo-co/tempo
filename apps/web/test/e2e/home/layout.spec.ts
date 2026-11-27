@@ -28,6 +28,7 @@ const layouts = [
   {width: 390, theme: 'light'},
   {width: 390, theme: 'dark'},
   {width: 360, theme: 'light'},
+  {width: 320, theme: 'light'},
   {width: 320, theme: 'dark'},
 ] as const;
 

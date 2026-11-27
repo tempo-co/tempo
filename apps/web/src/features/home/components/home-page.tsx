@@ -157,9 +157,11 @@ function HomeCards({
     recurring.summary && accepted(recurring.summary.baseCurrency) ? recurring.summary : undefined;
   const failure = (query: {isError: boolean; error: unknown; refetch: () => unknown}) =>
     query.isError ? {error: query.error, retry: () => query.refetch()} : undefined;
+  // Without the newest transactions to say whether any exist, a bank or file is connected, so data is taken as in.
+  const hasData = recent.isError ? true : recent.total === undefined ? undefined : recent.total > 0;
   const rows =
-    reviewCounts && recent.total !== undefined
-      ? toDoRows({hasData: recent.total > 0, toCheck: reviewCounts.needsAttention})
+    reviewCounts && hasData !== undefined
+      ? toDoRows({hasData, toCheck: reviewCounts.needsAttention})
       : undefined;
 
   const runs = wide ? Object.values(visibleCards(layout)) : phoneRuns(layout);

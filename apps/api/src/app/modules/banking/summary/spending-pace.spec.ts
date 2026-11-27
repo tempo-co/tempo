@@ -57,12 +57,29 @@ describe('spending pace', () => {
 
 describe('usual pace', () => {
 	it.each([
-		['a long history', '2024-03-09', ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']],
-		['a history from a 1st', '2026-07-01', ['2026-07', '2026-08', '2026-09']],
-		['a history from mid-month', '2026-07-02', ['2026-08', '2026-09']],
-		['no history', null, []],
-	])('averages the complete months before this one, six at most: %s', (_, first, expected) => {
-		expect(usualPaceMonths('2026-10', first)).toEqual(expected);
+		[
+			'a long history',
+			'2024-03-09',
+			'2026-10-14',
+			['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
+		],
+		['a history from a 1st', '2026-07-01', '2026-10-14', ['2026-07', '2026-08', '2026-09']],
+		['a history from mid-month', '2026-07-02', '2026-10-14', ['2026-08', '2026-09']],
+		[
+			'data through a month end',
+			'2024-03-09',
+			'2026-09-30',
+			['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
+		],
+		[
+			'data that stopped in August',
+			'2024-03-09',
+			'2026-08-20',
+			['2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07'],
+		],
+		['no history', null, null, []],
+	])('averages the complete months before this one, six at most: %s', (_, first, lastCovered, expected) => {
+		expect(usualPaceMonths('2026-10', first, lastCovered)).toEqual(expected);
 	});
 
 	it('averages the newest six complete months, each through the same day of the month', () => {
