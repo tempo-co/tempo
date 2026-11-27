@@ -1,8 +1,5 @@
 import {Link, useNavigate, useRouter} from '@tanstack/react-router';
-import {
-  BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
-  type BankTransactionCategoryFilterValue,
-} from '@tempo/contracts';
+import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
 import {FileQuestion} from 'lucide-react';
 import type {ReactNode} from 'react';
 
@@ -15,6 +12,7 @@ import {Card} from '@/components/ui/card';
 import {TooltipProvider} from '@/components/ui/tooltip';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
+import {isBankTransactionCategoryFilterValue} from '@/features/banking/types/bank-transaction';
 import {LoadingLabel, TextBone, TileRowsSkeleton} from '@/features/dashboard/components/loading';
 import {categoryDrill} from '@/features/dashboard/utils/drill-links';
 import {categoryLabel, wholeCents} from '@/features/dashboard/utils/format';
@@ -40,9 +38,6 @@ import {PeriodPicker} from './period-picker';
 /** Merchants the page lists. */
 const TOP = 6;
 
-const isCategory = (value: string): value is BankTransactionCategoryFilterValue =>
-  (BANK_TRANSACTION_CATEGORY_FILTER_VALUES as readonly string[]).includes(value);
-
 /**
  * One category at `/insights/categories/<category>` over Insights' period, kept in the address: what was spent each
  * month against a usual month, its biggest merchants and its transactions, with the way to Transactions filtered to
@@ -54,7 +49,7 @@ export function CategoryPage({category, search}: {category: string; search: Insi
     // One provider for the page, so moving between figures shows the next tip without a new delay.
     <TooltipProvider delayDuration={300}>
       <AppBodyLayout>
-        {isCategory(category) ? (
+        {isBankTransactionCategoryFilterValue(category) ? (
           <InsightsGate title={title}>
             <CategoryReport category={category} search={search} />
           </InsightsGate>
@@ -65,7 +60,7 @@ export function CategoryPage({category, search}: {category: string; search: Insi
             <StateMessage
               icon={FileQuestion}
               title='There is no such category'
-              description='The address names a category Tempo does not have.'
+              description='The address names a category that does not exist.'
             >
               <Button variant='outline' asChild>
                 <Link to='/insights' search={search}>
@@ -300,15 +295,21 @@ function CategoryTransactions({
       ) : (
         <>
           <TransactionsHeader />
-          <div aria-busy='true'>
-            <LoadingLabel>Loading transactions</LoadingLabel>
-            <ul aria-hidden='true' className='divide-y divide-border/60 px-2 pb-2'>
-              <TileRowsSkeleton count={5} />
-            </ul>
-          </div>
+          <TransactionsSkeleton />
         </>
       )}
     </Card>
+  );
+}
+
+function TransactionsSkeleton() {
+  return (
+    <div aria-busy='true'>
+      <LoadingLabel>Loading transactions</LoadingLabel>
+      <ul aria-hidden='true' className='divide-y divide-border/60 px-2 pb-2'>
+        <TileRowsSkeleton count={5} />
+      </ul>
+    </div>
   );
 }
 
@@ -341,12 +342,7 @@ function TransactionPages({
     <>
       <TransactionsHeader drill={drill} />
       {isPending ? (
-        <div aria-busy='true'>
-          <LoadingLabel>Loading transactions</LoadingLabel>
-          <ul aria-hidden='true' className='divide-y divide-border/60 px-2 pb-2'>
-            <TileRowsSkeleton count={5} />
-          </ul>
-        </div>
+        <TransactionsSkeleton />
       ) : !data ? (
         <div className='px-4 pb-4'>
           <LoadErrorState

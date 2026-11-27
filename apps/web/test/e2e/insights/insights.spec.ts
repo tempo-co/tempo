@@ -220,7 +220,7 @@ test.describe('Insights over the seeded history', () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/insights\?period=2026$/);
 
-    // A link to Home's old month dialog opens the month's page.
+    // A link to a month over Home opens the month's page.
     await page.goto('/?month=2026-08');
     await expect(page).toHaveURL('/insights/months/2026-08');
     await expect(page.getByRole('article', {name: 'August 2026'})).toBeVisible();

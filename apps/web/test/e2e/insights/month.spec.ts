@@ -279,6 +279,10 @@ test('a month outside the history says so', async ({page, homePage}) => {
   await mockSyntheticHome(page);
   await page.goto('/insights/months/2019-04');
   await expect(homePage.monthPage('April 2019')).toContainText('No history for April 2019.');
+  // A month still to come has no history either.
+  await page.goto('/insights/months/2027-03');
+  await expect(homePage.monthPage('March 2027')).toContainText('No history for March 2027.');
+  await expect(page.getByText(/Couldn't load/)).toHaveCount(0);
 });
 
 test('an address with an invalid month opens Insights over its period', async ({page}) => {

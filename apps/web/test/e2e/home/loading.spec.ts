@@ -71,7 +71,7 @@ const STAGGER: [string, number][] = [
   ['**/bank-transactions/breakdown?**', 800],
   ['**/recurring-series/summary?**', 1100],
   ['**/bank-transactions/review-counts', 1400],
-  // A month's transactions and biggest merchants, when the month dialog is open.
+  // A month's transactions and biggest merchants, on the month page.
   ['**/bank-transactions?**', 1200],
   ['**/merchants/ranking?**', 1300],
   // The running month's usual by this day.

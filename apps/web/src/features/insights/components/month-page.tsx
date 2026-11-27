@@ -80,7 +80,14 @@ function MonthReport({
   return (
     <article aria-label={formatMonth(month)} className='@container grid gap-4'>
       <MonthTitle month={month} search={search} overview={history.overview} />
-      <MonthView month={month} today={today} history={history} search={search} />
+      {/* A month after this one has no history yet, and its reads would be refused. */}
+      {month > today.slice(0, 7) ? (
+        <p className='text-body-small text-muted-foreground'>
+          No history for {formatMonth(month)}.
+        </p>
+      ) : (
+        <MonthView month={month} today={today} history={history} search={search} />
+      )}
     </article>
   );
 }
