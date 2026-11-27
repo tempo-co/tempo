@@ -140,6 +140,12 @@ test.describe('Insights over the seeded history', () => {
     page,
   }) => {
     await page.setViewportSize({width: 1440, height: 1000});
+    // A link to a month over Home opens the month's page. It loads before any response is recorded, since a full load
+    // drops the bodies of reads still in flight.
+    await page.goto('/?month=2026-08');
+    await expect(page).toHaveURL('/insights/months/2026-08');
+    await expect(page.getByRole('article', {name: 'August 2026'})).toBeVisible();
+
     const categoryLists = new Map<string, MerchantGroupsResponse>();
     page.on('response', async (response) => {
       const url = new URL(response.url());
@@ -228,11 +234,6 @@ test.describe('Insights over the seeded history', () => {
     await expect(next).toBeDisabled();
     await page.goBack();
     await expect(page).toHaveURL(/\/insights\?period=2026$/);
-
-    // A link to a month over Home opens the month's page.
-    await page.goto('/?month=2026-08');
-    await expect(page).toHaveURL('/insights/months/2026-08');
-    await expect(page.getByRole('article', {name: 'August 2026'})).toBeVisible();
   });
 
   test('on a phone a merchant opens in a sheet over Insights', async ({page}) => {
