@@ -208,18 +208,24 @@ test.describe('Insights over the seeded history', () => {
     await page.getByRole('main').getByRole('link', {name: 'Insights', exact: true}).click();
     await expect(page).toHaveURL(/\/insights\?period=2026$/);
 
-    // A month's bar opens its page; the arrows step in place, and Back returns to Insights.
-    await page.getByRole('link', {name: /^August 2026:/}).click();
+    // A month's bar opens its page; the arrows step through the seeded history, August to the running October, in
+    // place, and Back returns to Insights.
+    await page.getByRole('link', {name: /^September 2026:/}).click();
+    await expect(page).toHaveURL('/insights/months/2026-09?period=2026');
+    await expect(page.getByRole('article', {name: 'September 2026'})).toBeVisible();
+    const previous = page.getByRole('button', {name: 'Previous month'});
+    const next = page.getByRole('button', {name: 'Next month'});
+    await previous.click();
     await expect(page).toHaveURL('/insights/months/2026-08?period=2026');
     await expect(page.getByRole('article', {name: 'August 2026'})).toBeVisible();
-    await page.getByRole('button', {name: 'Previous month'}).click();
-    await expect(page).toHaveURL('/insights/months/2026-07?period=2026');
-    await expect(page.getByRole('article', {name: 'July 2026'})).toBeVisible();
-    await page.getByRole('button', {name: 'Next month'}).click();
-    await page.getByRole('button', {name: 'Next month'}).click();
+    await expect(previous).toBeDisabled();
+    await next.click();
     await expect(page).toHaveURL('/insights/months/2026-09?period=2026');
-    const september = page.getByRole('article', {name: 'September 2026'});
-    await expect(september.getByRole('region', {name: 'The month'})).toContainText('In');
+    await next.click();
+    await expect(page).toHaveURL('/insights/months/2026-10?period=2026');
+    const october = page.getByRole('article', {name: 'October 2026'});
+    await expect(october.getByRole('region', {name: 'The month'})).toContainText('Kept so far');
+    await expect(next).toBeDisabled();
     await page.goBack();
     await expect(page).toHaveURL(/\/insights\?period=2026$/);
 
