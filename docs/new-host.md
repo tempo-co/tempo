@@ -31,7 +31,8 @@ As the admin user: `git clone https://github.com/tempo-co/tempo.git ~/tempo && ~
 | DNS records | Printed with the server's addresses: A (and AAAA) for `app` and the bare domain, Scaleway's SPF and DKIM records as Scaleway's console shows them |
 | Directories, env file, banking key | `/etc/wisp` and `/var/lib/wisp-deploy`; `/etc/wisp/production.env` filled by the env part below; the Enable Banking key copied from the owner's off-server copy to `/etc/wisp/enable-banking-private.key` (admin user, group 10001, mode 0440) |
 | Off-site backups | The Storage Box SSH key and `/etc/wisp/backup.env` (repository, and the restic password at a hidden prompt), then `restic init`, as in `backups.md` |
-| Install and start | `sudo ops/install.sh production`, the deploy timer and a first deploy, the egress firewall, the backup and drill timers with one backup and one drill, and a test failure email |
+| Release trigger | `/etc/wisp/release-trigger.env`: a fine-grained GitHub token for this repository with Actions write only, typed at a hidden prompt (Production in the ops README) |
+| Install and start | `sudo ops/install.sh production`, the deploy and release-trigger timers and a first deploy, the egress firewall, the backup and drill timers with one backup and one drill, and a test failure email |
 
 Production data comes back from Helsinki ([`backups.md`](backups.md), Rebuilding the server from Helsinki). Staging's feed ([`staging-feed.md`](staging-feed.md), Setting it up) needs the owner's account id, so it is set up after that restore.
 

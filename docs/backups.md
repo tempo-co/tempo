@@ -44,7 +44,7 @@ Everything written after the snapshot is lost; the `wisp-pre-restore-*.dump` hol
 When the server is lost, a new one is rebuilt from the newest snapshot, losing at most the 6 hours since it:
 
 1. Create a new server of the same type and bring it to the production baseline with `ops/wizard.sh setup` up to its DNS records stage ([`new-host.md`](new-host.md)).
-2. Put back the owner's off-server copies: `/etc/wisp/production.env`, the banking key at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` (ownership and mode as in Container privileges in `ops/README.md`) and the restic password. Set up the Storage Box key and `/etc/wisp/backup.env` as in Setting up the repository, without `restic init` and without enabling the timers yet.
+2. Put back the owner's off-server copies: `/etc/wisp/production.env`, the banking key at `ENABLE_BANKING_PRIVATE_KEY_HOST_PATH` (ownership and mode as in Container privileges in `ops/README.md`) and the restic password. Set up the Storage Box key and `/etc/wisp/backup.env` as in Setting up the repository, without `restic init` and without enabling the timers yet, and the release token: `sudo install -m 600 -o "$USER" /dev/null /etc/wisp/release-trigger.env`, then `read -rsp 'token: ' t && printf 'RELEASE_TRIGGER_TOKEN=%s\n' "$t" >/etc/wisp/release-trigger.env; unset t` (Production in `ops/README.md`).
 3. From a clean `main` checkout, `sudo ops/install.sh production`.
 4. Start PostgreSQL alone, create the read-only role (Read-only database access in `ops/README.md`; the dump's grants name it), and restore the newest snapshot into it:
 
@@ -75,7 +75,7 @@ When the server is lost, a new one is rebuilt from the newest snapshot, losing a
    printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$(docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tempo-co/api:release)" \
        "$(docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tempo-co/web:release)" >/var/lib/wisp-deploy/deployed.env
    docker compose -p wisp-production -f /etc/wisp/compose/production.compose.yml --env-file /etc/wisp/production.env --env-file /var/lib/wisp-deploy/deployed.env up -d --wait
-   sudo systemctl enable --now wisp-api-egress wisp-deploy-production.timer wisp-backup.timer wisp-restore-drill.timer
+   sudo systemctl enable --now wisp-api-egress wisp-deploy-production.timer wisp-release-trigger.timer wisp-backup.timer wisp-restore-drill.timer
    ```
 
 6. Point the app's DNS records at the new server, check that you can log in, and run the drill once: `sudo systemctl start wisp-restore-drill.service`.

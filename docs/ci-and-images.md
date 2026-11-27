@@ -23,7 +23,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 ## What each job covers
 
 - `Docs check`: runs for every change. `.github/scripts/check-docs.mjs` fails when a living doc names a backticked path that is not tracked, an `npm run` script its package lacks, or exceeds its word budget; budgets, overrides and the allowed missing paths are in `.github/scripts/check-docs.json`, and `node --test .github/scripts/check-docs.test.mjs` tests the check.
-- `Ops checks`: `shellcheck -x` on the `ops/` scripts and the release scripts in `.github/scripts/`, the offline `ops/test-deploy.sh`, `ops/test-sync-pins.sh`, `ops/test-backup.sh` and `.github/scripts/move-tag.test.sh`, `docker compose config -q` on the production and staging Compose files with synthetic values for every required variable, and `caddy validate` on `ops/Caddyfile` with the pinned Caddy image. A new `${VAR:?}` in a Compose file needs a synthetic export there.
+- `Ops checks`: `shellcheck -x` on the `ops/` scripts and the release scripts in `.github/scripts/`, the offline `ops/test-deploy.sh`, `ops/test-sync-pins.sh`, `ops/test-backup.sh`, `ops/test-release-trigger.sh` and `.github/scripts/move-tag.test.sh`, `docker compose config -q` on the production and staging Compose files with synthetic values for every required variable, and `caddy validate` on `ops/Caddyfile` with the pinned Caddy image. A new `${VAR:?}` in a Compose file needs a synthetic export there.
 - `API lint & format`: the API's `lint:check`/`format:check`.
 - `API build`: `npm --prefix apps/api run build`.
 - `API unit tests`: Jest.
@@ -36,7 +36,7 @@ A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, an
 
 ## Release
 
-Production deploys `:release` (`ops/README.md`). `.github/workflows/release.yml` (`Release`) moves each app's `:release` to the image its `:main` points at, API before web, every night at 02:23 UTC, and at once when run by hand: Actions → Release → Run workflow on `main`, or `gh workflow run release.yml --ref main`. A release ships everything merged since the previous one, and the run summary lists those commits per app. It uses `.github/scripts/move-tag.sh`, the same forward-only rule as `:main`: `:release` is kept when it is already newer, a `:release` off `main`'s history fails the run, and a `:main` built from a commit not on `main` is never released. Because `:main` only moves after `CI` passed, `:release` only ever points at green commits. The first run creates `:release`. GitHub pauses scheduled workflows after 60 days without repository activity, and may start a scheduled run late when it is busy.
+Production deploys `:release` (`ops/README.md`). `.github/workflows/release.yml` (`Release`) moves each app's `:release` to the image its `:main` points at, API before web. The production server starts it every night at 02:23 UTC (`ops/README.md`, Production), and it runs at once when started by hand: Actions → Release → Run workflow on `main`, or `gh workflow run release.yml --ref main`. A release ships everything merged since the previous one, and the run summary lists those commits per app. It uses `.github/scripts/move-tag.sh`, the same forward-only rule as `:main`: `:release` is kept when it is already newer, a `:release` off `main`'s history fails the run, and a `:main` built from a commit not on `main` is never released. Because `:main` only moves after `CI` passed, `:release` only ever points at green commits. The first run creates `:release`.
 
 ## Rules
 
