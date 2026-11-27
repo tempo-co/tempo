@@ -25,13 +25,12 @@ export function importedAccountIds(
   accounts: readonly BankImportPreviewAccount[],
   summary: Pick<BankImportSummary, 'accounts'>,
 ): (string | null)[] {
-  const taken = new Set<string>();
+  // Accounts the preview found are theirs: a new account's fallback never takes one.
+  const taken = new Set<string>(accounts.flatMap(({id}) => (id ? [id] : [])));
   return accounts.map((account) => {
-    const id = account.id
-      ? summary.accounts.some(({id}) => id === account.id)
-        ? account.id
-        : null
-      : (sameNamed(summary, account, taken, true) ?? sameNamed(summary, account, taken, false));
+    if (account.id) return summary.accounts.some(({id}) => id === account.id) ? account.id : null;
+    const id =
+      sameNamed(summary, account, taken, true) ?? sameNamed(summary, account, taken, false);
     if (id) taken.add(id);
     return id;
   });

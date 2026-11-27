@@ -53,6 +53,12 @@ test('each previewed account maps to the account its import wrote to, same-named
   expect(importedAccountIds([found({})], {accounts: [summaryAccount('first-new', false)]})).toEqual(
     ['first-new'],
   );
+  // Even when the summary lists them the other way round, a found account is never a new one's.
+  expect(
+    importedAccountIds([found({}), found({id: 'kept-account'})], {
+      accounts: [summaryAccount('kept-account', false), summaryAccount('first-new', false)],
+    }),
+  ).toEqual(['first-new', 'kept-account']);
   // A found account the import did not write to has nothing to rename either.
   expect(importedAccountIds([found({id: 'other-account'})], summary)).toEqual([null]);
 });

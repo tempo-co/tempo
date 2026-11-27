@@ -30,7 +30,7 @@ import {useNow} from '@/hooks/use-now';
 
 import {useDataCoverage, useRecentTransactions, useSpendingPace} from '../api/use-home-reads';
 import {useHomeLayout} from '../use-home-layout';
-import {awaitingFirstFetch, onFirstFetch, withData} from '../utils/first-fetch';
+import {awaitingFirstFetch, isOnFirstFetch, onFirstFetch, withData} from '../utils/first-fetch';
 import {greeting} from '../utils/greeting';
 import {
   HOME_CARDS,
@@ -154,9 +154,7 @@ function FirstFetchHome({
     <>
       <HomeTitle editing={waiting ? undefined : editing} onEdit={onEdit} />
       {waiting ? (
-        <DataOnItsWay
-          connections={connections.filter((connection) => onFirstFetch([connection]))}
-        />
+        <DataOnItsWay connections={connections.filter(isOnFirstFetch)} />
       ) : (
         <HomeCards connections={connections} editing={editing} />
       )}

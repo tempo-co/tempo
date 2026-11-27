@@ -238,6 +238,7 @@ test.describe('Home while a new bank fetches', () => {
     await mockSyntheticHome(page, {connections: () => [connection], clock: 'installed'});
     // Nothing is in until the bank has fetched: the newest transactions are none.
     await page.route('**/bank-transactions?**', (route) =>
+      ['fetch', 'xhr'].includes(route.request().resourceType()) &&
       connection.lastSyncedAt === null &&
       !new URL(route.request().url()).searchParams.has('filter[date][from]')
         ? fulfillJson(route, monthTransactions('2026-11', 0))

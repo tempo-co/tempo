@@ -40,7 +40,7 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
-  screens get a muted note on the `muted` field (`Smartphone` glyph) that banking apps usually
+  screens get a default `Alert` (`Smartphone` glyph) that banking apps usually
   can't export a statement but the bank's website can, then **Choose the file** alone, full width. The picker accepts any extension, since banks name
   their exports oddly. Files dragged over any signed-in page show a full-column overlay (dashed
   2px ring rule, page-field wash, "Drop to import") while the sheet is closed and no import runs;
@@ -52,8 +52,8 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   shows it), a `secondary` `New` or `Matched` badge, and a muted line with the bank, the account's details,
   currency, its transactions and days. A muted line says the import can be undone from Accounts,
   and the footer holds one **Import N transactions**. A name changed there is saved as the
-  account's own name once the import is in (the same write as Rename on Accounts; left empty or
-  typed as it was, the account keeps its name), and a failed save says so in a toast. An import
+  account's own name once the import is in (the same write as Rename on Accounts: left empty or
+  typed as the account's own name, it goes back to that name; unchanged, nothing is saved), and a failed save says so in a toast. An import
   refused as busy or failed for a lost connection stays on this step with the names typed, its
   `Alert` (none when the shared toast already said so), and Import or Try again imports it as it
   is; Add data reopens it there, and so does Check on the failure's toast when one shows. The back

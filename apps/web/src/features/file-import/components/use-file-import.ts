@@ -304,8 +304,10 @@ export function useFileImport({
       try {
         connections = await queryClient.fetchQuery(bankConnectionsQueryOptions);
       } catch (error) {
-        // A sign-out cancels the read, and its renames belong to no one here.
-        if (isCancelledError(error) || error instanceof SessionChangedError) return;
+        // A sign-out cancels the read, and its renames belong to no one here; a failure the api wrapper toasted was
+        // told once already.
+        if (isCancelledError(error) || error instanceof SessionChangedError || wasToasted(error))
+          return;
         // Otherwise each rename below fails as an account it cannot find.
       }
       await Promise.all(

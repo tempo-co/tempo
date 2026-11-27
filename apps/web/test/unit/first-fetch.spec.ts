@@ -33,9 +33,9 @@ test('Home waits while a bank is on its first fetch and no transaction is in, an
   ).toBe(false);
   for (const syncStatus of ['FAILED', 'PARTIAL', 'EXPIRED'] as const)
     expect(awaitingFirstFetch([connected({syncStatus})], false)).toBe(false);
-  // Transactions already in, from a file or put into the bank's account by one, show Home; so does not knowing yet.
+  // Transactions already in, from a file or put into the bank's account by one, show Home; until that is known, it waits.
   expect(awaitingFirstFetch([connected({})], true)).toBe(false);
-  expect(awaitingFirstFetch([connected({})], undefined)).toBe(false);
+  expect(awaitingFirstFetch([connected({})], undefined)).toBe(true);
 });
 
 test('imported files whose imports were all undone hold nothing, and Home is empty without a bank', () => {

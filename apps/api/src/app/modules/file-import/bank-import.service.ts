@@ -29,6 +29,7 @@ import {
 import {
 	MATCH_WINDOW_DAYS,
 	MatchExistingRow,
+	MatchOutcome,
 	REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
 	matchDay,
 	matchTransactions,
@@ -333,19 +334,8 @@ export class BankImportService {
 						{account, connection, importId: record.id},
 						async ({finalDays, insert}) => {
 							for (const index of indexes) {
-								const target = targets[index];
-								// Without the bank's references a row of another account's statement can pass for a
-								// stored payment of the same amount and day, so that path needs the statement or the
-								// owner to name it.
-								const confirmed = target.kind === 'synced' && target.confirmed;
-								// An imported-files account found by the IBAN a built-in reader read holds only that
-								// account's files, so another format's numbering may be set aside there too, after fewer
-								// probed rows.
-								const fileIbanConfirmed =
-									target.kind === 'file' &&
-									!target.bank &&
-									!!accountRows[index].iban &&
-									!accountRows[index].learnedBank;
+								const matching = matchingOf(targets[index], accountRows[index]);
+								const fileIbanConfirmed = matching === 'betweenFiles';
 								// Candidates are read again per format, inside the transaction, so they include the rows
 								// the formats and statements before this one just inserted. Each format numbers its rows in
 								// a scheme of its own, so whether the bank's references are set aside is decided per format.
@@ -361,17 +351,7 @@ export class BankImportService {
 										rows,
 										fileIbanConfirmed ? numbering : null,
 									);
-									const ladder = confirmed
-										? matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true})
-										: fileIbanConfirmed
-											? matchWithReferenceFallback(incoming, candidates, {
-													pairLookAlikeGroups: true,
-													minProbedRows: REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
-												})
-											: {
-													outcomes: matchTransactions(incoming, candidates),
-													referencesSetAside: false,
-												};
+									const ladder = matchRows(incoming, candidates, matching);
 									const {referencesSetAside} = ladder;
 									const outcomes = decideOnFinalDays(rows, ladder.outcomes, finalDays);
 									if (referencesSetAside) {
@@ -464,13 +444,14 @@ export class BankImportService {
 		);
 		const found = await Promise.all(
 			targets.map(async (target, index) => {
-				if (target.account) return {account: target.account, rows: accountRows[index]};
+				const matching = matchingOf(target, accountRows[index]);
+				if (target.account) return {account: target.account, rows: accountRows[index], matching};
 				const rows =
 					target.kind === 'file' && target.bank
 						? withoutAccount(accountRows[index], target.bank)
 						: accountRows[index];
 				const {account, identity} = await findFileAccountIn(this.dataSource.manager, ownerId, null, rows);
-				return {account, identity, rows: accountRows[index]};
+				return {account, identity, rows: accountRows[index], matching};
 			}),
 		);
 		refuseBankConflicts(
@@ -484,7 +465,7 @@ export class BankImportService {
 		// Two statements reaching one account are one account of the import, as its summary lists them: an account it
 		// creates for a file that names none is its bank's, named ignoring case and spacing, as `findFileAccountIn` finds it.
 		const byAccount = new Map<string, BankImportPreviewAccount>();
-		const partsOf = new Map<string, AccountRows['byFormat']>();
+		const partsOf = new Map<string, {parts: AccountRows['byFormat']; matching: ReturnType<typeof matchingOf>}>();
 		for (const entry of found) {
 			const {account, rows} = entry;
 			const key =
@@ -493,7 +474,11 @@ export class BankImportService {
 					? `new-bank:${bankNameKey(rows.bank)}:${rows.currency}`
 					: `new:${entry.identity!.providerAccountId}`);
 			const days = rows.byFormat.flatMap((part) => part.rows.flatMap((row) => matchDay(row) ?? [])).sort();
-			partsOf.set(key, [...(partsOf.get(key) ?? []), ...rows.byFormat]);
+			const before = partsOf.get(key);
+			partsOf.set(key, {
+				parts: [...(before?.parts ?? []), ...rows.byFormat],
+				matching: before?.matching ?? entry.matching,
+			});
 			const known = byAccount.get(key);
 			if (known) {
 				known.dateFrom = [known.dateFrom, days[0]].filter((day) => day != null).sort()[0] ?? null;
@@ -520,7 +505,10 @@ export class BankImportService {
 				dateTo: days.at(-1) ?? null,
 			});
 		}
-		for (const [key, account] of byAccount) account.rowCount = distinctRowCount(partsOf.get(key)!);
+		for (const [key, account] of byAccount) {
+			const {parts, matching} = partsOf.get(key)!;
+			account.rowCount = distinctRowCount(parts, matching);
+		}
 		const days = statements.flatMap(({rows}) => rows.flatMap((row) => matchDay(row) ?? [])).sort();
 		const accounts = [...byAccount.values()];
 		return {
@@ -1966,18 +1954,41 @@ function formatBank(
 }
 
 /**
- * An account's rows across the parts of a drop that reach it, a payment two of them state counted once: each part is
- * matched against the parts before it, as the import matches each against the rows the parts before it inserted.
+ * How a target's incoming rows are matched with its stored ones. `confirmed`: a synced account the statement or the
+ * owner named; without the bank's references a row of another account's statement could pass for a stored payment
+ * of the same amount and day, so only then may references be set aside. `betweenFiles`: an imported-files account
+ * found by the IBAN a built-in reader read holds only that account's files, so another format's numbering may be
+ * set aside there too, after fewer probed rows. `plain` otherwise.
  */
-function distinctRowCount(parts: AccountRows['byFormat']): number {
-	const earlier: MatchExistingRow[] = [];
-	for (const {rows: formatRows} of parts) {
-		const incoming = formatRows.map(toMatchRow);
-		// Between the files of one drop, as between an account's files at the import.
-		const {outcomes} = matchWithReferenceFallback(incoming, earlier, {
+function matchingOf(target: Target, rows: AccountRows): 'confirmed' | 'betweenFiles' | 'plain' {
+	if (target.kind === 'synced') return target.confirmed ? 'confirmed' : 'plain';
+	return !target.bank && !!rows.iban && !rows.learnedBank ? 'betweenFiles' : 'plain';
+}
+
+function matchRows(
+	incoming: Parameters<typeof matchTransactions>[0],
+	candidates: readonly MatchExistingRow[],
+	matching: ReturnType<typeof matchingOf>,
+): {outcomes: MatchOutcome[]; referencesSetAside: boolean} {
+	if (matching === 'confirmed') return matchWithReferenceFallback(incoming, candidates, {pairLookAlikeGroups: true});
+	if (matching === 'betweenFiles')
+		return matchWithReferenceFallback(incoming, candidates, {
 			pairLookAlikeGroups: true,
 			minProbedRows: REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
 		});
+	return {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
+}
+
+/**
+ * An account's rows across the parts of a drop that reach it, a payment two of them state counted once: each part is
+ * matched against the parts before it, as the import matches each against the rows the parts before it inserted, and
+ * the way the import would match them there (`matchingOf`).
+ */
+function distinctRowCount(parts: AccountRows['byFormat'], matching: ReturnType<typeof matchingOf>): number {
+	const earlier: MatchExistingRow[] = [];
+	for (const {rows: formatRows} of parts) {
+		const incoming = formatRows.map(toMatchRow);
+		const {outcomes} = matchRows(incoming, earlier, matching);
 		const added = incoming.filter((_, index) => outcomes[index].kind !== 'matched');
 		const createdAt = new Date(earlier.length);
 		earlier.push(...added.map((row, index) => ({...row, id: String(earlier.length + index), createdAt})));
