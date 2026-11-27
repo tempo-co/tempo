@@ -66,6 +66,8 @@ async function recordShifts(page: Page) {
 /** When each of Home's answers arrives after it is asked for, in the order a real load tends to finish. */
 const STAGGER: [string, number][] = [
   ['**/bank-connections', 150],
+  ['**/bank-transactions/spending-pace?**', 400],
+  ['**/bank-connections/coverage?**', 600],
   ['**/bank-transactions/balance-trend?**', 450],
   ['**/bank-transactions/cash-flow?**', 500],
   ['**/bank-transactions/breakdown?**', 800],
@@ -128,41 +130,18 @@ for (const width of [1440, 390]) {
     await staggerHome(page);
 
     await page.goto('/');
-    await expect(homePage.totalBalance).toHaveText('€24,300');
-    await expect(homePage.whereYouStand.getByRole('region', {name: 'Repeats'})).toContainText(
-      'Example Landlord',
-    );
-    await expect(page.getByRole('region', {name: 'Income by source'})).toContainText(
-      'Example Employer',
-    );
+    await expect(homePage.paceFigure).toHaveText('€1,200');
+    await expect(homePage.card('Coming up')).toContainText('Example Landlord');
+    await expect(homePage.card('Top categories this month')).toContainText('Housing');
+    await expect(homePage.card('To do')).toContainText('Check 3 transactions');
 
     const {shifts, total} = await settledShifts(page);
     expect(total, JSON.stringify(shifts)).toBeLessThanOrEqual(0.02);
-    const topCard = shifts.filter((shift) =>
-      shift.sources.some((source) => source.region === 'Where you stand'),
+    const paceCard = shifts.filter((shift) =>
+      shift.sources.some((source) => source.region === 'Spending pace'),
     );
-    for (const shift of topCard)
+    for (const shift of paceCard)
       expect(shift.value, JSON.stringify(shift)).toBeLessThanOrEqual(0.005);
-
-    // The last month loads its day ends and its money on first selecting it, each in place, after the click's
-    // own half second.
-    for (const [url, delay] of [
-      ['**/bank-transactions/balance-trend?**', 700],
-      ['**/bank-transactions/totals?**', 900],
-    ] as const)
-      await page.route(url, async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        await route.fallback();
-      });
-    await page.evaluate(() => (window.__shifts = []));
-    await homePage.whereYouStand.getByRole('radio', {name: '1M', exact: true}).click();
-    // Until then, the plot holds a quiet placeholder in the line's place.
-    await expect(
-      homePage.whereYouStand.locator('[data-slot="plot-placeholder"] > [aria-hidden="true"]'),
-    ).toBeVisible();
-    await expect(homePage.whereYouStand).toContainText('since 6 Oct 2026');
-    const lastMonth = await settledShifts(page);
-    expect(lastMonth.total, JSON.stringify(lastMonth.shifts)).toBeLessThanOrEqual(0.005);
   });
 
   test(`at ${width}px, a month opened from a link loads in place`, async ({
@@ -188,7 +167,7 @@ for (const width of [1440, 390]) {
   });
 }
 
-test('Home shows each section as soon as its own data arrives', async ({page, homePage}) => {
+test('Home shows each card as soon as its own data arrives', async ({page, homePage}) => {
   await mockLoadingHome(page);
   const held: (() => void)[] = [];
   for (const url of ['**/bank-transactions/breakdown?**', '**/recurring-series/summary?**'])
@@ -199,31 +178,22 @@ test('Home shows each section as soon as its own data arrives', async ({page, ho
 
   try {
     await page.goto('/');
-    // The history is in: the balance and the years show while the breakdowns and what repeats still load.
-    await expect(homePage.totalBalance).toHaveText('€24,300');
-    await expect(homePage.yearTable.getByRole('button', {name: /2026/})).toBeVisible();
-    const repeats = homePage.whereYouStand.getByRole('region', {name: 'Repeats'});
-    await expect(repeats).toHaveAttribute('aria-busy', 'true');
-    await expect(repeats).toContainText('Loading what repeats');
-    for (const title of ['Spending by category', 'Income by source']) {
-      const table = page.getByRole('region', {name: title});
-      await expect(table).toHaveAttribute('aria-busy', 'true');
-      await expect(table).toContainText(`Loading ${title.toLowerCase()}`);
+    // The pace is in: it shows while this month's categories and what's coming up still load.
+    await expect(homePage.paceFigure).toHaveText('€1,200');
+    for (const [name, loading] of [
+      ['Top categories this month', 'Loading this month’s categories'],
+      ['Coming up', 'Loading what’s coming up'],
+    ]) {
+      const card = homePage.card(name).locator('[aria-busy="true"]');
+      await expect(card).toContainText(loading);
     }
-    await expect.poll(() => held.length).toBe(3);
+    await expect.poll(() => held.length).toBe(2);
   } finally {
     held.forEach((release) => release());
   }
 
-  await expect(page.getByRole('region', {name: 'Spending by category'})).not.toHaveAttribute(
-    'aria-busy',
-  );
-  await expect(page.getByRole('region', {name: 'Income by source'})).toContainText(
-    'Example Employer',
-  );
-  await expect(homePage.whereYouStand.getByRole('region', {name: 'Repeats'})).toContainText(
-    'Example Landlord',
-  );
+  await expect(homePage.card('Top categories this month')).toContainText('Housing');
+  await expect(homePage.card('Coming up')).toContainText('Example Landlord');
 });
 
 test('the running month asks for its transactions once, up to today, while the rest of the month loads', async ({
@@ -267,7 +237,7 @@ test('the running month asks for its transactions once, up to today, while the r
   expect(asked).toEqual(['2026-11-01..2026-11-05']);
 });
 
-test('when the year breakdowns fail, the balance and years stay and Try again fills in the tables', async ({
+test('when this month’s categories fail, the other cards stay and Try again fills the card in', async ({
   page,
   homePage,
 }) => {
@@ -278,15 +248,13 @@ test('when the year breakdowns fail, the balance and years stay and Try again fi
   );
   await page.goto('/');
 
-  await expect(page.getByText("Couldn't load spending and income by year")).toBeVisible();
-  await expect(homePage.totalBalance).toHaveText('€24,300');
-  await expect(homePage.yearTable.getByRole('button', {name: /2026/})).toBeVisible();
-  await expect(page.getByRole('region', {name: 'Spending by category'})).toHaveCount(0);
+  const categories = homePage.card('Top categories this month');
+  await expect(categories).toContainText("Couldn't load this month's categories");
+  await expect(homePage.paceFigure).toHaveText('€1,200');
+  await expect(homePage.accountsTotal).toHaveText('€24,300.00');
 
   failing = false;
-  await page.getByRole('button', {name: 'Try again'}).click();
-  await expect(page.getByRole('region', {name: 'Income by source'})).toContainText(
-    'Example Employer',
-  );
-  await expect(page.getByText("Couldn't load spending and income by year")).toHaveCount(0);
+  await categories.getByRole('button', {name: 'Try again'}).click();
+  await expect(categories).toContainText('Housing');
+  await expect(categories).not.toContainText("Couldn't load");
 });

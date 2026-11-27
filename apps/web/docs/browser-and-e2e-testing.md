@@ -66,7 +66,7 @@ CI retries a failed test twice, so a test that fails and then passes leaves the 
 
 ## Dates
 
-- Specs that depend on the local calendar set `timezoneId` (`test/e2e/home/recurring.spec.ts`, `test/e2e/recurring/`). Keep local-calendar-date drill URLs in assertions; do not assume UTC midnight.
+- Specs that depend on the local calendar set `timezoneId` (`test/e2e/home/home.spec.ts`, `test/e2e/recurring/`). Keep local-calendar-date drill URLs in assertions; do not assume UTC midnight.
 - `src/hooks/use-local-date.ts` is the reactive local-date owner: it reschedules at local midnight (`setHours(24, 0, 0, 0)`) and on focus/visibility. A parent calling `localDate()` during render keeps yesterday's value even when the child query refetches; pass one `useLocalDate()` value to every date-sensitive section.
 - Rollover test: install `page.clock` just before midnight in the spec's zone, return an active item for the earlier `asOf` and an ended item for the next day, advance through midnight without navigating, then assert the new request date and the changed totals. Test tab wake separately with `page.clock.setSystemTime()` plus a focus or visibility event.
 - Do not pin an exact relative-time string computed at module load; suite delays cross minute boundaries.
@@ -92,7 +92,7 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 
 - WebKit sends requests from a controlling service worker past `page.route`, so mocks stop applying once the worker takes over and requests leak to the real API. The project blocks service workers and ignores the saved-app specs that need one (`testIgnore` in `playwright.config.ts`); a new spec that needs the worker goes on that list.
 - Touch gestures are sent with Chromium CDP (`Input.dispatchTouchEvent`), and hover-tooltip checks need a mouse; both skip outside Chromium. Real iPhone touch, native drag-and-drop and the Android on-screen keyboard are not covered; check them by hand on a device.
-- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `settled` in `test/e2e/home/where-you-stand.spec.ts` does. `animationsSettled` polls because awaiting `animation.finished` fails in WebKit when an animation is cancelled.
+- With Playwright's clock installed (`mockSyntheticHome` does), WebKit can keep reporting an element's position from the last frame it read of a finished CSS transition until its next rendering update, hundreds of milliseconds later, so an element that stands still may not have arrived. Wait until it has no animations left and its computed transform matches its style, as `animationsSettled` in `test/utils/layout.ts` does. `animationsSettled` polls because awaiting `animation.finished` fails in WebKit when an animation is cancelled.
 - WebKit cannot fulfill a mocked 3xx, so mock a redirect with `fulfillRedirect` from `test/utils/api-mocks.ts`. Only Chromium lets a test read the clipboard back; the copy itself still runs in WebKit.
 - Put worst-case data (long names, large amounts, flags) in layout specs: kind seed data fits any screen in any engine.
 

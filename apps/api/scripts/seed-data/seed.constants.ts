@@ -35,3 +35,6 @@ export const LEFT_OUT_ACCOUNT_PASSWORD = 'left-out';
 export const RECURRING_ACCOUNT_NAME = 'Recurring Account';
 export const RECURRING_ACCOUNT_EMAIL = 'recurring@test.com';
 export const RECURRING_ACCOUNT_PASSWORD = 'recurring';
+export const HOME_ACCOUNT_NAME = 'Alex Example';
+export const HOME_ACCOUNT_EMAIL = 'home@test.com';
+export const HOME_ACCOUNT_PASSWORD = 'home-owner';

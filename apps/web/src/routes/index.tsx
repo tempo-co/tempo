@@ -1,10 +1,10 @@
 import {createFileRoute} from '@tanstack/react-router';
 
-import {ReportsPage} from '@/features/dashboard/components/reports-page';
+import {HomePage} from '@/features/home/components/home-page';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/')({
-  component: ReportsPage,
+  component: HomePage,
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);
   },

@@ -19,6 +19,12 @@ export const dashboardQueryKeys = {
   /** One month's spending by category with each category's usual by the same day. */
   summary: (month: string, asOf: string) => ['bank-dashboard', 'summary', month, asOf] as const,
   reviewCounts: ['bank-dashboard', 'review-counts'] as const,
+  /** This month's spending day by day against the usual pace, as of a local date. */
+  spendingPace: (asOf: string) => ['bank-dashboard', 'spending-pace', asOf] as const,
+  /** Which of the last 30 days each account's data covers; imports and syncs move it, so it lives here too. */
+  coverage: (asOf: string) => ['bank-dashboard', 'coverage', asOf] as const,
+  /** Home's newest transactions. */
+  recentTransactions: ['bank-dashboard', 'recent-transactions'] as const,
   /** Pages of a month's transactions; kept apart from the Transactions page's lists. */
   monthTransactions: (from: string, to: string) =>
     ['bank-dashboard', 'month-transactions', from, to] as const,

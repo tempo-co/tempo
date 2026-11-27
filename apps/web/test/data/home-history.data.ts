@@ -11,11 +11,13 @@ import type {
   BankTransactionSummary,
   BankTransactionTotals,
   BankTransactionsResponse,
+  DataCoverage,
   MerchantGroupsResponse,
   MerchantRanking,
   RecurringSeries,
   RecurringSeriesLists,
   RecurringSummary,
+  SpendingPace,
 } from '@tempo/contracts';
 
 import {fulfillJson, mockBankConnections, mockJson} from '../utils/api-mocks';
@@ -377,12 +379,83 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
     };
   };
 
+  /** A month's spending added up day by day through `throughDay`: rent on the 1st, the rest on the 15th. */
+  const cumulativeOf = (month: string, throughDay: number) => {
+    const spending = spendingOf(month);
+    const rent = spending.HOUSING_AND_UTILITIES ?? 0;
+    const rest = sum(spending) - rent;
+    return Array.from({length: throughDay}, (_, index) => rent + (index + 1 >= 15 ? rest : 0));
+  };
+
+  /** Home's spending pace at `asOf`, with the data covering every day through it and the usual of up to 6 months. */
+  const paceOf = (asOf: string): SpendingPace => {
+    const month = asOf.slice(0, 7);
+    const throughDay = Number(asOf.slice(8));
+    const days = daysIn(month);
+    const usualMonths = monthsBetween(firstMonth, month).slice(-7, -1);
+    const spent = cumulativeOf(month, throughDay);
+    const usualDaily = Array.from({length: days}, (_, index) => {
+      const day = index + 1;
+      const average =
+        usualMonths.reduce(
+          (total, of) =>
+            total + cumulativeOf(of, Math.min(day, daysIn(of)))[Math.min(day, daysIn(of)) - 1],
+          0,
+        ) / Math.max(1, usualMonths.length);
+      return {day, average: money(average), low: null, high: null};
+    });
+    return {
+      baseCurrency: 'EUR',
+      month,
+      daysInMonth: days,
+      lastCoveredDay: asOf,
+      daily: spent.map((cumulative, index) => ({
+        day: index + 1,
+        spending: money(cumulative - (spent[index - 1] ?? 0)),
+        cumulative: money(cumulative),
+      })),
+      spending: money(spent[throughDay - 1] ?? 0),
+      income: money(month === RUNNING ? 0 : sum(incomeOf(month))),
+      usual:
+        usualMonths.length < 2
+          ? null
+          : {
+              months: usualMonths,
+              daily: usualDaily,
+              byLastCoveredDay: usualDaily[throughDay - 1].average,
+              month: usualDaily[days - 1].average,
+            },
+    };
+  };
+
+  /** One synced account whose data covers the 30 days ending on `asOf`. */
+  const coverageOf = (asOf: string): DataCoverage => {
+    const from = new Date(`${asOf}T00:00:00Z`);
+    from.setUTCDate(from.getUTCDate() - 29);
+    const start = from.toISOString().slice(0, 10);
+    return {
+      from: start,
+      to: asOf,
+      lastCoveredDay: asOf,
+      accounts: [
+        {
+          bankAccountId: '00000000-0000-4000-8000-0000000000a1',
+          source: 'sync',
+          coveredThrough: asOf,
+          ranges: [{from: start, to: asOf}],
+        },
+      ],
+    };
+  };
+
   return {
     trend,
     flow,
     dayEnds,
     totalsBetween,
     summaryOf,
+    paceOf,
+    coverageOf,
     breakdown: {
       year: {
         category: yearly(spendingOf, category),
@@ -558,6 +631,7 @@ export function monthTransactions(
     const day = `${month}-${pad(Math.max(1, 28 - index))}`;
     return {
       id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      date: day,
       transactionDate: day,
       bookingDate: day,
       valueDate: day,
@@ -639,6 +713,12 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
   await page.route('**/bank-transactions/summary?**', (route) =>
     fulfillJson(route, history.summaryOf(params(route).get('month')!, params(route).get('asOf')!)),
   );
+  await page.route('**/bank-transactions/spending-pace?**', (route) =>
+    fulfillJson(route, history.paceOf(params(route).get('asOf')!)),
+  );
+  await page.route('**/bank-connections/coverage?**', (route) =>
+    fulfillJson(route, history.coverageOf(params(route).get('asOf')!)),
+  );
   await page.route('**/bank-transactions/breakdown?**', (route) => {
     const interval = params(route).get('interval') as 'year' | 'month';
     const by = params(route).get('by') as 'category' | 'source';
@@ -681,11 +761,14 @@ export async function mockHomeHistory(
       index: Number(params(route).get('pagination[pageIndex]') ?? 0),
       size: Number(params(route).get('pagination[pageSize]') ?? transactionsPerMonth),
     };
+    // Without a date, the newest transactions: Home's recent list, from last month.
     return fulfillJson(
       route,
-      from
-        ? monthTransactions(from.slice(0, 7), transactionsPerMonth, pagination)
-        : {transactions: [], total: 0},
+      monthTransactions(
+        from ? from.slice(0, 7) : HOME_MONTHS[HOME_MONTHS.length - 2],
+        transactionsPerMonth,
+        pagination,
+      ),
     );
   });
 }

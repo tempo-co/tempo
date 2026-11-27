@@ -38,9 +38,9 @@ Consequences:
 
 - API E2E setup boots the application and runs `seedAccounts` for each spec file. It does not load the full banking dataset: create the rows a spec depends on with `BankingFixtures`.
 - `scripts/seed-data/seed.constants.ts` holds the synthetic accounts. Tests that change account data use the account dedicated to that flow, not the shared `VERIFIED` one; scenarios that need their own banking totals use an isolated user.
-- `npm run db:seed` and API-backed web E2E run the full seed: accounts, banking, own transfers and recurring payments. `apps/web/test/auth.setup.ts` in the web app only logs those accounts in and saves their sessions; it does not seed.
+- `npm run db:seed` and API-backed web E2E run the full seed: accounts, banking, own transfers, recurring payments and the Home owner (`scripts/seed-data/seed-home-data.ts`, a synced and an imported account whose data run out on different days). `apps/web/test/auth.setup.ts` in the web app only logs those accounts in and saves their sessions; it does not seed.
 - `seedBankingData` is a full synthetic dataset with fixed row IDs, not a repeatable per-user fixture factory. Do not make feature assertions depend on its exact contents. Account-deletion E2E uses it to exercise cascades through populated relationships.
-- Data a test counts as a whole goes under its own user (see `scripts/seed-data/seed-own-transfer-data.ts` and `scripts/seed-data/seed-recurring-data.ts`), so default pagination fixtures keep their counts.
+- Data a test counts as a whole goes under its own user (see `scripts/seed-data/seed-own-transfer-data.ts`, `scripts/seed-data/seed-recurring-data.ts` and `scripts/seed-data/seed-home-data.ts`), so default pagination fixtures keep their counts.
 
 ## Reusing test setup
 

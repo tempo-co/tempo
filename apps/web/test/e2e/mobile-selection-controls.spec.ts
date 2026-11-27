@@ -225,19 +225,17 @@ test('touch verification-code entry uses readable digits across the phone field'
   await expectNoHorizontalOverflow(page);
 });
 
-test('Home span choices are finger-sized and select quietly', async ({page}) => {
-  // Home's reads are all answered here; CI's real API would sign the fake session out.
+test('Insights period choices are finger-sized and select quietly', async ({page}) => {
+  // Insights' reads are all answered here; CI's real API would sign the fake session out.
   await mockSyntheticHome(page);
-  await page.goto('/');
-  const spans = page
-    .getByRole('region', {name: 'Where you stand'})
-    .getByRole('radiogroup', {name: 'Span'});
-  const threeYears = spans.getByRole('radio', {name: '3Y', exact: true});
-  await expect(threeYears).toBeVisible();
-  for (const button of await spans.getByRole('radio').all())
+  await page.goto('/insights');
+  const periods = page.getByRole('radiogroup', {name: 'Period'});
+  const sixMonths = periods.getByRole('radio', {name: '6 months', exact: true});
+  await expect(sixMonths).toBeVisible();
+  for (const button of await periods.getByRole('radio').all())
     expect((await boxOf(button)).height).toBeGreaterThanOrEqual(44);
-  await threeYears.tap();
-  await expect(threeYears).toHaveAttribute('aria-checked', 'true');
+  await sixMonths.tap();
+  await expect(sixMonths).toHaveAttribute('aria-checked', 'true');
   expect(await page.evaluate(() => Reflect.get(window, 'selectionHaptics') as number[])).toEqual(
     [],
   );

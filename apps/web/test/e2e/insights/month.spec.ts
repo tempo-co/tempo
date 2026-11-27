@@ -200,7 +200,7 @@ test('arrows step through months in place, and Back returns to where the month w
 }) => {
   await mockSyntheticHome(page);
   await page.goto('/');
-  await expect(homePage.totalBalance).toHaveText('€24,300');
+  await expect(homePage.accountsTotal).toHaveText('€24,300.00');
   await page.goto('/insights/months/2025-01');
   const length = await page.evaluate(() => history.length);
 
@@ -220,7 +220,7 @@ test('arrows step through months in place, and Back returns to where the month w
   await page.goBack();
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('article')).toHaveCount(0);
-  await expect(homePage.totalBalance).toHaveText('€24,300');
+  await expect(homePage.accountsTotal).toHaveText('€24,300.00');
 });
 
 test('a month goes back to Insights, over the period it was opened with', async ({
@@ -229,11 +229,12 @@ test('a month goes back to Insights, over the period it was opened with', async 
 }) => {
   await mockSyntheticHome(page);
   await page.goto('/');
-  await homePage.yearTable.getByRole('link', {name: 'October'}).click();
-  await expect(page).toHaveURL('/insights/months/2026-10');
-  await expect(homePage.monthPage('October 2026')).toBeVisible();
+  // Home's spending pace opens this month over This month.
+  await homePage.paceCard.getByRole('link', {name: 'Insights'}).click();
+  await expect(page).toHaveURL('/insights/months/2026-11?period=month');
+  await expect(homePage.monthPage('November 2026')).toBeVisible();
   await page.getByRole('main').getByRole('link', {name: 'Insights', exact: true}).click();
-  await expect(page).toHaveURL('/insights');
+  await expect(page).toHaveURL('/insights?period=month');
 
   await page.goto('/insights/months/2026-09?period=6m');
   await expect(homePage.monthPage('September 2026')).toBeVisible();

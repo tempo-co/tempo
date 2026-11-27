@@ -1,88 +1,110 @@
 import type {BankConnection} from '@tempo/contracts';
 
-import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
-import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
+import {HOME_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {HOME_CONNECTION, HOME_NOW, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
-import {mockBankConnections, mockJson, routeBankConnectionsApi} from '../../utils/api-mocks';
+import {mockJson} from '../../utils/api-mocks';
 import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
-  test('prompts to connect a bank', async ({page, homePage, freshAccount}) => {
+  test('offers to add data', async ({page, homePage, freshAccount}) => {
     await page.goto('/');
     await expect(homePage.accountEmail).toHaveText(freshAccount.email);
 
     await expect(homePage.emptyStateTitle).toBeVisible();
-    await expect(page.getByRole('main')).toContainText(
-      'where the money went, once one account has synced.',
-    );
-    await homePage.connectBankLink.click();
-    await expect(page).toHaveURL(/\/accounts$/);
+    await homePage.addDataButton.click();
+    await expect(page.getByTestId('add-data-sheet')).toBeVisible();
+  });
+
+  test('ignores connections that never finished authorizing', async ({
+    page,
+    homePage,
+    freshAccount: _account,
+  }) => {
+    await mockSyntheticHome(page, {
+      connections: [
+        {
+          ...HOME_CONNECTION,
+          id: '00000000-0000-4000-8000-0000000000aa',
+          status: 'PENDING_AUTHORIZATION',
+          syncStatus: 'IDLE',
+          bankAccounts: [],
+        },
+      ],
+    });
+    await page.goto('/');
+
+    await expect(homePage.emptyStateTitle).toBeVisible();
   });
 });
 
 test.describe('Home', () => {
-  test.afterEach(async ({page}) => {
-    await page.unrouteAll({behavior: 'wait'});
-  });
-  test.use({storageState: VERIFIED_USER_AUTH_FILE});
+  test.use({storageState: HOME_USER_AUTH_FILE, timezoneId: 'Europe/Amsterdam'});
 
   test.beforeEach(async ({page}) => {
-    await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
+    await page.clock.setFixedTime(new Date('2026-10-20T12:00:00.000Z'));
   });
 
-  test('shows where the seeded owner stands, and requests it while the connections load', async ({
+  test('shows the month against the usual pace up to the last synced day, how far the data runs, and what to check', async ({
     page,
     homePage,
   }) => {
-    let releaseConnections = () => {};
-    const connectionsHeld = new Promise<void>((resolve) => (releaseConnections = resolve));
-    await routeBankConnectionsApi(page, async (route) => {
-      await connectionsHeld;
-      await route.continue();
-    });
-    const historyRequests = [
-      '**/bank-transactions/balance-trend?**',
-      '**/bank-transactions/cash-flow?**',
-      '**/bank-transactions/breakdown?**',
-      '**/bank-transactions/review-counts',
-    ].map((url) => page.waitForRequest(url));
+    await page.goto('/');
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('Good afternoon, Alex');
 
-    try {
-      await page.goto('/');
-      await Promise.all(historyRequests);
-    } finally {
-      releaseConnections();
-    }
+    // The bank last synced on 14 October; the savings file runs to 2 October.
+    await expect(homePage.paceFigure).toHaveText('€1,119');
+    await expect(homePage.paceCard.getByTestId('pace-up-to')).toHaveText(
+      'spent in October, up to 14 Oct',
+    );
+    // April to September, each added up to the 14th, average €1,094.05.
+    await expect(homePage.paceCard.getByTestId('pace-comparison')).toHaveText(
+      '€25 over your usual pace',
+    );
+    await expect(homePage.paceCard).toContainText('Usual month€1,178');
 
-    await expect(homePage.totalBalance).toHaveText(/^€[\d,]+$/);
-    await expect(homePage.yearTable.getByRole('button', {name: /^2026/})).toBeVisible();
-    await expect(page.getByRole('region', {name: 'Spending by category'})).toBeVisible();
-    await expectLoaded(page.getByRole('main'));
+    const data = homePage.card('Your data');
+    await expect(data).toContainText('Your data runs up to 14 Oct');
+    await expect(data).toContainText('Savings');
+    // Both accounts cover 21 September to 2 October, the bank alone up to 14 October, nothing after.
+    await expect(data.getByTestId('coverage-strip')).toHaveAccessibleName(
+      'The last 30 days: 12 covered by every account, 12 by some, 6 by none',
+    );
+
+    await expect(homePage.accountsTotal).toHaveText('€7,584.60');
+
+    const toDo = homePage.card('To do');
+    await expect(toDo).toContainText('Check 2 transactions');
+    await toDo.getByRole('link', {name: 'Check'}).click();
+    await expect(page).toHaveURL(/\/transactions\?needsAttention=true$/);
   });
 
-  test('ignores connections that never finished authorizing', async ({page, homePage}) => {
-    await mockBankConnections(page, [
-      {
-        id: '00000000-0000-4000-8000-0000000000aa',
-        provider: 'enable-banking',
-        aspspName: 'Sample Bank',
-        aspspCountry: 'NL',
-        status: 'PENDING_AUTHORIZATION',
-        consentValidUntil: null,
-        lastSyncedAt: null,
-        lastSuccessfulSyncAt: null,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        lastSyncError: null,
-        nextSyncAt: null,
-        syncStatus: 'IDLE',
-        baseCurrency: null,
-        bankAccounts: [],
-      },
-    ]);
+  test('keeps hidden and reordered cards on this device', async ({page, homePage}) => {
     await page.goto('/');
+    await expect(homePage.paceFigure).toBeVisible();
+    await page.getByRole('button', {name: 'Customize'}).click();
+    await homePage.card('Accounts').getByRole('button', {name: 'Move Accounts up'}).click();
+    await homePage
+      .card('Recent transactions')
+      .getByRole('button', {name: 'Hide Recent transactions'})
+      .click();
+    await expect(homePage.card('Recent transactions')).toHaveCount(0);
+    await expect(page.getByRole('region', {name: 'Customize Home'})).toContainText(
+      'Show Recent transactions',
+    );
+    await page.getByRole('button', {name: 'Done'}).click();
 
-    await expect(homePage.emptyStateTitle).toBeVisible();
+    await page.reload();
+    await expect(homePage.paceFigure).toBeVisible();
+    await expect(homePage.card('Recent transactions')).toHaveCount(0);
+    const main = page.getByRole('main').getByRole('region');
+    await expect(main.first()).toHaveAccessibleName('Spending pace');
+    await expect(main.nth(1)).toHaveAccessibleName('Accounts');
+    await expect(main.nth(2)).toHaveAccessibleName('Top categories this month');
+
+    await page.getByRole('button', {name: 'Customize'}).click();
+    await page.getByRole('button', {name: 'Show Recent transactions'}).click();
+    await expect(homePage.card('Recent transactions')).toBeVisible();
   });
 });
 
@@ -111,7 +133,7 @@ test.describe('Home navigation badges', () => {
       primary.getByRole('link', {name: 'Accounts, a bank needs attention'}),
     ).toBeVisible();
     // A retained expired bank still counts towards the totals.
-    await expect(homePage.totalBalance).toHaveText('€24,300');
+    await expect(homePage.accountsTotal).toHaveText('€48,600.00');
 
     await transactions.click();
     await expect(page).toHaveURL(/\/transactions/);
@@ -210,7 +232,10 @@ test.describe('Home navigation badges', () => {
     });
   }
 
-  test('without anything to check or reconnect, the tabs carry no badge', async ({page}) => {
+  test('without anything to check or reconnect, the tabs carry no badge and To do steps aside', async ({
+    page,
+    homePage,
+  }) => {
     await mockSyntheticHome(page, {
       reviewCounts: {
         needsReview: 0,
@@ -222,7 +247,10 @@ test.describe('Home navigation badges', () => {
     });
     await page.goto('/');
     const primary = page.getByRole('navigation', {name: 'Primary'}).first();
-    await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
+    await expect(homePage.paceFigure).toBeVisible();
+    // With nothing to check and the setup done, To do steps aside.
+    await expect(homePage.card('Your data')).toBeVisible();
+    await expect(homePage.card('To do')).toHaveCount(0);
     await expect(primary.getByRole('link', {name: 'Transactions', exact: true})).toHaveText(
       'Transactions',
     );
@@ -251,8 +279,8 @@ test.describe('Home on a phone', () => {
   test('fits the screen', async ({page, homePage}) => {
     await mockSyntheticHome(page);
     await page.goto('/');
-    await expect(homePage.totalBalance).toHaveText('€24,300');
-    await expect(page.getByRole('region', {name: 'Income by source'})).toBeVisible();
+    await expect(homePage.paceFigure).toHaveText('€1,200');
+    await expect(homePage.accountsTotal).toHaveText('€24,300.00');
     await expectLoaded(page.getByRole('main'));
     await expectNoHorizontalOverflow(page);
   });
