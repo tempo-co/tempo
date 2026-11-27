@@ -4,7 +4,7 @@ import {
 	type BankTransactionBreakdownQuery,
 	type BreakdownDimension,
 	type BreakdownInterval,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {IsIn} from 'class-validator';
 
 import {PeriodRangeQueryDto} from './bank-transaction-cash-flow-query.dto';

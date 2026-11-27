@@ -1,5 +1,5 @@
 import {Body, Controller, Get, Put} from '@nestjs/common';
-import type {ReportingCurrency} from '@tempo/contracts';
+import type {ReportingCurrency} from '@wisp/contracts';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';

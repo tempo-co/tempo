@@ -14,9 +14,11 @@ import {balanceActionOf} from '@/features/file-import/utils/balance-copy';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {useNow} from '@/hooks/use-now';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 import {savedDataStatus} from '@/utils/query-status';
 
 export const Route = createFileRoute('/accounts/$accountId')({
+  head: pageHead('Accounts'),
   component: AccountRoute,
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);

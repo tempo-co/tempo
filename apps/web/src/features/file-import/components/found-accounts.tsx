@@ -1,4 +1,4 @@
-import {BANK_ACCOUNT_ALIAS_MAX_LENGTH, type BankImportPreview} from '@tempo/contracts';
+import {BANK_ACCOUNT_ALIAS_MAX_LENGTH, type BankImportPreview} from '@wisp/contracts';
 import {useId} from 'react';
 
 import {Badge} from '@/components/ui/badge';
@@ -9,7 +9,7 @@ import {formatDateRange, plural} from '../utils/import-format';
 
 /**
  * What Check what we found lists: one block per account the drop goes to, its name in a field to rename it, marked
- * New when the import creates it and Matched when it is already in Tempo, with its rows' count and days.
+ * New when the import creates it and Matched when it is already in Wisp, with its rows' count and days.
  */
 export function FoundAccounts({
   preview,

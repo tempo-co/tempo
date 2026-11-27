@@ -2,7 +2,7 @@
  * Pure money and period math for the summaries. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
-import {type BalanceTrendInterval, MAX_RANGE_PERIODS} from '@tempo/contracts';
+import {type BalanceTrendInterval, MAX_RANGE_PERIODS} from '@wisp/contracts';
 
 import {addDays} from '../banking.utils';
 

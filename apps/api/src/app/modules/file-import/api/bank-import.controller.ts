@@ -22,8 +22,8 @@ import type {
 	BankImportNeverSentRow,
 	BankImportPreview,
 	BankImportSummary,
-} from '@tempo/contracts';
-import {isPickableBankId} from '@tempo/contracts';
+} from '@wisp/contracts';
+import {isPickableBankId} from '@wisp/contracts';
 import {isUUID} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';

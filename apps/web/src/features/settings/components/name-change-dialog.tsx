@@ -1,5 +1,5 @@
 import {zodResolver} from '@hookform/resolvers/zod';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 import {useState} from 'react';
 import {useForm} from 'react-hook-form';
 

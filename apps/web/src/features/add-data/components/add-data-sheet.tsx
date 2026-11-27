@@ -1,4 +1,4 @@
-import type {BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnectionAspsp} from '@wisp/contracts';
 import {ChevronRight, FileUp, Landmark} from 'lucide-react';
 import {
   type Ref,

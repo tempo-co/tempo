@@ -3,7 +3,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import {CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
 import {Logger} from '@nestjs/common';
 import {Throttle, seconds} from '@nestjs/throttler';
-import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@tempo/contracts';
+import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@wisp/contracts';
 import Redis from 'ioredis';
 import {createHash, randomUUID} from 'node:crypto';
 import {AddressInfo, createConnection} from 'node:net';
@@ -307,7 +307,7 @@ describe('Hosted MCP', () => {
 			expect(result.content).toHaveLength(1);
 			const content = result.content[0];
 			if (content.type !== 'text') throw new Error('Expected tool JSON text');
-			// Categories are Tempo's own fixed text, not bank data.
+			// Categories are Wisp's own fixed text, not bank data.
 			return name === 'list_categories' ? JSON.parse(content.text) : bankData(content.text).value;
 		};
 		const rest = async (path: string) =>
@@ -453,7 +453,7 @@ describe('Hosted MCP', () => {
 						content: [
 							{
 								type: 'text',
-								text: 'Tempo API HTTP 404: Resource not found or not accessible to this token.',
+								text: 'Wisp API HTTP 404: Resource not found or not accessible to this token.',
 							},
 						],
 					});
@@ -573,7 +573,7 @@ describe('Hosted MCP', () => {
 						content: [
 							{
 								type: 'text',
-								text: 'Tempo API HTTP 404: Resource not found or not accessible to this token.',
+								text: 'Wisp API HTTP 404: Resource not found or not accessible to this token.',
 							},
 						],
 					});
@@ -647,7 +647,7 @@ describe('Hosted MCP', () => {
 				expect(forbidden).toMatchObject({
 					isError: true,
 					content: [
-						{type: 'text', text: 'Tempo API HTTP 404: Resource not found or not accessible to this token.'},
+						{type: 'text', text: 'Wisp API HTTP 404: Resource not found or not accessible to this token.'},
 					],
 				});
 				const invalidPeriod = await client.callTool({
@@ -656,7 +656,7 @@ describe('Hosted MCP', () => {
 				});
 				expect(invalidPeriod).toMatchObject({
 					isError: true,
-					content: [{type: 'text', text: 'Tempo API HTTP 400: Request refused. Check tool input.'}],
+					content: [{type: 'text', text: 'Wisp API HTTP 400: Request refused. Check tool input.'}],
 				});
 				const strict = await client.callTool({name: 'list_accounts', arguments: {accountId: otherOwner.id}});
 				expect(strict.isError).toBe(true);
@@ -667,7 +667,7 @@ describe('Hosted MCP', () => {
 				try {
 					expect(await client.callTool({name: 'list_accounts', arguments: {}})).toMatchObject({
 						isError: true,
-						content: [{type: 'text', text: 'Tempo API HTTP 500: Tempo API unavailable. Retry later.'}],
+						content: [{type: 'text', text: 'Wisp API HTTP 500: Wisp API unavailable. Retry later.'}],
 					});
 					expect(log).toHaveBeenCalledTimes(1);
 					expect(log).toHaveBeenCalledWith(
@@ -828,7 +828,7 @@ describe('Hosted MCP', () => {
 					for (const authorization of [
 						undefined,
 						'Basic example',
-						'Bearer tempo_pat_invalid',
+						'Bearer wisp_pat_invalid',
 						'Bearer',
 						`Bearer ${token} extra`,
 					]) {

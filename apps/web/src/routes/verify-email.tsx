@@ -1,7 +1,7 @@
 import {useIsMutating, useQuery} from '@tanstack/react-query';
 import {Link, createFileRoute, redirect, useRouter} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 import {Loader} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';

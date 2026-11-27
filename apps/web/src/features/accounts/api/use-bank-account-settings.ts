@@ -4,7 +4,7 @@ import type {
   BankAccountRemoveRequest,
   BankConnection,
   UpdateBankAccountRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {invalidateBankDerivedData} from '@/features/banking/api/invalidate-bank-derived-data';
 import {bankQueryKeys} from '@/features/banking/api/query-keys';

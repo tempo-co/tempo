@@ -1,4 +1,4 @@
-import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_UNCATEGORIZED} from '@wisp/contracts';
 
 import {LoadErrorState} from '@/components/shared/state-message';
 import {Skeleton} from '@/components/ui/skeleton';

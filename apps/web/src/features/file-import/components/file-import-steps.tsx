@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {Check, Columns3, FileX, RotateCw} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
@@ -260,8 +260,8 @@ function ChooseStep({
           {failure && <FailureAlert failure={failure} onRetry={() => onFiles(files)} />}
         </div>
       }
-      // Files kept after a lost connection or a busy bank go again as they are; a file in no layout Tempo knows
-      // has its columns worked out first. A file Tempo cannot read at all offers to tell us the bank.
+      // Files kept after a lost connection or a busy bank go again as they are; a file in no layout Wisp knows
+      // has its columns worked out first. A file Wisp cannot read at all offers to tell us the bank.
       footer={
         mappable && files.length > 0 ? (
           <Button onClick={() => onMapColumns(mappable)}>Work out the columns</Button>
@@ -280,7 +280,7 @@ function ChooseStep({
 }
 
 /**
- * A refusal that means Tempo cannot read the bank's layout: its columns could not be worked out, the owner said the
+ * A refusal that means Wisp cannot read the bank's layout: its columns could not be worked out, the owner said the
  * worked-out ones were not right, or they cannot be worked out on this deployment.
  */
 const cannotReadLayout = (failure: Extract<ImportFailure, {kind: 'refused'}>) =>
@@ -362,7 +362,7 @@ function PreviewStep({
   // Read while the owner chooses; once confirming, the proposal is saved and its list is not read again.
   const bankList = useBankImportBanks(proposal.id, {enabled: !pending});
   const banks = bankList.data ?? NO_BANKS;
-  // Until the owner picks, the choice follows Tempo's guess as the list of banks arrives.
+  // Until the owner picks, the choice follows Wisp's guess as the list of banks arrives.
   const [pickedBank, setPickedBank] = useState<string | null>(null);
   const bankChoice = pickedBank ?? guessedBankChoice(proposal.bankName, banks);
   const [otherBankName, setOtherBankName] = useState(proposal.bankName ?? '');
@@ -373,7 +373,7 @@ function PreviewStep({
       ? otherBankName
       : bankChoice;
   const [currency, setCurrency] = useState(proposal.defaultCurrency);
-  // Why the API refused the name, such as a bank whose own files Tempo reads; cleared as the name changes.
+  // Why the API refused the name, such as a bank whose own files Wisp reads; cleared as the name changes.
   const [bankError, setBankError] = useState<string | null>(null);
   const name = bankName.trim();
 
@@ -398,7 +398,7 @@ function PreviewStep({
   return (
     <Frame
       title='Check the columns'
-      description='These are the first and last transactions of your file, as Tempo would import them.'
+      description='These are the first and last transactions of your file, as Wisp would import them.'
       body={
         <LayoutPreview
           proposal={proposal}

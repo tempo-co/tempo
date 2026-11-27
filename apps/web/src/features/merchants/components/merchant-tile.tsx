@@ -1,4 +1,4 @@
-import type {MerchantGroupListItem} from '@tempo/contracts';
+import type {MerchantGroupListItem} from '@wisp/contracts';
 
 import {MerchantLogoTile} from '@/features/banking/components/merchant-logo-tile';
 

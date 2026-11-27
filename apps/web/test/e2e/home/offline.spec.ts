@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {
@@ -243,6 +243,6 @@ test('logout removes saved Home data and prevents an offline reload from reopeni
   expect(await readCache(page)).toBe(null);
   await context.setOffline(true);
   await page.goto('/insights/months/2026-09');
-  await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
+  await expect(page.getByRole('heading', {name: "Can't reach Wisp"})).toBeVisible();
   await expect(page.getByRole('article')).toHaveCount(0);
 });

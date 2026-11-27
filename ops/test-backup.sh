@@ -351,6 +351,8 @@ test_every_server_unit_sends_a_failure_email() {
     local unit missing=''
     for unit in "$OPS_DIR"/systemd/wisp-*.service; do
         [[ $unit == */wisp-failure-email@.service ]] && continue
+        # A user unit on the staging machine, which has no failure-email unit.
+        [[ $unit == */wisp-staging-docker.service ]] && continue
         grep -qx 'OnFailure=wisp-failure-email@%n.service' "$unit" || missing+=" $(basename "$unit")"
     done
     [[ -z $missing ]] || fail "units without the failure email:$missing"

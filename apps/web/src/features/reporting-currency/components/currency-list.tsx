@@ -1,4 +1,4 @@
-import type {ReportingCurrency} from '@tempo/contracts';
+import type {ReportingCurrency} from '@wisp/contracts';
 import {Check, Search} from 'lucide-react';
 import {useState} from 'react';
 

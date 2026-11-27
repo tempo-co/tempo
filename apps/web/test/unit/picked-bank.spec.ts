@@ -1,6 +1,6 @@
 // Pure modules' contracts: no page, so this uses Playwright's own `test` rather than the app fixtures.
 import {expect, test} from '@playwright/test';
-import {BANK_LIST, type Bank} from '@tempo/contracts';
+import {BANK_LIST, type Bank} from '@wisp/contracts';
 
 import {catalogMatch} from '../../src/features/file-import/utils/picked-bank';
 

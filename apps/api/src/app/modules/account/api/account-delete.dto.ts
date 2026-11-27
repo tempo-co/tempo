@@ -1,4 +1,4 @@
-import type {AccountDeleteRequest} from '@tempo/contracts';
+import type {AccountDeleteRequest} from '@wisp/contracts';
 import {IsNotEmpty, IsString, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';

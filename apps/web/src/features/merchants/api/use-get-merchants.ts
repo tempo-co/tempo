@@ -3,7 +3,7 @@ import {
   MERCHANT_LIST_DEFAULT_LIMIT,
   type MerchantGroupsQuery,
   type MerchantGroupsResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

@@ -1,4 +1,4 @@
-import type {CreditDebitIndicator} from '@tempo/contracts';
+import type {CreditDebitIndicator} from '@wisp/contracts';
 
 /** Refusals a parser can reach on its own; the parent adds size, timeout and account refusals. */
 export const PARSE_REFUSAL_CODES = [

@@ -1,5 +1,5 @@
 import {Body, Controller, Delete, Get, HttpCode, Patch, Put, Req} from '@nestjs/common';
-import type {NotificationSettings} from '@tempo/contracts';
+import type {NotificationSettings} from '@wisp/contracts';
 import {Request} from 'express';
 
 import {Account} from '@modules/account/account.entity';

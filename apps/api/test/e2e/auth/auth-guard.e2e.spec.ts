@@ -221,7 +221,7 @@ describe('AuthGuard - protected routes', () => {
 	});
 
 	it.each(TOKEN_DENIED_ROUTES)('%s %s rejects an invalid personal token with 401', async (method, path) => {
-		await send(request(httpServer)[method](path).auth('tempo_pat_invalid', {type: 'bearer'}), method).expect(401);
+		await send(request(httpServer)[method](path).auth('wisp_pat_invalid', {type: 'bearer'}), method).expect(401);
 	});
 
 	it.each([...SESSION_ROUTES, ...VERIFIED_ROUTES, ...MCP_TOKEN_ROUTES])(

@@ -1,4 +1,4 @@
-import {BankTransaction} from '@tempo/contracts';
+import {BankTransaction} from '@wisp/contracts';
 import {ArrowDownLeft, ArrowUpRight, CalendarDays, CreditCard, FileQuestion, X} from 'lucide-react';
 import {type ReactNode, useEffect, useRef, useState} from 'react';
 

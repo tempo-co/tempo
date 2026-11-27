@@ -1,6 +1,6 @@
 import {Body, Controller, Delete, Get, HttpCode, Patch} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
-import type {Account as AccountResponse, MessageResponse} from '@tempo/contracts';
+import type {Account as AccountResponse, MessageResponse} from '@wisp/contracts';
 
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 import {SkipEmailVerification} from '@modules/auth/decorators/skip-email-verification.decorator';

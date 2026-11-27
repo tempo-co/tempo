@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {RecurringSeriesLists, RecurringSeriesQuery} from '@tempo/contracts';
+import type {RecurringSeriesLists, RecurringSeriesQuery} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

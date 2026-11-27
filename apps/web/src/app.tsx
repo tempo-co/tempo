@@ -51,10 +51,10 @@ export function App() {
             tone='error'
             titleAs='h1'
             icon={navigator.onLine ? CloudOff : WifiOff}
-            title="Can't reach Tempo"
+            title="Can't reach Wisp"
             description={
               navigator.onLine
-                ? "Tempo isn't answering right now. Try again in a moment."
+                ? "Wisp isn't answering right now. Try again in a moment."
                 : "You're offline. Connect to the internet, then try again."
             }
           >

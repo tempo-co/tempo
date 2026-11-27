@@ -1,11 +1,11 @@
 import {HttpException, HttpStatus} from '@nestjs/common';
-import type {BankImportAccountQuestion, BankImportError, BankImportErrorCode} from '@tempo/contracts';
+import type {BankImportAccountQuestion, BankImportError, BankImportErrorCode} from '@wisp/contracts';
 
 const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string}> = {
 	unsupported_format: {
 		status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
 		message:
-			'This file type is not supported yet. Export a CAMT.053, MT940 or OFX statement, or one of the bank exports Tempo reads.',
+			'This file type is not supported yet. Export a CAMT.053, MT940 or OFX statement, or one of the bank exports Wisp reads.',
 	},
 	layout_not_recognized: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -13,20 +13,20 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 	},
 	layout_unknown: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
-		message: 'This file holds a table, but not in a layout Tempo knows.',
+		message: 'This file holds a table, but not in a layout Wisp knows.',
 	},
 	layout_not_mappable: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
-		message: "Tempo couldn't work out this file's columns. Nothing was imported.",
+		message: "Wisp couldn't work out this file's columns. Nothing was imported.",
 	},
 	mapper_unavailable: {
 		status: HttpStatus.SERVICE_UNAVAILABLE,
-		message: "Tempo can't work out file columns right now. This file isn't supported yet.",
+		message: "Wisp can't work out file columns right now. This file isn't supported yet.",
 	},
 	// A typed refusal, not a 429: the web answers every 429 as the API's general rate limit.
 	mapper_limit_reached: {
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
-		message: 'Tempo has worked out the columns of 5 files in the last 24 hours. Try again later.',
+		message: 'Wisp has worked out the columns of 5 files in the last 24 hours. Try again later.',
 	},
 	layout_proposal_expired: {
 		status: HttpStatus.GONE,

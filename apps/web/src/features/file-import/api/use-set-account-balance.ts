@@ -1,5 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {BankAccount, BankConnection, SetBankAccountBalanceRequest} from '@tempo/contracts';
+import type {BankAccount, BankConnection, SetBankAccountBalanceRequest} from '@wisp/contracts';
 
 import {bankQueryKeys} from '@/features/banking/api/query-keys';
 import {bankConnectionsQueryOptions} from '@/features/banking/api/use-get-all-bank-connections';

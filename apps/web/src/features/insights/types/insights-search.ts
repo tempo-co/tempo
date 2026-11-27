@@ -1,4 +1,4 @@
-import {MERCHANT_GROUP_ID_PATTERN} from '@tempo/contracts';
+import {MERCHANT_GROUP_ID_PATTERN} from '@wisp/contracts';
 import {z} from 'zod';
 
 import {PERIOD_PATTERN} from '../utils/insights-period';

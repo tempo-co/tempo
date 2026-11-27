@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankTransactionCategory} from '@tempo/contracts';
+import type {BankTransactionCategory} from '@wisp/contracts';
 import {EntityManager, Raw, Repository} from 'typeorm';
 
 import {BankTransaction} from '../bank-transaction.entity';

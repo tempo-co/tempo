@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import type {RecurringSeriesLists} from '@tempo/contracts';
+import type {RecurringSeriesLists} from '@wisp/contracts';
 
 import {RECURRING_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, APP_ORIGIN_HEADERS, expect, test} from '../../fixtures';

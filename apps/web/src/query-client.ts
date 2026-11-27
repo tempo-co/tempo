@@ -5,7 +5,7 @@ import {
   QueryClient,
   type QueryKey,
 } from '@tanstack/react-query';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 
 import {
   CURRENT_ACCOUNT_KEY,
@@ -87,7 +87,7 @@ const handleQueryError = (error: Error, query: Query<unknown, unknown, unknown, 
     query.state.data
   ) {
     // A saved account this page load never confirmed is not on screen yet, unless it was shown while
-    // Tempo was unreachable; if not, the route decides.
+    // Wisp was unreachable; if not, the route decides.
     if (query.state.dataUpdatedAt < PAGE_LOADED_AT && !wasSavedSessionShown())
       dropSavedData(queryClient);
     else signOut();

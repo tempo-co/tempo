@@ -34,7 +34,7 @@ export type MerchantSiteNetwork = {
 
 const MAX_REDIRECTS = 3;
 const TIMEOUT_MS = 8000;
-const USER_AGENT = 'Mozilla/5.0 (compatible; TempoMerchantLogo/1.0)';
+const USER_AGENT = 'Mozilla/5.0 (compatible; WispMerchantLogo/1.0)';
 
 /** An https URL on port 443 with a DNS hostname: no credentials, IP literals or other schemes. */
 export function toPublicHttpsUrl(input: string, base?: string): URL {

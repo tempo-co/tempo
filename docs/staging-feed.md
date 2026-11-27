@@ -36,11 +36,11 @@ Staging fetches over SSH as `wisp-staging-feed`, a system account whose only acc
 On the laptop, as the staging user (the secret key stays there):
 
 ```bash
-cd ~/.config/tempo-staging
+cd ~/.config/wisp-staging
 install -d -m 700 feed-gnupg feed-ssh
-gpg --homedir feed-gnupg --batch --passphrase '' --quick-gen-key 'Tempo staging feed <staging-feed@example.invalid>' future-default default never
+gpg --homedir feed-gnupg --batch --passphrase '' --quick-gen-key 'Wisp staging feed <staging-feed@example.invalid>' future-default default never
 gpg --homedir feed-gnupg --armor --export staging-feed@example.invalid >staging-feed.pub.asc
-ssh-keygen -t ed25519 -N '' -C tempo-staging-feed -f feed-ssh/id_ed25519
+ssh-keygen -t ed25519 -N '' -C wisp-staging-feed -f feed-ssh/id_ed25519
 ```
 
 Copy `staging-feed.pub.asc` and the SSH public key (feed-ssh/id_ed25519.pub, as staging-feed-ssh.pub) to the server. There, as the deploy user, after `sudo ops/install.sh production`:
@@ -60,9 +60,9 @@ sudo systemctl enable --now wisp-staging-copy.timer && sudo systemctl start wisp
 Back on the laptop, pin the server's host key (check its fingerprint against the server's) and name the feed account:
 
 ```bash
-cd ~/.config/tempo-staging
+cd ~/.config/wisp-staging
 ssh-keyscan -t ed25519 <server tailnet name> >feed-ssh/known_hosts
 printf 'STAGING_FEED_SSH=wisp-staging-feed@<server tailnet name>\n' >feed.env
 ```
 
-The next `tempo-deploy staging` that changes an image restores from the server's copy.
+The next `wisp-deploy staging` that changes an image restores from the server's copy.

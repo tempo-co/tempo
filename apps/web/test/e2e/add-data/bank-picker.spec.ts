@@ -1,5 +1,5 @@
 import type {Page, Route} from '@playwright/test';
-import {BANK_LIST, type CreateBankRequest, OTHER_BANK_EXPORT_TEXT} from '@tempo/contracts';
+import {BANK_LIST, type CreateBankRequest, OTHER_BANK_EXPORT_TEXT} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';
@@ -167,7 +167,7 @@ test.describe('the bank picker in Add data', () => {
     await sheet.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
     await sheet.getByRole('button', {name: 'Work out the columns'}).click();
     await expect(sheet.getByRole('alert')).toContainText(
-      "Tempo couldn't work out this file's columns",
+      "Wisp couldn't work out this file's columns",
     );
     expect(sentForm(api.previews[0]).fields).toEqual({bankId: 'other'});
     expect(sentForm(api.proposals[0]).fields).toEqual({bankId: 'other'});

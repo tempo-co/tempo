@@ -98,7 +98,7 @@ test.describe('Add data', () => {
     await expect(page.getByTestId('bank-import-row')).toContainText('3 new');
   });
 
-  test('a file Tempo cannot read is refused inside the sheet, and nothing is imported', async ({
+  test('a file Wisp cannot read is refused inside the sheet, and nothing is imported', async ({
     page,
     freshAccount: _account,
   }) => {
@@ -108,7 +108,7 @@ test.describe('Add data', () => {
 
     const sheet = page.getByTestId('add-data-sheet');
     const alert = sheet.getByRole('alert');
-    await expect(alert).toContainText("Tempo can't read this file");
+    await expect(alert).toContainText("Wisp can't read this file");
     await expect(alert).toContainText('Nothing was imported.');
     await sheet.getByRole('button', {name: 'Close'}).click();
 

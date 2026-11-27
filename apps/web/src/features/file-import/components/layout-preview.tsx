@@ -3,7 +3,7 @@ import {
   type BankImportLayoutPreview,
   type BankImportLayoutPreviewRow,
   type BankImportLayoutProposal,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {CalendarCheck, FileText} from 'lucide-react';
 import {useId} from 'react';
 
@@ -76,7 +76,7 @@ export function LayoutPreview({
     <div className='grid grid-cols-1 gap-5' data-testid='bank-import-layout-preview'>
       <section aria-labelledby='bank-import-layout-columns' className='grid grid-cols-1 gap-1.5'>
         <h3 id='bank-import-layout-columns' className='text-label text-muted-foreground'>
-          How Tempo reads it
+          How Wisp reads it
         </h3>
         <p className='text-body text-pretty wrap-anywhere'>{mappingInWords(mapping).join(' · ')}</p>
       </section>

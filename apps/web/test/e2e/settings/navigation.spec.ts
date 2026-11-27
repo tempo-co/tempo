@@ -83,7 +83,7 @@ async function expectLaterRows(nav: Locator) {
 }
 
 test.describe('Settings navigation', () => {
-  test('on desktop, Settings opens Profile and every section is at its address and in the list', async ({
+  test('on desktop, Settings opens Profile, every section is at its address and in the list, and the official addresses are under it', async ({
     page,
   }) => {
     await page.setViewportSize({width: 1440, height: 900});
@@ -114,6 +114,11 @@ test.describe('Settings navigation', () => {
     // Account's earlier address opens Profile.
     await page.goto('/settings/account');
     await expect(page).toHaveURL(/\/settings\/profile$/);
+
+    // Under the list, Wisp's official addresses.
+    await page.getByRole('link', {name: 'Official addresses'}).click();
+    await expect(page).toHaveURL(/\/official$/);
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('Official addresses');
   });
 
   test('on a phone, Settings is a list to tap into, with a way back', async ({page}) => {

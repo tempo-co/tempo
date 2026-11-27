@@ -2,7 +2,7 @@ import {
 	PERSONAL_ACCESS_TOKEN_LIFETIMES,
 	type PersonalAccessTokenCreateRequest,
 	type PersonalAccessTokenLifetime,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Transform} from 'class-transformer';
 import {IsIn, IsString, Length, ValidateIf} from 'class-validator';
 

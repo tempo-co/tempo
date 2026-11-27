@@ -7,7 +7,7 @@ import type {
   BankTransactionCategoryImpact,
   BankTransactionDayTotals,
   BankTransactionTotals,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';

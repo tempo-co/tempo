@@ -2,7 +2,7 @@ import {
   BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
   BANK_TRANSACTION_UNCATEGORIZED,
   type BankTransactionCategoryFilterValue,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {parse} from 'date-fns';
 
 import type {BankTransactionSearchParams} from '@/features/banking/types/bank-transaction';

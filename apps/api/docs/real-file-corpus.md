@@ -7,11 +7,11 @@ The corpus lives in the private repository tempo-co/tempo-import-corpus: public,
 ## Running it
 
 ```sh
-TEMPO_IMPORT_CORPUS=/path/to/corpus npm --prefix apps/api run test:corpus
-TEMPO_IMPORT_CORPUS=/path/to/corpus npm --prefix apps/api run test:corpus -- -t pl-mbank   # one file
+WISP_IMPORT_CORPUS=/path/to/corpus npm --prefix apps/api run test:corpus
+WISP_IMPORT_CORPUS=/path/to/corpus npm --prefix apps/api run test:corpus -- -t pl-mbank   # one file
 ```
 
-Point it at a clone of the corpus repository. It takes seconds. Without `TEMPO_IMPORT_CORPUS` it passes with a skip message. CI runs it as `API real-file corpus` (`docs/ci-and-images.md`). Its output is counts plus the id and problem of each failing file, never a row's content, since CI logs are public.
+Point it at a clone of the corpus repository. It takes seconds. Without `WISP_IMPORT_CORPUS` it passes with a skip message. CI runs it as `API real-file corpus` (`docs/ci-and-images.md`). Its output is counts plus the id and problem of each failing file, never a row's content, since CI logs are public.
 
 ## What it checks
 
@@ -28,11 +28,11 @@ It fails when a verified bank has no passing file read by one of the readers the
 
 - corpus.json: one entry per file, with its id, path and bank id (a `BANK_LIST` id, or the id a later layout will use), and under `ownerProven` the verified banks proven only on the owner's own export, which never enters the corpus: the check names each instead of requiring a file;
 - files/: the files, as published apart from the repairs SOURCES.md records;
-- truth/: one truth file per entry, written by tools/truth.py from readers that share no code with Tempo (Python's csv module with a hand-written column spec per CSV file; readers written from the CAMT, MT940 and OFX specifications);
+- truth/: one truth file per entry, written by tools/truth.py from readers that share no code with Wisp (Python's csv module with a hand-written column spec per CSV file; readers written from the CAMT, MT940 and OFX specifications);
 - SOURCES.md: per file its bank, source, licence, why it is included and any repair. A file damaged only by its anonymisation or publishing (hand-edited balances, invalid IBAN check digits, a garbled header, a line a sample repository added) is kept with only that damage repaired; a row the bank wrote is never changed beyond that.
 
-Adding a bank's file: copy it in, add its entry (and a column spec for a CSV file), run tools/truth.py for it, read the truth against the file by eye, add its SOURCES.md row, run the check, then open a PR on the corpus repository. CI reads the corpus's `main`, so a change that alters a file's truth together with Tempo's readers merges in the same sitting as the Tempo PR, corpus first.
+Adding a bank's file: copy it in, add its entry (and a column spec for a CSV file), run tools/truth.py for it, read the truth against the file by eye, add its SOURCES.md row, run the check, then open a PR on the corpus repository. CI reads the corpus's `main`, so a change that alters a file's truth together with Wisp's readers merges in the same sitting as the Wisp PR, corpus first.
 
 ## Mapper rerun
 
-`TEMPO_IMPORT_CORPUS_MAPPER=subscription` also asks the column mapper to map each CSV file and compares the layout's rows with the truth. It calls the local `claude` CLI on the signed-in subscription, with `ANTHROPIC_API_KEY` removed, never the paid API, and only when set by hand: each run costs model calls. `FILE_IMPORT_MAPPER_MODEL` picks the model.
+`WISP_IMPORT_CORPUS_MAPPER=subscription` also asks the column mapper to map each CSV file and compares the layout's rows with the truth. It calls the local `claude` CLI on the signed-in subscription, with `ANTHROPIC_API_KEY` removed, never the paid API, and only when set by hand: each run costs model calls. `FILE_IMPORT_MAPPER_MODEL` picks the model.

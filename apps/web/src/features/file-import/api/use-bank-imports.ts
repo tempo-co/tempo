@@ -1,5 +1,5 @@
 import {type QueryClient, queryOptions, useQuery} from '@tanstack/react-query';
-import type {BankImportList, BankImportSummary} from '@tempo/contracts';
+import type {BankImportList, BankImportSummary} from '@wisp/contracts';
 
 import {invalidateBankDerivedData} from '@/features/banking/api/invalidate-bank-derived-data';
 import {bankQueryKeys} from '@/features/banking/api/query-keys';
@@ -49,7 +49,7 @@ export function useBankImports() {
         : error instanceof HttpError && isApiServerError(error.status, error.body)
           ? 'on'
           : 'unknown';
-  // Whether a table in no layout Tempo knows can have its columns worked out.
+  // Whether a table in no layout Wisp knows can have its columns worked out.
   const mapper = list?.mapper ?? false;
   return {data, error, isError, isFetching, refetch, state, mapper};
 }

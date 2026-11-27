@@ -61,7 +61,7 @@ export function AccountDeleteDialog({children}: AccountDeleteDialogProps) {
         <ResponsiveDialogHeader className='text-start'>
           <ResponsiveDialogTitle>Delete account</ResponsiveDialogTitle>
           <ResponsiveDialogDescription className='pt-2'>
-            This permanently deletes your Tempo account and all of its bank connections, bank
+            This permanently deletes your Wisp account and all of its bank connections, bank
             accounts and transaction history. This can&apos;t be undone.
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>

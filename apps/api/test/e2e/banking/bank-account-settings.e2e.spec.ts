@@ -4,7 +4,7 @@ import type {
 	BankConnection as BankConnectionResponse,
 	BankTransaction as BankTransactionResponse,
 	BankTransactionsResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
 

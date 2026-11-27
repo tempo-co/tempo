@@ -2,7 +2,7 @@ import type {
   BankImportNeverSentKind,
   BankImportNeverSentRow,
   BankImportSummary,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {plural} from './import-format';
 
@@ -45,7 +45,7 @@ export const NEVER_SENT_COPY: Record<
         ? 'Added back every row your bank never sent'
         : `Removed: ${plural(count, 'row')} your bank never sent`,
     intro:
-      "Your bank sent every transaction for these days, and these weren't among them, so Tempo removed the file's copies. Add back any you know are real.",
+      "Your bank sent every transaction for these days, and these weren't among them, so Wisp removed the file's copies. Add back any you know are real.",
     loading: 'Loading the removed rows your bank never sent',
     add: 'Add back',
     adding: 'Adding back…',

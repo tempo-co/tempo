@@ -1,5 +1,5 @@
 import {useQueryClient} from '@tanstack/react-query';
-import type {PushSubscriptionRegistration} from '@tempo/contracts';
+import type {PushSubscriptionRegistration} from '@wisp/contracts';
 import {useEffect} from 'react';
 
 import {
@@ -20,9 +20,9 @@ import {
 
 /**
  * Subscribes this browser again without asking when notifications are still allowed but its subscription is gone
- * (clearing site data on Android removes the subscription and keeps the permission). It runs once Tempo answers with
+ * (clearing site data on Android removes the subscription and keeps the permission). It runs once Wisp answers with
  * the alert settings, and again when bank alerts are turned on, but not for a device that was turned off. Only a
- * confirmed session on a device that could be restored asks Tempo for the settings, once per app open, so other
+ * confirmed session on a device that could be restored asks Wisp for the settings, once per app open, so other
  * devices, and the moment logout clears the session, read nothing. Failures stay silent and leave the device off, so
  * Allow notifications still works. An attempt that logout or bank alerts going off interrupts registers nothing and
  * ends any subscription it got.
@@ -55,7 +55,7 @@ export function useRestoreDeviceSubscription(confirmed: boolean) {
       if (isStopped()) return;
       const registration = await subscribeAllowedDevice(publicKey, isStopped);
       if (!isStopped()) {
-        // Settings shows the device as on while Tempo registers it, so Allow is not offered meanwhile.
+        // Settings shows the device as on while Wisp registers it, so Allow is not offered meanwhile.
         queryClient.setQueryData(DEVICE_KEY, registration.endpoint);
         const registered = await api
           .put(SUBSCRIPTIONS, registration satisfies PushSubscriptionRegistration, {quiet: true})

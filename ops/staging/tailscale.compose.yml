@@ -1,27 +1,27 @@
-# Gives staging its own tailnet device (https://tempo-staging.<tailnet>.ts.net) for testing from
-# other tailnet devices such as a phone. Installed to ~/.config/tempo-staging/tailscale.compose.yml
+# Gives staging its own tailnet device (https://wisp-staging.<tailnet>.ts.net) for testing from
+# other tailnet devices such as a phone. Installed to ~/.config/wisp-staging/tailscale.compose.yml
 # by `ops/install.sh staging` and run on the staging rootless daemon. The node is logged in once and
 # keeps its identity in the state volume, so no auth key is passed after that. Separate project, so
 # staging deploys never recreate it unless its pinned image changes.
-name: tempo-staging-tailscale
+name: wisp-staging-tailscale
 
 services:
   tailscale:
     image: tailscale/tailscale:v1.104.7@sha256:72c1e19e0aedca96b8533bbb0b4368564410ff20b17e53b804eb6c1f04a31be4
-    hostname: tempo-staging
+    hostname: wisp-staging
     restart: unless-stopped
     # Userspace networking needs no capabilities.
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
     environment:
-      TS_HOSTNAME: tempo-staging
+      TS_HOSTNAME: wisp-staging
       TS_STATE_DIR: /var/lib/tailscale
       TS_SERVE_CONFIG: /config/serve.json
       TS_USERSPACE: 'true'
       TS_EXTRA_ARGS: --accept-dns=false
     volumes:
-      - tempo_staging_tailscale_state:/var/lib/tailscale
+      - wisp_staging_tailscale_state:/var/lib/tailscale
       - ./tailscale-serve.json:/config/serve.json:ro
     networks:
       tailscale:
@@ -38,8 +38,8 @@ services:
 
 networks:
   tailscale:
-    name: tempo-staging-tailscale
+    name: wisp-staging-tailscale
     external: true
 
 volumes:
-  tempo_staging_tailscale_state:
+  wisp_staging_tailscale_state:

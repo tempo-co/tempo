@@ -48,14 +48,14 @@ if (!('locks' in navigator)) {
       /* The router loads the chunk again, and reloads the page if it is gone. */
     });
   // Without a saved account this browser is often signed out (new, or its data was cleared), so the
-  // session check comes first. When Tempo answers that there is no session, it renders at once and
+  // session check comes first. When Wisp answers that there is no session, it renders at once and
   // the router shows login. Otherwise the early result is dropped and the start continues as with a
   // saved account: App checks the session itself once the page's code has loaded.
   const loadInitialPageForSession = async () => {
     queryClient.removeQueries({queryKey: CURRENT_ACCOUNT_KEY, exact: true});
     await loadInitialPage();
   };
-  // Offline, the check would wait for a connection; App shows that Tempo cannot be reached instead.
+  // Offline, the check would wait for a connection; App shows that Wisp cannot be reached instead.
   const ready =
     hasSavedAccount() || !onlineManager.isOnline()
       ? loadInitialPage()

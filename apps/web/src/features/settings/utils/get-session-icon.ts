@@ -1,4 +1,4 @@
-import type {Session} from '@tempo/contracts';
+import type {Session} from '@wisp/contracts';
 import {Monitor, Smartphone, Tablet, TvMinimal} from 'lucide-react';
 
 import Chrome from '@/assets/icons/browsers/chrome';

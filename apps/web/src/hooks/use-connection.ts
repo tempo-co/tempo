@@ -7,12 +7,12 @@ onlineManager.setOnline(navigator.onLine);
 const subscribe = (listener: () => void) => onlineManager.subscribe(listener);
 const getSnapshot = () => onlineManager.isOnline();
 
-/** Whether Tempo answered its most recent request. */
+/** Whether Wisp answered its most recent request. */
 export function useIsOnline() {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
-/** Tracks reachability and probes Tempo until it answers again. Mount once, at the app root. */
+/** Tracks reachability and probes Wisp until it answers again. Mount once, at the app root. */
 export function useConnection() {
   const isOnline = useIsOnline();
   useEffect(() => {

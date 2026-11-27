@@ -6,8 +6,10 @@ import {type InsightsNavigation, InsightsPage} from '@/features/insights/compone
 import {insightsSearchSchema} from '@/features/insights/types/insights-search';
 import {periodSearch} from '@/features/insights/utils/insights-links';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 
 export const Route = createFileRoute('/insights/')({
+  head: pageHead('Insights'),
   component: Insights,
   validateSearch: zodValidator(insightsSearchSchema),
   beforeLoad: ({context}) => {

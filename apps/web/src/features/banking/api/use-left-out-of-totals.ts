@@ -4,7 +4,7 @@ import type {
   BankTransactionBulkLeftOutOfTotalsResult,
   BankTransactionBulkLeftOutOfTotalsUpdate,
   BankTransactionLeftOutOfTotalsUpdate,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api, wasToasted} from '@/utils/api';

@@ -1,4 +1,4 @@
-import type {BankTransactionCategory, BankTransactionCategoryImpact} from '@tempo/contracts';
+import type {BankTransactionCategory, BankTransactionCategoryImpact} from '@wisp/contracts';
 import {createContext, useContext} from 'react';
 
 /** A category picked for a transaction whose preview found other payments it could move too. */

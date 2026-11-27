@@ -1,7 +1,7 @@
 import {
   BANK_TRANSACTION_CATEGORIZATION_SOURCES,
   BankTransactionCategorizationSource,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';
 import {useBankTransactionArrayFilter} from '@/hooks/use-bank-transaction-array-filter';

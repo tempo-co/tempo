@@ -1,4 +1,4 @@
-/** Whether Tempo runs as an installed app (from the Home Screen or the app list) rather than in a browser tab. */
+/** Whether Wisp runs as an installed app (from the Home Screen or the app list) rather than in a browser tab. */
 export function isStandalone() {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -24,7 +24,7 @@ const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((listener) => listener());
 
 /**
- * Keeps the browser's install event for Tempo's own Install buttons instead of the browser's banner. Called once at
+ * Keeps the browser's install event for Wisp's own Install buttons instead of the browser's banner. Called once at
  * start-up, because the event fires early and only once per page.
  */
 export function keepInstallPrompt() {
@@ -47,7 +47,7 @@ export function subscribeInstallPrompt(listener: () => void) {
 
 /** The kept install event, null once used or before the browser offers one. */
 export const getInstallPrompt = () => installPrompt;
-/** Whether Tempo was installed from this page. */
+/** Whether Wisp was installed from this page. */
 export const getInstalledHere = () => installedHere;
 
 /** Opens the browser's own install dialog; the event is spent either way. */

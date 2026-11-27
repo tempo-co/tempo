@@ -1,4 +1,4 @@
-import type {Session} from '@tempo/contracts';
+import type {Session} from '@wisp/contracts';
 
 export const UNKNOWN = 'Unknown';
 const DEFAULT_DATE = new Date(0).toISOString();

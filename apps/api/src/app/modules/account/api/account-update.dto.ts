@@ -1,4 +1,4 @@
-import type {AccountUpdateRequest} from '@tempo/contracts';
+import type {AccountUpdateRequest} from '@wisp/contracts';
 import {IsString, Length, ValidateIf} from 'class-validator';
 
 import {Account} from '../account.entity';

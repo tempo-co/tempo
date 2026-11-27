@@ -1,4 +1,4 @@
-import type {OwnTransferEvidence, OwnTransferOverride} from '@tempo/contracts';
+import type {OwnTransferEvidence, OwnTransferOverride} from '@wisp/contracts';
 
 import type {BankGroup} from '../bank-group';
 import {extractStructuredCounterpartyName, normalizeBankTransactionText} from '../bank-transaction-display';

@@ -1,4 +1,4 @@
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {FileUp} from 'lucide-react';
 import {type MouseEvent, useState} from 'react';
 

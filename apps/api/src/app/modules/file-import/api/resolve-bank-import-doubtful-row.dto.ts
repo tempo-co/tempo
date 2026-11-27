@@ -2,7 +2,7 @@ import {
 	BANK_IMPORT_DOUBTFUL_DECISIONS,
 	BankImportDoubtfulDecision,
 	ResolveBankImportDoubtfulRowRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {IsIn, IsUUID, ValidateIf} from 'class-validator';
 
 export class ResolveBankImportDoubtfulRowDto implements ResolveBankImportDoubtfulRowRequest {

@@ -1,4 +1,4 @@
-import {BANK_IMPORT_DROP_LIMITS} from '@tempo/contracts';
+import {BANK_IMPORT_DROP_LIMITS} from '@wisp/contracts';
 
 import {MAX_ARCHIVE_ENTRIES, MAX_DROP_BYTES, MAX_FILES_PER_DROP, MAX_FILE_BYTES} from './parse-limits';
 

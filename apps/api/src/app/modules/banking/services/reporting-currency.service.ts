@@ -1,5 +1,5 @@
 import {BadRequestException, Injectable, Logger} from '@nestjs/common';
-import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
+import {REPORTING_CURRENCIES, type ReportingCurrency} from '@wisp/contracts';
 import {DataSource, EntityManager} from 'typeorm';
 
 import {dateInAppTimeZone} from '@core/time/app-time-zone';
@@ -35,12 +35,12 @@ const SUGGESTION_SQL = `
 /**
  * The owner's reporting currency: the one currency every combined total is in.
  *
- * - While every active account holds one currency, Tempo uses it (`AUTOMATIC`), as soon as the accounts are known,
+ * - While every active account holds one currency, Wisp uses it (`AUTOMATIC`), as soon as the accounts are known,
  *   and follows it while the owner has not chosen one.
  * - Once accounts hold several and a sync or import has finished, the owner is asked once (`SETUP_PENDING`) and
  *   nothing is guessed: an automatic currency stays meanwhile, and without one, the currency most recent transactions
  *   are in is only suggested.
- * - A chosen currency (`CONFIRMED`) never changes by itself. Once Tempo can no longer convert into the current
+ * - A chosen currency (`CONFIRMED`) never changes by itself. Once Wisp can no longer convert into the current
  *   currency (it left {@link REPORTING_CURRENCIES}), the owner is asked again.
  *
  * Changing it clears every converted amount in the same transaction and lets the conversion job convert them again.
@@ -150,7 +150,7 @@ export class ReportingCurrencyService {
 	}
 
 	/**
-	 * The single currency most recent booked transactions are in, other than `current` (one Tempo can no longer
+	 * The single currency most recent booked transactions are in, other than `current` (one Wisp can no longer
 	 * convert into); null on a tie or without any.
 	 */
 	private async findSuggestion(

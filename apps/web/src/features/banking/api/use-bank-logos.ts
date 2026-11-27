@@ -1,5 +1,5 @@
 import {skipToken, useQuery, useQueryClient} from '@tanstack/react-query';
-import type {BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnectionAspsp} from '@wisp/contracts';
 import {useEffect, useMemo} from 'react';
 
 import {isFileConnection} from '../utils/bank-sync-status';

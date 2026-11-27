@@ -4,7 +4,7 @@ import type {
   BankTransactionBreakdown,
   BankTransactionCashFlow,
   MerchantGroupsResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';

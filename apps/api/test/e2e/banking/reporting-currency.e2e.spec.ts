@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
+import {REPORTING_CURRENCIES, type ReportingCurrency} from '@wisp/contracts';
 import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
@@ -261,7 +261,7 @@ describe('Reporting currency', () => {
 	});
 
 	it.each([
-		['a currency Tempo cannot convert into', 'BGN', REPORTING_CURRENCY_UNSUPPORTED],
+		['a currency Wisp cannot convert into', 'BGN', REPORTING_CURRENCY_UNSUPPORTED],
 		['a code in lower case', 'gbp', /three-letter currency code/],
 		['no currency', undefined, /three-letter currency code/],
 	])('refuses %s and changes nothing', async (_case, currency, message) => {

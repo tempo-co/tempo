@@ -1,5 +1,5 @@
 import {Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post} from '@nestjs/common';
-import type {CreatedPersonalAccessToken, PersonalAccessToken} from '@tempo/contracts';
+import type {CreatedPersonalAccessToken, PersonalAccessToken} from '@wisp/contracts';
 
 import {PersonalAccessTokenService} from '@core/personal-access-token/personal-access-token.service';
 import {Account} from '@modules/account/account.entity';

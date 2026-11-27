@@ -11,7 +11,7 @@ export type BankSyncFailure = {
 	 * `interrupted` for a run whose process stopped before finishing it.
 	 */
 	kind: 'session' | 'balances' | 'transactions' | 'internal' | 'cancelled' | 'interrupted';
-	/** Tempo's bank account id for per-account calls. */
+	/** Wisp's bank account id for per-account calls. */
 	bankAccountId: string | null;
 	code: string;
 	httpStatus: number | null;
@@ -23,7 +23,7 @@ export type BankSyncFailure = {
 /** A provider call a targeted retry repeats: the session read, or one account's balances or transactions. */
 export type BankSyncRetryCall = {
 	kind: 'session' | 'balances' | 'transactions';
-	/** Tempo's bank account id; null for the session read. */
+	/** Wisp's bank account id; null for the session read. */
 	bankAccountId: string | null;
 };
 
@@ -32,7 +32,7 @@ export const INTERRUPTED_SYNC_CODE = 'sync_interrupted';
 
 /**
  * Enable Banking error codes (API reference, `ErrorCode`) meaning the session no longer grants access, plus
- * Tempo's own code for a session the provider reports in another status than AUTHORIZED. Only re-authorization helps.
+ * Wisp's own code for a session the provider reports in another status than AUTHORIZED. Only re-authorization helps.
  */
 const SESSION_ENDED_CODES = new Set([
 	'CLOSED_SESSION',
@@ -44,8 +44,8 @@ const SESSION_ENDED_CODES = new Set([
 /** Enable Banking error codes for rate limits; HTTP 429 counts as one whatever its code. */
 const RATE_LIMIT_CODES = new Set(['ASPSP_RATE_LIMIT_EXCEEDED']);
 /**
- * Enable Banking refusing Tempo's own application credentials (JWT, key, clock or allowed IP) rather than the
- * user's session, plus Tempo failing to sign its JWT. HTTP 401 with any code other than a session one counts too.
+ * Enable Banking refusing Wisp's own application credentials (JWT, key, clock or allowed IP) rather than the
+ * user's session, plus Wisp failing to sign its JWT. HTTP 401 with any code other than a session one counts too.
  */
 const APPLICATION_AUTH_CODES = new Set([
 	'AUTHORIZATION_NOT_PROVIDED',

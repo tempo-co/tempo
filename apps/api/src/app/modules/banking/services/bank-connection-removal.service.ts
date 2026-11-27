@@ -1,6 +1,6 @@
 import {BadRequestException, ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankConnectionRemoveRequest} from '@tempo/contracts';
+import type {BankConnectionRemoveRequest} from '@wisp/contracts';
 import {DataSource, EntityManager, In, Repository} from 'typeorm';
 
 import {dateInTimeZone} from '@core/time/app-time-zone';
@@ -189,7 +189,7 @@ export class BankConnectionRemovalService {
 			order: {id: 'ASC'},
 		});
 		if (accounts.length === 0) return [];
-		// Only a deletion of the whole Tempo account committing before the removal locked it gets here.
+		// Only a deletion of the whole Wisp account committing before the removal locked it gets here.
 		if (!fileConnection) throw new NotFoundException(BANKING_CONNECTION_NOT_FOUND);
 		const owner = await manager.getRepository(Account).findOneOrFail({
 			select: {id: true, timeZone: true},

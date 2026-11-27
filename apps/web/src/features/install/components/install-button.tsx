@@ -16,7 +16,7 @@ import {promptInstall} from '@/utils/installed-app';
 import type {InstallWay} from '../use-install';
 
 /**
- * Installs Tempo the way this device allows: Chrome's own install dialog, or on iPhone and iPad the Share › Add to
+ * Installs Wisp the way this device allows: Chrome's own install dialog, or on iPhone and iPad the Share › Add to
  * Home Screen steps. Renders nothing where neither applies.
  */
 export function InstallButton({
@@ -49,7 +49,7 @@ export function InstallButton({
 const SAFARI_CONTROL =
   'inline-flex items-center gap-1 rounded-md border px-1.5 font-medium [&_svg]:size-3.5';
 
-/** Safari's steps to add Tempo to the Home Screen, which no page can do for the owner. */
+/** Safari's steps to add Wisp to the Home Screen, which no page can do for the owner. */
 function HomeScreenSteps({
   open,
   onOpenChange,
@@ -89,7 +89,7 @@ function HomeScreenSteps({
         }}
       >
         <ResponsiveDialogHeader>
-          <ResponsiveDialogTitle>Add Tempo to your Home Screen</ResponsiveDialogTitle>
+          <ResponsiveDialogTitle>Add Wisp to your Home Screen</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>
             It opens full screen, like an app.
           </ResponsiveDialogDescription>

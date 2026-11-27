@@ -1,6 +1,6 @@
 /**
  * Upload and parse limits for one drop. The parse runner and the upload route both read them, so this file imports
- * nothing: the parse child loads it alone. `BANK_IMPORT_DROP_LIMITS` in `@tempo/contracts` repeats the first three
+ * nothing: the parse child loads it alone. `BANK_IMPORT_DROP_LIMITS` in `@wisp/contracts` repeats the first three
  * for the web to refuse a choice before uploading it, and `MAX_ARCHIVE_ENTRIES` for its copy.
  */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;

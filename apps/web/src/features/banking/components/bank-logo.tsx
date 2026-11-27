@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BankConnectionAspsp, BankLogo as LogoMetadata} from '@tempo/contracts';
+import type {BankConnectionAspsp, BankLogo as LogoMetadata} from '@wisp/contracts';
 import {Building2} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 

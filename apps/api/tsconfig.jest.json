@@ -4,7 +4,7 @@
 		"paths": {
 			"@core/*": ["./src/app/core/*"],
 			"@modules/*": ["./src/app/modules/*"],
-			"@tempo/contracts": ["../../packages/contracts/src"]
+			"@wisp/contracts": ["../../packages/contracts/src"]
 		}
 	}
 }

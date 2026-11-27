@@ -1,4 +1,4 @@
-import {MERCHANT_SEARCH_MAX_LENGTH, type MerchantGroupListItem} from '@tempo/contracts';
+import {MERCHANT_SEARCH_MAX_LENGTH, type MerchantGroupListItem} from '@wisp/contracts';
 import {useEffect, useState} from 'react';
 
 import {LoadMore} from '@/components/shared/load-more';

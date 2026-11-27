@@ -1,4 +1,4 @@
-import {type Bank, OTHER_BANK_EXPORT_TEXT, OTHER_BANK_ID} from '@tempo/contracts';
+import {type Bank, OTHER_BANK_EXPORT_TEXT, OTHER_BANK_ID} from '@wisp/contracts';
 import {ChevronRight} from 'lucide-react';
 import {useState} from 'react';
 

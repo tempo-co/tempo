@@ -24,12 +24,12 @@ function SettingsAppearanceIndex() {
       >
         <ThemeSwitcher />
       </SettingsGroup>
-      {/* Shown where this device can install Tempo and it does not run installed already. */}
+      {/* Shown where this device can install Wisp and it does not run installed already. */}
       {(installWay === 'steps' || installWay === 'prompt') && (
         <SettingsGroup id='install-heading' title='App'>
           <SettingsList>
             <SettingsRow
-              label='Install Tempo'
+              label='Install Wisp'
               value='Opens full screen from its own icon, like an app.'
               action={
                 <InstallButton way={installWay} variant='outline' size='sm'>

@@ -15,7 +15,7 @@ import {BankingConsentRevocationService} from '@modules/banking/services/banking
 import {AccountService} from './account.service';
 import {emailChangeKey, revokePasswordResetToken, signupCodeKey} from './auth-secret-keys';
 
-const ACCOUNT_DELETED_EMAIL_SUBJECT = 'Your Tempo account has been deleted';
+const ACCOUNT_DELETED_EMAIL_SUBJECT = 'Your Wisp account has been deleted';
 export {ACCOUNT_DELETED_EMAIL_SUBJECT};
 export const ACCOUNT_DELETED_MESSAGE = 'Account has been deleted.';
 
@@ -44,7 +44,7 @@ export class AccountDeletionService {
 		// including the caller's own (same primitive the password-reset flow uses).
 		await this.sessionService.revokeAllCredentials(accountId, null);
 
-		// Close every bank consent at the provider first: once the rows are gone, Tempo can no longer name the sessions.
+		// Close every bank consent at the provider first: once the rows are gone, Wisp can no longer name the sessions.
 		// This takes no sync lease. A sync still running finds its connection gone at its fenced write and rolls back.
 		await this.consentRevocationService.revokeSessions(
 			await this.bankConnectionRepository.find({

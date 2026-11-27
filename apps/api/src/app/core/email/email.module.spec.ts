@@ -18,8 +18,10 @@ type EmailConfig = {
 	EMAIL_FROM?: string;
 };
 
-const makeConfig = (values: EmailConfig): ConfigurationService =>
-	({get: (key: keyof EmailConfig) => values[key]}) as unknown as ConfigurationService;
+const makeConfig = (values: EmailConfig): ConfigurationService => {
+	const config = {WEB_BASE_URL: 'https://app.example.test', ...values};
+	return {get: (key: keyof typeof config) => config[key]} as unknown as ConfigurationService;
+};
 
 describe('EmailModule SMTP options', () => {
 	it('configures Gmail authentication, STARTTLS, and the selected sender', () => {
@@ -31,7 +33,7 @@ describe('EmailModule SMTP options', () => {
 				EMAIL_REQUIRE_TLS: true,
 				EMAIL_USERNAME: 'mailer@example.test',
 				EMAIL_PASSWORD: 'synthetic-app-password',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			}),
 		);
 
@@ -42,7 +44,7 @@ describe('EmailModule SMTP options', () => {
 			requireTLS: true,
 			auth: {user: 'mailer@example.test', pass: 'synthetic-app-password'},
 		});
-		expect(options.defaults.from).toBe('Tempo <mailer@example.test>');
+		expect(options.defaults.from).toBe('Wisp <mailer@example.test>');
 	});
 
 	it('authenticates to any SMTP host that has credentials configured', () => {
@@ -78,7 +80,7 @@ describe('EmailModule SMTP options', () => {
 			requireTLS: false,
 		});
 		expect(options.transport).not.toHaveProperty('auth');
-		expect(options.defaults.from).toBe('"Tempo" <no-reply@localhost>');
+		expect(options.defaults.from).toBe('"Wisp" <no-reply@localhost>');
 	});
 
 	it('reports a plain-text conversion failure through the template callback', async () => {

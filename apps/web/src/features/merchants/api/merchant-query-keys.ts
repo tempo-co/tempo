@@ -1,4 +1,4 @@
-import type {CashFlowInterval} from '@tempo/contracts';
+import type {CashFlowInterval} from '@wisp/contracts';
 
 /** Merchant totals are derived from transactions, so `invalidateBankDerivedData` marks them stale too. */
 export const merchantQueryKeys = {

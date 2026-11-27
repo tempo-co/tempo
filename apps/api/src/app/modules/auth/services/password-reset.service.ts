@@ -1,5 +1,5 @@
 import {BadRequestException, Inject, Injectable} from '@nestjs/common';
-import type {CodedErrorResponse, PasswordResetErrorCode} from '@tempo/contracts';
+import type {CodedErrorResponse, PasswordResetErrorCode} from '@wisp/contracts';
 import Redis from 'ioredis';
 import ms from 'ms';
 import crypto from 'node:crypto';
@@ -68,7 +68,7 @@ export class PasswordResetService {
 		await this.emailService.send(
 			{
 				to: account.email,
-				subject: 'Reset your Tempo password',
+				subject: 'Reset your Wisp password',
 				template: 'reset-password',
 				context: {name: account.name, resetUrl, expiration},
 			},

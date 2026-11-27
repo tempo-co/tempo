@@ -1,4 +1,4 @@
-# Built from the repository root. `@tempo/contracts` is a `file:../../packages/contracts` dependency, so it sits two
+# Built from the repository root. `@wisp/contracts` is a `file:../../packages/contracts` dependency, so it sits two
 # levels above the app directory here too.
 FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 WORKDIR /usr/src/app

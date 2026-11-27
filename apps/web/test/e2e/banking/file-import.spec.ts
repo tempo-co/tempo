@@ -6,7 +6,7 @@ import {
   type BankImportDoubtfulRow,
   type BankImportLayoutProposal,
   type BankImportNeverSentRow,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';
@@ -37,7 +37,7 @@ import {animationsSettled, boxOf, expectNoHorizontalOverflow} from '../../utils/
 import {countAfterToasts} from '../../utils/toasts';
 
 const SYNCED_LINE =
-  'These are almost always in Tempo already from your bank, so leaving them without an answer loses nothing.';
+  'These are almost always in Wisp already from your bank, so leaving them without an answer loses nothing.';
 
 /** A proposal for a synthetic German-style export: debit and credit columns, the account on a line above. */
 function layoutProposal(fields: Partial<BankImportLayoutProposal> = {}): BankImportLayoutProposal {
@@ -249,7 +249,7 @@ test.describe('statement file import on Accounts', () => {
         statement('statement-july.xml'),
       ]);
 
-    // Read first: the account the files go to, already in Tempo, with their rows and days, and nothing imported.
+    // Read first: the account the files go to, already in Wisp, with their rows and days, and nothing imported.
     await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
     await expect(dialog).toContainText(
       '313 transactions from 1 May – 30 Oct 2026. Rename an account if you like.',
@@ -278,7 +278,7 @@ test.describe('statement file import on Accounts', () => {
     const summaryBody = dialog.getByTestId('bank-import-summary');
     for (const [label, value] of [
       ['New transactions', '212'],
-      ['Already in Tempo', '98'],
+      ['Already in Wisp', '98'],
       ['Need a look', '3'],
     ]) {
       await expect(summaryBody.getByText(label, {exact: true}).locator('..')).toContainText(value);
@@ -338,7 +338,7 @@ test.describe('statement file import on Accounts', () => {
 
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
     await expect(dialog.getByText('Nothing new in these files')).toBeVisible();
-    await expect(dialog.getByText('All 313 transactions are already in Tempo.')).toBeVisible();
+    await expect(dialog.getByText('All 313 transactions are already in Wisp.')).toBeVisible();
     await expect(dialog.getByText('New transactions')).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: /^Review/})).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Done'})).toHaveCSS(
@@ -378,7 +378,7 @@ test.describe('statement file import on Accounts', () => {
     const gaps = dialog.getByTestId('bank-import-statement-gaps');
     await expect(gaps.getByText('Some days are missing')).toBeVisible();
     await expect(gaps).toContainText(
-      "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
+      "These statements skip some days, so their transactions aren't in Wisp. Everything else was imported. Import the statements for these days to add them.",
     );
     await expect(gaps.getByRole('listitem')).toHaveText([
       /^7 Oct – 9 Oct 2026\s*Mock ASPSP checking account\s*-€1,200\.00 missing$/,
@@ -746,7 +746,7 @@ test.describe('statement file import on Accounts', () => {
     await line.click();
     await expect(
       summaryBody.getByText(
-        "Your bank sent every transaction for these days, and these weren't among them, so Tempo removed the file's copies. Add back any you know are real.",
+        "Your bank sent every transaction for these days, and these weren't among them, so Wisp removed the file's copies. Add back any you know are real.",
       ),
     ).toBeVisible();
     const groups = summaryBody.getByTestId('bank-import-never-sent-group');
@@ -929,12 +929,12 @@ test.describe('statement file import on Accounts', () => {
       alert.getByText("This file doesn't look the way Rabobank's exports usually do"),
     ).toBeVisible();
     await expect(alert).toHaveText(
-      /Tempo didn't import anything from it\. Try exporting it again, or use CAMT\.053 or MT940 if your bank offers them\.$/,
+      /Wisp didn't import anything from it\. Try exporting it again, or use CAMT\.053 or MT940 if your bank offers them\.$/,
     );
     await expect(dialog.getByRole('button', {name: 'Choose files'})).toBeVisible();
   });
 
-  test('a file in no layout Tempo knows says so while working out columns is off, and offers nothing more', async ({
+  test('a file in no layout Wisp knows says so while working out columns is off, and offers nothing more', async ({
     page,
   }) => {
     await mockFileImport(page, {uploads: [refused({code: 'layout_unknown', file: 1})]});
@@ -946,8 +946,8 @@ test.describe('statement file import on Accounts', () => {
       .setInputFiles([statement('transactions.csv')]);
 
     const alert = dialog.getByRole('alert');
-    await expect(alert.getByText("Tempo doesn't know this file's layout yet")).toBeVisible();
-    await expect(alert).toContainText("It isn't a layout Tempo knows yet. Nothing was imported.");
+    await expect(alert.getByText("Wisp doesn't know this file's layout yet")).toBeVisible();
+    await expect(alert).toContainText("It isn't a layout Wisp knows yet. Nothing was imported.");
     await expect(dialog.getByRole('button', {name: 'Work out the columns'})).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: 'Supported files'})).toBeVisible();
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
@@ -974,9 +974,9 @@ test.describe('statement file import on Accounts', () => {
       .setInputFiles([statement('statement-april.xml'), statement('export-example.csv')]);
 
     const alert = dialog.getByRole('alert');
-    await expect(alert.getByText("Tempo doesn't know this file's layout yet")).toBeVisible();
+    await expect(alert.getByText("Wisp doesn't know this file's layout yet")).toBeVisible();
     await expect(alert).toContainText(
-      'export-example.csv: Tempo can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
+      'export-example.csv: Wisp can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
     );
     // The drop stays chosen, so it can go again once the columns are known.
     await expect(
@@ -1016,7 +1016,7 @@ test.describe('statement file import on Accounts', () => {
     );
     await expect(preview.getByText('Account DE89370400440532013000')).toBeVisible();
     await expect(preview.getByTestId('bank-import-date-check')).toHaveCount(0);
-    // The bank Tempo guessed is picked among the owner's banks; any other can be picked instead.
+    // The bank Wisp guessed is picked among the owner's banks; any other can be picked instead.
     const bank = preview.getByLabel('Bank', {exact: true});
     await expect(bank).toHaveText('Example Bank');
     await expect(preview.getByLabel('Bank name')).toHaveCount(0);
@@ -1114,13 +1114,13 @@ test.describe('statement file import on Accounts', () => {
       alert.getByText("This file doesn't look the way Rabobank's exports usually do"),
     ).toBeVisible();
     await expect(alert).toContainText(
-      'Try exporting it again, or use CAMT.053 or MT940 if your bank offers them. Tempo can also work out which column is which.',
+      'Try exporting it again, or use CAMT.053 or MT940 if your bank offers them. Wisp can also work out which column is which.',
     );
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
 
     const preview = dialog.getByTestId('bank-import-layout-preview');
     await expect(preview.getByTestId('bank-import-date-check')).toContainText(
-      'Tempo read 03/04/2026 as 3 April 2026',
+      'Wisp read 03/04/2026 as 3 April 2026',
     );
     const confirm = dialog.getByRole('button', {name: 'Looks right'});
     const bank = preview.getByLabel('Bank', {exact: true});
@@ -1257,7 +1257,7 @@ test.describe('statement file import on Accounts', () => {
     await dialog.getByRole('button', {name: 'Cancel'}).click();
 
     await expect(
-      dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
+      dialog.getByRole('alert').getByText("Wisp doesn't know this file's layout yet"),
     ).toBeVisible();
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toContainText(
       'transactions.csv',
@@ -1270,7 +1270,7 @@ test.describe('statement file import on Accounts', () => {
     await page.getByRole('button', {name: 'Import a file'}).first().click();
     dialog = page.getByRole('dialog');
     await expect(
-      dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
+      dialog.getByRole('alert').getByText("Wisp doesn't know this file's layout yet"),
     ).toBeVisible();
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toContainText(
       'transactions.csv',
@@ -1279,7 +1279,7 @@ test.describe('statement file import on Accounts', () => {
     await dialog.getByRole('button', {name: 'Not right'}).click();
 
     const alert = dialog.getByRole('alert');
-    await expect(alert.getByText("Tempo didn't import anything")).toBeVisible();
+    await expect(alert.getByText("Wisp didn't import anything")).toBeVisible();
     await expect(alert).toContainText("This layout isn't supported yet.");
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
     expect(api.rejects).toEqual([layoutProposal().id]);
@@ -1341,7 +1341,7 @@ test.describe('statement file import on Accounts', () => {
     );
     await dialog.getByRole('button', {name: 'Work out the columns'}).click();
 
-    await expect(alert.getByText("Tempo couldn't work out this file's columns")).toBeVisible();
+    await expect(alert.getByText("Wisp couldn't work out this file's columns")).toBeVisible();
     await expect(alert).toContainText(
       'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
     );
@@ -1714,7 +1714,7 @@ test.describe('statement file import on Accounts', () => {
       doubtfulRow('00000000-0000-4000-8000-000000000602', 'Example Refund', '12.00', [
         candidate('00000000-0000-4000-8000-000000000703', 'Example Refund', '12.00'),
       ]),
-      // Already in Tempo from the file; a later bank sync brought a look-alike.
+      // Already in Wisp from the file; a later bank sync brought a look-alike.
       doubtfulRow(
         '00000000-0000-4000-8000-000000000603',
         'Example Bakery',
@@ -1736,14 +1736,14 @@ test.describe('statement file import on Accounts', () => {
     const blocks = dialog.getByTestId('bank-import-doubtful-row');
     await expect(blocks).toHaveCount(3);
     const [first, second, third] = [blocks.nth(0), blocks.nth(1), blocks.nth(2)];
-    // Rows in Tempo twice count twice until answered, so the list says so instead of saying nothing is lost.
+    // Rows in Wisp twice count twice until answered, so the list says so instead of saying nothing is lost.
     await expect(
       dialog.getByText(
-        'Some are in Tempo twice, from the file and from your bank. Until you answer, both count in your totals.',
+        'Some are in Wisp twice, from the file and from your bank. Until you answer, both count in your totals.',
       ),
     ).toBeVisible();
     await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);
-    await expect(third).toContainText('1 Oct · from the file, already in Tempo');
+    await expect(third).toContainText('1 Oct · from the file, already in Wisp');
     await expect(third).toContainText('Your bank also sent');
     await expect(third.getByRole('radio').nth(1)).toHaveAccessibleName(
       'Different payments, keep both',
@@ -1846,7 +1846,7 @@ test.describe('statement file import on Accounts', () => {
     // Rows held on an imported-files account have no bank sync that could have stored them already.
     await expect(dialog.getByText(SYNCED_LINE)).toHaveCount(0);
     // A row with nothing to compare offers the new transaction alone.
-    await expect(refund).toContainText('Nothing already in Tempo matches it now');
+    await expect(refund).toContainText('Nothing already in Wisp matches it now');
     await expect(refund.getByRole('radio')).toHaveCount(1);
 
     await grocer.getByText('Example Grocer', {exact: true}).last().click();
@@ -2024,7 +2024,7 @@ test.describe('statement file import on Accounts', () => {
     const field = prompt.getByLabel('Balance of Example Card · EUR today');
     await expect(field).toBeVisible();
     await expect(
-      prompt.getByText('Tempo works out earlier balances from your transactions.'),
+      prompt.getByText('Wisp works out earlier balances from your transactions.'),
     ).toBeVisible();
     await expectCurrencyInside(field, 'EUR');
     // Save under the field, as in the Add balance dialog.
@@ -2267,7 +2267,7 @@ test.describe('statement file import on Accounts', () => {
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
 
     const alert = dialog.getByRole('alert');
-    await expect(alert.getByText('Tempo is busy right now')).toBeVisible();
+    await expect(alert.getByText('Wisp is busy right now')).toBeVisible();
     await expect(alert).toContainText('Try again in a moment. Nothing was imported.');
     await expect(
       dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),

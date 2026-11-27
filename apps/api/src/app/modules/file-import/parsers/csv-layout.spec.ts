@@ -4,7 +4,7 @@ import {CSV_LAYOUTS} from './csv-layouts';
 const [ING] = CSV_LAYOUTS;
 
 describe('validateCsvLayout', () => {
-	it('accepts every layout Tempo ships, as plain JSON', () => {
+	it('accepts every layout Wisp ships, as plain JSON', () => {
 		for (const layout of CSV_LAYOUTS) {
 			expect(validateCsvLayout(JSON.parse(JSON.stringify(layout)))).toEqual({ok: true, layout});
 		}

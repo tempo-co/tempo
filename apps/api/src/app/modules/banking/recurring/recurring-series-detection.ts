@@ -8,7 +8,7 @@ import type {
 	RecurringSeriesDirection,
 	RecurringSeriesFlag,
 	RecurringSeriesStatus,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
 
 import {BANK_TRANSACTION_DIRECTIONS, type BankTransactionDirection} from '../bank-transaction-direction';

@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransactionTotals} from '@tempo/contracts';
+import type {BankTransactionTotals} from '@wisp/contracts';
 import {CircleAlert, ListChecks} from 'lucide-react';
 import {useState} from 'react';
 

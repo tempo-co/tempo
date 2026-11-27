@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
+import type {BankTransactionBreakdownPeriod} from '@wisp/contracts';
 import type {ReactNode} from 'react';
 
 import {LoadErrorState} from '@/components/shared/state-message';

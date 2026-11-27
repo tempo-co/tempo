@@ -7,11 +7,39 @@ import {
 import {createVerifiedAccount, expect, test} from '../../fixtures';
 import {LoginPage} from '../../pages/login.page';
 import {fulfillJson} from '../../utils/api-mocks';
+import {expectBankConnectionLine} from '../../utils/bank-connections';
 
 test.describe('Login', () => {
-  test.describe('Opening Tempo signed out', () => {
+  test.describe('Opening Wisp signed out', () => {
     // Every script must pass through page.route, not the offline shell.
     test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
+
+    test('the login page is titled Wisp and its footer opens the official addresses', async ({
+      page,
+      loginPage,
+    }) => {
+      await loginPage.navigate();
+      await expect(page).toHaveTitle('Wisp');
+      await expect(page.getByRole('heading', {level: 1})).toHaveText('Log in to Wisp');
+
+      await page.getByRole('link', {name: 'Official addresses'}).click();
+      await expect(page).toHaveURL(/\/official$/);
+      await expect(page).toHaveTitle('Official addresses · Wisp');
+      const official = page.getByTestId('auth-page');
+      await expect(official.getByRole('heading', {level: 1})).toHaveText('Official addresses');
+      for (const [name, href] of [
+        ['wispmoney.com', 'https://wispmoney.com'],
+        ['app.wispmoney.com', 'https://app.wispmoney.com'],
+        ['no-reply@wispmoney.com', 'mailto:no-reply@wispmoney.com'],
+        ['support@wispmoney.com', 'mailto:support@wispmoney.com'],
+        ['github.com/wispmoney/wisp', 'https://github.com/wispmoney/wisp'],
+      ])
+        await expect(official.getByRole('link', {name, exact: true})).toHaveAttribute('href', href);
+      await expect(official).toContainText(
+        "We never ask for your bank password; you log in to your bank only on your bank's own site.",
+      );
+      await expectBankConnectionLine(official);
+    });
 
     test('shows the login form while the requested page is still loading', async ({
       page,

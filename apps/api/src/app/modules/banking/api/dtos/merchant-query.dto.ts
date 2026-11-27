@@ -8,7 +8,7 @@ import {
 	MERCHANT_SEARCH_MAX_LENGTH,
 	type MerchantGroupsQuery,
 	type MerchantRankingQuery,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Transform} from 'class-transformer';
 import {IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min} from 'class-validator';
 

@@ -5,7 +5,7 @@ import {
   type BankImportAccountQuestion,
   type BankImportError,
   type BankImportErrorCode,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {layoutBank} from './supported-files';
 
@@ -26,14 +26,14 @@ const REFUSAL_COPY: Record<
   RefusalCopy
 > = {
   unsupported_format: {
-    title: "Tempo can't read this file",
+    title: "Wisp can't read this file",
     description:
-      "It isn't a statement format Tempo knows yet. Supported files lists the formats it reads.",
+      "It isn't a statement format Wisp knows yet. Supported files lists the formats it reads.",
   },
-  // A table in no layout Tempo knows, while its columns cannot be worked out here.
+  // A table in no layout Wisp knows, while its columns cannot be worked out here.
   layout_unknown: {
-    title: "Tempo doesn't know this file's layout yet",
-    description: "It isn't a layout Tempo knows yet.",
+    title: "Wisp doesn't know this file's layout yet",
+    description: "It isn't a layout Wisp knows yet.",
   },
   // Working out the columns was tried and failed; the file stays chosen to try again.
   mapper_unavailable: {
@@ -41,7 +41,7 @@ const REFUSAL_COPY: Record<
     description: `Try again later. Each try counts towards the ${BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY} allowed in 24 hours.`,
   },
   layout_not_mappable: {
-    title: "Tempo couldn't work out this file's columns",
+    title: "Wisp couldn't work out this file's columns",
     description:
       'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
   },
@@ -102,7 +102,7 @@ const REFUSAL_COPY: Record<
   },
   // Another drop is being read: the owner can only wait and import the same files again.
   import_busy: {
-    title: 'Tempo is busy right now',
+    title: 'Wisp is busy right now',
     description: 'Try again in a moment.',
   },
   // Asked as a question when the refusal lists what to ask; these cover a refusal with nothing to ask.
@@ -133,15 +133,15 @@ function layoutRefusalCopy(
   return {
     title: `This file doesn't look the way ${bank ? `${bank}'s` : "your bank's"} exports usually do`,
     description: mappable
-      ? `${advice} Tempo can also work out which column is which. ${MAPPER_SENDS}`
-      : `Tempo didn't import anything from it. ${advice}`,
+      ? `${advice} Wisp can also work out which column is which. ${MAPPER_SENDS}`
+      : `Wisp didn't import anything from it. ${advice}`,
   };
 }
 
-/** A file in no layout Tempo knows, when its columns can be worked out: the owner is offered that. */
+/** A file in no layout Wisp knows, when its columns can be worked out: the owner is offered that. */
 export const MAPPER_COPY: RefusalCopy = {
-  title: "Tempo doesn't know this file's layout yet",
-  description: `Tempo can work out which column is which. ${MAPPER_SENDS}`,
+  title: "Wisp doesn't know this file's layout yet",
+  description: `Wisp can work out which column is which. ${MAPPER_SENDS}`,
 };
 
 /** More files than one drop holds (`file` null), or an archive with more statements than one may hold. */
@@ -159,7 +159,7 @@ function tooManyFilesCopy(file: number | null): RefusalCopy {
 
 /** After the owner said a proposed layout is not right. */
 export const LAYOUT_DISCARDED_COPY: RefusalCopy = {
-  title: "Tempo didn't import anything",
+  title: "Wisp didn't import anything",
   description: "This layout isn't supported yet.",
 };
 
@@ -240,7 +240,7 @@ export function refuseBySize(files: readonly Pick<File, 'size'>[]): BankImportEr
 /**
  * What a refused import means for the owner. `fileNames` are the drop's files in the order sent: a refusal
  * names its file by position, and the name is shown when there was more than one to tell apart. With `mapper`
- * on, a table in no layout Tempo knows, or one that only looks like a bank's export, is offered to have its
+ * on, a table in no layout Wisp knows, or one that only looks like a bank's export, is offered to have its
  * columns worked out, and a failed try at that is offered again.
  */
 export function describeRefusal(

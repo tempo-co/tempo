@@ -1,5 +1,5 @@
 import type {InfiniteData} from '@tanstack/react-query';
-import type {BankTransactionsResponse} from '@tempo/contracts';
+import type {BankTransactionsResponse} from '@wisp/contracts';
 
 /**
  * A cached transaction list: every page "Load more" fetched so far, or one page in caches saved for offline use

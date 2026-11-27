@@ -1,4 +1,4 @@
-import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
+import type {BankTransactionBreakdownPeriod} from '@wisp/contracts';
 
 import {toCents} from '@/features/dashboard/utils/money';
 import {formatMonth} from '@/features/dashboard/utils/month';

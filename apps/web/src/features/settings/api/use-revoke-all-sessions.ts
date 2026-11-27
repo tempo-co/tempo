@@ -1,5 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {MessageResponse, Session} from '@tempo/contracts';
+import type {MessageResponse, Session} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api} from '@/utils/api';

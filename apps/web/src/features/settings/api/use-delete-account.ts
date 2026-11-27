@@ -1,5 +1,5 @@
 import {useMutation} from '@tanstack/react-query';
-import type {AccountDeleteRequest} from '@tempo/contracts';
+import type {AccountDeleteRequest} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {signOut} from '@/query-client';

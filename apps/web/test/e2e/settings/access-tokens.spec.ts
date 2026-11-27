@@ -12,13 +12,13 @@ const account = createAccount({
 const tokenMetadata = {
   id: '00000000-0000-4000-8000-000000000002',
   name: 'Example integration',
-  prefix: 'tempo_pat_example',
+  prefix: 'wisp_pat_example',
   scopes: ['read'],
   createdAt: '2026-01-02T12:00:00.000Z',
   lastUsedAt: null,
   expiresAt: '2027-01-02T12:00:00.000Z',
 };
-const secret = 'tempo_pat_example_synthetic_secret_not_a_real_token';
+const secret = 'wisp_pat_example_synthetic_secret_not_a_real_token';
 
 test('delivers the created secret only to the dialog, keeping query and mutation caches secret-free', async () => {
   const {client, renderHook} = createHookHarness({

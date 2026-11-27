@@ -1,5 +1,5 @@
 import {queryOptions, useQuery, useQueryClient} from '@tanstack/react-query';
-import type {ReportingCurrency} from '@tempo/contracts';
+import type {ReportingCurrency} from '@wisp/contracts';
 import {useEffect} from 'react';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';

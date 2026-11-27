@@ -1,6 +1,6 @@
 // A pure module's contract: no page, so this uses Playwright's own `test` rather than the app fixtures.
 import {expect, test} from '@playwright/test';
-import type {BankImportPreviewAccount} from '@tempo/contracts';
+import type {BankImportPreviewAccount} from '@wisp/contracts';
 
 import {importedAccountIds} from '../../src/features/file-import/utils/found-accounts';
 

@@ -343,7 +343,7 @@ export async function seedBankTransactionCategorizationData(app: INestApplicatio
 		},
 	]);
 
-	// A second Tempo account with a conflicting manual category for the same merchant must never influence the first.
+	// A second Wisp account with a conflicting manual category for the same merchant must never influence the first.
 	const accounts = app.get<Repository<Account>>(getRepositoryToken(Account));
 	const otherAccount = await accounts.save(
 		accounts.create({

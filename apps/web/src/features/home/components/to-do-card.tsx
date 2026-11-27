@@ -28,7 +28,7 @@ const VIEWS: {[K in ToDoRow['kind']]: (row: Extract<ToDoRow, {kind: K}>) => RowV
   }),
   install: () => ({
     icon: Smartphone,
-    title: 'Add Tempo to your Home Screen',
+    title: 'Add Wisp to your Home Screen',
     detail: 'Opens full screen, like an app',
     action: <InstallActions />,
   }),

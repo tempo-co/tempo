@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 import {Check, Eye, LayoutGrid} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 

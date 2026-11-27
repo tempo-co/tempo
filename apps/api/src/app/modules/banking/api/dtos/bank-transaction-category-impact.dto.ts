@@ -2,7 +2,7 @@ import {
 	BANK_TRANSACTION_CATEGORIES,
 	type BankTransactionCategory,
 	type BankTransactionCategoryImpactQuery,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {IsEnum} from 'class-validator';
 
 export class BankTransactionCategoryImpactQueryDto implements BankTransactionCategoryImpactQuery {

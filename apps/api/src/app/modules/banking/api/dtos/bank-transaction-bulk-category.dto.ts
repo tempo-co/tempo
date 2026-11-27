@@ -4,7 +4,7 @@ import {
 	type BankTransactionBulkCategoryScope,
 	type BankTransactionBulkCategoryUpdate,
 	type BankTransactionCategory,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {IsIn} from 'class-validator';
 
 import {REUSABLE_MANUAL_CATEGORIES} from '../../categorization/manual-category-follow-up';

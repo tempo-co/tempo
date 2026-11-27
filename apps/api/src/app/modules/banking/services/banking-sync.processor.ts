@@ -52,7 +52,7 @@ export class BankingSyncProcessor extends WorkerHost {
 			const errorName = safeErrorName(error);
 			await this.operatorAlertService.send({
 				kind: `bank-sync-run-${errorName}`,
-				subject: 'Tempo: scheduled bank sync failed',
+				subject: 'Wisp: scheduled bank sync failed',
 				text: [
 					`The scheduled bank sync run failed with ${errorName}, so no bank connection was synced.`,
 					'Check the API log.',

@@ -1,4 +1,4 @@
-import type {BankTransactionCategory} from '@tempo/contracts';
+import type {BankTransactionCategory} from '@wisp/contracts';
 
 import type {BankTransactionDirection} from '../bank-transaction-direction';
 

@@ -6,7 +6,7 @@ import {BANK_CONNECTION_PROVIDERS} from './services/banking-sync.constants';
 export const INCREMENTAL_OVERLAP_DAYS = 7;
 
 /**
- * Providers whose sync records coverage: every fetch goes through Tempo, so a complete one is known to be complete.
+ * Providers whose sync records coverage: every fetch goes through Wisp, so a complete one is known to be complete.
  * A provider that fetches from the bank on its own schedule (such as Synci) must not be added until its fetch time,
  * how far back it reads again and whether its syncs can be partial are known.
  */

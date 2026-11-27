@@ -3,7 +3,7 @@ import {
   BankTransaction,
   BankTransactionCategory,
   BankTransactionCategoryImpact,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {ArrowRight, Check, ChevronDown, Minus, Sparkles} from 'lucide-react';
 import {useEffect, useId, useMemo, useRef, useState} from 'react';
 

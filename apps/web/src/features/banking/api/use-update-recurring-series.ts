@@ -1,5 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {RecurringContinuationUpdate, RecurringSeriesHiddenUpdate} from '@tempo/contracts';
+import type {RecurringContinuationUpdate, RecurringSeriesHiddenUpdate} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api, wasToasted} from '@/utils/api';

@@ -1,4 +1,4 @@
-# Design System: Tempo
+# Design System: Wisp
 
 The design system's single document. Product scope is in `PRODUCT.md`; what screens show is in
 `docs/product-ui-rules.md`.
@@ -12,7 +12,7 @@ outcomes, label synthetic data as synthetic, and use no decorative gradients.
 
 ### Name and colours
 
-The product is moving to the Wisp name; the name strings still say "Tempo". Two brand colours:
+The product is Wisp, store and trade name Wisp Money. Two brand colours:
 
 - **Midnight** `#232B66`: the action colour in the interface (light theme), and the logo's bars.
 - **Rose** `#D9577A`: the logo's dot only. Rose never appears in the interface.

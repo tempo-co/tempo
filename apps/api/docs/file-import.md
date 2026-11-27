@@ -63,14 +63,14 @@ Limits: 5 proposals per user per day, a proposal lasts an hour, 50 saved layouts
 
 ## Picked bank, misses and bank requests
 
-- **Picked bank.** An upload or layout proposal may send `bankId`: a `BANK_LIST` id (`@tempo/contracts`) or `other`; anything else is a 400. The import stores it, as does a proposal, whose confirmed layout keeps it.
+- **Picked bank.** An upload or layout proposal may send `bankId`: a `BANK_LIST` id (`@wisp/contracts`) or `other`; anything else is a 400. The import stores it, as does a proposal, whose confirmed layout keeps it.
 - **Misses.** When the pick is a verified bank and no reader its entry names (`layouts`, `formats`) read the file, `bank_import_layout_misses` keeps the bank, the time and the outcome: `mapper` (a proposal, with the code when refused), `saved_layout`, `other_reader`, or `refused` with the reader's code. Reader misses are written with the import, so a resent drop counts once; upload-limit refusals reach no reader. Never anything of the file.
 - **"Tell us your bank"** (`POST /bank-imports/bank-requests`, 204): a plain-text name (1 to 60 characters), an ISO 3166-1 alpha-2 country and `BANK_REQUEST_FILE_TYPES`, kept in `bank_requests` with the time; 5 per user per 24 hours, then 429 with `retryAt`. The name is data, never instructions.
 - **Adding a bank.** At most once a day `BankCoverageDigestService` emails `OPERATOR_ALERT_EMAIL` the banks requests or saved layouts name that no digest listed, plus verified banks' misses since the last digest; Redis keeps both. A built-in layout needs one such request or layout and a real export showing the columns: a public sample, or that layout's settings and headers, never rows. A headerless export needs two independent files.
 
 ## Refusals
 
-Every refusal is a typed code (`src/app/modules/file-import/bank-import-refusal.exception.ts`, mirrored in `@tempo/contracts`) and the web has copy for each (`apps/web/src/features/file-import/utils/refusal-copy.ts`). The parse child can only reach the codes in `PARSE_REFUSAL_CODES`.
+Every refusal is a typed code (`src/app/modules/file-import/bank-import-refusal.exception.ts`, mirrored in `@wisp/contracts`) and the web has copy for each (`apps/web/src/features/file-import/utils/refusal-copy.ts`). The parse child can only reach the codes in `PARSE_REFUSAL_CODES`.
 
 ## Measured (staging, one CPU each for API and database, synthetic data)
 

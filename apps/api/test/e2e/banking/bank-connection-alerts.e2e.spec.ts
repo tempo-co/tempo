@@ -129,7 +129,7 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 
 		const [weekWarning] = await expectMessages(OWNER_EMAIL, 1);
-		expect(weekWarning.Subject).toBe(`Your ${BANK_NAME} connection to Tempo ends soon`);
+		expect(weekWarning.Subject).toBe(`Your ${BANK_NAME} connection to Wisp ends soon`);
 		expect(weekWarning.Text).toContain(BANK_NAME);
 		expect(oneLine(weekWarning.Text)).toContain(`ends on ${ownerTime(consentValidUntil)}.`);
 		expect(weekWarning.HTML).toContain(`href="${webBaseUrl}/accounts"`);
@@ -144,7 +144,7 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 
 		const [lastDay] = await expectMessages(OWNER_EMAIL, 1);
-		expect(lastDay.Subject).toBe(`Last day to reconnect ${BANK_NAME} in Tempo`);
+		expect(lastDay.Subject).toBe(`Last day to reconnect ${BANK_NAME} in Wisp`);
 	});
 
 	it('sends a single last-day warning when the 7-day window was missed', async () => {
@@ -154,7 +154,7 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 
 		const [message] = await expectMessages(OWNER_EMAIL, 1);
-		expect(message.Subject).toBe(`Last day to reconnect ${BANK_NAME} in Tempo`);
+		expect(message.Subject).toBe(`Last day to reconnect ${BANK_NAME} in Wisp`);
 	});
 
 	it('warns again about a reauthorized consent once its new end date is near', async () => {
@@ -176,7 +176,7 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 
 		const [message] = await expectMessages(OWNER_EMAIL, 1);
-		expect(message.Subject).toBe('Your Example Bank connection to Tempo ends soon');
+		expect(message.Subject).toBe('Your Example Bank connection to Wisp ends soon');
 	});
 
 	it.each([
@@ -190,7 +190,7 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 
 		const [message] = await expectMessages(OWNER_EMAIL, 1);
-		expect(message.Subject).toBe(`Tempo can't sync ${BANK_NAME}`);
+		expect(message.Subject).toBe(`Wisp can't sync ${BANK_NAME}`);
 	});
 
 	it('does not alert about a rate-limited connection that synced within the day', async () => {
@@ -213,8 +213,8 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 
 		const [message] = await expectMessages(OWNER_EMAIL, 1);
-		expect(message.Subject).toBe(`Tempo can't sync ${BANK_NAME}`);
-		expect(message.Text).toContain(`The access you gave Tempo to ${BANK_NAME} has ended.`);
+		expect(message.Subject).toBe(`Wisp can't sync ${BANK_NAME}`);
+		expect(message.Text).toContain(`The access you gave Wisp to ${BANK_NAME} has ended.`);
 		expect(oneLine(message.Text)).toContain(
 			`The last successful sync was on ${ownerTime(connection.lastSyncedAt!)}.`,
 		);
@@ -298,7 +298,7 @@ describe('Bank connection email alerts', () => {
 		await scanAndDeliver();
 		await scanAndDeliver();
 		const [message] = await expectMessages(OWNER_EMAIL, 1);
-		expect(message.Subject).toBe(`Tempo can't sync ${BANK_NAME}`);
+		expect(message.Subject).toBe(`Wisp can't sync ${BANK_NAME}`);
 	});
 
 	it('retries only the alert whose email could not be queued', async () => {
@@ -318,8 +318,8 @@ describe('Bank connection email alerts', () => {
 
 		const messages = await expectMessages(OWNER_EMAIL, 2);
 		expect(messages.map((message) => message.Subject).sort()).toEqual([
-			`Tempo can't sync ${BANK_NAME}`,
-			`Your ${BANK_NAME} connection to Tempo ends soon`,
+			`Wisp can't sync ${BANK_NAME}`,
+			`Your ${BANK_NAME} connection to Wisp ends soon`,
 		]);
 	});
 

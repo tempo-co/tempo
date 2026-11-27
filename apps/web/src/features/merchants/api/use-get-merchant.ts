@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {MerchantGroup} from '@tempo/contracts';
+import type {MerchantGroup} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

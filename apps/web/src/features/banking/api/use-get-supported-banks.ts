@@ -1,5 +1,5 @@
 import {queryOptions, useQuery} from '@tanstack/react-query';
-import {BankConnectionAspsp} from '@tempo/contracts';
+import {BankConnectionAspsp} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

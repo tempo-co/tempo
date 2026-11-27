@@ -1,4 +1,4 @@
-import {CONSENT_ENDING_SOON_MS, SYNC_BROKEN_AFTER_MS} from '@tempo/contracts';
+import {CONSENT_ENDING_SOON_MS, SYNC_BROKEN_AFTER_MS} from '@wisp/contracts';
 
 import {BankConnection} from '../bank-connection.entity';
 import {BANK_CONNECTION_STATUSES} from '../services/banking-sync.constants';

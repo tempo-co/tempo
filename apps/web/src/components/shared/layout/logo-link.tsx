@@ -10,7 +10,7 @@ type LogoLinkProps = {
 
 export function LogoLink({className, disabled = false}: LogoLinkProps) {
   return (
-    <Link to='/' className={className} disabled={disabled} aria-label='Tempo home'>
+    <Link to='/' className={className} disabled={disabled} aria-label='Wisp home'>
       <motion.div
         whileHover={{scale: 1.07}}
         whileTap={{scale: 0.95}}

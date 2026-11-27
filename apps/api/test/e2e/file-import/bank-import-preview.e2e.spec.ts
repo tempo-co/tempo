@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportPreview, BankImportSummary} from '@tempo/contracts';
+import type {BankImportPreview, BankImportSummary} from '@wisp/contracts';
 import {readFileSync} from 'node:fs';
 import {Server} from 'node:net';
 import {join} from 'node:path';

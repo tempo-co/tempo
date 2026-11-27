@@ -3,7 +3,7 @@ import type {
   CashFlowInterval,
   MerchantGroupPeriods,
   MerchantGroupPeriodsQuery,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

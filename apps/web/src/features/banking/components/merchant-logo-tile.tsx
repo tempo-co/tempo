@@ -1,4 +1,4 @@
-import {BankTransaction} from '@tempo/contracts';
+import {BankTransaction} from '@wisp/contracts';
 import {useId, useState} from 'react';
 
 import {cn} from '@/utils/cn';

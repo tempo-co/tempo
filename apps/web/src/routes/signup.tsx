@@ -15,7 +15,7 @@ export const Route = createFileRoute('/signup')({
 
 function SignUp() {
   return (
-    <AuthLayout title='Create your Tempo account'>
+    <AuthLayout title='Create your Wisp account' officialLink>
       <FadeSwitch
         viewKey='initial-signup-options'
         wrapperClassName='relative flex flex-col space-y-3'

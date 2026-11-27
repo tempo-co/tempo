@@ -23,7 +23,7 @@ export class HttpError extends Error {
 
 export class NetworkError extends HttpError {
   constructor() {
-    super(0, 'Cannot reach Tempo. Try again when the connection returns.');
+    super(0, 'Cannot reach Wisp. Try again when the connection returns.');
   }
 }
 
@@ -92,7 +92,7 @@ export async function completePendingLogout() {
         throw new NetworkError();
       });
       if (!response.ok && response.status !== 401) {
-        throw new HttpError(response.status, 'Tempo could not confirm the logout.');
+        throw new HttpError(response.status, 'Wisp could not confirm the logout.');
       }
       try {
         localStorage.removeItem(PENDING_LOGOUT_KEY);
@@ -117,7 +117,7 @@ export function beginLogout() {
     localStorage.setItem(PENDING_LOGOUT_KEY, 'true');
   } catch {
     unpersistedLogout = true;
-    toast.warning('Keep Tempo open until logout is confirmed', {
+    toast.warning('Keep Wisp open until logout is confirmed', {
       description: 'This browser could not remember the unfinished logout.',
     });
   }
@@ -177,7 +177,7 @@ async function request<T = unknown>(
   const isWrite = !['GET', 'HEAD'].includes(init?.method ?? 'GET');
   if (isWrite && !onlineManager.isOnline()) {
     if (init?.quiet) throw new NetworkError();
-    toast.error('Changes cannot be saved while Tempo is unreachable.');
+    toast.error('Changes cannot be saved while Wisp is unreachable.');
     throw toasted(new NetworkError());
   }
   const response = await fetch(url, {
@@ -191,10 +191,10 @@ async function request<T = unknown>(
       throw error;
     onlineManager.setOnline(false);
     if (!isWrite || init?.quiet) throw new NetworkError();
-    toast.error('Cannot reach Tempo. Your change was not confirmed. Check before trying again.');
+    toast.error('Cannot reach Wisp. Your change was not confirmed. Check before trying again.');
     throw toasted(new NetworkError());
   });
-  // Any reply, including an error status, proves Tempo is reachable. The API itself answers 502/503
+  // Any reply, including an error status, proves Wisp is reachable. The API itself answers 502/503
   // when the bank provider fails, so only a failed request means the connection is down.
   init?.signal?.throwIfAborted();
   onlineManager.setOnline(true);
@@ -250,7 +250,7 @@ async function request<T = unknown>(
     if (response.status >= 500) {
       const unavailable = new HttpError(
         response.status,
-        'Tempo is temporarily unavailable. Try again.',
+        'Wisp is temporarily unavailable. Try again.',
       );
       // A busy refusal is a 503 with a typed body the caller can tell apart from an outage.
       unavailable.body = await response.json().catch(() => undefined);

@@ -10,7 +10,7 @@ export type BankStandardFormat = Exclude<BankImportFormat, 'csv' | 'mixed'>;
 export const BANK_STATUSES = ['verified', 'unverified'] as const;
 export type BankStatus = (typeof BANK_STATUSES)[number];
 
-/** How to download the file Tempo reads: short numbered steps in the bank's own menu labels, and the file to pick. */
+/** How to download the file Wisp reads: short numbered steps in the bank's own menu labels, and the file to pick. */
 export type BankExportSteps = {
 	steps: readonly string[];
 	file: string;
@@ -36,7 +36,7 @@ export type Bank = {
 };
 
 /**
- * The banks Tempo knows, verified first, then the researched unverified ones. Menu labels are quoted in the bank's
+ * The banks Wisp knows, verified first, then the researched unverified ones. Menu labels are quoted in the bank's
  * language with an English gloss. Each entry's sources are in `docs/bank-sources.md` of this package.
  */
 export const BANK_LIST: readonly Bank[] = [
@@ -621,7 +621,7 @@ export const BANK_LIST: readonly Bank[] = [
 				'In easy eBanking, go to "Finanzübersicht" (financial overview).',
 				'Open "Umsatzanzeige" (transaction view) and search or filter the period.',
 				'Export as CSV. The file holds every transaction the search finds, not only those on screen.',
-				"Tempo also reads an easybank credit card's CSV file; easybank's help does not describe its download.",
+				"Wisp also reads an easybank credit card's CSV file; easybank's help does not describe its download.",
 			],
 			file: 'CSV',
 		},
@@ -638,7 +638,7 @@ export const BANK_LIST: readonly Bank[] = [
 				'In KBC Touch, go to "Betalen" (payments), then "Zoeken en Rapporten" (search and reports).',
 				"Search the account's transactions for the period you want.",
 				'Click "Downloaden" (download) and choose CSV, not PDF.',
-				"Tempo also reads a KBC credit card's CSV file; KBC's pages do not describe its download.",
+				"Wisp also reads a KBC credit card's CSV file; KBC's pages do not describe its download.",
 			],
 			file: 'CSV',
 		},
@@ -880,7 +880,7 @@ export const BANK_LIST: readonly Bank[] = [
 
 /** What to look for at a bank the list does not name. */
 export const OTHER_BANK_EXPORT_TEXT =
-	'Look first for a download named CAMT (camt.053), MT940 or OFX: Tempo reads those most reliably. If your bank offers only CSV or Excel, choose CSV, or Excel saved as .xlsx; old .xls files are not read. Never choose PDF. In the website or app, open your account, then its transaction list, set the widest date range the bank allows, and look for a Download or Export button, usually above the list. If you cannot find one, search the help section for "export" or "download transactions".';
+	'Look first for a download named CAMT (camt.053), MT940 or OFX: Wisp reads those most reliably. If your bank offers only CSV or Excel, choose CSV, or Excel saved as .xlsx; old .xls files are not read. Never choose PDF. In the website or app, open your account, then its transaction list, set the widest date range the bank allows, and look for a Download or Export button, usually above the list. If you cannot find one, search the help section for "export" or "download transactions".';
 
 /** The pick for a bank the list does not name ("Another bank"); no bank in `BANK_LIST` takes this id. */
 export const OTHER_BANK_ID = 'other';
@@ -907,7 +907,7 @@ export const BANK_REQUEST_MAX_NAME_LENGTH = 60;
 export const BANK_REQUEST_MAX_PER_DAY = 5;
 
 /**
- * `POST /bank-imports/bank-requests` (204, no body): asks Tempo to read a bank's files. No file is sent and no reply
+ * `POST /bank-imports/bank-requests` (204, no body): asks Wisp to read a bank's files. No file is sent and no reply
  * follows. The name is kept as plain text, never read as instructions.
  */
 export type CreateBankRequest = {

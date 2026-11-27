@@ -1,4 +1,4 @@
-import type {BankConnectionRemoveRequest} from '@tempo/contracts';
+import type {BankConnectionRemoveRequest} from '@wisp/contracts';
 import {IsBoolean, IsOptional, IsString} from 'class-validator';
 
 export class BankConnectionRemoveDto implements BankConnectionRemoveRequest {

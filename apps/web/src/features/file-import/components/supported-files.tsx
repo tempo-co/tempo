@@ -1,4 +1,4 @@
-import type {BankImportLayout} from '@tempo/contracts';
+import type {BankImportLayout} from '@wisp/contracts';
 import {useState} from 'react';
 import {toast} from 'sonner';
 
@@ -61,7 +61,7 @@ export function SupportedFiles() {
 }
 
 /**
- * The layouts the owner confirmed for files Tempo did not know, each with Remove; shown once there is one. Removing
+ * The layouts the owner confirmed for files Wisp did not know, each with Remove; shown once there is one. Removing
  * one leaves what it imported; Undo on the import removes that.
  */
 function YourLayouts({enabled}: {enabled: boolean}) {

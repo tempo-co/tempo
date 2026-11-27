@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BankImportBanks} from '@tempo/contracts';
+import type {BankImportBanks} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

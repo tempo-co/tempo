@@ -9,7 +9,7 @@ import {
 } from '@/utils/installed-app';
 
 /**
- * How Tempo can be installed here: `installed` when it runs installed (or was just installed from this page),
+ * How Wisp can be installed here: `installed` when it runs installed (or was just installed from this page),
  * `steps` on iPhone and iPad (Safari's Share › Add to Home Screen), `prompt` where the browser offered its own install
  * dialog (Chrome), `none` otherwise.
  */
@@ -23,7 +23,7 @@ export function useInstallWay(): InstallWay {
   return prompt ? 'prompt' : 'none';
 }
 
-const DISMISSED_KEY = 'tempo.install-card-dismissed';
+const DISMISSED_KEY = 'wisp-install-card-dismissed';
 
 function readDismissed() {
   try {
@@ -66,7 +66,7 @@ export function useInstallCardDismissed() {
 }
 
 /**
- * Whether Home offers the install card: on a phone that can install Tempo and does not run it installed, until the
+ * Whether Home offers the install card: on a phone that can install Wisp and does not run it installed, until the
  * owner closes the card on this device.
  */
 export function useInstallCard(phone: boolean) {

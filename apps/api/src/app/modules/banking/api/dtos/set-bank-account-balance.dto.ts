@@ -1,4 +1,4 @@
-import type {SetBankAccountBalanceRequest} from '@tempo/contracts';
+import type {SetBankAccountBalanceRequest} from '@wisp/contracts';
 import {IsString, Matches} from 'class-validator';
 
 import {BANKING_BALANCE_AMOUNT_INVALID} from '../constants/banking-messages.constants';

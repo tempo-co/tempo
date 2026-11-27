@@ -1,9 +1,9 @@
-import type {BankRequestFileType} from '@tempo/contracts';
+import type {BankRequestFileType} from '@wisp/contracts';
 import {Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
-/** A user's "Tell us your bank" request for a bank Tempo does not read yet. The name is plain text as typed. */
+/** A user's "Tell us your bank" request for a bank Wisp does not read yet. The name is plain text as typed. */
 @Entity('bank_requests')
 @Index('idx_bank_requests_account_created', ['accountId', 'createdAt'])
 export class BankRequest {

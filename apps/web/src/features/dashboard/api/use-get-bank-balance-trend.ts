@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BalanceTrendInterval, BankBalanceTrend} from '@tempo/contracts';
+import type {BalanceTrendInterval, BankBalanceTrend} from '@wisp/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {api} from '@/utils/api';

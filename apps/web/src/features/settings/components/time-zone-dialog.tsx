@@ -1,4 +1,4 @@
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 import {Check, Search} from 'lucide-react';
 import {useMemo, useState} from 'react';
 

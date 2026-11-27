@@ -1,6 +1,6 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useNavigate, useRouter} from '@tanstack/react-router';
-import type {EmailVerifyRequest, MessageResponse} from '@tempo/contracts';
+import type {EmailVerifyRequest, MessageResponse} from '@wisp/contracts';
 import {useCallback} from 'react';
 import {toast} from 'sonner';
 
@@ -28,7 +28,7 @@ export const useContinueVerified = () => {
         toast.info('Your email has already been verified.', {id: 'email-already-verified'});
         return;
       }
-      toast.success('Welcome to Tempo!', {
+      toast.success('Welcome to Wisp!', {
         description: 'Your email has been verified.',
         id: 'welcome',
       });

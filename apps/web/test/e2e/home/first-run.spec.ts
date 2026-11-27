@@ -1,5 +1,5 @@
 import type {Locator, Page, Request} from '@playwright/test';
-import type {BankConnection, BankTransactionReviewCounts} from '@tempo/contracts';
+import type {BankConnection, BankTransactionReviewCounts} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {HOME_CONNECTION, mockSyntheticHome, monthTransactions} from '../../data/home-history.data';
@@ -217,7 +217,7 @@ test.describe('First run on an iPhone', () => {
         .getByRole('region', {name: 'To do', exact: true})
         .getByRole('listitem')
         .nth(1),
-    ).toContainText('Add Tempo to your Home Screen');
+    ).toContainText('Add Wisp to your Home Screen');
   });
 });
 

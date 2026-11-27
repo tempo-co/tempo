@@ -4,7 +4,7 @@ import {
   BANK_ACCOUNT_ALIAS_MAX_LENGTH,
   type BankAccount,
   type BankConnection,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {CircleAlert, Eye, EyeOff, Pencil, Trash2} from 'lucide-react';
 import {type ReactNode, useId, useState} from 'react';
 import {toast} from 'sonner';

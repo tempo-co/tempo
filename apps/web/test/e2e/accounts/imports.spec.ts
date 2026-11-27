@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';
@@ -129,7 +129,7 @@ test.describe('imports on Accounts', () => {
     const counts = summary.getByRole('region', {name: 'When imported'});
     await expect(counts.getByText('Were new', {exact: true}).locator('..')).toContainText('212');
     await expect(
-      counts.getByText('Were already in Tempo', {exact: true}).locator('..'),
+      counts.getByText('Were already in Wisp', {exact: true}).locator('..'),
     ).toContainText('98');
     await expect(summary.getByText('New transactions')).toHaveCount(0);
     const wentTo = summary.getByTestId('bank-import-accounts').getByRole('listitem');
@@ -276,7 +276,7 @@ test.describe('imports on Accounts', () => {
     dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', {name: 'Add balance'})).toBeVisible();
     await expect(
-      dialog.getByText('Tempo works out earlier balances from your transactions.'),
+      dialog.getByText('Wisp works out earlier balances from your transactions.'),
     ).toBeVisible();
     const field = dialog.getByLabel('Balance of Example Wallet today');
     await animationsSettled(dialog);

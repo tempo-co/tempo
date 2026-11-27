@@ -403,7 +403,7 @@ export type BankImportLayoutMapping = {
 	dateFormat: string;
 };
 
-/** A row of the owner's file as Tempo would store it. Amounts are signed decimal strings. */
+/** A row of the owner's file as Wisp would store it. Amounts are signed decimal strings. */
 export type BankImportLayoutPreviewRow = {
 	date: string | null;
 	amount: string;
@@ -468,7 +468,7 @@ export type ConfirmBankImportLayoutProposalRequest = {
 export const BANK_IMPORT_CURRENCIES: readonly string[] = ['EUR', ...Object.keys(ECB_CURRENCIES)].sort();
 
 /**
- * A layout the owner confirmed: every later drop of theirs is tried with it after Tempo's own readers. Each item of
+ * A layout the owner confirmed: every later drop of theirs is tried with it after Wisp's own readers. Each item of
  * `GET /bank-imports/layouts`, newest first; `DELETE /bank-imports/layouts/:layoutId` removes one and leaves what it
  * imported.
  */
@@ -486,7 +486,7 @@ export type BankImportLayout = {
  */
 export type BankImportBanks = {banks: string[]};
 
-/** A bank name as Tempo shows and keeps it: trimmed, with single spaces. */
+/** A bank name as Wisp shows and keeps it: trimmed, with single spaces. */
 export function bankNameSpelling(name: string): string {
 	return name.trim().replace(/\s+/g, ' ');
 }

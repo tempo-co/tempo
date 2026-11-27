@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import type {BankConnection, UpdateBankAccountRequest} from '@tempo/contracts';
+import type {BankConnection, UpdateBankAccountRequest} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
@@ -18,9 +18,11 @@ import {
   transformBankConnections,
 } from '../../utils/api-mocks';
 import {
+  BANK_CONNECTION_LINE,
   accountRow,
   attentionLines,
   chooseDeleteEverything,
+  expectBankConnectionLine,
   openAccount,
   openRemoval,
   routeMockedBankApp,
@@ -680,7 +682,12 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/accounts');
 
-    const dialog = await openRemoval(page, CHECKING.id);
+    // A bank-connected account's About says who makes the connection.
+    await openAccount(page, CHECKING.id);
+    const about = page.getByTestId('account-about');
+    await expectBankConnectionLine(about);
+    await page.getByRole('button', {name: 'Remove connection', exact: true}).click();
+    const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('radio', {name: /^Keep accounts and history/})).toBeChecked();
     await expect(
       dialog.getByText(
@@ -695,7 +702,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     expect(removal).toEqual({keepAccounts: true});
     // The account stays, now from statement files, so its page stays open.
     await expect(page).toHaveURL(new RegExp(`/accounts/${CHECKING.id}$`));
-    await expect(page.getByTestId('account-about')).toContainText('Statement files');
+    await expect(about).toContainText('Statement files');
+    // A file-only account has no bank connection to describe.
+    await expect(about).not.toContainText(BANK_CONNECTION_LINE);
     await expect(page.getByTestId('account-connection')).toHaveCount(0);
     await page.goto('/accounts');
     await expect(accountRow(page, CHECKING.id)).toContainText('statement files');
@@ -1152,15 +1161,15 @@ test.describe('mocked Enable Banking bank connection', () => {
     expect((await boxOf(page.getByTestId('accounts-total'))).width).toBe(first.width);
   });
 
-  test('says Tempo is not answering, without mentioning sessions, when the first check fails', async ({
+  test('says Wisp is not answering, without mentioning sessions, when the first check fails', async ({
     page,
   }) => {
     await page.route('**/accounts/me', (route) => route.abort('failed'));
     await page.goto('/accounts');
 
-    await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Can't reach Wisp"})).toBeVisible();
     await expect(page.locator('body')).toContainText(
-      "Tempo isn't answering right now. Try again in a moment.",
+      "Wisp isn't answering right now. Try again in a moment.",
     );
   });
 
@@ -1206,7 +1215,7 @@ test.describe('account loading errors', () => {
     await expect(alert).toContainText(/503 · \d{2}:\d{2}/);
   });
 
-  test('loads accounts once when Tempo answers after an unanswered first session check', async ({
+  test('loads accounts once when Wisp answers after an unanswered first session check', async ({
     page,
   }) => {
     let connectionRequests = 0;
@@ -1220,8 +1229,8 @@ test.describe('account loading errors', () => {
     );
 
     await page.goto('/accounts');
-    await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
-    // Focus makes Tempo check its connection now instead of on its next timer.
+    await expect(page.getByRole('heading', {name: "Can't reach Wisp"})).toBeVisible();
+    // Focus makes Wisp check its connection now instead of on its next timer.
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
     await expect(page.getByRole('heading', {name: "Couldn't load accounts"})).toBeVisible();

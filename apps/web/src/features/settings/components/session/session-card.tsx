@@ -1,4 +1,4 @@
-import type {Session} from '@tempo/contracts';
+import type {Session} from '@wisp/contracts';
 import {format, formatDistanceToNowStrict} from 'date-fns';
 import {createElement} from 'react';
 

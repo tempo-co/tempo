@@ -1,4 +1,4 @@
-import {BankTransaction, BankTransactionCategory} from '@tempo/contracts';
+import {BankTransaction, BankTransactionCategory} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {

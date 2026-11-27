@@ -1,7 +1,7 @@
 import {INestApplication} from '@nestjs/common';
 import {ConfigService} from '@nestjs/config';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankTransactionBreakdownPeriod, BankTransactionsResponse} from '@tempo/contracts';
+import type {BankTransactionBreakdownPeriod, BankTransactionsResponse} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';
 import type {DeepPartial} from 'typeorm';

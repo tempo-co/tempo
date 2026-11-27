@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 import {Circle, FileUp, Hourglass, Landmark} from 'lucide-react';
 import {useEffect} from 'react';
 

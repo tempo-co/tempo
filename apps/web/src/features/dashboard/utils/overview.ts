@@ -3,7 +3,7 @@ import {
   type BankTransactionBreakdownPeriod,
   type BankTransactionCashFlow,
   MAX_RANGE_PERIODS,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {getDaysInMonth} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';

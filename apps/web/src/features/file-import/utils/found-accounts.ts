@@ -1,4 +1,4 @@
-import type {BankImportPreviewAccount, BankImportSummary} from '@tempo/contracts';
+import type {BankImportPreviewAccount, BankImportSummary} from '@wisp/contracts';
 
 import {accountName} from '@/features/banking/utils/bank-account-name';
 

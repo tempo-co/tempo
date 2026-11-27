@@ -4,7 +4,7 @@ import {
   type RecurringSeries,
   type RecurringSeriesList,
   type RecurringSeriesLists,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {formatBankTransactionCompactDate} from '../../../src/features/banking/utils/formatters';
 import {createAccount} from '../../data/account.data';
