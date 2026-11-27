@@ -12,6 +12,9 @@ import {
 	EMAIL_CHANGE_ACCOUNT_EMAIL,
 	EMAIL_CHANGE_ACCOUNT_NAME,
 	EMAIL_CHANGE_ACCOUNT_PASSWORD,
+	HOME_ACCOUNT_EMAIL,
+	HOME_ACCOUNT_NAME,
+	HOME_ACCOUNT_PASSWORD,
 	LEFT_OUT_ACCOUNT_EMAIL,
 	LEFT_OUT_ACCOUNT_NAME,
 	LEFT_OUT_ACCOUNT_PASSWORD,
@@ -102,6 +105,12 @@ export async function seedAccounts(app: INestApplicationContext) {
 			name: RECURRING_ACCOUNT_NAME,
 			email: RECURRING_ACCOUNT_EMAIL,
 			password: RECURRING_ACCOUNT_PASSWORD,
+			isEmailVerified: true,
+		},
+		{
+			name: HOME_ACCOUNT_NAME,
+			email: HOME_ACCOUNT_EMAIL,
+			password: HOME_ACCOUNT_PASSWORD,
 			isEmailVerified: true,
 		},
 	];

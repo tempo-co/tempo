@@ -183,12 +183,18 @@ test.describe('fully mocked', () => {
     await page.route('**/bank-transactions/cash-flow?**', (route) =>
       fulfillJson(route, {...history.flow, baseCurrency: currency}),
     );
+    await page.route('**/bank-transactions/spending-pace?**', (route) =>
+      fulfillJson(route, {
+        ...history.paceOf(new URL(route.request().url()).searchParams.get('asOf')!),
+        baseCurrency: currency,
+      }),
+    );
     await page.goto('/insights/months/2026-10');
 
     const setup = page.getByRole('region', {name: QUESTION});
     const month = homePage.monthPage('October 2026');
     await expect(setup.getByText('Choose a currency before saving.')).toBeVisible();
-    await expect(homePage.whereYouStand).toBeHidden();
+    await expect(homePage.paceCard).toBeHidden();
     await expect(month).toBeHidden();
     await setup.getByRole('button', {name: 'Save'}).click();
     await page.getByRole('dialog').getByRole('radio', {name: 'GBP — British Pound'}).click();
@@ -196,7 +202,7 @@ test.describe('fully mocked', () => {
 
     await expect(page.getByRole('heading', {name: 'Recalculating totals in GBP'})).toBeVisible();
     expect(api.saved).toEqual(['GBP']);
-    await expect(homePage.whereYouStand).toBeHidden();
+    await expect(homePage.paceCard).toBeHidden();
     await expect(month).toBeHidden();
 
     // Once the amounts are converted, the figures and the month come back in GBP without a reload.
@@ -209,7 +215,7 @@ test.describe('fully mocked', () => {
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: 'Home', exact: true})
       .click();
-    await expect(homePage.totalBalance).toContainText('£');
+    await expect(homePage.paceFigure).toContainText('£');
   });
 
   test('Home and a linked month show no figures before the reporting currency is known', async ({
@@ -233,11 +239,11 @@ test.describe('fully mocked', () => {
     // Whether the history may be added up is still unknown: nothing of it shows.
     await expect.poll(() => asked).toBe(true);
     await page.waitForTimeout(300);
-    await expect(homePage.whereYouStand).toHaveCount(0);
+    await expect(homePage.paceCard).toHaveCount(0);
     await expect(month).toHaveCount(0);
     release();
     await expect(page.getByRole('region', {name: QUESTION})).toBeVisible();
-    await expect(homePage.whereYouStand).toBeHidden();
+    await expect(homePage.paceCard).toBeHidden();
     await expect(month).toBeHidden();
   });
 
@@ -255,12 +261,12 @@ test.describe('fully mocked', () => {
       {recalculates: false},
     );
     await page.goto('/');
-    await expect(homePage.totalBalance).toContainText('€');
+    await expect(homePage.paceFigure).toContainText('€');
 
     // The new figures take a while; meanwhile none of the EUR ones may be shown under GBP.
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
-    await page.route('**/bank-transactions/balance-trend?**', async (route) => {
+    await page.route('**/bank-transactions/spending-pace?**', async (route) => {
       await held;
       return route.fallback();
     });
@@ -270,7 +276,7 @@ test.describe('fully mocked', () => {
     await setup.getByRole('button', {name: 'Use GBP'}).click();
     await expect.poll(() => api.saved).toEqual(['GBP']);
     try {
-      await expect(homePage.totalBalance).not.toContainText('€');
+      await expect(homePage.paceCard).not.toContainText('€');
     } finally {
       release();
     }
@@ -302,6 +308,16 @@ test.describe('fully mocked', () => {
       return answer(route, history.trend);
     });
     await page.route('**/bank-transactions/cash-flow?**', (route) => answer(route, history.flow));
+    await page.route('**/bank-transactions/spending-pace?**', async (route) => {
+      if (racing) {
+        await new Promise((resolve) => setTimeout(resolve, 30_000));
+        return route.fallback().catch(() => undefined);
+      }
+      return answer(
+        route,
+        history.paceOf(new URL(route.request().url()).searchParams.get('asOf')!),
+      );
+    });
     await page.exposeFunction('raceDone', () => {
       racing = false;
     });
@@ -337,7 +353,7 @@ test.describe('fully mocked', () => {
       };
     });
     await page.goto('/');
-    await expect(homePage.totalBalance).toContainText('€');
+    await expect(homePage.paceFigure).toContainText('€');
 
     racing = true;
     const setup = page.getByRole('region', {name: QUESTION});
@@ -347,7 +363,7 @@ test.describe('fully mocked', () => {
     await expect.poll(() => api.saved).toEqual(['GBP']);
 
     // The EUR figures are dropped and the GBP ones load now, not at Home's next refresh.
-    await expect(homePage.totalBalance).toContainText('£', {timeout: 5_000});
+    await expect(homePage.paceFigure).toContainText('£', {timeout: 5_000});
   });
 
   test('stops asking once the bank in the other currency is removed', async ({page, baseURL}) => {
@@ -426,8 +442,15 @@ test.describe('fully mocked', () => {
     await page.route('**/bank-transactions/cash-flow?**', (route) =>
       fulfillJson(route, {...history.flow, baseCurrency: currency}),
     );
+    await page.route('**/bank-transactions/spending-pace?**', async (route) => {
+      await held;
+      return fulfillJson(route, {
+        ...history.paceOf(new URL(route.request().url()).searchParams.get('asOf')!),
+        baseCurrency: currency,
+      });
+    });
     await page.goto('/');
-    await expect(homePage.totalBalance).toContainText('€');
+    await expect(homePage.paceFigure).toContainText('€');
 
     // Another tab or device changes the currency to USD, and its amounts are converted. Accounts reads it.
     api.state = {...api.state, currency: 'USD'};
@@ -443,18 +466,17 @@ test.describe('fully mocked', () => {
     await expect.poll(() => api.reads).toBeGreaterThan(reads);
     await page.goBack();
 
-    // Until the USD balances arrive, the balance and flows show neither the EUR ones nor a mix under one name.
-    await expect(homePage.whereYouStand).toBeVisible();
+    // Until the USD figures arrive, the spending pace shows neither the EUR ones nor a mix under one name.
+    await expect(homePage.paceCard).toBeVisible();
     await page.waitForTimeout(300);
-    const balanceAndFlows = (await homePage.whereYouStand.innerText()).split('Repeats')[0];
-    expect(balanceAndFlows).not.toContain('€');
+    expect(await homePage.paceCard.innerText()).not.toContain('€');
     release();
-    await expect(homePage.totalBalance).toContainText('$');
+    await expect(homePage.paceFigure).toContainText('$');
 
-    // Breakdowns still answering in EUR are not shown under the history's USD, on Home or in a month.
-    const spending = page.getByRole('region', {name: 'Spending by category'});
-    await expect(spending).toHaveAttribute('aria-busy', 'true');
-    expect(await spending.innerText()).not.toContain('$');
+    // Breakdowns still answering in EUR are not shown under the pace's USD, on Home or in a month.
+    const categories = homePage.card('Top categories this month');
+    await expect(categories.locator('[aria-busy="true"]')).toBeVisible();
+    expect(await categories.innerText()).not.toContain('$');
     await page.goto('/insights/months/2026-10');
     const month = homePage.monthPage('October 2026');
     await expect(month.getByRole('region', {name: 'The month'})).toContainText('$');
@@ -489,8 +511,14 @@ test.describe('fully mocked', () => {
     await page.route('**/bank-transactions/cash-flow?**', (route) =>
       fulfillJson(route, {...history.flow, baseCurrency: currency}),
     );
+    await page.route('**/bank-transactions/spending-pace?**', (route) =>
+      fulfillJson(route, {
+        ...history.paceOf(new URL(route.request().url()).searchParams.get('asOf')!),
+        baseCurrency: currency,
+      }),
+    );
     await page.goto('/');
-    await expect(homePage.totalBalance).toContainText('€');
+    await expect(homePage.paceFigure).toContainText('€');
 
     // Another device switched to USD; until its amounts are converted, figures come back in no currency.
     api.state = {...api.state, currency: 'USD', recalculating: true};
@@ -499,7 +527,7 @@ test.describe('fully mocked', () => {
 
     // Home reads the settings again instead of showing the partial figures as plain numbers.
     await expect(page.getByRole('heading', {name: 'Recalculating totals in USD'})).toBeVisible();
-    await expect(homePage.whereYouStand).toBeHidden();
+    await expect(homePage.paceCard).toBeHidden();
   });
 
   test('dialogs wait for figures read while a change elsewhere is converted instead of showing plain numbers', async ({

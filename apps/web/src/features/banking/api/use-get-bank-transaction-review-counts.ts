@@ -22,7 +22,7 @@ const isReviewPage = (pathname: string) =>
 /** Transactions across all months that still need the owner's attention. */
 export const useGetBankTransactionReviewCounts = () => {
   const onReviewPage = useLocation({select: (location) => isReviewPage(location.pathname)});
-  const {data, isPending, isError, refetch} = useQuery<BankTransactionReviewCounts>({
+  const {data, isPending, isError, error, refetch} = useQuery<BankTransactionReviewCounts>({
     queryKey: dashboardQueryKeys.reviewCounts,
     queryFn: () => api.get<BankTransactionReviewCounts>('/bank-transactions/review-counts'),
     refetchInterval: onReviewPage ? HOME_REFRESH_INTERVAL_MS : AWAY_REFRESH_INTERVAL_MS,
@@ -31,7 +31,7 @@ export const useGetBankTransactionReviewCounts = () => {
     refetchOnReconnect: 'always',
   });
 
-  return {reviewCounts: data, isPending, isError, refetch};
+  return {reviewCounts: data, isPending, isError, error, refetch};
 };
 
 /**

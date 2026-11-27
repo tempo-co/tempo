@@ -127,7 +127,7 @@ test('a real income source reconciles with its drill, from its month and from it
   );
 
   const year = await sourceOf('year', '2026-01-01', '2026-10-01');
-  await page.goto('/');
+  await page.goto('/insights?period=2026&view=table');
   await expectDrill(
     page
       .getByRole('region', {name: 'Income by source'})

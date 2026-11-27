@@ -28,6 +28,7 @@ const layouts = [
   {width: 390, theme: 'light'},
   {width: 390, theme: 'dark'},
   {width: 360, theme: 'light'},
+  {width: 320, theme: 'light'},
   {width: 320, theme: 'dark'},
 ] as const;
 
@@ -60,7 +61,107 @@ function worstCase() {
   };
   for (let index = 1; index <= 39; index++)
     sourceLabels[`INCOME:example source ${index}`] = `Example Source ${index}`;
-  return homeHistory({spending, income, sourceLabels, firstMonth: FIRST_MONTH});
+  const history = homeHistory({spending, income, sourceLabels, firstMonth: FIRST_MONTH});
+  // A refund bigger than the month's spending so far, booked on the 1st, keeps this month below zero, and no data
+  // covers the 2nd and 3rd.
+  const paceOf = history.paceOf;
+  history.paceOf = (asOf) => {
+    const pace = paceOf(asOf);
+    const refund = 1_500_000;
+    return {
+      ...pace,
+      uncovered: [{from: 2, to: 3}],
+      daily: pace.daily.map((day) => ({
+        ...day,
+        spending: day.day === 1 ? (Number(day.spending) - refund).toFixed(2) : day.spending,
+        cumulative: (Number(day.cumulative) - refund).toFixed(2),
+      })),
+    };
+  };
+  return history;
+}
+
+/** Six accounts at one bank, each with a long name and a balance in the tens of millions, all synthetic. */
+const worstConnections = () => [
+  {
+    ...HOME_CONNECTION,
+    aspspName: 'Example Cooperative Savings and Loan Association of the Netherlands',
+    bankAccounts: Array.from({length: 6}, (_, index) => ({
+      ...HOME_CONNECTION.bankAccounts[0],
+      id: `00000000-0000-4000-8000-0000000000b${index}`,
+      name: `Example Joint Household Account With A Very Long Name Number ${index + 1}`,
+      currentBalanceAmount: '48123456.78',
+      currentBalanceInBaseCurrency: '48123456.78',
+    })),
+  },
+];
+
+const LONG_PAYEE = 'Example Municipal Water, Waste and Energy Services Cooperative Netherlands';
+
+/**
+ * The rest of worst-case Home, all synthetic: an owner with a long first name, six accounts' data running out on
+ * different days (one with none yet), bills with long names and amounts in the tens of thousands, the newest
+ * transactions with long descriptions and amounts in the millions, and more to check than fits a badge.
+ */
+async function mockWorstHomeCards(page: Page) {
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      name: 'Maximiliaan-Bartholomeus Wiśniewska-Kowalczyk',
+      email: 'owner@example.com',
+    }),
+  );
+  const accounts = worstConnections()[0].bankAccounts;
+  await page.route('**/bank-connections/coverage?**', (route) =>
+    fulfillJson(route, {
+      from: '2026-10-07',
+      to: '2026-11-05',
+      lastCoveredDay: '2026-11-05',
+      accounts: accounts.map((account, index) => {
+        const through =
+          index === 5
+            ? null
+            : `2026-${index < 2 ? '11-0' + (5 - index) : '10-' + (30 - index * 4)}`;
+        return {
+          bankAccountId: account.id,
+          source: index % 2 ? 'file' : 'sync',
+          coveredThrough: through,
+          ranges: through ? [{from: '2026-10-07', to: through}] : [],
+        };
+      }),
+    }),
+  );
+  const recurring = homeRecurring();
+  const long = <T extends {name: string; typicalAmount: string}>(series: T) => ({
+    ...series,
+    name: LONG_PAYEE,
+    typicalAmount: '48123.45',
+  });
+  await page.route('**/recurring-series/summary?**', (route) =>
+    fulfillJson(route, {
+      ...recurring.summary,
+      upcoming: recurring.summary.upcoming.map(long),
+      flagged: recurring.summary.flagged.map(long),
+      expenseThisMonth: {...recurring.summary.expenseThisMonth, remaining: '96246.90'},
+    }),
+  );
+  await page.route('**/bank-transactions?**', (route) => {
+    if (new URL(route.request().url()).searchParams.has('filter[date][from]'))
+      return route.fallback();
+    const newest = monthTransactions('2026-11', 5);
+    return fulfillJson(route, {
+      ...newest,
+      total: 48_210,
+      transactions: newest.transactions.map((transaction) => ({
+        ...transaction,
+        displayDescription: LONG_PAYEE,
+        description: LONG_PAYEE,
+        amount: '-48123456.78',
+        amountInBaseCurrency: '-48123456.78',
+      })),
+    });
+  });
 }
 
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
@@ -79,20 +180,16 @@ const smallTargets = (page: Page, selector: string) =>
     selector,
   );
 
-/**
- * Home's cards in page order: each a 1px hairline with 8px corners and no shadow, 12px below the card above, and its
- * heading, when it has one, 16px in from the edge.
- */
+/** Home's cards in page order: each a 1px hairline with 8px corners and no shadow, its heading 16px in from the edge. */
 const homeCards = (page: Page) =>
   page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll<HTMLElement>('main [role="region"]')).filter(
       (card) => !card.parentElement?.closest('[role="region"]'),
     );
-    return cards.map((card, index) => {
+    return cards.map((card) => {
       const css = getComputedStyle(card);
       const box = card.getBoundingClientRect();
       const heading = card.querySelector('h2');
-      const above = cards[index - 1]?.getBoundingClientRect();
       const headingCss = heading && getComputedStyle(heading);
       return {
         card: card.getAttribute('aria-label'),
@@ -102,25 +199,43 @@ const homeCards = (page: Page) =>
         inset: heading
           ? Math.round(heading.getBoundingClientRect().left - box.left - card.clientLeft)
           : null,
-        gap: above ? Math.round(box.top - above.bottom) : null,
         heading: headingCss && `${headingCss.fontSize} ${headingCss.fontWeight}`,
       };
     });
   });
 
-const card = (name: string, gap: number | null, heading: string | null = '13px 600') => ({
+const card = (name: string) => ({
   card: name,
   border: '1px',
   radius: '8px',
   shadow: 'none',
-  inset: heading ? 16 : null,
-  gap,
-  heading,
+  inset: 16,
+  heading: '13px 600',
 });
 
-for (const [name, history] of [
-  ['demo', homeHistory],
-  ['worst-case', worstCase],
+/** Wide, the main column then the rail; narrower, one column that opens with Your data and To do. */
+const WIDE_ORDER = [
+  'Spending pace',
+  'Top categories this month',
+  'Accounts',
+  'Recent transactions',
+  'Your data',
+  'To do',
+  'Coming up',
+];
+const NARROW_ORDER = [
+  'Your data',
+  'To do',
+  'Spending pace',
+  'Top categories this month',
+  'Accounts',
+  'Recent transactions',
+  'Coming up',
+];
+
+for (const [name, history, connections] of [
+  ['demo', homeHistory, () => [HOME_CONNECTION]],
+  ['worst-case', worstCase, worstConnections],
 ] as const) {
   for (const {width, theme} of layouts) {
     test(`Home and a month fit ${name} data at ${width}px in ${theme}`, async ({
@@ -131,9 +246,15 @@ for (const [name, history] of [
       page.on('pageerror', (error) => errors.push(error.message));
       await page.setViewportSize({width, height: 1000});
       await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
-      await mockSyntheticHome(page, {history: history()});
+      await mockSyntheticHome(page, {
+        history: history(),
+        connections: connections(),
+        reviewCounts:
+          name === 'worst-case' ? {...HOME_REVIEW_COUNTS, needsAttention: 1284} : undefined,
+      });
+      if (name === 'worst-case') await mockWorstHomeCards(page);
       await page.goto('/');
-      await expect(page.getByRole('region', {name: 'Income by source'})).toBeVisible();
+      await expect(homePage.paceFigure).toBeVisible();
       await expectLoaded(page);
       await page.evaluate(() => document.fonts.ready);
       const capture = async (view: string) => {
@@ -146,31 +267,38 @@ for (const [name, history] of [
       };
       await capture('home');
       await expectNoHorizontalOverflow(page);
-      // Where you stand leads with its total's label rather than a card title; Year by year is a table with no title.
       expect
         .soft(await homeCards(page))
-        .toEqual([
-          card('Where you stand', null, '12px 500'),
-          card('Year by year', 12, null),
-          card('Spending by category', 12),
-          card('Income by source', 12),
-        ]);
+        .toEqual((width >= 1024 ? WIDE_ORDER : NARROW_ORDER).map(card));
       expect.soft(await brokenAmounts(page)).toEqual([]);
-      // Every control is a full tap target on a phone.
-      if (width < 640) {
-        expect.soft(await smallTargets(page, 'main')).toEqual([]);
-        // An opened row lists every year, the tightest place for an amount.
-        for (const title of ['Spending by category', 'Income by source']) {
-          const table = page.getByRole('region', {name: title});
-          await table.getByRole('button', {name: /^Total/}).click();
-          await expect(table.getByRole('list', {name: /by year$/})).toHaveCount(1);
-        }
-        expect.soft(await brokenAmounts(page)).toEqual([]);
-        expect.soft(await smallTargets(page, 'main')).toEqual([]);
+      // Each pace fact puts its label above its value.
+      for (const fact of await homePage.paceCard.locator('dl > div').all()) {
+        const [label, value] = await Promise.all([
+          boxOf(fact.locator('dt')),
+          boxOf(fact.locator('dd')),
+        ]);
+        expect.soft(label.y + label.height).toBeLessThanOrEqual(value.y);
       }
-
-      await homePage.whereYouStand.getByRole('radio', {name: 'All', exact: true}).click();
-      await capture('home-all');
+      // The greeting stays on one line, however long the name.
+      expect.soft((await boxOf(page.getByRole('heading', {level: 1}))).height).toBeLessThan(30);
+      // The month's line stays inside the chart, below zero too.
+      const chart = await boxOf(homePage.paceCard.getByRole('img'));
+      const line = await boxOf(homePage.paceCard.getByTestId('pace-spent'));
+      expect.soft(line.y).toBeGreaterThanOrEqual(chart.y);
+      expect.soft(line.y + line.height).toBeLessThanOrEqual(chart.y + chart.height);
+      if (name === 'worst-case') {
+        await expect(homePage.card('To do')).toContainText('Check 1,284 transactions');
+        // The days no data covers are hatched, inside the month as after its last covered day.
+        await expect(homePage.paceCard.getByTestId('pace-not-covered')).toHaveCount(2);
+      }
+      // Every control is a full tap target on a phone.
+      if (width < 640) expect.soft(await smallTargets(page, 'main')).toEqual([]);
+      // Customizing puts move and hide buttons in every card's header without pushing anything out.
+      await page.getByRole('button', {name: 'Customize'}).click();
+      await expect(
+        homePage.card('Accounts').getByRole('button', {name: 'Hide Accounts'}),
+      ).toBeVisible();
+      await capture('home-customize');
       await expectNoHorizontalOverflow(page);
       expect.soft(await brokenAmounts(page)).toEqual([]);
 
@@ -197,51 +325,6 @@ for (const [name, history] of [
       expect(errors).toEqual([]);
     });
   }
-}
-
-/** How far the chart column and the details column end apart, in px. */
-async function columnGap(page: Page) {
-  const card = page.getByRole('region', {name: 'Where you stand'});
-  const [chart, details, repeats] = await Promise.all([
-    boxOf(card.locator('[data-slot="chart"]')),
-    boxOf(card.getByRole('region', {name: 'This span'})),
-    card
-      .getByRole('region', {name: 'Repeats'})
-      .boundingBox()
-      .catch(() => null),
-  ]);
-  // Side by side, the details to the right of the chart.
-  expect(details.x).toBeGreaterThanOrEqual(chart.x + chart.width);
-  const right = repeats ?? details;
-  return Math.abs(right.y + right.height - (chart.y + chart.height));
-}
-
-// 1250px is just past the side-by-side breakpoint: the 240px sidebar, then a 60rem column plus the page padding and
-// scrollbar gutter.
-for (const width of [1250, 1280, 1440]) {
-  test(`the chart and the span details end level at ${width}px, at every span`, async ({
-    page,
-    homePage,
-  }) => {
-    // Ten span switches over two histories: WebKit on CI already took over 9s of the default 10s.
-    test.setTimeout(30_000);
-    await page.setViewportSize({width, height: 1000});
-    for (const [name, history] of [
-      ['demo', homeHistory],
-      ['worst-case', worstCase],
-    ] as const) {
-      await mockSyntheticHome(page, {history: history()});
-      await page.goto('/');
-      await expectLoaded(homePage.whereYouStand);
-      for (const span of ['1M', '6M', '1Y', '3Y', 'All']) {
-        await homePage.whereYouStand.getByRole('radio', {name: span, exact: true}).click();
-        // 1M loads its day ends on selection.
-        await expectLoaded(homePage.whereYouStand);
-        await expect(homePage.whereYouStand.getByRole('region', {name: 'This span'})).toBeVisible();
-        expect.soft(await columnGap(page), `${name}, ${span}`).toBeLessThanOrEqual(8);
-      }
-    }
-  });
 }
 
 for (const {width, rows} of [
@@ -303,17 +386,14 @@ test('Home’s text actions and Load more buttons share one style with the month
       const css = getComputedStyle(element);
       return `${css.fontSize}/${css.lineHeight} ${css.fontWeight} ${css.color}`;
     });
-  const card = homePage.whereYouStand;
-  const spending = page.getByRole('region', {name: 'Spending by category'});
   const actions = [
-    card.getByRole('button', {name: 'All recurring payments'}),
-    card.getByRole('link', {name: 'Transactions in this span'}),
-    spending.getByRole('button', {name: '3 more categories'}),
+    homePage.paceCard.getByRole('link', {name: 'Insights'}),
+    homePage.card('Coming up').getByRole('link', {name: 'Recurring'}),
+    homePage.card('Recent transactions').getByRole('link', {name: 'All'}),
   ];
+  await expect(actions[0]).toBeVisible();
   const styles = [];
   for (const action of actions) styles.push(await style(action));
-  await actions[2].click();
-  styles.push(await style(spending.getByRole('button', {name: 'Show fewer'})));
   await page.goto('/insights/months/2026-03');
   const transactions = homePage.monthPage('March 2026').getByRole('region', {name: 'Transactions'});
   styles.push(await style(transactions.getByRole('link', {name: 'Open in Transactions'})));

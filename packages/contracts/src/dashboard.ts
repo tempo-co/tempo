@@ -210,3 +210,92 @@ export type BankTransactionDayTotals = {
 	baseCurrency: string | null;
 	days: BankTransactionDayTotal[];
 };
+
+/** `GET /bank-transactions/spending-pace` and `GET /bank-connections/coverage` query. */
+export type HomeReadQuery = {
+	/** The client's local date: the month it falls in is this month, and no day after it counts. */
+	asOf: string;
+};
+
+/** How many complete months before this one the usual pace averages, at most. */
+export const USUAL_PACE_MONTHS = 6;
+/** The usual pace is left out while fewer complete months than this exist. */
+export const MIN_USUAL_PACE_MONTHS = 2;
+
+/**
+ * The usual pace: the average of the complete months before this one (the newest `USUAL_PACE_MONTHS` at most), each
+ * month's spending added up day by day. A shorter month holds its last day's total to the end of this one.
+ */
+export type UsualPace = {
+	/** `YYYY-MM`, oldest first. */
+	months: string[];
+	/** Every day of this month; `average` is the usual spending up to and including that day. */
+	daily: BaselineDay[];
+	/** The usual spending up to the last covered day's day of the month. */
+	byLastCoveredDay: string;
+	/** The usual spending over a whole month as long as this one. */
+	month: string;
+};
+
+/**
+ * `GET /bank-transactions/spending-pace`: this month's spending, added up day by day through the last covered day,
+ * against the usual pace. Money fields are decimal strings with two places in the reporting currency, counted by the
+ * same rule as every other total.
+ */
+export type SpendingPace = {
+	/** The reporting currency; null while there is none or its amounts are being converted (`GET /reporting-currency`). */
+	baseCurrency: string | null;
+	/** `YYYY-MM` of `asOf`. */
+	month: string;
+	daysInMonth: number;
+	/**
+	 * The newest day the owner's data covers, never after `asOf`: across their accounts, the day each account's
+	 * transactions were last fetched completely and the end date of the newest import not undone. Null without any.
+	 */
+	lastCoveredDay: string | null;
+	/** One entry per day of this month through the last covered day; empty when that day is before this month. */
+	daily: SpendingPaceDay[];
+	/**
+	 * The runs of `daily`'s days no data covers, as days of the month (both included), oldest first: their spending is
+	 * unknown, not zero.
+	 */
+	uncovered: Array<{from: number; to: number}>;
+	/** Spending and income this month through the last covered day. */
+	spending: string;
+	income: string;
+	/** Null while fewer than `MIN_USUAL_PACE_MONTHS` complete months exist. */
+	usual: UsualPace | null;
+};
+
+/** A run of days, both included (`YYYY-MM-DD`). */
+export type DateRange = {from: string; to: string};
+
+/** Where an account's data comes from: its bank's sync, or statement files. */
+export type DataCoverageSource = 'sync' | 'file';
+
+/** One account's coverage over the window. */
+export type DataCoverageAccount = {
+	bankAccountId: string;
+	source: DataCoverageSource;
+	/** The newest day the account's data covers, not after `asOf`; null when nothing covers it yet. */
+	coveredThrough: string | null;
+	/** The days of the window the account's data covers, oldest first, apart and not touching. */
+	ranges: DateRange[];
+};
+
+/** The days `GET /bank-connections/coverage` covers: the 30 days ending on `asOf`. */
+export const DATA_COVERAGE_DAYS = 30;
+
+/**
+ * `GET /bank-connections/coverage`: which of the last `DATA_COVERAGE_DAYS` days each account's data covers: from its
+ * first transaction through its last covered day, the newer of its last complete transaction fetch and its newest
+ * import not undone, without the gaps something recorded (between imported statements, before a reconnect).
+ */
+export type DataCoverage = {
+	/** The window, both days included. */
+	from: string;
+	to: string;
+	/** As in `SpendingPace`: the newest of the accounts' `coveredThrough`. */
+	lastCoveredDay: string | null;
+	accounts: DataCoverageAccount[];
+};

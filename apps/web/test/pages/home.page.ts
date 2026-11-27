@@ -10,9 +10,11 @@ export class HomePage {
   readonly welcomeToastDescription: Locator;
   readonly alreadyVerifiedToastTitle: Locator;
   readonly emptyStateTitle: Locator;
-  readonly connectBankLink: Locator;
-  readonly whereYouStand: Locator;
-  readonly totalBalance: Locator;
+  readonly addDataButton: Locator;
+  readonly paceCard: Locator;
+  readonly paceFigure: Locator;
+  readonly accountsTotal: Locator;
+  /** Insights' table of years, shown over a span with the Table view. */
   readonly yearTable: Locator;
 
   constructor(page: Page) {
@@ -25,14 +27,18 @@ export class HomePage {
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
     this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
     this.emptyStateTitle = page.getByRole('heading', {
-      name: 'Connect a bank to see where you stand',
+      name: 'Add data to see your month',
     });
-    this.connectBankLink = page.getByRole('link', {name: 'Connect a bank'});
-    this.whereYouStand = page.getByRole('region', {name: 'Where you stand'});
-    this.totalBalance = this.whereYouStand
-      .getByRole('heading', {name: 'Total balance'})
-      .locator('xpath=following-sibling::p[1]');
+    this.addDataButton = page.getByRole('main').getByRole('button', {name: 'Add data'});
+    this.paceCard = this.card('Spending pace');
+    this.paceFigure = this.paceCard.getByTestId('pace-figure');
+    this.accountsTotal = this.card('Accounts').getByTestId('accounts-card-total');
     this.yearTable = page.getByRole('region', {name: 'Year by year'});
+  }
+
+  /** One of Home's cards, by its name ("Spending pace", "Your data", "To do"). */
+  card(name: string) {
+    return this.page.getByRole('main').getByRole('region', {name, exact: true});
   }
 
   /** A month's page in Insights, named by its title ("March 2026"). */

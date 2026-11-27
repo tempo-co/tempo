@@ -1,57 +1,10 @@
 /**
- * Pure monthly spending math for the Home summary. Money is integer cents (`bigint`) throughout; amounts enter as
+ * Pure money and period math for the summaries. Money is integer cents (`bigint`) throughout; amounts enter as
  * Postgres decimal strings with at most two decimals and leave through {@link formatCents}. No floats.
  */
-import {
-	type BalanceTrendInterval,
-	type BaselineDay,
-	type BaselineTotal,
-	MAX_RANGE_PERIODS,
-	type SpendingPaceDay,
-} from '@tempo/contracts';
+import {type BalanceTrendInterval, MAX_RANGE_PERIODS} from '@tempo/contracts';
 
 import {addDays} from '../banking.utils';
-
-/** Spending of one calendar month, keyed by day of month. */
-export type DailyCents = ReadonlyMap<number, bigint>;
-
-export type SpendingPaceInput = {
-	daysInMonth: number;
-	/** Last day of the viewed month that counts (the client's today in the current month). */
-	throughDay: number;
-	daily: DailyCents;
-	/** Earlier months to compare with, each with its own length so shorter months stop at their last day. */
-	baseline: ReadonlyArray<{days: number; daily: DailyCents}>;
-};
-
-export type {BaselineDay, BaselineTotal, SpendingPaceDay};
-
-export function buildSpendingPace(input: SpendingPaceInput): {daily: SpendingPaceDay[]; baseline: BaselineDay[]} {
-	let cumulative = 0n;
-	const daily = days(input.throughDay).map((day) => {
-		const spending = input.daily.get(day) ?? 0n;
-		cumulative += spending;
-		return {day, spending: formatCents(spending), cumulative: formatCents(cumulative)};
-	});
-
-	if (input.baseline.length === 0) return {daily, baseline: []};
-	const cumulativeByMonth = input.baseline.map((month) => cumulativeSeries(month.daily, month.days));
-	const baseline = days(input.daysInMonth).map((day) => {
-		const totals = cumulativeByMonth.map((series) => series[Math.min(day, series.length) - 1]);
-		return {day, ...summarizeBaseline(totals)};
-	});
-	return {daily, baseline};
-}
-
-/** Average and observed low-high band; callers supply at least one baseline month. */
-export function summarizeBaseline(totals: readonly bigint[]): BaselineTotal {
-	const hasBand = totals.length > 1;
-	return {
-		average: formatCents(averageCents(totals)),
-		low: hasBand ? formatCents(totals.reduce((min, value) => (value < min ? value : min))) : null,
-		high: hasBand ? formatCents(totals.reduce((max, value) => (value > max ? value : max))) : null,
-	};
-}
 
 /** The `count` calendar months before `month` (`YYYY-MM`), oldest first. */
 export function previousMonths(month: string, count: number): string[] {
@@ -103,15 +56,6 @@ export function medianCents(values: readonly bigint[]): bigint {
 	const sorted = [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 	const middle = Math.floor(sorted.length / 2);
 	return sorted.length % 2 ? sorted[middle] : divideRounded(sorted[middle - 1] + sorted[middle], 2n);
-}
-
-function cumulativeSeries(daily: DailyCents, monthDays: number): bigint[] {
-	let total = 0n;
-	return days(monthDays).map((day) => (total += daily.get(day) ?? 0n));
-}
-
-function days(count: number): number[] {
-	return Array.from({length: count}, (_, index) => index + 1);
 }
 
 /** Period starts from `from` through `to`, or null when the range is backwards, ends after `asOf` or is too long. */

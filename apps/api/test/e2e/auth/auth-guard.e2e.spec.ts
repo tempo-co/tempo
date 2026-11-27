@@ -42,10 +42,12 @@ const SESSION_ROUTES: GuardedRoute[] = [
 // Read routes a verified session or a personal access token may use.
 const TOKEN_READABLE_PATHS = [
 	'/bank-connections',
+	'/bank-connections/coverage?asOf=2026-10-18',
 	'/bank-transactions',
 	'/bank-transactions/totals',
 	'/bank-transactions/day-totals',
 	'/bank-transactions/summary?month=2026-10&asOf=2026-10-18',
+	'/bank-transactions/spending-pace?asOf=2026-10-18',
 	'/bank-transactions/cash-flow?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/balance-trend?interval=month&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',
 	'/bank-transactions/breakdown?interval=year&by=category&from=2026-01-01&to=2026-10-18&asOf=2026-10-18',

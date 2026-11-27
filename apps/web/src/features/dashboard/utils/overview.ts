@@ -4,16 +4,16 @@ import {
   type BankTransactionCashFlow,
   MAX_RANGE_PERIODS,
 } from '@tempo/contracts';
-import {addDays, format, getDaysInMonth, subDays, subMonths} from 'date-fns';
+import {getDaysInMonth} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';
 import {BOLD_FIGURE_CHAR, figureColumnWidth} from './format';
 import {formatWholeMoney, toCents} from './money';
 
-/** Whole years Home asks for by month and by year: as many as both of the API's range limits allow. */
+/** Whole years the history is read for by month and by year: as many as both of the API's range limits allow. */
 const HISTORY_YEARS = Math.min(MAX_RANGE_PERIODS.year, Math.floor(MAX_RANGE_PERIODS.month / 12));
 
-/** The first day of Home's history, so the whole of it fits in one request by month or by year. */
+/** The first day of the history, so the whole of it fits in one request by month or by year. */
 export function historyFrom(today: string) {
   return `${Number(today.slice(0, 4)) - HISTORY_YEARS + 1}-01-01`;
 }
@@ -114,41 +114,6 @@ export function buildOverview({
   };
 }
 
-export const SPANS = [
-  // A month of month ends is one point, so this span reads day ends instead: see lastMonthRange.
-  {value: '1m', label: '1M', months: 1},
-  {value: '6m', label: '6M', months: 6},
-  {value: '1y', label: '1Y', months: 12},
-  {value: '3y', label: '3Y', months: 36},
-  {value: 'all', label: 'All', months: Infinity},
-] as const;
-export type Span = (typeof SPANS)[number]['value'];
-
-/**
- * The months a span shows and the month end its change is measured from: the last month end on or before the same
- * day N months ago (31 Oct for 5 Nov a year back), where the line starts. "All", and a span longer than the history,
- * measure from the first month end: banks send only part of an account's past, so the balance before the history is
- * unknown, not zero. Without a complete month there is no base and no change. `change` is null when either balance
- * could not be converted.
- */
-export function spanMonths(overview: Overview, span: Span) {
-  const count = SPANS.find((option) => option.value === span)!.months;
-  const all = overview.months;
-  let index = -1;
-  if (Number.isFinite(count)) {
-    const target = format(subMonths(parseCalendarDate(overview.today), count), 'yyyy-MM-dd');
-    all.forEach((point, at) => {
-      if (point.complete && point.end <= target) index = at;
-    });
-  }
-  if (index < 0 && all[0]?.complete) index = 0;
-  if (index < 0) return {shown: all, base: null, change: null};
-  const base = all[index];
-  const change =
-    overview.total === null || base.balance === null ? null : overview.total - base.balance;
-  return {shown: all.slice(index), base, change};
-}
-
 /** A point on the balance line: a month end, or a day end over the last month. */
 export type BalancePoint = {
   /** The month a click opens, `YYYY-MM`. */
@@ -161,31 +126,6 @@ export type BalancePoint = {
   /** Cents kept in the month; months only. */
   kept?: number;
 };
-
-/** Days the 1M span covers, through today. */
-const LAST_MONTH_DAYS = 30;
-
-/**
- * The 1M span: the day end its change is measured from, 30 days before today, where the line starts, and the
- * first and last day its money counts.
- */
-export function lastMonthRange(today: string) {
-  const base = subDays(parseCalendarDate(today), LAST_MONTH_DAYS);
-  return {
-    base: format(base, 'yyyy-MM-dd'),
-    from: format(addDays(base, 1), 'yyyy-MM-dd'),
-    to: today,
-  };
-}
-
-/** Day-end balances from the balance trend's `day` periods, oldest first. */
-export const dayBalancePoints = (trend: BankBalanceTrend): BalancePoint[] =>
-  trend.periods.map((period) => ({
-    month: period.end.slice(0, 7),
-    end: period.end,
-    complete: period.complete,
-    balance: period.total === null ? null : toCents(period.total),
-  }));
 
 /** A breakdown part's amount in cents, zero when the period has no such part. */
 export function partCents(period: BankTransactionBreakdownPeriod, key: string) {

@@ -456,7 +456,9 @@ test.describe('mocked Enable Banking bank connection', () => {
       });
       await page.goto('/accounts');
       const row = accountRow(page, CHECKING.id);
-      await expect(row.getByRole('button', {name: 'Reconnect Mock ASPSP', exact: true})).toBeVisible();
+      await expect(
+        row.getByRole('button', {name: 'Reconnect Mock ASPSP', exact: true}),
+      ).toBeVisible();
       await expect(row.getByTestId('account-freshness')).toContainText('Access expired');
       await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     });
@@ -626,7 +628,7 @@ test.describe('mocked Enable Banking bank connection', () => {
         await expect.poll(() => requests).toEqual([MOCK_CONNECTION.id]);
         await expect.poll(() => reviewCountReads).toBe(1);
         // Home reads the list once as it mounts, which waits for the reporting currency; count from there.
-        await expect(page.getByRole('region', {name: 'Where you stand'})).toBeVisible();
+        await expect(page.getByRole('region', {name: 'Spending pace'})).toBeVisible();
         readsBeforeRun = listReads;
         releases.get(MOCK_CONNECTION.id)!();
         // The next bank starts only after the previous refresh has settled.

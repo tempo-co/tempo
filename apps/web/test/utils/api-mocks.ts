@@ -8,11 +8,13 @@ import {
   type BankTransactionReviewCounts,
   type BankTransactionSummary,
   type BankTransactionTotals,
+  type DataCoverage,
   type MerchantRanking,
   REPORTING_CURRENCIES,
   type RecurringSeriesLists,
   type RecurringSummary,
   type ReportingCurrency,
+  type SpendingPace,
 } from '@tempo/contracts';
 
 import {successfulBankRefresh} from '../data/bank-sync-run.data';
@@ -206,6 +208,29 @@ export async function mockEmptyHome(page: Page) {
     baseCurrency: null,
     days: [],
   } satisfies BankTransactionDayTotals);
+  await page.route('**/bank-transactions/spending-pace?**', (route) => {
+    const asOf = new URL(route.request().url()).searchParams.get('asOf') ?? '';
+    return fulfillJson(route, {
+      baseCurrency: null,
+      month: asOf.slice(0, 7),
+      daysInMonth: 30,
+      lastCoveredDay: null,
+      daily: [],
+      uncovered: [],
+      spending: '0.00',
+      income: '0.00',
+      usual: null,
+    } satisfies SpendingPace);
+  });
+  await page.route('**/bank-connections/coverage?**', (route) => {
+    const asOf = new URL(route.request().url()).searchParams.get('asOf') ?? '';
+    return fulfillJson(route, {
+      from: asOf,
+      to: asOf,
+      lastCoveredDay: null,
+      accounts: [],
+    } satisfies DataCoverage);
+  });
   await page.route('**/bank-transactions/summary?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     const month = params.get('month') ?? '';

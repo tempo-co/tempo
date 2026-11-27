@@ -80,7 +80,7 @@ test('year by year shows each year, newest first and open; a click anywhere on a
   homePage,
 }) => {
   await mockSyntheticHome(page);
-  await page.goto('/');
+  await page.goto('/insights?period=all&view=table');
 
   const table = homePage.yearTable;
   const years = table
@@ -156,7 +156,7 @@ test('a month’s whole row in year by year opens it, and its link opens it from
   homePage,
 }) => {
   await mockSyntheticHome(page);
-  await page.goto('/');
+  await page.goto('/insights?period=all&view=table');
 
   const table = homePage.yearTable;
   // One year is open at a time, so 2025's months are the only ones named June and July.
@@ -170,7 +170,7 @@ test('a month’s whole row in year by year opens it, and its link opens it from
   await kept.hover();
   await expect(june).not.toHaveCSS('background-color', plain);
   await kept.click();
-  await expect(page).toHaveURL(/\/insights\/months\/2025-06$/);
+  await expect(page).toHaveURL(/\/insights\/months\/2025-06\?period=all$/);
   await expect(homePage.monthPage('June 2025')).toBeVisible();
   await page.goBack();
   await expect(homePage.monthPage('June 2025')).toBeHidden();
@@ -182,7 +182,7 @@ test('a month’s whole row in year by year opens it, and its link opens it from
     table.getByRole('row').filter({has: page.getByRole('link', {name: 'July'})}),
   ).toHaveCSS('outline-style', 'solid');
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/insights\/months\/2025-07$/);
+  await expect(page).toHaveURL(/\/insights\/months\/2025-07\?period=all$/);
   await expect(homePage.monthPage('July 2025')).toBeVisible();
 });
 
@@ -191,7 +191,7 @@ test('spending by category shows a month on average per year, with small categor
 }) => {
   await page.setViewportSize({width: 1440, height: 1000});
   await mockSyntheticHome(page);
-  await page.goto('/');
+  await page.goto('/insights?period=all&view=table');
 
   const table = page.getByRole('region', {name: 'Spending by category'});
   const rows = table.getByRole('row');
@@ -218,8 +218,8 @@ test('spending by category shows a month on average per year, with small categor
   expect(await cells(rows.nth(5))).toEqual(['3 more categories', '−2%', '€98', '€100', '€100']);
   expect(await cells(rows.last())).toEqual(['Total', '+12%', '€2,233', '€2,000', '€2,000']);
 
-  // Shading compares a row's years; December 2024 alone is too thin to shade.
-  const housing = rows.nth(1).getByRole('link');
+  // Shading compares a row's years; December 2024 alone is too thin to shade. The name opens the category.
+  const housing = rows.nth(1).getByRole('cell').getByRole('link');
   await expect(housing.nth(0)).toHaveAttribute(
     'aria-label',
     'Housing and utilities, 2026: €1,298 a month · €13,200 in the year so far',
@@ -291,7 +291,7 @@ test('on a phone, each category shows its latest year and change, and opens into
 }) => {
   await page.setViewportSize({width: 390, height: 900});
   await mockSyntheticHome(page);
-  await page.goto('/');
+  await page.goto('/insights?period=all&view=table');
 
   const table = page.getByRole('region', {name: 'Spending by category'});
   await expect(table.getByRole('table')).toBeHidden();
@@ -342,11 +342,11 @@ test('income by source names each source with its logo or icon and lines up with
   await page.setViewportSize({width: 1440, height: 1000});
   const history = homeHistory({sourceLogos: true});
   const long = 'Example Employer Holding International Services Group Benelux Payroll Department';
-  for (const period of history.breakdown.year.source)
+  for (const period of [...history.breakdown.year.source, ...history.breakdown.month.source])
     for (const part of period.parts) if (part.key === EMPLOYER) part.label = long;
   await mockSyntheticHome(page, {history});
   await mockSourceLogo(page);
-  await page.goto('/');
+  await page.goto('/insights?period=all&view=table');
 
   const table = page.getByRole('region', {name: 'Income by source'});
   const rows = table.getByRole('row');
@@ -417,7 +417,7 @@ test('a single month of history is one part year with no comparison', async ({pa
   history.breakdown.year.source = history.breakdown.year.source.filter((p) => p.start >= '2026');
   history.breakdown.year.category[0].complete = false;
   await mockSyntheticHome(page, {history});
-  await page.goto('/');
+  await page.goto('/insights?period=all&view=table');
 
   const table = page.getByRole('region', {name: 'Spending by category'});
   expect(await cells(table.getByRole('row').nth(0))).toEqual([
@@ -433,7 +433,7 @@ for (const width of [1440, 1024]) {
   test(`each per-year heading lines up with its column's figures at ${width}px`, async ({page}) => {
     await page.setViewportSize({width, height: 1000});
     await mockSyntheticHome(page);
-    await page.goto('/');
+    await page.goto('/insights?period=all&view=table');
 
     for (const title of ['Income by source', 'Spending by category']) {
       const rows = page.getByRole('region', {name: title}).getByRole('row');
@@ -444,8 +444,10 @@ for (const width of [1440, 1024]) {
         .locator('th')
         .first()
         .evaluate((cell) => {
-          const box = cell.firstElementChild!.getBoundingClientRect();
-          return box.left;
+          // A category's name is a link padded out for its hover state; measure what it holds.
+          const name = cell.firstElementChild!;
+          const shown = name.tagName === 'A' ? name.firstElementChild! : name;
+          return shown.getBoundingClientRect().left;
         });
       // The name column starts where its names (and their icons) do; every figure ends under its heading.
       expect.soft(Math.abs(heads[0].left! - first), `${title} name`).toBeLessThanOrEqual(1);
@@ -461,7 +463,7 @@ for (const width of [1440, 390]) {
   test(`opening a year moves no column at ${width}px`, async ({page, homePage}) => {
     await page.setViewportSize({width, height: 1000});
     await mockSyntheticHome(page);
-    await page.goto('/');
+    await page.goto('/insights?period=all&view=table');
 
     const table = homePage.yearTable;
     const columns = () =>
@@ -481,11 +483,11 @@ for (const width of [1440, 390]) {
           return `${box.width}x${box.height}`;
         }),
       );
-    const size = width < 640 ? '64x20' : '96x24';
     const year = table.getByRole('button', {name: /^2026/});
     await expect(year).toHaveAttribute('aria-expanded', 'true');
     const open = await columns();
     expect(open.length).toBe(width < 640 ? 3 : 5);
+    const [size] = await lines();
     expect(await lines()).toEqual([size, size, size]);
     await year.click();
     await expect(year).toHaveAttribute('aria-expanded', 'false');

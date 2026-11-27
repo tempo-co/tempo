@@ -28,11 +28,8 @@ const readCache = (page: Page) =>
   );
 
 const offlineStatus = (page: Page) => page.getByRole('status').filter({hasText: /^Offline/});
-const totalBalance = (page: Page) =>
-  page
-    .getByRole('region', {name: 'Where you stand'})
-    .getByRole('heading', {name: 'Total balance'})
-    .locator('xpath=following-sibling::p[1]');
+const paceFigure = (page: Page) =>
+  page.getByRole('region', {name: 'Spending pace', exact: true}).getByTestId('pace-figure');
 const reviewBadge = (page: Page, count: number) =>
   page.getByRole('link', {name: `Transactions, ${count} to check`}).first();
 const monthRows = (page: Page, title: string) =>
@@ -125,7 +122,7 @@ test.describe('saved Home', () => {
       page.getByTestId('account-bank-logo').first().locator('img:visible'),
     ).toHaveAttribute('src', LOGO_URL);
     await page.goBack();
-    await expect(totalBalance(page)).toHaveText('€24,300');
+    await expect(paceFigure(page)).toHaveText('€1,200');
     const savedQueries = async () => {
       await page.clock.runFor(1100);
       return (await readCache(page))?.clientState.queries ?? [];
@@ -144,14 +141,11 @@ test.describe('saved Home', () => {
     await context.setOffline(true);
     await page.reload();
     await expect(offlineStatus(page)).toBeVisible();
-    await expect(totalBalance(page)).toHaveText('€24,300');
+    await expect(paceFigure(page)).toHaveText('€1,200');
     await expect(reviewBadge(page, 3)).toBeVisible();
 
     // A saved month reopens; one whose transactions were never loaded must not show another month's.
-    await page
-      .getByRole('region', {name: 'Year by year'})
-      .getByRole('link', {name: 'September'})
-      .click();
+    await page.goto('/insights/months/2026-09');
     await expect(monthRows(page, 'September 2026')).toHaveCount(3);
     await page.getByRole('button', {name: 'Previous month'}).click();
     await expect(page).toHaveURL(/\/insights\/months\/2026-08$/);
@@ -160,7 +154,7 @@ test.describe('saved Home', () => {
     await page.getByRole('button', {name: 'Next month'}).click();
     await expect(monthRows(page, 'September 2026')).toHaveCount(3);
     await page.goBack();
-    await expect(totalBalance(page)).toHaveText('€24,300');
+    await expect(paceFigure(page)).toHaveText('€1,200');
 
     // The connected bank's logo is saved, so it shows offline too.
     await page
@@ -171,7 +165,7 @@ test.describe('saved Home', () => {
       page.getByTestId('account-bank-logo').first().locator('img:visible'),
     ).toHaveAttribute('src', LOGO_URL);
     await page.goBack();
-    await expect(totalBalance(page)).toHaveText('€24,300');
+    await expect(paceFigure(page)).toHaveText('€1,200');
 
     state.refreshed = true;
     await context.setOffline(false);

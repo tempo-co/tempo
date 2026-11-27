@@ -26,15 +26,21 @@ export function Bone({className}: {className?: string}) {
   );
 }
 
-/** Placeholder rows as tall as a transaction's or merchant's row: a round tile, two lines and an amount. */
-export function TileRowsSkeleton({count}: {count: number}) {
+/**
+ * Placeholder rows as tall as a transaction's or merchant's row: a round tile (unless `tile` is false), two lines and
+ * an amount.
+ */
+export function TileRowsSkeleton({count, tile = true}: {count: number; tile?: boolean}) {
   return Array.from({length: count}, (_, index) => (
     <li
       key={index}
       aria-hidden='true'
-      className='grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2'
+      className={cn(
+        'grid min-h-15 items-center gap-3 px-3 py-2',
+        tile ? 'grid-cols-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_auto]',
+      )}
     >
-      <Bone className='size-9 rounded-full' />
+      {tile && <Bone className='size-9 rounded-full' />}
       <span className='min-w-0'>
         <span className='block text-body'>
           <TextBone className='w-[9em]' />

@@ -13,6 +13,8 @@ import {
 	type BankTransactionSummaryCategory,
 	type BankTransactionTotals,
 	type CashFlowInterval,
+	type HomeReadQuery,
+	type SpendingPace,
 } from '@tempo/contracts';
 import {Repository} from 'typeorm';
 
@@ -35,7 +37,6 @@ import {RecurringSeriesService} from '../recurring/recurring-series.service';
 import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
 import {
 	averageCents,
-	buildSpendingPace,
 	daysInMonth,
 	formatCents,
 	nextPeriodStart,
@@ -43,8 +44,8 @@ import {
 	periodStarts,
 	periodWindows,
 	previousMonths,
-	summarizeBaseline,
 } from '../summary/bank-transaction-summary';
+import {buildHomePace, buildSpendingPace, summarizeBaseline, usualPaceMonths} from '../summary/spending-pace';
 import {convertEcbAmountSql, newestEcbRatePairSql} from './bank-transaction-amount-conversion.utils';
 import {
 	SQL_BASE_AMOUNT,
@@ -61,6 +62,7 @@ import {
 	findFirstTransactionDate,
 } from './bank-transaction-filters';
 import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
+import {type CoverageOwner, DataCoverageService} from './data-coverage.service';
 
 const BASELINE_MONTHS = 3;
 /** Keys whose month-to-month average says nothing useful. */
@@ -95,7 +97,47 @@ export class BankTransactionSummaryService {
 		@InjectRepository(BankTransaction)
 		private readonly bankTransactionRepository: Repository<BankTransaction>,
 		private readonly recurringSeriesService: RecurringSeriesService,
+		private readonly dataCoverageService: DataCoverageService,
 	) {}
+
+	/**
+	 * This month's spending day by day through the last covered day, its income over the same days, and the usual pace
+	 * (`buildHomePace`). Days after the last covered day are not counted: their data has not come in.
+	 */
+	async getSpendingPace(owner: ReportingOwner & CoverageOwner, {asOf}: HomeReadQuery): Promise<SpendingPace> {
+		const month = asOf.slice(0, 7);
+		const monthStart = `${month}-01`;
+		const coveredDays = await this.dataCoverageService.findCoveredDays(owner, asOf);
+		const lastCoveredDay = coveredDays.at(-1)?.to ?? null;
+		const months = usualPaceMonths(month, coveredDays);
+		const from = months.length > 0 ? `${months[0]}-01` : monthStart;
+		// Through the last covered day; only the earlier months when it lies before this month.
+		const to = lastCoveredDay && lastCoveredDay >= monthStart ? lastCoveredDay : addDays(monthStart, -1);
+		const flows = from <= to ? await this.findFlows(owner.id, from, to) : [];
+
+		const spending = new Map<string, Map<number, bigint>>();
+		let income = 0n;
+		for (const row of flows) {
+			const cents = parseCents(row.amount);
+			if (row.flow === 'INCOME') {
+				if (row.month === month) income += cents;
+				continue;
+			}
+			spending.set(row.month, addTo(spending.get(row.month) ?? new Map<number, bigint>(), row.day, -cents));
+		}
+		const pace = buildHomePace({month, lastCoveredDay, coveredDays, spending});
+		return {
+			baseCurrency: totalsCurrency(owner),
+			month,
+			daysInMonth: daysInMonth(month),
+			lastCoveredDay,
+			daily: pace.daily,
+			uncovered: pace.uncovered,
+			spending: pace.daily.at(-1)?.cumulative ?? formatCents(0n),
+			income: formatCents(income),
+			usual: pace.usual,
+		};
+	}
 
 	async getSummary(
 		owner: ReportingOwner,

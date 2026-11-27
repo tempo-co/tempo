@@ -13,6 +13,7 @@ import {
   fulfillJson,
   mockBankConnections,
   mockBankRefresh,
+  mockEmptyHome,
   mockEmptyRecurringLists,
   mockFileImportOff,
   mockJson,
@@ -177,6 +178,8 @@ async function mockMerchantLogos(page: Page) {
       return fulfillJson(route, {}, 500);
     },
   );
+  // Home's own reads answer empty; the routes below give the payments and logos.
+  await mockEmptyHome(page);
   await mockJson(
     page,
     '**/accounts/me',
@@ -570,10 +573,11 @@ for (const width of [1440, 390]) {
         await expect(inspector).toBeHidden();
         deepLink.searchParams.delete('transactionId');
         await expect(page).toHaveURL(deepLink.href);
-        // The next recurring payment beside the history shows its latest payment's logo.
+        // Home's next payment shows its latest payment's logo.
         await page.goto('/');
         const upcoming = page
-          .getByRole('region', {name: 'Repeats'})
+          .getByRole('main')
+          .getByRole('region', {name: 'Coming up', exact: true})
           .getByRole('listitem')
           .filter({hasText: 'Example Market'});
         await expectLogo(upcoming.getByTestId('merchant-logo-tile'), theme);

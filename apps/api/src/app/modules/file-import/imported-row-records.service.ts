@@ -7,6 +7,7 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray} from '@modules/banking/banking.utils';
 import {
+	AccountImportCoverage,
 	ImportedRowQuestion,
 	ImportedRowRecords,
 	ImportedRowRecordsRegistry,
@@ -187,6 +188,27 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 			[bankAccountId, ownerId],
 		);
 		return statement ?? null;
+	}
+
+	async findImportCoverage(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportCoverage[]> {
+		// Joined through each account's own connection, so only the owner's accounts that still exist count.
+		return manager.query(
+			`SELECT bank_account."id" AS "bankAccountId", to_char(MAX(bank_import."dateTo"), 'YYYY-MM-DD') AS "through",
+				COALESCE(
+					jsonb_agg(jsonb_build_object('from', gap->>'from', 'to', gap->>'to')) FILTER (WHERE gap IS NOT NULL),
+					'[]'::jsonb
+				) AS "gaps"
+			FROM "bank_imports" bank_import
+			CROSS JOIN LATERAL unnest(bank_import."bankAccountIds") written("id")
+			JOIN "bank_accounts" bank_account ON bank_account."id" = written."id"
+			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+				AND connection."accountId" = $1
+			LEFT JOIN LATERAL jsonb_array_elements(bank_import."statementGaps") gap
+				ON gap->>'bankAccountId' = written."id"::text
+			WHERE bank_import."accountId" = $1 AND bank_import."undoneAt" IS NULL
+			GROUP BY bank_account."id"`,
+			[ownerId],
+		);
 	}
 
 	async findAccountsWithClosingBalances(

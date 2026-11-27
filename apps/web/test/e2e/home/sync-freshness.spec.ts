@@ -33,25 +33,21 @@ const connection: BankConnection = {
 
 test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
 
-test('Home refreshes its history and the review badge when a polled sync completes', async ({
+test('Home refreshes its figures and the review badge when a polled sync completes', async ({
   page,
   homePage,
 }) => {
   let current: BankConnection = {...HOME_CONNECTION, syncStatus: 'QUEUED'};
   let completed = false;
   let connectionReads = 0;
-  const reads = {flow: 0, review: 0};
+  const reads = {pace: 0, review: 0};
   const before = homeHistory();
-  // The sync brings in October's last €400 of spending.
+  // The sync brings in €400 more of November's spending.
   const after = homeHistory({
     spending: (month) =>
       month === '2026-11'
-        ? {HOUSING_AND_UTILITIES: 1200}
-        : {
-            ...USUAL_SPENDING,
-            ...(month === '2026-10' ? {SHOPPING: 600} : {}),
-            ...(month === '2026-03' ? {TRAVEL: 1500} : {}),
-          },
+        ? {HOUSING_AND_UTILITIES: 1600}
+        : {...USUAL_SPENDING, ...(month === '2026-03' ? {TRAVEL: 1500} : {})},
   });
   await mockSyntheticHome(page, {
     history: before,
@@ -61,9 +57,12 @@ test('Home refreshes its history and the review badge when a polled sync complet
       return [current];
     },
   });
-  await page.route('**/bank-transactions/cash-flow?**', (route) => {
-    reads.flow++;
-    return fulfillJson(route, (completed ? after : before).flow);
+  await page.route('**/bank-transactions/spending-pace?**', (route) => {
+    reads.pace++;
+    return fulfillJson(
+      route,
+      (completed ? after : before).paceOf(new URL(route.request().url()).searchParams.get('asOf')!),
+    );
   });
   await page.route('**/bank-transactions/review-counts', (route) => {
     reads.review++;
@@ -74,14 +73,9 @@ test('Home refreshes its history and the review badge when a polled sync complet
     });
   });
   await page.goto('/');
-  // The span's kept figure includes October's.
-  const kept = homePage.whereYouStand
-    .getByRole('region', {name: 'This span'})
-    .getByText('Kept', {exact: true})
-    .locator('..');
-  await expect(kept).toHaveText('Kept+€9,300');
+  await expect(homePage.paceFigure).toHaveText('€1,200');
   await expect(page.getByRole('link', {name: 'Transactions, 3 to check'}).first()).toBeVisible();
-  expect(reads).toEqual({flow: 1, review: 1});
+  expect(reads).toEqual({pace: 1, review: 1});
 
   // Let timers continue while responses and derived-data invalidation finish. A request count
   // alone does not mean the query has settled and re-armed its polling timer.
@@ -92,7 +86,7 @@ test('Home refreshes its history and the review badge when a polled sync complet
   completed = true;
   current = {...current, syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-11-05T12:00:30.000Z'};
   await expect.poll(() => connectionReads, {timeout: 15_000}).toBe(3);
-  await expect(kept).toHaveText('Kept+€8,900');
+  await expect(homePage.paceFigure).toHaveText('€1,600');
   await expect(page.getByRole('link', {name: 'Transactions, 4 to check'}).first()).toBeVisible();
   await expect(page).toHaveURL('/');
 });
