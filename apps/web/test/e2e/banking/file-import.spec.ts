@@ -1289,12 +1289,13 @@ test.describe('statement file import on Accounts', () => {
     expect(api.uploads).toHaveLength(0);
   });
 
-  test('says when a try at working out columns failed or found nothing, and when the limit allows another', async ({
+  test('says when a try at working out columns failed, found nothing or found several accounts, and when the limit allows another', async ({
     page,
   }) => {
     await mockFileImport(page, {
       mapper: true,
       uploads: [
+        refused({code: 'layout_unknown', file: 1}),
         refused({code: 'layout_unknown', file: 1}),
         refused({code: 'layout_unknown', file: 1}),
       ],
@@ -1309,6 +1310,12 @@ test.describe('statement file import on Accounts', () => {
           fulfillJson(
             route,
             {statusCode: 422, message: '', code: 'layout_not_mappable', file: 1},
+            422,
+          ),
+        (route) =>
+          fulfillJson(
+            route,
+            {statusCode: 422, message: '', code: 'several_accounts', file: 1},
             422,
           ),
         (route) =>
@@ -1345,6 +1352,14 @@ test.describe('statement file import on Accounts', () => {
     await expect(alert.getByText("Wisp couldn't work out this file's columns")).toBeVisible();
     await expect(alert).toContainText(
       'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
+    );
+    await expect(dialog.getByRole('button', {name: 'Work out the columns'})).toHaveCount(0);
+
+    await input.setInputFiles([statement('transactions.csv')]);
+    await dialog.getByRole('button', {name: 'Work out the columns'}).click();
+    await expect(alert.getByText('This file holds several accounts')).toBeVisible();
+    await expect(alert).toContainText(
+      'Export one account at a time and import each file on its own. Nothing was imported.',
     );
     await expect(dialog.getByRole('button', {name: 'Work out the columns'})).toHaveCount(0);
 

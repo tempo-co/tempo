@@ -72,6 +72,8 @@ Limits: 5 proposals per user per day, a proposal lasts an hour, 50 saved layouts
 
 Every refusal is a typed code (`src/app/modules/file-import/bank-import-refusal.exception.ts`, mirrored in `@wisp/contracts`) and the web has copy for each (`apps/web/src/features/file-import/utils/refusal-copy.ts`). The parse child can only reach the codes in `PARSE_REFUSAL_CODES`.
 
+Rows that name several accounts never share one: IBANs split them per account, and other names (a budgeting app's export of all its accounts) in a layout's `oneAccountColumn` are refused with `several_accounts`.
+
 ## Measured (staging, one CPU each for API and database, synthetic data)
 
 | Rows in one drop | Import time | Longest wait for other requests |

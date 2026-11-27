@@ -265,6 +265,23 @@ describe('bank CSV layouts', () => {
 		expect(refusal(text.replace(from, to))).toEqual({code: 'layout_not_recognized', layout});
 	});
 
+	it('refuses a file whose rows name two accounts in the column that names one as several_accounts', () => {
+		const text = fixture('ing-at-synthetic.csv');
+		const lines = text.split('\n');
+		lines[2] = lines[2].replace('00012345678', '00087654321');
+
+		expect(refusal(lines.join('\n'))).toEqual({code: 'several_accounts', layout: null});
+	});
+
+	it('leaves a file without a header whose one-account column differs from row to row to the other readers', () => {
+		// The shape of easybank-at-creditcard, with a reference per row where that layout names the card account.
+		const text = fixture('easybank-at-creditcard-synthetic.csv');
+		let row = 0;
+		const references = text.replace(/^99900012345;/gm, () => `REF${++row};`);
+
+		expect(refusal(references)).toEqual({code: 'layout_unknown', layout: null});
+	});
+
 	it.each([
 		{
 			change: 'a balance that does not follow the amounts',

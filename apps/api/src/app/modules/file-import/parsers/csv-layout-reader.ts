@@ -103,8 +103,11 @@ const BIC_AND_IBAN = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\s+([A-Z]{2}\d{2}[A-Z0
 /** A row that does not read as its layout says; the reader turns it into the layout's refusal. */
 class RowProblem extends Error {}
 
+/** Rows that all read but name more than one account in the layout's one-account column. */
+class SeveralAccounts extends Error {}
+
 type ReadRow = NormalizedRow & {iban: string | null; units: bigint; balance: Decimal | null};
-type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | null;
+type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | {severalAccounts: true} | null;
 
 /**
  * Reads a file with the first layout that claims it, or returns null when none does. A layout with a header claims
@@ -115,7 +118,9 @@ type Attempt = {read: CsvLayoutRead} | {nearMiss: string} | {skipsRows: true} | 
  * With `owned`, a header that matches but whose rows do not read lets the next layout try; only when no layout
  * reads the file is it refused with `layout_not_recognized`, naming the first that matched. A layout whose skipped
  * lines above or below the table look like rows does not read the file either: when no other layout does, it is refused with
- * `layout_not_mappable` (before any near miss) rather than read without those rows.
+ * `layout_not_mappable` (before any near miss) rather than read without those rows. Rows that read but name more
+ * than one account in the layout's one-account column are refused as `several_accounts`, by a layout that claimed
+ * the file by its header or, with `owned`, when no other layout reads it.
  */
 export function readCsvLayout(
 	bytes: Uint8Array,
@@ -129,6 +134,7 @@ export function readCsvLayout(
 	];
 	let nearMiss: string | null = null;
 	let skipsRows = false;
+	let severalAccounts = false;
 	for (const layout of ordered) {
 		const attempt = attemptLayout(source, layout, options);
 		if (!attempt) continue;
@@ -137,11 +143,17 @@ export function readCsvLayout(
 			skipsRows = true;
 			continue;
 		}
+		if ('severalAccounts' in attempt) {
+			if (!options.owned) throw new ParseRefusal('several_accounts');
+			severalAccounts = true;
+			continue;
+		}
 		if (!options.owned) throw new ParseRefusal('layout_not_recognized', attempt.nearMiss);
 		nearMiss ??= attempt.nearMiss;
 	}
 	// Rows a layout would skip are the refusal to name, before a layout whose rows do not read.
 	if (skipsRows) throw new ParseRefusal('layout_not_mappable');
+	if (severalAccounts) throw new ParseRefusal('several_accounts');
 	if (nearMiss) throw new ParseRefusal('layout_not_recognized', nearMiss);
 	return null;
 }
@@ -167,6 +179,7 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 		const records = workbook ? head : source.records(layout);
 		if (options.owned && records && skipped(records, skipBefore + expected.length)) return {skipsRows: true};
 		const read = records && readTable(records, skipBefore + expected.length, layout, options);
+		if (read === 'severalAccounts') return {severalAccounts: true};
 		return read ? {read} : {nearMiss: layout.id};
 	}
 	const records = workbook ? source.workbookRows() : source.records(layout);
@@ -177,6 +190,8 @@ function attemptLayout(source: TableSource, layout: CsvLayout, options: CsvLayou
 	if (workbook ? width > recognize.columnCount : width !== recognize.columnCount) return null;
 	if (options.owned && skipped(records, skipBefore)) return {skipsRows: true};
 	const read = readTable(records, skipBefore, layout, options);
+	// A built-in layout without a header claims only a file it reads; an owned one reads the owner's own files.
+	if (read === 'severalAccounts') return options.owned ? {severalAccounts: true} : null;
 	return read ? {read} : null;
 }
 
@@ -267,13 +282,16 @@ function sameCells(actual: readonly TableCell[] | undefined, expected: readonly 
 	return cells.length === wanted.length && cells.every((cell, index) => fold(cell) === fold(wanted[index]));
 }
 
-/** The rows below line `start` (less the lines the layout skips at the end) read as the layout says; null when any fails. */
+/**
+ * The rows below line `start` (less the lines the layout skips at the end) read as the layout says; null when any
+ * fails, `severalAccounts` when they read but name more than one account.
+ */
 function readTable(
 	records: readonly TableCell[][],
 	start: number,
 	layout: CsvLayout,
 	options: CsvLayoutReadOptions,
-): CsvLayoutRead | null {
+): CsvLayoutRead | 'severalAccounts' | null {
 	const end = records.length - (layout.skipAfter ?? 0);
 	if (end < start) return null;
 	const lines = records.slice(start, end);
@@ -285,7 +303,7 @@ function readTable(
 	const width = rowWidthOf(lines);
 	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout, width));
 	const statements = readRows(body, records.slice(0, layout.skipBefore ?? 0), layout, width);
-	if (!statements) return null;
+	if (!statements || statements === 'severalAccounts') return statements;
 	if (options.owned && !plausible(statements, options.today ?? new Date().toISOString().slice(0, 10))) return null;
 	if (statements.length > 0) statements[0].entriesSkipped = lines.length - body.length;
 	return {layout, statements, dateCheck: options.owned ? dateCheck(body, layout) : null};
@@ -332,8 +350,8 @@ function dateCheck(body: readonly TableCell[][], layout: CsvLayout): CsvLayoutRe
 }
 
 /**
- * The statements of the rows, one per account and currency in the order first met; null when any row fails, or when
- * rows differ in the column that must name one account.
+ * The statements of the rows, one per account and currency in the order first met; null when any row fails, and
+ * `severalAccounts` when they all read but differ in the column that must name one account.
  */
 function readRows(
 	records: readonly TableCell[][],
@@ -341,20 +359,22 @@ function readRows(
 	layout: CsvLayout,
 	/** The width of the whole table, pending rows included. */
 	width: RowWidth,
-): NormalizedStatement[] | null {
+): NormalizedStatement[] | 'severalAccounts' | null {
 	let rows: ReadRow[];
 	try {
 		const lineIban = layout.accountIbanLine === undefined ? null : ibanOnLine(above[layout.accountIbanLine]);
 		const debitsNegative = writesDebitsNegative(records, layout);
+		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative, width));
+		// Rows that read but name more than one account would mix those accounts in one statement.
 		const {oneAccountColumn} = layout;
 		if (
 			oneAccountColumn !== undefined &&
 			new Set(records.map((cells) => (cells[oneAccountColumn]?.text ?? '').trim())).size > 1
 		) {
-			throw new RowProblem();
+			throw new SeveralAccounts();
 		}
-		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative, width));
 	} catch (error) {
+		if (error instanceof SeveralAccounts) return 'severalAccounts';
 		if (error instanceof RowProblem) return null;
 		throw error;
 	}

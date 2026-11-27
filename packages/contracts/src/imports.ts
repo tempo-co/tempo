@@ -56,6 +56,11 @@ export const BANK_IMPORT_ERROR_CODES = [
 	'multiple_bank_connections',
 	/** Other drops took every upload slot for too long (HTTP 503 with `Retry-After`): the same files can be sent again. */
 	'import_busy',
+	/**
+	 * A table whose rows name more than one account (such as a budgeting app's export of all its accounts) without an
+	 * IBAN per row to tell them apart: the owner exports one account at a time.
+	 */
+	'several_accounts',
 	/** The column mapper's answer was not a layout that reads every row of the file. */
 	'layout_not_mappable',
 	/** The column mapper is off, or its model failed, timed out or had no credit. */

@@ -40,7 +40,41 @@ const WORKBOOK = createWorkbook([
 /** Everything of the debit and credit file that is not its header. */
 const DEBIT_CREDIT_CONTENT = ['Example', 'Beispiel', 'Miete', 'Gehalt', '2026', '12,50', '2.500', 'DE89', '3704'];
 
-const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook', LayoutAnswer> = {
+/** A budgeting app's register: each row names its account by name, in the first column, as `names` take turns. */
+function accountNamesFile(names: readonly string[]): Buffer {
+	const rows = [
+		['01/11/2026', 'Example Employer', 'salary', '0.00', '2500.00'],
+		['02/11/2026', 'Transfer : Credit Card', 'card payment', '150.00', '0.00'],
+		['02/11/2026', 'Transfer : Checking', 'card payment', '0.00', '150.00'],
+		['03/11/2026', 'Example Shop', '', '42.10', '0.00'],
+	];
+	return Buffer.from(
+		[
+			'"Account","Date","Payee","Memo","Outflow","Inflow"',
+			...rows.map((row, index) => [names[index % names.length], ...row].map((cell) => `"${cell}"`).join(',')),
+			'',
+		].join('\n'),
+	);
+}
+
+const ANSWER: Record<'debitCredit' | 'balance' | 'headerless' | 'workbook' | 'accountNames', LayoutAnswer> = {
+	accountNames: {
+		bankName: null,
+		dateFormat: 'DD/MM/YYYY',
+		bookingDate: 1,
+		valueDate: null,
+		transactionDate: null,
+		pending: null,
+		amount: {kind: 'debitCredit', moneyOutColumn: 4, moneyInColumn: 5},
+		decimalMark: '.',
+		thousandsSeparator: null,
+		currency: null,
+		balance: null,
+		counterpartyName: 2,
+		counterpartyAccount: null,
+		description: [3],
+		account: {column: 0},
+	},
 	debitCredit: {
 		bankName: 'Example Bank',
 		dateFormat: 'DD.MM.YYYY',
@@ -416,6 +450,31 @@ describe('Bank import column mapper', () => {
 			expect.objectContaining({status: 'failed', failureCode: code, layout: null}),
 		]);
 		expect(await missesOf(owner)).toEqual([{bankId: 'ing-nl', outcome: 'mapper', refusalCode: code}]);
+	});
+
+	it('refuses a table whose account column names two accounts after one call and offers nothing', async () => {
+		const {owner, agent} = await createOwner();
+		mapLayout.mockResolvedValueOnce(ANSWER.accountNames);
+
+		const refused = await propose(agent, accountNamesFile(['Checking', 'Credit Card'])).expect(422);
+
+		expect(refused.body).toMatchObject({code: 'several_accounts', file: 1});
+		expect(await proposals.findBy({accountId: owner.id})).toEqual([
+			expect.objectContaining({status: 'failed', failureCode: 'several_accounts', layout: null}),
+		]);
+		expect(await layouts.countBy({accountId: owner.id})).toBe(0);
+	});
+
+	it('imports every row of a table whose account column names one account into one account', async () => {
+		const {agent} = await createOwner();
+		const file = accountNamesFile(['Checking']);
+		await saveLayout(agent, file, ANSWER.accountNames, {bankName: 'Example Budget', currency: 'EUR'});
+
+		const imported = await drop(agent, file)
+			.field('accountChoices', JSON.stringify({'Example Budget:EUR': 'new'}))
+			.expect(201);
+
+		expect(imported.body).toMatchObject({rowsAdded: 4, accounts: [{name: 'Example Budget EUR', created: true}]});
 	});
 
 	it.each([
