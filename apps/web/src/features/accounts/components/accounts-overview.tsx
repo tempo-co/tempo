@@ -204,12 +204,9 @@ function HiddenAccounts({entries, bankLogos}: {entries: AccountEntry[]; bankLogo
       data-testid='accounts-hidden'
       className='p-4 pb-2'
     >
-      <header className='grid grid-cols-1 gap-0.5'>
-        <h2 id='accounts-hidden-heading' className='text-card-title'>
-          Hidden
-        </h2>
-        <p className='text-body-small text-muted-foreground'>Not in your lists or totals.</p>
-      </header>
+      <h2 id='accounts-hidden-heading' className='text-card-title'>
+        Hidden
+      </h2>
       <ul className='-mx-3 mt-2 grid grid-cols-1 divide-y divide-border/60'>
         {entries.map((entry) => {
           const {account, connection} = entry;

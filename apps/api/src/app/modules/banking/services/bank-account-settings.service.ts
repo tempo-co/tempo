@@ -82,9 +82,10 @@ export class BankAccountSettingsService {
 				fileConnection?.id === connectionId
 					? await manager.query(
 							`SELECT bank_account."id" FROM "bank_accounts" bank_account
-							WHERE bank_account."id" = $1 AND bank_account."bankConnectionId" = $2
-							FOR UPDATE`,
-							[bankAccountId, fileConnection.id],
+							JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+							WHERE bank_account."id" = $1 AND connection."id" = $2 AND connection."accountId" = $3
+							FOR UPDATE OF bank_account`,
+							[bankAccountId, fileConnection.id, ownerId],
 						)
 					: [];
 			if (locked.length === 0) throw new NotFoundException(BANKING_ACCOUNT_NOT_FOUND);
