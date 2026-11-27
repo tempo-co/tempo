@@ -2,7 +2,7 @@
 
 Synthetic fixtures prove each reader; this check proves the readers on real exports. A verified bank in `BANK_LIST` (`packages/contracts/src/banks.ts`) is one whose real export reads correctly here.
 
-The corpus lives in the private repository tempo-co/tempo-import-corpus: public, anonymised real exports and bank-published example files, never a user's own export. Real files and anything taken from their rows never enter this repository or its tests.
+The corpus lives in the private repository wispmoney/tempo-import-corpus: public, anonymised real exports and bank-published example files, never a user's own export. Real files and anything taken from their rows never enter this repository or its tests.
 
 ## Running it
 
