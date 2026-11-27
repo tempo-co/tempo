@@ -74,6 +74,11 @@ export function BankTransactionBulkBar({
   );
 }
 
+/** An action's label, read out but not shown on the narrowest phones, so every action keeps its place in the bar. */
+function BarLabel({children}: {children: ReactNode}) {
+  return <span className='max-[360px]:sr-only'>{children}</span>;
+}
+
 /**
  * The bar's Leave out action, or Count in totals when every picked row is left out already. It applies at once; the
  * rows show the result.
@@ -102,12 +107,12 @@ export function BulkLeftOutAction({
       ) : allLeftOut ? (
         <>
           <Eye aria-hidden='true' />
-          Count in totals
+          <BarLabel>Count in totals</BarLabel>
         </>
       ) : (
         <>
           <EyeOff aria-hidden='true' />
-          Leave out
+          <BarLabel>Leave out</BarLabel>
         </>
       )}
     </Button>
@@ -147,7 +152,7 @@ export function BulkCategoryAction({
       ) : (
         <>
           <Tag aria-hidden='true' />
-          Category
+          <BarLabel>Category</BarLabel>
         </>
       )}
     </Button>
