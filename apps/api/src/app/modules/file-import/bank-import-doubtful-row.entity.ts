@@ -31,8 +31,12 @@ export const BANK_IMPORT_NEVER_SENT_ROW_KINDS = [
 	'removed_by_sync',
 ] as const satisfies readonly BankImportRowKind[];
 
-/** The owner's choices on a row sync removed, restored when it is added back. */
-export type BankImportRowOwnerEdits = {category: string | null; ownTransferOverride: OwnTransferOverride | null};
+/** The owner's choices on a row sync removed, restored when it is added back; older rows lack `leftOutOfTotals`. */
+export type BankImportRowOwnerEdits = {
+	category: string | null;
+	ownTransferOverride: OwnTransferOverride | null;
+	leftOutOfTotals?: boolean;
+};
 
 /**
  * A row of an import kept beside history (`kind`). A `doubtful` row is a question for the owner: usually a file row

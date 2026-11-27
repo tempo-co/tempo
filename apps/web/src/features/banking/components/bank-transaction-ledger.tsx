@@ -1,5 +1,6 @@
 import type {BankTransaction, BankTransactionDayTotal} from '@tempo/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
+import {EyeOff} from 'lucide-react';
 import type {ReactNode} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
@@ -202,6 +203,19 @@ function SelectAllRow({
   );
 }
 
+/** The marker on a row the owner left out of totals. */
+function LeftOutTag() {
+  return (
+    <span
+      className='inline-flex h-4 shrink-0 items-center gap-1 rounded-full border bg-card px-1.5 text-caption text-muted-foreground'
+      data-testid='ledger-row-left-out'
+    >
+      <EyeOff aria-hidden='true' className='size-3' />
+      Left out of totals
+    </span>
+  );
+}
+
 function LedgerRow({
   transaction,
   showDate,
@@ -229,6 +243,7 @@ function LedgerRow({
       (isCategorizing ? 'Categorizing…' : formatBankTransactionCategory(transaction.category));
   const date = formatBankTransactionCompactDate(dayOf(transaction) || null);
   const pending = isPendingBankTransaction(transaction);
+  const leftOut = transaction.leftOutOfTotals;
   // Merchant logos fill most tiles, so the category keeps its own icon beside its name.
   const categoryIcon = (className: string, iconClassName: string) =>
     toCheck ? (
@@ -262,7 +277,7 @@ function LedgerRow({
       aria-label={
         selection?.picking
           ? `${picked ? 'Unselect' : 'Select'} ${title}`
-          : `View ${title} transaction details`
+          : `View ${title} transaction details${leftOut ? ', left out of totals' : ''}`
       }
       aria-current={selected || undefined}
       aria-pressed={selection?.picking ? picked : undefined}
@@ -280,20 +295,22 @@ function LedgerRow({
     >
       <MerchantLogoTile transaction={transaction} />
       <div className='min-w-0'>
-        <p className='truncate text-body'>{title}</p>
+        <p className={cn('truncate text-body', leftOut && 'text-muted-foreground')}>{title}</p>
         <p
           className='flex h-4 min-w-0 items-center gap-1 text-body-small text-muted-foreground @3xl:hidden'
           data-testid='ledger-row-meta'
         >
           {showDate && <span className='shrink-0'>{date} ·</span>}
           {pending && <span className='shrink-0'>Pending ·</span>}
+          {leftOut && <LeftOutTag />}
           {categoryIcon('h-4 w-4', 'h-2.5 w-2.5')}
           <span className={cn('truncate', toCheck && 'text-warning')}>{category}</span>
           {account && <span className='min-w-0 shrink-[2] truncate'>· {account}</span>}
         </p>
-        {desktopSubline && (
-          <p className='hidden truncate text-body-small text-muted-foreground @3xl:block'>
-            {desktopSubline}
+        {(desktopSubline || leftOut) && (
+          <p className='hidden h-5 min-w-0 items-center gap-1.5 text-body-small text-muted-foreground @3xl:flex'>
+            {leftOut && <LeftOutTag />}
+            <span className='truncate'>{desktopSubline}</span>
           </p>
         )}
       </div>
@@ -317,7 +334,14 @@ function LedgerRow({
       ) : (
         <span aria-hidden='true' className='hidden @3xl:block' />
       )}
-      <span className='text-right text-body whitespace-nowrap' data-testid='ledger-row-amount'>
+      <span
+        className={cn(
+          'text-right text-body whitespace-nowrap',
+          // Counted in no total: struck through and quiet, income too.
+          leftOut && 'line-through *:text-muted-foreground',
+        )}
+        data-testid='ledger-row-amount'
+      >
         <CurrencyAmount amount={Number(transaction.amount)} currency={transaction.currency} />
       </span>
     </button>

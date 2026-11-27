@@ -28,11 +28,21 @@ const INDICATOR_SQL = '"transaction"."creditDebitIndicator"';
 /** Own transfers and currency exchanges move money between the owner's accounts. */
 // Null-safe on purpose: these predicates are negated, and `NOT (NULL OR FALSE)` would drop ordinary rows.
 export const SQL_INTERNAL = `("transaction"."financialEventType" IS NOT DISTINCT FROM '${BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE}' OR "transaction"."ownTransferEvidence" IS NOT NULL)`;
+/** Rows the owner left out of totals: they stay in the list and in balances, and no total counts them. */
+export const SQL_LEFT_OUT = `("transaction"."leftOutOfTotals")`;
+/**
+ * The one rule for whether a row counts in spending and income, and so in every total built on them (cash flow, the
+ * breakdown, the list's totals, the month summary, merchants, recurring detection): it is no internal movement, and the
+ * owner has not left it out. Balances never read it, because the money did move.
+ */
+export const SQL_COUNTED_IN_TOTALS = `(NOT ${SQL_INTERNAL} AND NOT ${SQL_LEFT_OUT})`;
 /** Debits, including payments to other people, plus refund credits, which reduce spending. */
-export const SQL_SPENDING = `(NOT ${SQL_INTERNAL} AND (${INDICATOR_SQL} = 'DBIT' OR (${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" = '${REFUND}')))`;
-export const SQL_INCOME = `(NOT ${SQL_INTERNAL} AND ${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" IS DISTINCT FROM '${REFUND}')`;
-export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT')`;
-export const SQL_MISSING_BASE_AMOUNT = `(NOT ${SQL_INTERNAL} AND ${SQL_BASE_AMOUNT} IS NULL)`;
+export const SQL_SPENDING = `(${SQL_COUNTED_IN_TOTALS} AND (${INDICATOR_SQL} = 'DBIT' OR (${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" = '${REFUND}')))`;
+export const SQL_INCOME = `(${SQL_COUNTED_IN_TOTALS} AND ${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" IS DISTINCT FROM '${REFUND}')`;
+/** The own transfers the summary totals as moved between accounts; one left out of totals is not among them. */
+export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT' AND NOT ${SQL_LEFT_OUT})`;
+/** Rows a total would count but cannot yet, for want of a base-currency amount. */
+export const SQL_MISSING_BASE_AMOUNT = `(${SQL_COUNTED_IN_TOTALS} AND ${SQL_BASE_AMOUNT} IS NULL)`;
 
 /** The SQL form of getMerchantKeyName: the stored merchant key without its direction. */
 export const SQL_MERCHANT_KEY_NAME = `substring("transaction"."merchantKey" from position(':' in "transaction"."merchantKey") + 1)`;
@@ -54,6 +64,7 @@ const CASH_FLOW_SQL: Record<BankTransactionCashFlowFilterValue, string> = {
 	INTERNAL: SQL_INTERNAL,
 	CURRENCY_EXCHANGE: `("transaction"."financialEventType" = '${BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE}')`,
 	OWN_TRANSFER: '("transaction"."ownTransferEvidence" IS NOT NULL)',
+	LEFT_OUT: SQL_LEFT_OUT,
 };
 
 export const SQL_CATEGORIZATION_FAILED = `("transaction"."categoryStatus" = '${FAILED}' AND "transaction"."category" IS NULL)`;
@@ -154,8 +165,8 @@ export function applyBankTransactionFilters(
 		query.andWhere(anyOf(filter.cashFlows.map((cashFlow) => CASH_FLOW_SQL[cashFlow])));
 	}
 	if (filter?.baseAmount) {
-		// MISSING lists exactly the rows totals leave out (`excluded.missingBaseAmount`); own transfers and currency
-		// exchanges never count towards totals, so they are not missing from them.
+		// MISSING lists exactly the rows totals leave out (`excluded.missingBaseAmount`); rows no total counts (own
+		// transfers, currency exchanges, rows left out) are not missing from them.
 		query.andWhere(
 			filter.baseAmount === 'PRESENT'
 				? `"transaction"."amountInBaseCurrency" IS NOT NULL`

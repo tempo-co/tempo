@@ -36,6 +36,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 - A row to check shows "To check" in the warning colour in place of a category: there is no guess to show.
 - A page's rail shows the view's own cards while nothing is open (Transactions: the view's totals and the To check count). A step started in the details or the bulk bar, such as updating other transactions, replaces them until it is saved or cancelled.
 - Bulk actions: on desktop a list has a checkbox column that is always there, faint until its row is hovered or checked, with "Select all N" ("3 of N selected") above the rows and Shift-click ranges; once every loaded row is picked and the filters match more, "Select all M matching" picks those too; phones show checkboxes only in Select mode. While rows are picked a press picks a row instead of opening it, and a bar under the list ("3 selected") holds the actions. An action that can reach other rows asks once ("Just these 3 / Change all 7") and reports the result in a toast.
+- Leave out of totals: a switch in the transaction's details and Leave out in the bulk bar (Count in totals when every picked row is left out already). A left-out row stays in the list with a muted title, its amount struck through in muted text and an outlined "Left out of totals" pill on its second line; Cash flow › Left out of totals filters to them. Every total skips it; balances keep it.
 - Optional columns keep their grid track: render an empty cell so the next column starts at the same x in every state.
 
 ## Filters and pickers

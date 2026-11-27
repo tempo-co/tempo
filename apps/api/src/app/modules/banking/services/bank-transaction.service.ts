@@ -2,6 +2,7 @@ import {Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {
 	BankConnectionTransactionsResponse,
+	BankTransactionBulkLeftOutOfTotalsResult,
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 	BankTransactionCategory,
@@ -13,11 +14,12 @@ import type {
 	BankTransaction as BankTransactionResponse,
 	BankTransactionsResponse,
 } from '@tempo/contracts';
-import {Repository} from 'typeorm';
+import {EntityManager, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 
 import {BANKING_TRANSACTION_NOT_FOUND} from '../api/constants/banking-messages.constants';
+import type {BulkSelection} from '../api/dtos/bank-transaction-bulk-selection.dto';
 import {
 	BankTransactionQueryDto,
 	DEFAULT_BANK_TRANSACTION_PAGE_INDEX,
@@ -37,6 +39,7 @@ import {
 	applyBankTransactionFilters,
 	createOwnerScopedQuery as createLedgerQuery,
 } from './bank-transaction-filters';
+import {findSelectedTransactions, resolveBulkSelection} from './bulk-selection';
 import {findOwnedConnection} from './find-owned-connection';
 import {OwnTransferService} from './own-transfer.service';
 
@@ -180,6 +183,44 @@ export class BankTransactionService {
 		return this.findById(accountId, id);
 	}
 
+	/**
+	 * Leaves one of the owner's rows out of every total, or counts it again; refuses (404) a row that is not theirs.
+	 * Recurring detection, the one stored value that reads the flag, detects again on its next read: the flag is part of
+	 * the owner's history version.
+	 */
+	async updateLeftOutOfTotals(
+		accountId: Account['id'],
+		id: BankTransaction['id'],
+		leftOutOfTotals: boolean,
+	): Promise<BankTransactionResponse> {
+		await this.findOwnedTransaction(accountId, id);
+		await writeLeftOutOfTotals(this.bankTransactionRepository.manager, accountId, [id], leftOutOfTotals);
+		return this.findById(accountId, id);
+	}
+
+	/**
+	 * Leaves the selected rows out of every total, or counts them again, in one write; a selection holding a row that is
+	 * not the owner's, or a filter matching none, is refused (404) and nothing is written. A filter is matched again
+	 * inside the write.
+	 */
+	async updateBulkLeftOutOfTotals(
+		accountId: Account['id'],
+		selection: BulkSelection,
+		leftOutOfTotals: boolean,
+	): Promise<BankTransactionBulkLeftOutOfTotalsResult> {
+		const resolved = await resolveBulkSelection(this.recurringSeriesService, accountId, selection);
+		const updated = await this.bankTransactionRepository.manager.transaction(async (manager) => {
+			const selected = await findSelectedTransactions(manager, accountId, resolved);
+			return writeLeftOutOfTotals(
+				manager,
+				accountId,
+				selected.map(({id}) => id),
+				leftOutOfTotals,
+			);
+		});
+		return {updated};
+	}
+
 	private async findOwnedTransaction(accountId: Account['id'], id: BankTransaction['id']) {
 		const transaction = await this.createOwnerScopedQuery(accountId)
 			.andWhere('transaction.id = :transactionId', {transactionId: id})
@@ -267,6 +308,7 @@ export class BankTransactionService {
 			ownTransfer: this.toOwnTransferResponse(transaction),
 			ownTransferOverride: transaction.ownTransferOverride ?? null,
 			currencyExchangeCounterpart: this.toCounterpartResponse(transaction.currencyExchangeCounterpart),
+			leftOutOfTotals: transaction.leftOutOfTotals,
 		};
 	}
 
@@ -319,6 +361,25 @@ export class BankTransactionService {
 			remittanceInformation: transaction.remittanceInformation,
 		};
 	}
+}
+
+/** Sets the flag on the owner's rows with these ids; returns how many it changed, so a rerun writes none. */
+async function writeLeftOutOfTotals(
+	manager: EntityManager,
+	accountId: Account['id'],
+	ids: readonly string[],
+	leftOutOfTotals: boolean,
+): Promise<number> {
+	const [rows] = await manager.query<[unknown[], number]>(
+		`UPDATE "bank_transactions" transaction SET "leftOutOfTotals" = $1
+		FROM "bank_accounts" account, "bank_connections" connection
+		WHERE transaction."id" = ANY($2::uuid[]) AND account."id" = transaction."bankAccountId"
+			AND connection."id" = account."bankConnectionId" AND connection."accountId" = $3
+			AND transaction."leftOutOfTotals" IS DISTINCT FROM $1
+		RETURNING transaction."id"`,
+		[leftOutOfTotals, ids, accountId],
+	);
+	return rows.length;
 }
 
 /** A row a category change would also change, as the correction previews list it. */

@@ -3574,6 +3574,7 @@ describe('Bank imports', () => {
 					categorySource: 'MANUAL',
 					categoryStatus: 'COMPLETED',
 					ownTransferOverride: 'UNMARKED',
+					leftOutOfTotals: true,
 				},
 			);
 			await transactions.update(
@@ -3622,6 +3623,7 @@ describe('Bank imports', () => {
 				category: 'SHOPPING',
 				categorySource: 'MANUAL',
 				ownTransferOverride: 'UNMARKED',
+				leftOutOfTotals: true,
 			});
 			const different = await resolve(lookAlikes[1].id, {decision: 'new'}).expect(200);
 			expect(different.body).toMatchObject({
@@ -3748,6 +3750,8 @@ describe('Bank imports', () => {
 			{id: kiosk2.id},
 			{category: 'HEALTH', categorySource: 'MANUAL', categoryStatus: 'COMPLETED'},
 		);
+		// Left out of totals and nothing else: that alone is an edit the row keeps.
+		await transactions.update({id: pocket.id}, {leftOutOfTotals: true});
 		await transactions.update(
 			{id: pharmacy.id},
 			{
@@ -3755,6 +3759,7 @@ describe('Bank imports', () => {
 				categorySource: 'MANUAL',
 				categoryStatus: 'COMPLETED',
 				ownTransferOverride: 'MARKED',
+				leftOutOfTotals: true,
 			},
 		);
 		// A row sync stored before, a day from the pharmacy row, with a category of its own.
@@ -3888,11 +3893,13 @@ describe('Bank imports', () => {
 				category: 'SHOPPING',
 				categorySource: 'MANUAL',
 				ownTransferOverride: 'UNMARKED',
+				leftOutOfTotals: false,
 			});
 			expect(await transactions.findOneByOrFail({id: storedPharmacy.id})).toMatchObject({
 				category: 'HEALTH',
 				categorySource: 'MANUAL',
 				ownTransferOverride: 'MARKED',
+				leftOutOfTotals: true,
 			});
 			// A hidden series follows each removed payment to its look-alike, edits or not, and drops one without.
 			expect((await hides.findOneByOrFail({id: hide.id})).transactionIds).toEqual([
@@ -3956,8 +3963,10 @@ describe('Bank imports', () => {
 				category: 'SHOPPING',
 				categorySource: 'MANUAL',
 				ownTransferOverride: 'MARKED',
+				leftOutOfTotals: true,
 			});
 			const pocketBack = await transactions.findOneByOrFail({importId, amount: '-0.40000000'});
+			expect(pocketBack).toMatchObject({leftOutOfTotals: true});
 			expect((await listed()).map(({row}) => row.bankReference)).toEqual(['FILE-SWEEP-4', 'FILE-SWEEP-6']);
 
 			// A later file's row the bank never sent, added by the owner.

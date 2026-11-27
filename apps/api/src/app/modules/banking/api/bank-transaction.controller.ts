@@ -18,6 +18,7 @@ import type {
 	BankTransactionBreakdown,
 	BankTransactionBulkCategoryPreview,
 	BankTransactionBulkCategoryResult,
+	BankTransactionBulkLeftOutOfTotalsResult,
 	BankTransactionCashFlow,
 	BankTransactionCategoryImpact,
 	BankTransactionDayTotals,
@@ -42,11 +43,15 @@ import {BankTransactionBreakdownQueryDto} from './dtos/bank-transaction-breakdow
 import {
 	BankTransactionBulkCategoryPreviewDto,
 	BankTransactionBulkCategoryUpdateDto,
-	toBulkCategorySelection,
 } from './dtos/bank-transaction-bulk-category.dto';
+import {toBulkSelection} from './dtos/bank-transaction-bulk-selection.dto';
 import {BankBalanceTrendQueryDto, BankTransactionCashFlowQueryDto} from './dtos/bank-transaction-cash-flow-query.dto';
 import {BankTransactionCategoryImpactQueryDto} from './dtos/bank-transaction-category-impact.dto';
 import {BankTransactionCategoryUpdateDto} from './dtos/bank-transaction-category-update.dto';
+import {
+	BankTransactionBulkLeftOutOfTotalsUpdateDto,
+	BankTransactionLeftOutOfTotalsUpdateDto,
+} from './dtos/bank-transaction-left-out-of-totals.dto';
 import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-transfer-update.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from './dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from './dtos/bank-transaction-summary-query.dto';
@@ -171,7 +176,7 @@ export class BankTransactionController {
 		@CurrentAccount() account: Account,
 		@Body() dto: BankTransactionBulkCategoryPreviewDto,
 	): Promise<BankTransactionBulkCategoryPreview> {
-		return this.bulkCategoryService.preview(account.id, toBulkCategorySelection(dto), dto.category);
+		return this.bulkCategoryService.preview(account.id, toBulkSelection(dto), dto.category);
 	}
 
 	@Patch('bulk-category')
@@ -179,7 +184,19 @@ export class BankTransactionController {
 		@CurrentAccount() account: Account,
 		@Body() dto: BankTransactionBulkCategoryUpdateDto,
 	): Promise<BankTransactionBulkCategoryResult> {
-		return this.bulkCategoryService.update(account.id, toBulkCategorySelection(dto), dto.category, dto.scope);
+		return this.bulkCategoryService.update(account.id, toBulkSelection(dto), dto.category, dto.scope);
+	}
+
+	@Patch('bulk-left-out-of-totals')
+	updateBulkLeftOutOfTotals(
+		@CurrentAccount() account: Account,
+		@Body() dto: BankTransactionBulkLeftOutOfTotalsUpdateDto,
+	): Promise<BankTransactionBulkLeftOutOfTotalsResult> {
+		return this.bankTransactionService.updateBulkLeftOutOfTotals(
+			account.id,
+			toBulkSelection(dto),
+			dto.leftOutOfTotals,
+		);
 	}
 
 	/** Lists the owner's other rows a category correction would change, without saving anything. */
@@ -199,6 +216,15 @@ export class BankTransactionController {
 		@Body() dto: BankTransactionCategoryUpdateDto,
 	): Promise<BankTransaction> {
 		return this.bankTransactionService.updateCategory(account.id, id, dto.category, dto.applyToTransactionIds);
+	}
+
+	@Patch(':id/left-out-of-totals')
+	updateLeftOutOfTotals(
+		@CurrentAccount() account: Account,
+		@Param('id', new ParseUUIDPipe({version: '4'})) id: string,
+		@Body() dto: BankTransactionLeftOutOfTotalsUpdateDto,
+	): Promise<BankTransaction> {
+		return this.bankTransactionService.updateLeftOutOfTotals(account.id, id, dto.leftOutOfTotals);
 	}
 
 	@Patch(':id/own-transfer')
