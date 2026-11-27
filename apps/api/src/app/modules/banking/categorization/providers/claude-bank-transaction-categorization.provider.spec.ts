@@ -404,8 +404,8 @@ describe('ClaudeBankTransactionCategorizationProvider', () => {
 			.digest('hex')
 			.slice(0, 16);
 		expect({version: BANK_TRANSACTION_CATEGORIZATION_PROMPT_VERSION, promptHash}).toEqual({
-			version: 'bank-transaction-categorization-v22',
-			promptHash: '0493e5ad1d3de1f0',
+			version: 'bank-transaction-categorization-v23',
+			promptHash: '632d968c74840506',
 		});
 	});
 
