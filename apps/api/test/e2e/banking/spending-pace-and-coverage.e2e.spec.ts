@@ -97,6 +97,28 @@ describe('Spending pace and data coverage', () => {
 		expect(body).toMatchObject({lastCoveredDay: null, daily: [], spending: '0.00', income: '0.00', usual: null});
 	});
 
+	it('counts a month from the first day the sync recorded covering, though nothing was booked on it', async () => {
+		const {agent, bankAccount} = await syncedOwner('2026-10-14T08:00:00.000Z');
+		await fixtures.bankAccounts.update({id: bankAccount.id}, {syncCoveredFrom: '2026-08-01'});
+		await fixtures.createTransactions(bankAccount, [
+			bookedRow('2026-08-03', '-100.00'),
+			bookedRow('2026-09-05', '-300.00'),
+		]);
+
+		const {body} = (await agent.get(PACE).query({asOf: AS_OF}).expect(200)) as {body: SpendingPace};
+
+		expect(body.usual).toMatchObject({months: ['2026-08', '2026-09'], month: '200.00'});
+
+		// Without recorded coverage the data starts at its first booking, so August is not whole.
+		const unrecorded = await syncedOwner('2026-10-14T08:00:00.000Z');
+		await fixtures.createTransactions(unrecorded.bankAccount, [
+			bookedRow('2026-08-03', '-100.00'),
+			bookedRow('2026-09-05', '-300.00'),
+		]);
+		const pace = (await unrecorded.agent.get(PACE).query({asOf: AS_OF}).expect(200)).body as SpendingPace;
+		expect(pace.usual).toBeNull();
+	});
+
 	it('refuses a date that is not a calendar date', async () => {
 		const {agent} = await syncedOwner(null);
 

@@ -29,7 +29,7 @@ An owner's transactions that wait for them to pick a category: those the AI coul
 _Avoid_: to review, needs attention, uncategorised
 
 **Usual pace**:
-How much an owner usually has spent by each day of a month: the average, day by day, of their newest six complete months before this one, shown once two complete months exist. A month is complete when their data covers it whole: their history began on or before its 1st, and the last covered day is on or after its last day. This month's spending is compared with it up to the last covered day.
+How much an owner usually has spent by each day of a month: the average, day by day, of their newest six complete months before this one, shown once two complete months exist. A month is complete when their data covers it whole: their data starts (the first covered day or first transaction) on or before its 1st, and the last covered day is on or after its last day. This month's spending is compared with it up to the last covered day.
 _Avoid_: baseline, typical spending, average month
 
 **Verified bank**:

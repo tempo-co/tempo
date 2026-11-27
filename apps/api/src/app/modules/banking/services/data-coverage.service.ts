@@ -15,6 +15,9 @@ import {ImportedRowRecordsRegistry} from './imported-row-records';
 
 export type CoverageOwner = Pick<Account, 'id' | 'timeZone'>;
 
+/** Where a sync range starts without recorded coverage: from any day, so no known first day. */
+const UNRECORDED_SYNC_START = '0001-01-01';
+
 type AccountCoverage = {bankAccountId: string; source: DataCoverageSource; ranges: DateRange[]};
 
 /**
@@ -42,9 +45,25 @@ export class DataCoverageService {
 		return {from, to: asOf, lastCoveredDay: newest(accounts.map((account) => account.coveredThrough)), accounts};
 	}
 
-	/** The newest day any of the owner's accounts covers, not after `asOf`; null when none covers any. */
-	async findLastCoveredDay(owner: CoverageOwner, asOf: string): Promise<string | null> {
-		return newest((await this.findAccountCoverage(owner, asOf)).map(({ranges}) => coveredThrough(ranges)));
+	/**
+	 * The oldest day the owner's data is known to cover (an import's first day or a recorded sync coverage start) and
+	 * the newest day any account covers, not after `asOf`; each null when none is known.
+	 */
+	async findCoveredSpan(
+		owner: CoverageOwner,
+		asOf: string,
+	): Promise<{firstCoveredDay: string | null; lastCoveredDay: string | null}> {
+		const accounts = await this.findAccountCoverage(owner, asOf);
+		const starts = accounts.flatMap(({ranges}) =>
+			ranges.flatMap(({from}) => (from === UNRECORDED_SYNC_START ? [] : [from])),
+		);
+		return {
+			firstCoveredDay: starts.reduce<string | null>(
+				(oldest, day) => (!oldest || day < oldest ? day : oldest),
+				null,
+			),
+			lastCoveredDay: newest(accounts.map(({ranges}) => coveredThrough(ranges))),
+		};
 	}
 
 	/** Each account the connection list shows, in its order, with its covered days merged and cut at `asOf`. */
@@ -74,7 +93,7 @@ export class DataCoverageService {
 			if (account.lastSuccessfulSyncAt)
 				ranges.push({
 					// Without recorded coverage, the sync history counts from its start.
-					from: account.syncCoveredFrom ?? '0001-01-01',
+					from: account.syncCoveredFrom ?? UNRECORDED_SYNC_START,
 					to: dateInTimeZone(account.lastSuccessfulSyncAt, owner.timeZone),
 				});
 			return {bankAccountId: account.id, source: file ? 'file' : 'sync', ranges: mergeRanges(ranges, asOf)};

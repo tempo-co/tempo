@@ -94,7 +94,7 @@ describe('usual pace', () => {
 		const pace = buildHomePace({
 			month: '2026-10',
 			lastCoveredDay: '2026-10-14',
-			firstTransactionDate: '2025-11-03',
+			historyStart: '2025-11-03',
 			spending,
 		});
 
@@ -111,8 +111,8 @@ describe('usual pace', () => {
 			['2026-09', cents({3: 1000})],
 			['2026-10', cents({1: 700})],
 		]);
-		const pace = (firstTransactionDate: string) =>
-			buildHomePace({month: '2026-10', lastCoveredDay: '2026-10-05', firstTransactionDate, spending});
+		const pace = (historyStart: string) =>
+			buildHomePace({month: '2026-10', lastCoveredDay: '2026-10-05', historyStart, spending});
 
 		expect(pace('2026-08-20').usual).toBeNull();
 		expect(pace('2026-08-20').daily).toHaveLength(5);
@@ -126,7 +126,7 @@ describe('usual pace', () => {
 			['2026-10', cents({1: 500, 15: 400, 20: 99_900})],
 		]);
 		const through = (lastCoveredDay: string | null) =>
-			buildHomePace({month: '2026-10', lastCoveredDay, firstTransactionDate: '2026-08-01', spending});
+			buildHomePace({month: '2026-10', lastCoveredDay, historyStart: '2026-08-01', spending});
 
 		expect(through('2026-10-15').daily).toHaveLength(15);
 		expect(through('2026-10-15').daily.at(-1)).toEqual({day: 15, spending: '4.00', cumulative: '9.00'});
