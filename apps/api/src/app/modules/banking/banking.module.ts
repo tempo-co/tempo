@@ -39,6 +39,7 @@ import {RecurringSeriesService} from './recurring/recurring-series.service';
 import {RecurringSnapshot} from './recurring/recurring-snapshot.entity';
 import {AccountHistoryWriterService} from './services/account-history-writer.service';
 import {AspspCatalogService} from './services/aspsp-catalog.service';
+import {BankAccountSettingsService} from './services/bank-account-settings.service';
 import {BankAuthorizationService} from './services/bank-authorization.service';
 import {BankConnectionQueryService} from './services/bank-connection-query.service';
 import {BankConnectionRemovalService} from './services/bank-connection-removal.service';
@@ -95,6 +96,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 	providers: [
 		AccountHistoryWriterService,
 		AspspCatalogService,
+		BankAccountSettingsService,
 		BankAuthorizationService,
 		BankConnectionQueryService,
 		FileAccountBalanceService,

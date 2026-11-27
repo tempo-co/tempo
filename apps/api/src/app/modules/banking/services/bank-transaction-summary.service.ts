@@ -253,7 +253,8 @@ export class BankTransactionSummaryService {
 	 * account that has history by then cannot be converted, so a missing rate never reads as a drop.
 	 * Only rows the reported balance holds are subtracted: those booked by the day it was reported, and booked
 	 * rows made by that day however late the bank books them (a weekend card payment booked on Monday is in
-	 * Sunday's balance). A day from the reported one on is that balance.
+	 * Sunday's balance). A day from the reported one on is that balance. A hidden account is listed with its balance
+	 * but counts in no total, and a period no shown account has history by is left out.
 	 */
 	async getBalanceTrend(
 		owner: ReportingOwner,
@@ -268,11 +269,11 @@ export class BankTransactionSummaryService {
 			return {start, periodEnd, end: periodEnd < to ? periodEnd : to};
 		});
 
-		const rows: Array<{id: string; end: string; balance: string | null; included: boolean}> =
+		const rows: Array<{id: string; end: string; balance: string | null; included: boolean; hidden: boolean}> =
 			await this.bankTransactionRepository.manager.query(
 				`
 			WITH accounts AS (
-				SELECT a."id", a."currency", a."currentBalanceAmount" AS "current",
+				SELECT a."id", a."currency", a."isHidden" AS "hidden", a."currentBalanceAmount" AS "current",
 					(a."balanceUpdatedAt" AT TIME ZONE 'UTC')::date AS "reported",
 					-- Capped at the owner's today, so an account added late in their day counts today.
 					LEAST(
@@ -285,7 +286,7 @@ export class BankTransactionSummaryService {
 				WHERE c."accountId" = $1 AND c."status" = ANY($2::varchar[]) AND a."isActive"
 					AND a."currentBalanceAmount" IS NOT NULL
 			), native AS (
-				SELECT a."id", a."currency", ends."end", ends."end" >= a."first" AS "included",
+				SELECT a."id", a."currency", a."hidden", ends."end", ends."end" >= a."first" AS "included",
 					-- Only an end the account has history by needs its later bookings summed.
 					CASE WHEN ends."end" >= a."first" THEN a."current" - COALESCE((
 						SELECT SUM(t."amount") FROM "bank_transactions" t
@@ -297,7 +298,7 @@ export class BankTransactionSummaryService {
 					), 0) END AS "amount"
 				FROM accounts a CROSS JOIN unnest($3::date[]) AS ends("end")
 			)
-			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", n."included",
+			SELECT n."id", to_char(n."end", 'YYYY-MM-DD') AS "end", n."included", n."hidden",
 				CASE
 					WHEN NOT n."included" THEN NULL
 					WHEN n."currency" = $4::varchar THEN ROUND(n."amount", 2)
@@ -324,7 +325,7 @@ export class BankTransactionSummaryService {
 		const periods: BankBalanceTrendPeriod[] = [];
 		for (const {start, periodEnd, end} of windows) {
 			const accounts = byEnd.get(end) ?? [];
-			const counted = accounts.filter((row) => row.included);
+			const counted = accounts.filter((row) => row.included && !row.hidden);
 			if (counted.length === 0) continue;
 			periods.push({
 				start,

@@ -84,6 +84,13 @@ export class BankAccount {
 	isActive: boolean;
 
 	/**
+	 * The owner hid the account: it leaves the account lists and the balance total, and its rows count in no total
+	 * (`SQL_COUNTED_IN_TOTALS`); its rows and balance stay. Written only by the owner, through the account's settings.
+	 */
+	@Column({type: 'boolean', default: false})
+	isHidden: boolean;
+
+	/**
 	 * The app-time-zone date through which this account's transactions were last fetched completely; null until
 	 * the first complete fetch, which then asks the provider for its longest history.
 	 */

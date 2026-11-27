@@ -1,8 +1,10 @@
 import {Link} from '@tanstack/react-router';
 import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
-import {ChevronRight, Landmark, Trash2} from 'lucide-react';
+import {ChevronRight, Eye, Landmark, Trash2} from 'lucide-react';
 import {type MouseEvent, type ReactNode, useState} from 'react';
+import {toast} from 'sonner';
 
+import {PendingLabel} from '@/components/shared/pending-label';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {Card} from '@/components/ui/card';
@@ -10,9 +12,11 @@ import {type BankLogos, bankLogoKey, useBankLogos} from '@/features/banking/api/
 import {accountName} from '@/features/banking/utils/bank-account-name';
 import {isFileConnection} from '@/features/banking/utils/bank-sync-status';
 import {Bone, TextBone, TileRowsSkeleton} from '@/features/dashboard/components/loading';
+import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 import {formatCurrency} from '@/utils/format-currency';
 
+import {useUpdateBankAccount} from '../api/use-bank-account-settings';
 import {useConnectBank} from '../api/use-connect-bank';
 import {accountFreshness, connectionProblem} from '../utils/account-freshness';
 import {
@@ -30,9 +34,9 @@ const ROW =
   'relative grid min-h-15 w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] max-sm:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left hover:bg-accent/50 has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring';
 
 /**
- * The Accounts tab: the total across every account, then the accounts grouped by type. Each row names its bank and
- * how its data arrives, says how current it is, and opens the account's page. A bank connection that holds no account
- * is listed on its own, to reconnect or remove.
+ * The Accounts tab: the total across every shown account, then the accounts grouped by type. Each row names its bank
+ * and how its data arrives, says how current it is, and opens the account's page. A bank connection that holds no
+ * account is listed on its own, to reconnect or remove. Hidden accounts come last, under Hidden, to show again.
  */
 export function AccountsOverview({
   connections,
@@ -86,8 +90,8 @@ export function AccountsOverview({
   if (isError)
     return <LoadErrorState title="Couldn't load accounts" error={error} onRetry={onRetry} />;
 
-  const {groups, total, unlinked} = groupAccounts(connections, now);
-  if (groups.length === 0 && unlinked.length === 0)
+  const {groups, total, unlinked, hidden} = groupAccounts(connections, now);
+  if (groups.length === 0 && unlinked.length === 0 && hidden.length === 0)
     return (
       <StateMessage
         icon={Landmark}
@@ -170,7 +174,102 @@ export function AccountsOverview({
           </ul>
         </Card>
       ))}
+      {hidden.length > 0 && <HiddenAccounts entries={hidden} bankLogos={bankLogos} />}
     </div>
+  );
+}
+
+/** Accounts the owner hid: in no list or total elsewhere, each with its balance and Show. */
+function HiddenAccounts({entries, bankLogos}: {entries: AccountEntry[]; bankLogos: BankLogos}) {
+  const {updateBankAccount, isPending, variables} = useUpdateBankAccount();
+  const show = async ({account, connection}: AccountEntry) => {
+    try {
+      await updateBankAccount({
+        connectionId: connection.id,
+        accountId: account.id,
+        isHidden: false,
+      });
+    } catch (error) {
+      if (wasToasted(error)) return;
+      toast.error(`Couldn't show ${accountName(account)}. Try again.`, {
+        id: `account-show-failed-${account.id}`,
+      });
+    }
+  };
+
+  return (
+    <Card
+      role='region'
+      aria-labelledby='accounts-hidden-heading'
+      data-testid='accounts-hidden'
+      className='p-4 pb-2'
+    >
+      <header className='grid grid-cols-1 gap-0.5'>
+        <h2 id='accounts-hidden-heading' className='text-card-title'>
+          Hidden
+        </h2>
+        <p className='text-body-small text-muted-foreground'>Not in your lists or totals.</p>
+      </header>
+      <ul className='-mx-3 mt-2 grid grid-cols-1 divide-y divide-border/60'>
+        {entries.map((entry) => {
+          const {account, connection} = entry;
+          const name = accountName(account);
+          const balance = accountBalance(account);
+          const showing = isPending && variables?.accountId === account.id;
+          return (
+            <li
+              key={account.id}
+              data-testid={`account-row-${account.id}`}
+              className={cn(
+                ROW,
+                'grid-cols-[auto_minmax(0,1fr)_auto] max-sm:grid-cols-[auto_minmax(0,1fr)]',
+              )}
+            >
+              <AccountTile
+                connection={connection}
+                artwork={bankLogos[bankLogoKey(connection.aspspName, connection.aspspCountry)]}
+                className='max-sm:row-span-2'
+              />
+              <span className='min-w-0'>
+                <Link
+                  to='/accounts/$accountId'
+                  params={{accountId: account.id}}
+                  className='block truncate text-body text-muted-foreground outline-none after:absolute after:inset-0'
+                >
+                  {name}
+                </Link>
+                <span className='block truncate text-body-small text-muted-foreground'>
+                  {accountSource(account, connection)}
+                </span>
+              </span>
+              {/* On phones the balance and Show take the line under the name, Show wrapping under a long balance. */}
+              <span className='flex flex-wrap items-center justify-end gap-x-3 gap-y-1 max-sm:col-start-2 max-sm:justify-between'>
+                <span className='numeric text-body whitespace-nowrap text-muted-foreground'>
+                  {balance ? money(balance) : null}
+                </span>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  aria-label={`Show ${name}`}
+                  disabled={showing}
+                  onClick={() => void show(entry)}
+                  className='relative'
+                >
+                  {showing ? (
+                    <PendingLabel>Showing…</PendingLabel>
+                  ) : (
+                    <>
+                      <Eye aria-hidden='true' />
+                      Show
+                    </>
+                  )}
+                </Button>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

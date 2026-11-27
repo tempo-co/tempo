@@ -212,6 +212,57 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 		if (owned.length === 0) throw new NotFoundException(BANK_IMPORT_NOT_FOUND);
 	}
 
+	async forgetAccount(
+		manager: EntityManager,
+		ownerId: Account['id'],
+		bankAccountId: BankAccount['id'],
+	): Promise<number> {
+		const [, removed]: [unknown, number] = await manager.query(
+			`DELETE FROM "bank_imports" bank_import
+			WHERE bank_import."accountId" = $2 AND $1 = ANY(bank_import."bankAccountIds")
+				AND NOT EXISTS (
+					SELECT 1 FROM unnest(bank_import."bankAccountIds") named("id")
+					INNER JOIN "bank_accounts" other ON other."id" = named."id"
+					WHERE named."id" <> $1
+				)`,
+			[bankAccountId, ownerId],
+		);
+		// An open row of the account leaves its import's counts as it goes with the account.
+		await manager.query(
+			`UPDATE "bank_imports" bank_import SET
+				"rowsDoubtful" = GREATEST(0, bank_import."rowsDoubtful" - open."doubtful"),
+				"rowsNotInBank" = GREATEST(0, bank_import."rowsNotInBank" - open."notInBank"),
+				"rowsRemovedBySync" = GREATEST(0, bank_import."rowsRemovedBySync" - open."removedBySync")
+			FROM (
+				SELECT doubtful."importId",
+					COUNT(*) FILTER (WHERE doubtful."kind" = 'doubtful')::int AS "doubtful",
+					COUNT(*) FILTER (WHERE doubtful."kind" = 'not_in_bank')::int AS "notInBank",
+					COUNT(*) FILTER (WHERE doubtful."kind" = 'removed_by_sync')::int AS "removedBySync"
+				FROM "bank_import_doubtful_rows" doubtful
+				WHERE doubtful."bankAccountId" = $1 AND doubtful."resolution" IS NULL
+				GROUP BY doubtful."importId"
+			) open
+			WHERE bank_import."id" = open."importId" AND bank_import."accountId" = $2`,
+			[bankAccountId, ownerId],
+		);
+		await manager.query(
+			`UPDATE "bank_imports" bank_import SET
+				"bankAccountIds" = array_remove(bank_import."bankAccountIds", $1::uuid),
+				"createdBankAccountIds" = array_remove(bank_import."createdBankAccountIds", $1::uuid),
+				"closingBalances" = COALESCE((
+					SELECT jsonb_agg(entry) FROM jsonb_array_elements(bank_import."closingBalances") entry
+					WHERE entry->>'bankAccountId' IS DISTINCT FROM $1::uuid::text
+				), '[]'::jsonb),
+				"statementGaps" = COALESCE((
+					SELECT jsonb_agg(entry) FROM jsonb_array_elements(bank_import."statementGaps") entry
+					WHERE entry->>'bankAccountId' IS DISTINCT FROM $1::uuid::text
+				), '[]'::jsonb)
+			WHERE bank_import."accountId" = $2 AND $1 = ANY(bank_import."bankAccountIds")`,
+			[bankAccountId, ownerId],
+		);
+		return removed;
+	}
+
 	async moveToConnection(
 		manager: EntityManager,
 		ownerId: Account['id'],

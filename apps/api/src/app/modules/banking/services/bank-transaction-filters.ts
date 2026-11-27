@@ -30,17 +30,19 @@ const INDICATOR_SQL = '"transaction"."creditDebitIndicator"';
 export const SQL_INTERNAL = `("transaction"."financialEventType" IS NOT DISTINCT FROM '${BANK_TRANSACTION_FINANCIAL_EVENT_TYPES.CURRENCY_EXCHANGE}' OR "transaction"."ownTransferEvidence" IS NOT NULL)`;
 /** Rows the owner left out of totals: they stay in the list and in balances, and no total counts them. */
 export const SQL_LEFT_OUT = `("transaction"."leftOutOfTotals")`;
+/** Rows of an account the owner hid; needs the owner-scoped `bankAccount` alias (`createOwnerScopedQuery`). */
+export const SQL_HIDDEN_ACCOUNT = `("bankAccount"."isHidden")`;
 /**
  * The one rule for whether a row counts in spending and income, and so in every total built on them (cash flow, the
- * breakdown, the list's totals, the month summary, merchants, recurring detection): it is no internal movement, and the
- * owner has not left it out. Balances never read it, because the money did move.
+ * breakdown, the list's totals, the month summary, merchants, recurring detection): it is no internal movement, the
+ * owner has not left it out, and its account is not hidden. Balances never read it, because the money did move.
  */
-export const SQL_COUNTED_IN_TOTALS = `(NOT ${SQL_INTERNAL} AND NOT ${SQL_LEFT_OUT})`;
+export const SQL_COUNTED_IN_TOTALS = `(NOT ${SQL_INTERNAL} AND NOT ${SQL_LEFT_OUT} AND NOT ${SQL_HIDDEN_ACCOUNT})`;
 /** Debits, including payments to other people, plus refund credits, which reduce spending. */
 export const SQL_SPENDING = `(${SQL_COUNTED_IN_TOTALS} AND (${INDICATOR_SQL} = 'DBIT' OR (${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" = '${REFUND}')))`;
 export const SQL_INCOME = `(${SQL_COUNTED_IN_TOTALS} AND ${INDICATOR_SQL} = 'CRDT' AND "transaction"."category" IS DISTINCT FROM '${REFUND}')`;
-/** The own transfers the summary totals as moved between accounts; one left out of totals is not among them. */
-export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT' AND NOT ${SQL_LEFT_OUT})`;
+/** The own transfers the summary totals as moved between accounts; one left out of totals or on a hidden account is not among them. */
+export const SQL_OWN_TRANSFER_DEBIT = `("transaction"."ownTransferEvidence" IS NOT NULL AND ${INDICATOR_SQL} = 'DBIT' AND NOT ${SQL_LEFT_OUT} AND NOT ${SQL_HIDDEN_ACCOUNT})`;
 /** Rows a total would count but cannot yet, for want of a base-currency amount. */
 export const SQL_MISSING_BASE_AMOUNT = `(${SQL_COUNTED_IN_TOTALS} AND ${SQL_BASE_AMOUNT} IS NULL)`;
 

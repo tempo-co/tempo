@@ -204,14 +204,15 @@ function SelectAllRow({
 }
 
 /** The marker on a row the owner left out of totals. */
-function LeftOutTag() {
+/** The pill of a row no total counts: left out by the owner, or on an account they hid. */
+function LeftOutTag({hiddenAccount}: {hiddenAccount: boolean}) {
   return (
     <span
       className='inline-flex h-4 shrink-0 items-center gap-1 rounded-full border bg-card px-1.5 text-caption text-muted-foreground'
       data-testid='ledger-row-left-out'
     >
       <EyeOff aria-hidden='true' className='size-3' />
-      Left out of totals
+      {hiddenAccount ? 'Hidden account' : 'Left out of totals'}
     </span>
   );
 }
@@ -243,7 +244,9 @@ function LedgerRow({
       (isCategorizing ? 'Categorizing…' : formatBankTransactionCategory(transaction.category));
   const date = formatBankTransactionCompactDate(dayOf(transaction) || null);
   const pending = isPendingBankTransaction(transaction);
-  const leftOut = transaction.leftOutOfTotals;
+  // A hidden account's rows count in no total either, so they are marked the same way.
+  const hiddenAccount = transaction.bankAccountHidden && !transaction.leftOutOfTotals;
+  const leftOut = transaction.leftOutOfTotals || transaction.bankAccountHidden;
   // Merchant logos fill most tiles, so the category keeps its own icon beside its name.
   const categoryIcon = (className: string, iconClassName: string) =>
     toCheck ? (
@@ -277,7 +280,7 @@ function LedgerRow({
       aria-label={
         selection?.picking
           ? `${picked ? 'Unselect' : 'Select'} ${title}`
-          : `View ${title} transaction details${leftOut ? ', left out of totals' : ''}`
+          : `View ${title} transaction details${hiddenAccount ? ', on a hidden account' : leftOut ? ', left out of totals' : ''}`
       }
       aria-current={selected || undefined}
       aria-pressed={selection?.picking ? picked : undefined}
@@ -302,14 +305,14 @@ function LedgerRow({
         >
           {showDate && <span className='shrink-0'>{date} ·</span>}
           {pending && <span className='shrink-0'>Pending ·</span>}
-          {leftOut && <LeftOutTag />}
+          {leftOut && <LeftOutTag hiddenAccount={hiddenAccount} />}
           {categoryIcon('h-4 w-4', 'h-2.5 w-2.5')}
           <span className={cn('truncate', toCheck && 'text-warning')}>{category}</span>
           {account && <span className='min-w-0 shrink-[2] truncate'>· {account}</span>}
         </p>
         {(desktopSubline || leftOut) && (
           <p className='hidden h-5 min-w-0 items-center gap-1.5 text-body-small text-muted-foreground @3xl:flex'>
-            {leftOut && <LeftOutTag />}
+            {leftOut && <LeftOutTag hiddenAccount={hiddenAccount} />}
             <span className='truncate'>{desktopSubline}</span>
           </p>
         )}

@@ -7,6 +7,7 @@ import {
 	NotFoundException,
 	Param,
 	ParseUUIDPipe,
+	Patch,
 	Post,
 	Put,
 	Query,
@@ -34,6 +35,7 @@ import {TokenReadable} from '@modules/auth/decorators/token-readable.decorator';
 
 import {BankingSyncCooldownError} from '../errors/banking-sync-cooldown.error';
 import {AspspCatalogService} from '../services/aspsp-catalog.service';
+import {BankAccountSettingsService} from '../services/bank-account-settings.service';
 import {BankAuthorizationService} from '../services/bank-authorization.service';
 import {BankConnectionQueryService} from '../services/bank-connection-query.service';
 import {BankConnectionRemovalService} from '../services/bank-connection-removal.service';
@@ -46,6 +48,7 @@ import {BankConnectionCallbackDto} from './dtos/bank-connection-callback.dto';
 import {BankConnectionRemoveDto} from './dtos/bank-connection-remove.dto';
 import {BankConnectionTransactionsQueryDto} from './dtos/bank-connection-transactions-query.dto';
 import {SetBankAccountBalanceDto} from './dtos/set-bank-account-balance.dto';
+import {BankAccountRemoveDto, UpdateBankAccountDto} from './dtos/update-bank-account.dto';
 import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
 @UseInterceptors(TotalsCurrencyInterceptor)
@@ -53,6 +56,7 @@ import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 export class BankConnectionController {
 	constructor(
 		private readonly aspspCatalogService: AspspCatalogService,
+		private readonly bankAccountSettingsService: BankAccountSettingsService,
 		private readonly bankAuthorizationService: BankAuthorizationService,
 		private readonly bankConnectionQueryService: BankConnectionQueryService,
 		private readonly bankConnectionRemovalService: BankConnectionRemovalService,
@@ -134,6 +138,33 @@ export class BankConnectionController {
 		// Only a removal committing right after the balance was stored gets here.
 		if (!updated) throw new NotFoundException(BANKING_ACCOUNT_NOT_FOUND);
 		return updated;
+	}
+
+	/** The owner's name for the account and whether it is hidden. */
+	@Patch(':connectionId/accounts/:accountId')
+	async updateAccount(
+		@Param('connectionId', new ParseUUIDPipe({version: '4'})) connectionId: string,
+		@Param('accountId', new ParseUUIDPipe({version: '4'})) accountId: string,
+		@Body() dto: UpdateBankAccountDto,
+		@CurrentAccount() account: Account,
+	): Promise<BankAccount> {
+		await this.bankAccountSettingsService.update(account.id, connectionId, accountId, dto);
+		const updated = await this.bankConnectionQueryService.findAccount(account, connectionId, accountId);
+		// Only a removal committing right after the update gets here.
+		if (!updated) throw new NotFoundException(BANKING_ACCOUNT_NOT_FOUND);
+		return updated;
+	}
+
+	/** Deletes an imported-files account with its rows and the imports that wrote only to it. */
+	@Delete(':connectionId/accounts/:accountId')
+	@HttpCode(204)
+	async removeAccount(
+		@Param('connectionId', new ParseUUIDPipe({version: '4'})) connectionId: string,
+		@Param('accountId', new ParseUUIDPipe({version: '4'})) accountId: string,
+		@Body() _dto: BankAccountRemoveDto,
+		@CurrentAccount() account: Account,
+	) {
+		await this.bankAccountSettingsService.removeFileAccount(account.id, connectionId, accountId);
 	}
 
 	@Delete(':connectionId')

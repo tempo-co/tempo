@@ -184,6 +184,8 @@ export type BankTransaction = {
 	bankCountry: string;
 	bankAccountName: string | null;
 	bankAccountAlias: string | null;
+	/** The row's account is hidden: the row stays in the list and counts in no total. */
+	bankAccountHidden: boolean;
 };
 
 /** `GET /bank-transactions`. */
