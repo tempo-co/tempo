@@ -206,6 +206,7 @@ function InsightsReport({
   const lastMonth = sliced?.months[sliced.months.length - 1];
   const balanceLine = useBalanceLine({
     months: sliced?.months ?? null,
+    historyPlaceholder: history.isPlaceholderData,
     range,
     byDay: period === 'month',
     today,

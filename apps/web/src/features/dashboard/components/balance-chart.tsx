@@ -267,7 +267,7 @@ export function BalanceChart({
             {points.map((point, index) => {
               const before = points[index - 1]?.balance;
               // As the readout: what was kept in a month, or the change since the day before.
-              const third =
+              const delta =
                 unit === 'day'
                   ? point.balance !== null && before != null
                     ? point.balance - before
@@ -280,7 +280,7 @@ export function BalanceChart({
                     {point.complete ? '' : ', so far'}
                   </th>
                   <td>{exact(point.balance, currency)}</td>
-                  <td>{third === null ? '—' : signedExact(third, currency)}</td>
+                  <td>{delta === null ? '—' : signedExact(delta, currency)}</td>
                 </tr>
               );
             })}

@@ -13,12 +13,15 @@ import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-
  */
 export function useBalanceLine({
   months,
+  historyPlaceholder,
   range,
   byDay,
   today,
   currency,
 }: {
   months: MonthPoint[] | null;
+  /** The history is an earlier day's, kept while today's loads; its month ends wait for it. */
+  historyPlaceholder: boolean;
   range: {from: string; to: string};
   byDay: boolean;
   today: string;
@@ -31,9 +34,7 @@ export function useBalanceLine({
   if (!byDay)
     return {
       unit: 'month' as const,
-      // A period with no month in the history is one the history doesn't reach yet (yesterday's, kept while today's
-      // loads), since every period is cut to it.
-      points: months?.length ? withBalanceHistory(months) : null,
+      points: months && !historyPlaceholder ? withBalanceHistory(months) : null,
       isError: false,
       error: null,
       refetch: trend.refetch,

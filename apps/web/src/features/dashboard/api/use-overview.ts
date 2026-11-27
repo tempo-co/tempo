@@ -8,7 +8,8 @@ import {useGetBankTransactionCashFlow} from './use-get-bank-transaction-cash-flo
 
 /**
  * The whole history Insights reads as of the local date `today`: monthly balances and flows, by month and year. Requested
- * only while `enabled`; a disabled caller still reads what is cached.
+ * only while `enabled`; a disabled caller still reads what is cached. `isPlaceholderData` while either read still
+ * shows the history as of an earlier day (kept after midnight until today's arrives).
  */
 export function useOverview(today: string, {enabled = true}: {enabled?: boolean} = {}) {
   const from = historyFrom(today);
@@ -32,7 +33,11 @@ export function useOverview(today: string, {enabled = true}: {enabled?: boolean}
         : null,
     [shown, today, trend.balanceTrend, flow.cashFlow],
   );
-  return {overview, ...settled([trend, flow], overview)};
+  return {
+    overview,
+    isPlaceholderData: trend.isPlaceholderData || flow.isPlaceholderData,
+    ...settled([trend, flow], overview),
+  };
 }
 
 /** Failed while `result` is still missing, the first failure's error, and a refetch of only the queries that failed. */

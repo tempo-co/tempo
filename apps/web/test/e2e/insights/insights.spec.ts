@@ -8,7 +8,7 @@ import type {
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {HOME_NOW, MARKET_ID, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
+import {MARKET_ID, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 
@@ -437,43 +437,52 @@ test.describe('Insights over a synthetic multi-year history', () => {
     await expect(page.getByRole('region', {name: 'Year by year'})).toHaveCount(0);
     await expect(page.getByRole('list', {name: /^In and out per month/})).toBeVisible();
   });
-  test("after midnight into a new month, This month's balance line waits for the new month's days", async ({
-    page,
-  }) => {
-    await page.setViewportSize({width: 1440, height: 1000});
-    await mockSyntheticHome(page, {clock: 'installed'});
-    await mockInsightsMerchants(page);
-    await page.goto('/insights?period=month');
-    await expect(balanceLine(page)).toHaveAccessibleName(
-      'Total balance at each day end, from €24,300 to €24,300.',
-    );
+  for (const {period, line, held: heldInterval, after} of [
+    {
+      period: 'month',
+      line: 'Total balance at each day end, from €24,300 to €24,300.',
+      held: 'day',
+      after: 'Tue 1 Dec 2026, so far€24,300.00—',
+    },
+    {
+      period: '12m',
+      line: 'Total balance at each month end, from €17,000 to €24,300.',
+      held: 'month',
+      after: 'January 2026€18,000.00+€1,000.00',
+    },
+  ] as const) {
+    test(`past midnight into a new month, the ${period} balance line waits for the new day's balances`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({width: 1440, height: 1000});
+      await mockSyntheticHome(page, {clock: 'installed'});
+      await page.clock.setSystemTime(new Date('2026-11-30T23:59:30+01:00'));
+      await mockInsightsMerchants(page);
+      await page.goto(`/insights?period=${period}`);
+      await expect(balanceLine(page)).toHaveAccessibleName(line);
 
-    // December's day ends wait until the spec lets them through, while the page turns to December.
-    const held: (() => void)[] = [];
-    await page.route('**/bank-transactions/balance-trend?**', async (route) => {
-      if (new URL(route.request().url()).searchParams.get('from') !== '2026-12-01')
-        return route.fallback();
-      await new Promise<void>((resolve) => held.push(resolve));
-      await route.fallback();
+      // The balances read as of 1 December wait until the spec lets them through, while the page turns to December.
+      const held: (() => void)[] = [];
+      await page.route('**/bank-transactions/balance-trend?**', async (route) => {
+        const query = new URL(route.request().url()).searchParams;
+        if (query.get('asOf') !== '2026-12-01' || query.get('interval') !== heldInterval)
+          return route.fallback();
+        await new Promise<void>((resolve) => held.push(resolve));
+        await route.fallback();
+      });
+      const balance = page.getByRole('region', {name: 'Balance over time'});
+      try {
+        // The open tab's day timer turns the page to 1 December.
+        await page.clock.fastForward(60_000);
+        await expect(page.getByText(/December 2026$/)).toBeVisible();
+        await expect.poll(() => held.length).toBe(1);
+        // November's balances never stand under the new period.
+        await expect(balance).toHaveAttribute('aria-busy', 'true');
+        await expect(balanceLine(page)).toHaveCount(0);
+      } finally {
+        held.forEach((release) => release());
+      }
+      await expect(balance.getByRole('row').nth(1)).toHaveText(after);
     });
-    try {
-      // Just past midnight in Amsterdam, as the open tab's day timer sees it.
-      await page.clock.fastForward(
-        new Date('2026-12-01T00:00:30+01:00').getTime() - HOME_NOW.getTime(),
-      );
-      await expect(page.getByText('December 2026', {exact: true})).toBeVisible();
-      await expect.poll(() => held.length).toBe(1);
-      // November's days never stand under December.
-      await expect(page.getByRole('region', {name: 'Balance over time'})).toHaveAttribute(
-        'aria-busy',
-        'true',
-      );
-      await expect(balanceLine(page)).toHaveCount(0);
-    } finally {
-      held.forEach((release) => release());
-    }
-    await expect(page.getByRole('region', {name: 'Balance over time'}).getByRole('row')).toHaveText(
-      ['DayBalanceChange', 'Tue 1 Dec 2026, so far€24,300.00—'],
-    );
-  });
+  }
 });
