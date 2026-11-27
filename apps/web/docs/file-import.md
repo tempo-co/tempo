@@ -11,6 +11,24 @@ first step of each goes back to them. On Accounts, **Import a file** is the outl
 offers both, and each opens the sheet at its own first step; an account page's **Import a newer
 file** does too. No copy calls import a fallback or assumes a bank is connected.
 
+- **Bank picker.** Import a file starts at "Which bank is the file from?": the shared bank list
+  (`BANK_LIST` in `@tempo/contracts`) in three groups, each under a small muted heading: Verified,
+  then Not yet verified (researched banks, in the list's order), then Another bank under a
+  hairline, which every search keeps. Rows are 56px, the bank's name over its country. The search
+  above the list is never focused for the owner; it matches names and countries. Picking a bank
+  leads to the file choice, which opens with the bank (a `secondary` "Not yet verified" badge when
+  it is one, and **Change** back to the picker while no files are kept), its numbered export steps,
+  the file to pick, and for a bank not yet verified that no file of it has been tested. Another
+  bank shows one generic text instead. The picked bank's id goes as `bankId` with the upload and
+  with working out the columns. A page drop skips the picker and sends no bank.
+- **Tell us your bank.** A file Tempo cannot read (its columns could not be worked out, the owner
+  said the worked-out ones were not right, or this deployment cannot work them out) offers an
+  outline **Tell us your bank** in the footer. Its step asks for the bank name (the picked bank's
+  when it is listed), the country (a `Select` of the EEA, Switzerland and the United Kingdom, the
+  picked bank's or the browser's region preselected) and the files the bank lets you download
+  (an outline toggle group, several at once). Send stays disabled until all three are given. It
+  posts JSON to `POST /bank-imports/bank-requests` with no file, and the form says the file isn't
+  sent and no reply comes. The sent state says so again, with Done.
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch

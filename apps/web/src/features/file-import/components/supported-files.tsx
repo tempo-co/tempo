@@ -18,11 +18,14 @@ import {wasToasted} from '@/utils/api';
 
 import {useBankImportLayouts, useRemoveLayout} from '../api/use-layout-proposals';
 import {formatImportedDay} from '../utils/import-format';
-import {BANK_EXPORTS, STANDARD_FORMATS} from '../utils/supported-files';
+import {STANDARD_FORMATS} from '../utils/supported-files';
 
 export const SUPPORTED_FILES = 'Supported files';
 
-/** A Supported files text action, and the dialog it opens listing the formats and bank exports the import reads. */
+/**
+ * A Supported files text action, and the dialog it opens listing the standard formats the import reads and the owner's
+ * own layouts; each bank's own export is in the bank picker.
+ */
 export function SupportedFiles() {
   const [open, setOpen] = useState(false);
   return (
@@ -48,19 +51,6 @@ export function SupportedFiles() {
                 Standard formats
               </h3>
               <p className='text-muted-foreground'>{STANDARD_FORMATS.join(', ')}</p>
-            </section>
-            <section aria-labelledby='supported-files-banks' className='grid grid-cols-1 gap-1'>
-              <h3 id='supported-files-banks' className='font-medium'>
-                Bank exports
-              </h3>
-              <ul aria-labelledby='supported-files-banks' className='grid grid-cols-1 gap-1'>
-                {BANK_EXPORTS.map(({bank, files}) => (
-                  <li key={bank} className='flex justify-between gap-3'>
-                    <span>{bank}</span>
-                    <span className='text-muted-foreground'>{files}</span>
-                  </li>
-                ))}
-              </ul>
             </section>
             <YourLayouts enabled={open} />
           </div>

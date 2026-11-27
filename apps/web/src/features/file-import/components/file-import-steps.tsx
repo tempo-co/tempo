@@ -15,12 +15,15 @@ import {useBankImportBanks} from '../api/use-bank-import-banks';
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
 import {plural, summaryTitle} from '../utils/import-format';
 import {OTHER_BANK, guessedBankChoice} from '../utils/layout-mapping';
+import type {PickedBankId} from '../utils/picked-bank';
 import {type ImportFailure, accountQuestionKey} from '../utils/refusal-copy';
 import {AccountQuestions} from './account-questions';
+import {BankExportSteps, BankPicker} from './bank-picker';
 import {DoubtfulRowsReview} from './doubtful-rows-review';
 import {FileChoice, FileList} from './file-choice';
 import {ImportSummaryBody} from './import-summary';
 import {LayoutPreview} from './layout-preview';
+import {BankRequestSentStep, TellUsYourBankStep} from './tell-us-your-bank';
 import {
   ACCOUNT_QUESTION_TITLE,
   type FileImportController,
@@ -30,8 +33,9 @@ import {
 import {useUndoImport} from './use-undo-import';
 
 /**
- * Importing statement files, as steps of the Add data sheet: from choosing files to the summary, the account
- * question and the rows to check. `onBack` leads from a fresh choice back to what the sheet offered first.
+ * Importing statement files, as steps of the Add data sheet: from picking the bank and choosing files to the summary,
+ * the account question and the rows to check. `onBack` leads from the bank picker back to what the sheet offered
+ * first.
  */
 export function FileImportSteps({
   controller,
@@ -40,7 +44,7 @@ export function FileImportSteps({
   controller: FileImportController;
   onBack?: () => void;
 }) {
-  const {step, setStep, setOpen, run, propose} = controller;
+  const {step, setStep, setOpen, run, propose, bankId, pickBank} = controller;
   // The list holds the latest of a shown import, such as its counts after rows were checked elsewhere.
   const {data: imports} = useQuery({
     ...bankImportsQueryOptions,
@@ -52,14 +56,38 @@ export function FileImportSteps({
       ? (imports?.find((summary) => summary.id === step.summary.id) ?? step.summary)
       : null;
 
-  return step.kind === 'choose' ? (
+  // Kept files stay until they are settled or the sheet closes. Without them the bank can change; with no bank picked
+  // (a page drop), a fresh choice goes back to what the sheet offered first.
+  const noFiles = step.kind === 'choose' && step.files.length === 0;
+  const fresh = noFiles && step.failure === null;
+  const toPicker = () => setStep({kind: 'bank'});
+
+  return step.kind === 'bank' ? (
+    <Frame
+      title='Which bank is the file from?'
+      onBack={onBack}
+      backLabel='Back to Add data'
+      scroll={false}
+      body={<BankPicker onPick={pickBank} />}
+    />
+  ) : step.kind === 'choose' ? (
     <ChooseStep
       step={step}
-      // A fresh choice can go back; a kept drop or refusal stays until it is settled or the sheet closes.
-      onBack={step.files.length === 0 && step.failure === null ? onBack : undefined}
+      bankId={bankId}
+      onBack={bankId ? (noFiles ? toPicker : undefined) : fresh ? onBack : undefined}
+      onChangeBank={noFiles ? toPicker : undefined}
       onFiles={(files) => void run(files)}
       onMapColumns={(failure) => void propose(step.files, failure)}
+      onTellUs={() => setStep({kind: 'tell', back: step})}
     />
+  ) : step.kind === 'tell' ? (
+    <TellUsYourBankStep
+      bankId={bankId}
+      onBack={() => setStep(step.back)}
+      onSent={() => setStep({kind: 'told'})}
+    />
+  ) : step.kind === 'told' ? (
+    <BankRequestSentStep onDone={() => setOpen(false)} />
   ) : step.kind === 'importing' ? (
     <Frame
       title='Import a file'
@@ -139,26 +167,34 @@ function Frame({backLabel = 'Back to the summary', ...props}: Parameters<typeof 
 
 function ChooseStep({
   step,
+  bankId,
   onBack,
+  onChangeBank,
   onFiles,
   onMapColumns,
+  onTellUs,
 }: {
   step: Extract<ImportStep, {kind: 'choose'}>;
+  bankId: PickedBankId;
   onBack?: () => void;
+  onChangeBank?: () => void;
   onFiles: (files: File[]) => void;
   onMapColumns: (
     failure: Extract<ImportStep, {kind: 'choose'}>['failure'] & {kind: 'refused'},
   ) => void;
+  onTellUs: () => void;
 }) {
   const {failure, files} = step;
   const mappable = failure?.kind === 'refused' && failure.mapFile !== null ? failure : null;
+  const tellUs = failure?.kind === 'refused' && cannotReadLayout(failure);
   return (
     <Frame
       title='Import a file'
       onBack={onBack}
-      backLabel='Back to Add data'
+      backLabel={bankId ? 'Back to the banks' : 'Back to Add data'}
       body={
         <div className='grid grid-cols-1 gap-4'>
+          {bankId && <BankExportSteps bankId={bankId} onChange={onChangeBank} />}
           {files.length > 0 && <FileList files={files} />}
           <FileChoice onFiles={onFiles} />
           {/* Why the last drop was not imported, at the end under Supported files. */}
@@ -166,17 +202,31 @@ function ChooseStep({
         </div>
       }
       // Files kept after a lost connection or a busy bank go again as they are; a file in no layout Tempo knows
-      // has its columns worked out first.
+      // has its columns worked out first. A file Tempo cannot read at all offers to tell us the bank.
       footer={
         mappable && files.length > 0 ? (
           <Button onClick={() => onMapColumns(mappable)}>Work out the columns</Button>
+        ) : files.length > 0 ? (
+          <Button onClick={() => onFiles(files)}>Import</Button>
         ) : (
-          files.length > 0 && <Button onClick={() => onFiles(files)}>Import</Button>
+          tellUs && (
+            <Button variant='outline' onClick={onTellUs}>
+              Tell us your bank
+            </Button>
+          )
         )
       }
     />
   );
 }
+
+/**
+ * A refusal that means Tempo cannot read the bank's layout: its columns could not be worked out, the owner said the
+ * worked-out ones were not right, or they cannot be worked out on this deployment.
+ */
+const cannotReadLayout = (failure: Extract<ImportFailure, {kind: 'refused'}>) =>
+  failure.code === 'layout_not_mappable' ||
+  (failure.code === 'layout_unknown' && failure.mapFile === null);
 
 /** Refusals that offer to work out a file's columns, rather than report a try at it that failed. */
 const NO_BANKS: readonly string[] = [];

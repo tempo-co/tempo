@@ -332,20 +332,37 @@ export async function expectCurrencyInside(field: Locator, currency: string) {
   expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
 }
 
-/** Add data in the sidebar, then Import a statement file: the import's first step, on any page. */
+/** The multipart form an upload sent: its file names in order and its text fields. */
+export function sentForm(request: Request) {
+  const body = request.postDataBuffer()?.toString('latin1') ?? '';
+  const files = [...body.matchAll(/name="files"; filename="([^"]*)"/g)].map((match) => match[1]);
+  const fields = Object.fromEntries(
+    [...body.matchAll(/name="(\w+)"\r\n\r\n([^\r]*)\r\n/g)].map((match) => [match[1], match[2]]),
+  );
+  return {files, fields};
+}
+
+/** The bank picker's Another bank: the import's file choice, under the steps for any bank. */
+export async function pickAnotherBank(sheet: Locator) {
+  await expect(sheet.getByRole('heading', {name: 'Which bank is the file from?'})).toBeVisible();
+  await sheet.getByRole('button', {name: /^Another bank/}).click();
+  await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+}
+
+/** Add data in the sidebar, Import a statement file, then Another bank: the file choice, on any page. */
 export async function openImportFromAddData(page: Page) {
   await page.getByTestId('app-sidebar').getByRole('button', {name: 'Add data'}).click();
   const sheet = page.getByTestId('add-data-sheet');
   await sheet.getByRole('button', {name: /^Import a statement file/}).click();
-  await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+  await pickAnotherBank(sheet);
   return sheet;
 }
 
-/** Accounts' Import a file: the import's first step. */
+/** Accounts' Import a file, then Another bank: the file choice. */
 export async function openImport(page: Page) {
   await page.getByRole('button', {name: 'Import a file'}).first().click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+  await pickAnotherBank(dialog);
   return dialog;
 }
 

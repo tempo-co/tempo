@@ -11,6 +11,8 @@ import {Input} from '@/components/ui/input';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cn} from '@/utils/cn';
+import {browserRegion, countryName} from '@/utils/countries';
+import {matchesSearch} from '@/utils/text-search';
 
 import {bankConnectionsQueryOptions} from '../api/use-get-all-bank-connections';
 import {supportedBanksQueryOptions, useGetSupportedBanks} from '../api/use-get-supported-banks';
@@ -282,7 +284,7 @@ function BankStep({
   onSelect: (bank: BankConnectionAspsp) => void;
 }) {
   const [query, setQuery] = useState('');
-  const shown = banks.filter((bank) => matches(bank.name, query));
+  const shown = banks.filter((bank) => matchesSearch(bank.name, query));
   return (
     <>
       <button
@@ -369,7 +371,9 @@ function CountryStep({
   onSelect: (code: string) => void;
 }) {
   const [query, setQuery] = useState('');
-  const shown = countries.filter((country) => matches(`${country.label} ${country.code}`, query));
+  const shown = countries.filter((country) =>
+    matchesSearch(`${country.label} ${country.code}`, query),
+  );
   return (
     <>
       <SearchField
@@ -536,43 +540,17 @@ function likelyCountry(countries: CountryOption[], connected: string[]) {
   const counts = new Map<string, number>();
   for (const code of connected) counts.set(code, (counts.get(code) ?? 0) + 1);
   const fromConnections = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const fromBrowser = navigator.languages
-    .map((tag) => {
-      try {
-        return new Intl.Locale(tag).maximize().region;
-      } catch {
-        return undefined;
-      }
-    })
-    .find((region) => region && countries.some((country) => country.code === region));
+  const fromBrowser = browserRegion((region) =>
+    countries.some((country) => country.code === region),
+  );
   const code = fromConnections ?? fromBrowser;
   return countries.find((country) => country.code === code) ?? countries[0];
-}
-
-function matches(text: string, query: string) {
-  const fold = (value: string) =>
-    value
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .toLowerCase();
-  return fold(text).includes(fold(query.trim()));
 }
 
 function getCountryOptions(banks: BankConnectionAspsp[]): CountryOption[] {
   const counts = new Map<string, number>();
   for (const bank of banks) counts.set(bank.country, (counts.get(bank.country) ?? 0) + 1);
   return [...counts]
-    .map(([code, bankCount]) => ({code, label: formatCountry(code), bankCount}))
+    .map(([code, bankCount]) => ({code, label: countryName(code), bankCount}))
     .sort((left, right) => left.label.localeCompare(right.label));
-}
-
-let regionNames: Intl.DisplayNames | undefined;
-
-function formatCountry(country: string) {
-  try {
-    regionNames ??= new Intl.DisplayNames(undefined, {type: 'region'});
-    return regionNames.of(country) ?? country;
-  } catch {
-    return country;
-  }
 }

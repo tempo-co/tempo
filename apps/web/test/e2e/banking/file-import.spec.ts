@@ -1,4 +1,4 @@
-import type {Locator, Page, Request, Route} from '@playwright/test';
+import type {Locator, Page, Route} from '@playwright/test';
 import {
   type AddBankImportNeverSentRowsRequest,
   BANK_IMPORT_MAX_ROWS_PER_ADD,
@@ -29,6 +29,7 @@ import {
   openImport,
   openImportFromAddData,
   refused,
+  sentForm,
   statement,
 } from '../../utils/file-import';
 import {animationsSettled, boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
@@ -99,16 +100,6 @@ const proposed =
     await hold;
     await fulfillJson(route, proposal, 201);
   };
-
-/** The multipart form an upload sent: its file names in order and its text fields. */
-function sentForm(request: Request) {
-  const body = request.postDataBuffer()?.toString('latin1') ?? '';
-  const files = [...body.matchAll(/name="files"; filename="([^"]*)"/g)].map((match) => match[1]);
-  const fields = Object.fromEntries(
-    [...body.matchAll(/name="(\w+)"\r\n\r\n([^\r]*)\r\n/g)].map((match) => [match[1], match[2]]),
-  );
-  return {files, fields};
-}
 
 test.describe('statement file import on Accounts', () => {
   test.use({
@@ -279,7 +270,8 @@ test.describe('statement file import on Accounts', () => {
     expect(api.uploads).toHaveLength(1);
     const form = sentForm(api.uploads[0]);
     expect(form.files).toEqual(['statement-may.xml', 'statement-june.xml', 'statement-july.xml']);
-    expect(form.fields).toEqual({});
+    // The bank picked for the drop goes with it.
+    expect(form.fields).toEqual({bankId: 'other'});
 
     // Done closes it, and focus returns to the button that opened it.
     await dialog.getByRole('button', {name: 'Done'}).click();
@@ -877,20 +869,6 @@ test.describe('statement file import on Accounts', () => {
 
     await supportedFiles.click();
     await expect(supported.getByText('CAMT.053, MT940, OFX and QFX')).toBeVisible();
-    await expect(
-      supported.getByRole('list', {name: 'Bank exports'}).getByRole('listitem'),
-    ).toHaveText([
-      /^ABN AMRO\s*TXT$/,
-      /^ASN Bank\s*CSV$/,
-      /^bunq\s*CSV$/,
-      /^ING\s*CSV$/,
-      /^Knab\s*CSV$/,
-      /^Rabobank\s*CSV and credit card CSV$/,
-      /^RegioBank\s*CSV$/,
-      /^Revolut\s*CSV and Excel$/,
-      /^SNS\s*CSV$/,
-      /^Triodos Bank\s*CSV$/,
-    ]);
     // Closing the list goes back to choosing files, where it was opened.
     await page.keyboard.press('Escape');
     await expect(supported).toBeHidden();
@@ -1240,7 +1218,8 @@ test.describe('statement file import on Accounts', () => {
     await expect(dialog.getByRole('status').getByText('Working out the columns…')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    dialog = await openImport(page);
+    await page.getByRole('button', {name: 'Import a file'}).first().click();
+    dialog = page.getByRole('dialog');
     await expect(
       dialog.getByRole('alert').getByText("Tempo doesn't know this file's layout yet"),
     ).toBeVisible();
