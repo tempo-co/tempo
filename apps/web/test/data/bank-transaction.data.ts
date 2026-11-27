@@ -52,6 +52,7 @@ export function createBankTransaction(overrides: Partial<BankTransaction> = {}):
     bankCountry: 'NL',
     bankAccountName: 'Example account',
     bankAccountAlias: null,
+    bankAccountHidden: false,
     ...overrides,
   };
 }

@@ -76,6 +76,11 @@ export interface ImportedRowRecords {
 	 * the write's locks, as the lock order puts it.
 	 */
 	refuseUnownedImport(manager: EntityManager, ownerId: Account['id'], importId: string): Promise<void>;
+	/**
+	 * The owner's account is about to be deleted with its rows: the imports that wrote to no other account still there
+	 * go, and the others stop naming it, their counts losing its open rows.
+	 */
+	forgetAccount(manager: EntityManager, ownerId: Account['id'], bankAccountId: BankAccount['id']): Promise<void>;
 	/** The owner's imports under one connection move to another, as the accounts they wrote to did. */
 	moveToConnection(
 		manager: EntityManager,

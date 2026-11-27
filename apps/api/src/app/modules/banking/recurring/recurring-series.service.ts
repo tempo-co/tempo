@@ -53,12 +53,13 @@ const UPCOMING_COUNT = 3;
 /** Above this many change notes, a read folds the owner's notes into one; their sum stays the same. */
 const CHANGE_NOTES_FOLDED_AFTER = 32;
 /**
- * The owner's history version: their bank account ids and the sum of the change notes the bank transaction triggers
- * write (migration `AddBankHistoryChanges20261113170000`). Every committed write to the owner's rows raises the sum, and
- * rows removed with a bank account change the ids, so an equal version means the same candidate rows.
+ * The owner's history version: their bank account ids, each marked when hidden, and the sum of the change notes the
+ * bank transaction triggers write (migration `AddBankHistoryChanges20261113170000`). Every committed write to the
+ * owner's rows raises the sum, rows removed with a bank account change the ids, and hiding or showing an account (whose
+ * rows then leave or join the candidates) changes its mark, so an equal version means the same candidate rows.
  */
 const HISTORY_VERSION_SQL = `md5(concat_ws('|',
-	(SELECT string_agg(bank_account."id"::text, ',' ORDER BY bank_account."id") FROM "bank_accounts" bank_account
+	(SELECT string_agg(bank_account."id"::text || CASE WHEN bank_account."isHidden" THEN ':hidden' ELSE '' END, ',' ORDER BY bank_account."id") FROM "bank_accounts" bank_account
 		JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
 		WHERE connection."accountId" = account."id"),
 	(SELECT COALESCE(SUM(change."weight"), 0) FROM "bank_history_changes" change WHERE change."accountId" = account."id")))`;

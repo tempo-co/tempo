@@ -305,6 +305,7 @@ export class BankTransactionService {
 			bankCountry: transaction.bankAccount.bankConnection.aspspCountry,
 			bankAccountName: transaction.bankAccount.name,
 			bankAccountAlias: transaction.bankAccount.alias,
+			bankAccountHidden: transaction.bankAccount.isHidden,
 			ownTransfer: this.toOwnTransferResponse(transaction),
 			ownTransferOverride: transaction.ownTransferOverride ?? null,
 			currencyExchangeCounterpart: this.toCounterpartResponse(transaction.currencyExchangeCounterpart),

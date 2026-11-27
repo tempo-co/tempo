@@ -1363,6 +1363,132 @@ describe('Bank imports', () => {
 		expect(await imports.countBy({accountId: owner.id})).toBe(0);
 	});
 
+	it("removes one imported-files account with its rows and the imports only it holds, and touches no other account's rows or imports", async () => {
+		const {owner, agent} = await createOwner();
+		const archive = await drop(agent, [ARCHIVE]).expect(201);
+		const removedAlone = await drop(agent, [OTHER_STATEMENT]).expect(201);
+		// One drop into both accounts: it stays for the account that is kept.
+		const shared = await drop(agent, [
+			Buffer.from(
+				camt053([
+					{
+						sequence: '64',
+						closing: '1000.00',
+						closingDate: '2026-03-05',
+						entries: [
+							{
+								amount: '3.00',
+								reference: '6064000000000001',
+								bookingDate: '2026-03-05',
+								info: 'Example Shop',
+							},
+						],
+					},
+					// Two statements of the removed account with a gap between them.
+					{
+						...ofOtherAccount([{amount: '-4.00', bookingDate: '2026-03-07'}]),
+						sequence: '2',
+						closing: '50.00',
+						closingDate: '2026-03-07',
+					},
+					{
+						...ofOtherAccount([{amount: '-6.00', bookingDate: '2026-03-09'}]),
+						sequence: '3',
+						opening: '40.00',
+						openingDate: '2026-03-08',
+						closing: '34.00',
+						closingDate: '2026-03-09',
+					},
+				]),
+			),
+		]).expect(201);
+		const keptId: string = archive.body.accounts[0].id;
+		const removedId: string = removedAlone.body.accounts[0].id;
+		expect((shared.body as BankImportSummary).accounts.map(({id}) => id).sort()).toEqual(
+			[keptId, removedId].sort(),
+		);
+		const connection = (await fileConnection(owner))!;
+		const keptRows = async () =>
+			transactions.find({where: {bankAccountId: keptId}, order: {bookingDate: 'ASC', entryReference: 'ASC'}});
+		const keptBefore = await keptRows();
+		expect(keptBefore).toHaveLength(ARCHIVE_ROWS.length + 1);
+		expect(await transactions.countBy({bankAccountId: removedId})).toBe(4);
+		// Another owner's imported-files account, which the owner cannot remove.
+		const otherOwner = await createOwner();
+		const othersImport = await drop(otherOwner.agent, [OTHER_STATEMENT]).expect(201);
+		const othersAccountId: string = othersImport.body.accounts[0].id;
+		const othersConnection = (await fileConnection(otherOwner.owner))!;
+		const othersRows = await transactions.findBy({bankAccountId: othersAccountId});
+		// Two open questions about the removed account's rows on the shared import, and the kept account's own one.
+		const question = (bankAccountId: string, amount: string) =>
+			doubtfulRows.create({
+				importId: shared.body.id,
+				bankAccountId,
+				kind: 'doubtful',
+				row: {
+					bookingDate: '2026-03-07',
+					valueDate: '2026-03-07',
+					transactionDate: null,
+					amount,
+					creditDebitIndicator: 'DBIT',
+					currency: 'EUR',
+					balanceAfter: null,
+					bankReference: null,
+					counterpartyName: null,
+					counterpartyIban: null,
+					remittanceInformation: 'Example Shop',
+					description: null,
+					bankTransactionCode: null,
+					bankTransactionSubCode: null,
+					referenceNumber: null,
+				},
+				candidateTransactionIds: [],
+			});
+		await doubtfulRows.save([question(removedId, '4.00'), question(removedId, '6.00'), question(keptId, '3.00')]);
+		await imports.update({id: shared.body.id}, {rowsDoubtful: 3});
+		const sharedBefore = await imports.findOneByOrFail({id: shared.body.id});
+		expect(sharedBefore.closingBalances.map(({bankAccountId}) => bankAccountId).sort()).toEqual(
+			[keptId, removedId].sort(),
+		);
+		expect(sharedBefore.statementGaps.map(({bankAccountId}) => bankAccountId)).toEqual([removedId]);
+		await agent
+			.delete(`/bank-connections/${othersConnection.id}/accounts/${othersAccountId}`)
+			.send({confirmation: 'DELETE'})
+			.expect(404);
+
+		await agent
+			.delete(`/bank-connections/${connection.id}/accounts/${removedId}`)
+			.send({confirmation: 'DELETE'})
+			.expect(204);
+
+		expect(await bankAccounts.findOneBy({id: removedId})).toBeNull();
+		expect(await transactions.countBy({bankAccountId: removedId})).toBe(0);
+		expect(await imports.findOneBy({id: removedAlone.body.id})).toBeNull();
+		// The shared import keeps only the kept account, and only its open question.
+		expect(await imports.findOneByOrFail({id: shared.body.id})).toMatchObject({
+			bankAccountIds: [keptId],
+			createdBankAccountIds: [],
+			closingBalances: sharedBefore.closingBalances.filter(({bankAccountId}) => bankAccountId === keptId),
+			statementGaps: [],
+			rowsDoubtful: 1,
+		});
+		expect((await doubtfulRows.findBy({importId: shared.body.id})).map(({bankAccountId}) => bankAccountId)).toEqual(
+			[keptId],
+		);
+		expect(await imports.findOneByOrFail({id: archive.body.id})).toMatchObject({bankAccountIds: [keptId]});
+		const listing = (await agent.get('/bank-imports').expect(200)).body as BankImportList;
+		expect(listing.imports.map(({id}) => id).sort()).toEqual([archive.body.id, shared.body.id].sort());
+		expect(await keptRows()).toEqual(keptBefore);
+		expect(await bankAccounts.findOneBy({id: keptId})).not.toBeNull();
+		expect(await transactions.findBy({bankAccountId: othersAccountId})).toEqual(othersRows);
+		expect(await imports.findOneBy({id: othersImport.body.id})).not.toBeNull();
+
+		await agent
+			.delete(`/bank-connections/${connection.id}/accounts/${removedId}`)
+			.send({confirmation: 'DELETE'})
+			.expect(404);
+	});
+
 	it.each([
 		{name: 'its IBAN', values: {iban: EXAMPLE_IBAN}},
 		{name: 'its identification hash', values: {identificationHash: EXAMPLE_IBAN_HASH}},

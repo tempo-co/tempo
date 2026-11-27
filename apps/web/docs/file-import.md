@@ -119,4 +119,4 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   refuses says why under the control.
 - **Imported files.** An imported-files account has the `Files` leading tile and "statement files"
   as its source, and its freshness line runs up to its newest import's last day. It never shows
-  consent, sync or reconnecting; its page offers Import a newer file and Remove imported files.
+  consent, sync or reconnecting; its page offers Import a newer file, and Remove account in its Settings card.

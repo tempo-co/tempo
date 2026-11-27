@@ -26,13 +26,10 @@ export async function openAccount(page: Page, accountId: string) {
   return page.getByTestId('account-connection');
 }
 
-/**
- * Opens the removal of the connection an account belongs to, from the account's page: the bank's Remove connection,
- * or Remove imported files.
- */
+/** Opens the removal of a synced account's connection from the account's page: the bank's Remove connection. */
 export async function openRemoval(page: Page, accountId: string) {
   await openAccount(page, accountId);
-  await page.getByRole('button', {name: /^Remove (connection|imported files)$/}).click();
+  await page.getByRole('button', {name: 'Remove connection', exact: true}).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByTestId(/^remove-bank-confirm-/)).toBeVisible();
   return dialog;

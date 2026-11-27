@@ -243,6 +243,7 @@ export class BankConnectionQueryService {
 			balanceUpdatedAt: account.balanceUpdatedAt?.toISOString() ?? null,
 			balanceSource,
 			isActive: account.isActive,
+			isHidden: account.isHidden,
 			latestBalances: latestBalances.map((balance) => ({
 				name: balance.name,
 				balanceType: balance.balanceType,

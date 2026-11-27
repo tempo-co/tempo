@@ -20,14 +20,16 @@ const GROUPS = [
 ] as const;
 
 /**
- * The owner's accounts by type (cards are credit, everything else cash), the groups that have accounts in that order.
- * Within a group, accounts of a connection in trouble come first, the rest in the API's order. A bank connection that
- * holds no account is `unlinked`, so it can still be reconnected or removed.
+ * The owner's shown accounts by type (cards are credit, everything else cash), the groups that have accounts in that
+ * order. Within a group, accounts of a connection in trouble come first, the rest in the API's order. Hidden accounts
+ * are in no group or total; they are `hidden`, in the API's order. A bank connection that holds no account is
+ * `unlinked`, so it can still be reconnected or removed.
  */
 export function groupAccounts(connections: BankConnection[], now = Date.now()) {
-  const entries = connections.flatMap((connection) =>
+  const all = connections.flatMap((connection) =>
     connection.bankAccounts.map((account) => ({account, connection})),
   );
+  const entries = all.filter(({account}) => !account.isHidden);
   const troubled = new Set(
     connections.filter((connection) => connectionProblem(connection, now)).map(({id}) => id),
   );
@@ -42,6 +44,7 @@ export function groupAccounts(connections: BankConnection[], now = Date.now()) {
   return {
     groups,
     total: totalOf(entries),
+    hidden: all.filter(({account}) => account.isHidden),
     unlinked: connections.filter(
       (connection) => !isFileConnection(connection) && connection.bankAccounts.length === 0,
     ),
