@@ -1,4 +1,4 @@
-import {FileUp, Smartphone} from 'lucide-react';
+import {FileUp, Info} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
@@ -13,9 +13,9 @@ import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {SupportedFiles} from './supported-files';
 
 /**
- * Choosing statement files: a drop area with a Choose files button on desktop; on phones and touch screens Choose the
- * file alone, under a note that the bank's website exports what its app cannot. Any file can be chosen, since banks
- * name their exports with odd extensions.
+ * Choosing statement files: a drop area with a Choose files button on desktop; on touch screens and narrow windows
+ * Choose the file alone, under a note that the bank's website exports what its app cannot. Any file can be chosen,
+ * since banks name their exports with odd extensions.
  */
 export function FileChoice({
   onFiles,
@@ -122,10 +122,10 @@ export function FileChoice({
       ) : (
         <>
           <Alert>
-            <Smartphone aria-hidden='true' />
+            <Info aria-hidden='true' />
             <AlertDescription>
               Banking apps usually can’t export a statement, but your bank’s website can. Open it in
-              your phone’s browser and download the file, then choose it here.
+              your browser, download the file, then choose it here.
             </AlertDescription>
           </Alert>
           {chooseButton}

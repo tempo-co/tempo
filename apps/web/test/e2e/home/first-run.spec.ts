@@ -200,7 +200,9 @@ test.describe('First run on an iPhone', () => {
     await homePage.chooseBankButton.click();
     const sheet = page.getByTestId('add-data-sheet');
     await pickAbnAmro(sheet);
-    await expect(sheet).toContainText('Banking apps usually can’t export a statement');
+    await expect(sheet).toContainText(
+      'Banking apps usually can’t export a statement, but your bank’s website can. Open it in your browser, download the file, then choose it here.',
+    );
     await expect(sheet.getByTestId('bank-import-drop-area')).toHaveCount(0);
     const choose = sheet.getByRole('button', {name: 'Choose the file'});
     expect((await boxOf(choose)).width).toBeGreaterThan(300);

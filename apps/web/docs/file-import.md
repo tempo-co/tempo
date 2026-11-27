@@ -39,8 +39,8 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   sent and no reply comes. The sent state says so again, with Done.
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
-  Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
-  screens get a default `Alert` (`Smartphone` glyph) that banking apps usually
+  Drag-over turns the rule to the ring token and the field to the accent wash. Touch screens and
+  windows narrower than 768px get a default `Alert` (`Info` glyph) that banking apps usually
   can't export a statement but the bank's website can, then **Choose the file** alone, full width. The picker accepts any extension, since banks name
   their exports oddly. Files dragged over any signed-in page show a full-column overlay (dashed
   2px ring rule, page-field wash, "Drop to import") while the sheet is closed and no import runs;
