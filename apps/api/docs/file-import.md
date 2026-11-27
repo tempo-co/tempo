@@ -50,7 +50,7 @@ For a table no reader claims (`layout_unknown`, or `layout_not_recognized` for a
 
 1. `POST /bank-imports/layout-proposals` with the one file. The child finds the table; `src/app/modules/file-import/parsers/table-mask.ts` decides everything the model may learn about it. A table with lines above or below it that look like rows (two or more cells like values, as rows wider than the rest are, or a last row cut short) is refused with `layout_not_mappable` before any call: a layout skipping those lines would drop them from every later file. So is a header too long for a saved layout, or a model input over `MAX_MAPPER_INPUT_BYTES` (32 KB).
 2. One Anthropic API call (`src/app/modules/file-import/mapper/layout-mapper.ts`): no tools, no retry, 30 seconds, a fixed answer schema.
-3. The answer becomes a layout, is validated and must read the whole file before it is offered, with a preview of the user's own rows. `buildLayout` drops an account column or line without IBANs (a column stays as `oneAccountColumn`, refusing multi-account files), counterparty account columns of other values and one-value balance columns: the file goes by bank and currency.
+3. The answer becomes a layout, is validated and must read the whole file before it is offered, with a preview of the user's rows. `buildLayout` drops an account column or line without IBANs (a column stays as `oneAccountColumn`, refusing several-account files as `several_accounts`), counterparty account columns of other values and one-value balance columns: the file goes by bank and currency.
 4. The user confirms (naming the bank and the currency unless the sample sent showed its ISO code or a one-currency symbol like `€`). The layout is saved for that user and the web sends the original drop again.
 
 What the model is sent: the header, masked like rows unless it names a date over a date column (a holder's details line above a headerless table can pass for a header), cells with any numeral (`²`, `Ⅻ`) always; three rows and the lines around the table with every letter and numeral masked; per column, the distinct masked shapes over the whole file and whether every row holds the same value. Sent as written besides the header: ISO currency codes and direction or status words (`PLAIN_WORDS` in `src/app/modules/file-import/parsers/table-mask.ts`). No other row value is: in a short export a repeated name looks like a direction column. Masking that costs no accuracy stays; showing more needs a measured gain on synthetic exports. AI features send what they need to work well, nothing more.
@@ -71,8 +71,6 @@ Limits: 5 proposals per user per day, a proposal lasts an hour, 50 saved layouts
 ## Refusals
 
 Every refusal is a typed code (`src/app/modules/file-import/bank-import-refusal.exception.ts`, mirrored in `@wisp/contracts`) and the web has copy for each (`apps/web/src/features/file-import/utils/refusal-copy.ts`). The parse child can only reach the codes in `PARSE_REFUSAL_CODES`.
-
-Rows that name several accounts never share one: IBANs split them per account, and other names (a budgeting app's export of all its accounts) in a layout's `oneAccountColumn` are refused with `several_accounts`.
 
 ## Measured (staging, one CPU each for API and database, synthetic data)
 
