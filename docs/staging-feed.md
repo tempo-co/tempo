@@ -6,23 +6,24 @@ Staging runs on real data from one account only: the owner's. The production ser
 
 `wisp-staging-copy.timer` runs `ops/wisp-staging-copy.sh` at 01:15, after the 00:30 backup, and catches up after downtime. It fails the unit on any problem, which emails the operator (`ops/README.md`, Failure emails). Each run:
 
-1. Takes the newest local `wisp-<YYYYMMDD-HHMMSS>.dump` in `~/backups/wisp`, which `ops/backup.sh` publishes only after validating it.
-2. Restores it into a throwaway PostgreSQL container: the live image, no network, a random password, removed afterwards.
-3. Runs `ops/wisp-staging-copy.sql` there with the account `STAGING_COPY_OWNER_ACCOUNT_ID` from `/etc/wisp/staging-copy.env`.
-4. Dumps the result, checks the archive reads back, and encrypts it with `gpg` to staging's public key at `/etc/wisp/staging-copy.pub.asc`.
-5. Keeps the newest 3 `wisp-staging-copy-<YYYYMMDD-HHMMSS>.dump.gpg` in `/var/lib/wisp-staging-copy`.
+1. Copies the filter `apps/api/wisp-staging-copy.sql` out of the running API container, so the rules always come from the release whose migrations shaped the database.
+2. Takes the newest local `wisp-<YYYYMMDD-HHMMSS>.dump` in `~/backups/wisp`, which `ops/backup.sh` publishes only after validating it.
+3. Restores it into a throwaway PostgreSQL container: the live image, no network, a random password, removed afterwards.
+4. Runs the filter there with the account `STAGING_COPY_OWNER_ACCOUNT_ID` from `/etc/wisp/staging-copy.env`.
+5. Dumps the result, checks the archive reads back, and encrypts it with `gpg` to staging's public key at `/etc/wisp/staging-copy.pub.asc`.
+6. Keeps the newest 3 `wisp-staging-copy-<YYYYMMDD-HHMMSS>.dump.gpg` in `/var/lib/wisp-staging-copy`.
 
 The job refuses a key file that holds a secret key, so nothing on the server can decrypt a copy. The decryption key exists only on the laptop.
 
 ## The filter
 
-`ops/wisp-staging-copy.sql` lists every table with one rule:
+`apps/api/wisp-staging-copy.sql` lists every table with one rule. It ships in the API image, so a rule reaches the server with the release that adds its table:
 
 - `owned`: each row belongs to one account; rows that are not the owner's are deleted. A row owned through a parent (a bank account through its connection) is checked through that parent.
 - `shared`: no account owns the row; only rows the owner's rows use are kept. Merchant logos, keyed by domain, are kept only when one of the owner's merchants uses them.
 - `global`: reference data no account owns, kept whole, such as FX rates and the migration history.
 
-A table in the restored database without a rule fails the run before anything changes, so a migration that adds a table needs a rule in the same PR. After deleting, the run fails unless exactly the owner's account remains and every owned and shared row passes its rule; any failure rolls the whole filter back. A rule for a table the restored schema does not have yet is skipped, since the server's installed `ops/` can run ahead of the released API.
+A table in the restored database without a rule fails the run before anything changes, so a migration that adds a table needs a rule in the same PR. After deleting, the run fails unless exactly the owner's account remains and every owned and shared row passes its rule; any failure rolls the whole filter back. A rule for a table the restored schema does not have yet is skipped, since the newest backup can predate the running API's migrations. After a rollback to an API older than the database's schema, the run fails until a release with the rule is back.
 
 `apps/api/test/e2e/database/staging-copy.e2e.spec.ts` builds a database at the current schema with two accounts, each with rows in every table, and checks that the filter keeps exactly the owner's rows, the logos the owner's merchants use and all reference data, and that a table without a rule or a missing owner account fails without changing anything. CI runs it in `API E2E tests` whenever the API or the filter changes.
 

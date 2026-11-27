@@ -83,7 +83,7 @@ Every production unit has `OnFailure=wisp-failure-email@%n.service`, which runs 
 
 ### Staging copy
 
-`wisp-staging-copy.timer` (`wisp-staging-copy.sh`, `wisp-staging-copy.sql`, `wisp-staging-copy-serve.sh`) builds staging's encrypted owner-only copy nightly: see [`docs/staging-feed.md`](../docs/staging-feed.md).
+`wisp-staging-copy.timer` (`wisp-staging-copy.sh`, `wisp-staging-copy-serve.sh`) builds staging's encrypted owner-only copy nightly: see [`docs/staging-feed.md`](../docs/staging-feed.md).
 
 ### Public entry
 
