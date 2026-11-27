@@ -1,3 +1,4 @@
+import type {BankConnection} from '@tempo/contracts';
 import {Check, Eye, LayoutGrid} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 
@@ -29,7 +30,7 @@ import {useNow} from '@/hooks/use-now';
 
 import {useDataCoverage, useRecentTransactions, useSpendingPace} from '../api/use-home-reads';
 import {useHomeLayout} from '../use-home-layout';
-import {awaitingFirstFetch, withData} from '../utils/first-fetch';
+import {awaitingFirstFetch, onFirstFetch, withData} from '../utils/first-fetch';
 import {greeting} from '../utils/greeting';
 import {
   HOME_CARDS,
@@ -64,22 +65,27 @@ export function HomePage() {
   let body: ReactNode;
   // Cards to customize only once Home shows them.
   let cards = false;
+  let ownTitle = false;
   const connections = bankConnections?.filter(isConnectedBank);
   if (!reportingCurrencyKnown(reporting)) body = null;
   else if (isError && !bankConnections)
     body = <LoadErrorState title="Couldn't load your banks" error={error} onRetry={refetch} />;
   else if (connections && withData(connections).length === 0) body = <EmptyHome />;
-  else if (connections && awaitingFirstFetch(connections))
-    body = <DataOnItsWay connections={connections} />;
   else if (reporting.data?.setupRequired && reporting.data.currency === null)
     body = <ReportingCurrencySetup />;
   else if (reporting.data?.recalculating)
     body = <RecalculatingTotals currency={reporting.data.currency} />;
-  else {
+  else if (connections && onFirstFetch(connections)) {
+    body = <FirstFetchHome connections={connections} editing={editing} onEdit={setEditing} />;
+    ownTitle = true;
+  } else {
     body = <HomeCards connections={connections} editing={editing} />;
     cards = true;
   }
-  const title = <HomeTitle editing={cards ? editing : undefined} onEdit={setEditing} />;
+  // A Home on a bank's first fetch has its own title, which says whether its cards show.
+  const title = ownTitle ? null : (
+    <HomeTitle editing={cards ? editing : undefined} onEdit={setEditing} />
+  );
 
   return (
     <AppBodyLayout>
@@ -121,6 +127,40 @@ function HomeTitle({
         </Button>
       )}
     </header>
+  );
+}
+
+/**
+ * Home while a bank is on its first fetch: it waits for the data instead of showing empty figures, unless transactions
+ * are already in (another bank's, or a file's), and then shows its cards.
+ */
+function FirstFetchHome({
+  connections,
+  editing,
+  onEdit,
+}: {
+  connections: BankConnection[];
+  editing: boolean;
+  onEdit: (editing: boolean) => void;
+}) {
+  const recent = useRecentTransactions();
+  const hasTransactions = recent.isError
+    ? true
+    : recent.total === undefined
+      ? undefined
+      : recent.total > 0;
+  const waiting = awaitingFirstFetch(connections, hasTransactions);
+  return (
+    <>
+      <HomeTitle editing={waiting ? undefined : editing} onEdit={onEdit} />
+      {waiting ? (
+        <DataOnItsWay
+          connections={connections.filter((connection) => onFirstFetch([connection]))}
+        />
+      ) : (
+        <HomeCards connections={connections} editing={editing} />
+      )}
+    </>
   );
 }
 

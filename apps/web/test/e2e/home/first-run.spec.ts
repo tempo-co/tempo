@@ -2,9 +2,9 @@ import type {Locator, Page, Request} from '@playwright/test';
 import type {BankConnection, BankTransactionReviewCounts} from '@tempo/contracts';
 
 import {createAccount} from '../../data/account.data';
-import {HOME_CONNECTION, mockSyntheticHome} from '../../data/home-history.data';
+import {HOME_CONNECTION, mockSyntheticHome, monthTransactions} from '../../data/home-history.data';
 import {API_URL, expect, test} from '../../fixtures';
-import {mockJson} from '../../utils/api-mocks';
+import {fulfillJson, mockJson} from '../../utils/api-mocks';
 import {sentForm} from '../../utils/file-import';
 import {animationsSettled, boxOf} from '../../utils/layout';
 
@@ -236,6 +236,13 @@ test.describe('Home while a new bank fetches', () => {
       syncStatus: 'RATE_LIMITED',
     };
     await mockSyntheticHome(page, {connections: () => [connection], clock: 'installed'});
+    // Nothing is in until the bank has fetched: the newest transactions are none.
+    await page.route('**/bank-transactions?**', (route) =>
+      connection.lastSyncedAt === null &&
+      !new URL(route.request().url()).searchParams.has('filter[date][from]')
+        ? fulfillJson(route, monthTransactions('2026-11', 0))
+        : route.fallback(),
+    );
     await mockJson(page, '**/accounts/me', createAccount({email: 'owner@example.com', name: ''}));
     await page.goto('/');
 

@@ -12,33 +12,34 @@ const connected = (fields: Partial<BankConnection>): BankConnection => ({
   syncStatus: 'QUEUED',
   ...fields,
 });
+const SYNCED = {syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-11-12T09:00:00Z'} as const;
 
-test('Home waits while every bank is on its first fetch, and shows itself once one has synced, failed or files are in', () => {
+test('Home waits while a bank is on its first fetch and no transaction is in, and shows itself otherwise', () => {
   for (const syncStatus of ['IDLE', 'QUEUED', 'RUNNING', 'RATE_LIMITED'] as const)
-    expect(awaitingFirstFetch([connected({syncStatus})])).toBe(true);
-  expect(
-    awaitingFirstFetch([connected({}), connected({id: 'second', syncStatus: 'RUNNING'})]),
-  ).toBe(true);
+    expect(awaitingFirstFetch([connected({syncStatus})], false)).toBe(true);
+  // A bank that synced nothing does not hold up a second one on its first fetch.
+  expect(awaitingFirstFetch([connected({id: 'first', ...SYNCED}), connected({})], false)).toBe(
+    true,
+  );
 
-  expect(awaitingFirstFetch([])).toBe(false);
-  expect(
-    awaitingFirstFetch([
-      connected({syncStatus: 'SUCCEEDED', lastSyncedAt: '2026-11-12T09:00:00Z'}),
-    ]),
-  ).toBe(false);
+  expect(awaitingFirstFetch([], false)).toBe(false);
+  expect(awaitingFirstFetch([connected(SYNCED)], false)).toBe(false);
   // A bank that synced once shows Home while it fetches again.
   expect(
-    awaitingFirstFetch([connected({syncStatus: 'RUNNING', lastSyncedAt: '2026-11-12T09:00:00Z'})]),
+    awaitingFirstFetch(
+      [connected({syncStatus: 'RUNNING', lastSyncedAt: SYNCED.lastSyncedAt})],
+      false,
+    ),
   ).toBe(false);
   for (const syncStatus of ['FAILED', 'PARTIAL', 'EXPIRED'] as const)
-    expect(awaitingFirstFetch([connected({syncStatus})])).toBe(false);
-  expect(awaitingFirstFetch([connected({}), importedFiles(MOCK_CONNECTION.bankAccounts)])).toBe(
-    false,
-  );
+    expect(awaitingFirstFetch([connected({syncStatus})], false)).toBe(false);
+  // Transactions already in, from a file or put into the bank's account by one, show Home; so does not knowing yet.
+  expect(awaitingFirstFetch([connected({})], true)).toBe(false);
+  expect(awaitingFirstFetch([connected({})], undefined)).toBe(false);
 });
 
-test('imported files whose imports were all undone hold nothing: Home waits for the bank, or is empty without one', () => {
-  expect(awaitingFirstFetch([connected({}), importedFiles([])])).toBe(true);
+test('imported files whose imports were all undone hold nothing, and Home is empty without a bank', () => {
   expect(withData([importedFiles([])])).toEqual([]);
   expect(withData([importedFiles(MOCK_CONNECTION.bankAccounts)])).toHaveLength(1);
+  expect(withData([connected({}), importedFiles([])])).toHaveLength(1);
 });

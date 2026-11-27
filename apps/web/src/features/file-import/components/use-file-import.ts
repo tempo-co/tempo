@@ -1,4 +1,4 @@
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {isCancelledError, useQuery, useQueryClient} from '@tanstack/react-query';
 import type {
   BankConnection,
   BankImportAccountQuestion,
@@ -303,8 +303,10 @@ export function useFileImport({
       let connections: BankConnection[] = [];
       try {
         connections = await queryClient.fetchQuery(bankConnectionsQueryOptions);
-      } catch {
-        // Each rename below then fails as an account it cannot find.
+      } catch (error) {
+        // A sign-out cancels the read, and its renames belong to no one here.
+        if (isCancelledError(error) || error instanceof SessionChangedError) return;
+        // Otherwise each rename below fails as an account it cannot find.
       }
       await Promise.all(
         renames.map(async ({account, accountId, alias}) => {

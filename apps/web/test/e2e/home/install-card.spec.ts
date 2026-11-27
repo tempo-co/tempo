@@ -35,7 +35,7 @@ test.describe('Installing Tempo on an iPhone', () => {
     await expect(steps.getByRole('listitem')).toHaveText([
       /^1Tap Share in Safari’s toolbar$/,
       /^2Scroll and tap Add to Home Screen$/,
-      /^3Tap Add\. Tempo then opens from its own icon\.$/,
+      /^3Tap Add\. It then opens from its own icon\.$/,
     ]);
     await steps.getByRole('button', {name: 'Done'}).click();
     await expect(steps).toBeHidden();

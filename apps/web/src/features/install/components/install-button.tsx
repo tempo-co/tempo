@@ -76,7 +76,7 @@ function HomeScreenSteps({
       </span>
     </>,
     <>
-      Tap <span className='font-medium'>Add</span>. Tempo then opens from its own icon.
+      Tap <span className='font-medium'>Add</span>. It then opens from its own icon.
     </>,
   ];
   return (

@@ -5,7 +5,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 ## Pages
 
 - Each page answers one question. Home is for status: this month's spending against the usual pace, how far the synced and imported data runs, and what to do next. Reports (cash flow, categories, year tables) belong in Insights, bills in Recurring, account management and imports in Accounts.
-- Home greets by first name only when a name is set; otherwise it shows no greeting. Before any data it is one Add data panel ("Choose your bank", and a drop hint on desktop) beside Getting started, the setup steps whose features exist. While every bank is on its first fetch (none has fetched anything, none failed) it says the data is on its way instead of showing empty figures.
+- Home greets by first name only when a name is set; otherwise it shows no greeting. Before any data it is one Add data panel ("Choose your bank", and a drop hint on desktop) beside Getting started, the setup steps whose features exist. While a bank is on its first fetch (not fetched yet, not failed) and no transaction is in from any bank or file, it says the data is on its way instead of showing empty figures.
 
 ## Density and copy
 

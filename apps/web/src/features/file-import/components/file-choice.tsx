@@ -2,6 +2,7 @@ import {FileUp, Smartphone} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
+import {Alert, AlertDescription} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {cn} from '@/utils/cn';
 
@@ -120,13 +121,13 @@ export function FileChoice({
         </div>
       ) : (
         <>
-          <p className='flex gap-2.5 rounded-md bg-muted px-3 py-2.5 text-body-small text-pretty text-muted-foreground'>
-            <Smartphone aria-hidden='true' className='mt-0.5 size-4 shrink-0' />
-            <span>
+          <Alert>
+            <Smartphone aria-hidden='true' />
+            <AlertDescription>
               Banking apps usually can’t export a statement, but your bank’s website can. Open it in
               your phone’s browser and download the file, then choose it here.
-            </span>
-          </p>
+            </AlertDescription>
+          </Alert>
           {chooseButton}
         </>
       )}

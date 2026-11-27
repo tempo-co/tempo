@@ -1973,7 +1973,11 @@ function distinctRowCount(parts: AccountRows['byFormat']): number {
 	const earlier: MatchExistingRow[] = [];
 	for (const {rows: formatRows} of parts) {
 		const incoming = formatRows.map(toMatchRow);
-		const outcomes = matchTransactions(incoming, earlier);
+		// Between the files of one drop, as between an account's files at the import.
+		const {outcomes} = matchWithReferenceFallback(incoming, earlier, {
+			pairLookAlikeGroups: true,
+			minProbedRows: REFERENCE_FALLBACK_MIN_PROBED_ROWS_BETWEEN_FILES,
+		});
 		const added = incoming.filter((_, index) => outcomes[index].kind !== 'matched');
 		const createdAt = new Date(earlier.length);
 		earlier.push(...added.map((row, index) => ({...row, id: String(earlier.length + index), createdAt})));

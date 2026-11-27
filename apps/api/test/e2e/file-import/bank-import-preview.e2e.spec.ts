@@ -86,7 +86,7 @@ describe('Bank import preview', () => {
 		};
 	}
 
-	it('lists the accounts a drop would create or write to, with their rows and days, writing nothing, and imports the same drop into them', async () => {
+	it("lists the accounts a drop would create or write to, with their rows and days, writing nothing, and the archive's import goes to the account it listed", async () => {
 		const {owner, agent} = await createOwner();
 		const nothing = await written(owner);
 
