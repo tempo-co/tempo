@@ -119,6 +119,11 @@ case ${1:-} in
             systemctl daemon-reload
             echo 'if the egress script or unit changed: sudo systemctl reload wisp-api-egress'
         fi
+        # Nothing else starts the nightly release, so a host without this timer stops releasing.
+        if ! systemctl is-enabled --quiet wisp-release-trigger.timer || [[ ! -s /etc/wisp/release-trigger.env ]]; then
+            echo 'nightly releases are off: put the token in /etc/wisp/release-trigger.env (ops/README.md, Production), then sudo systemctl enable --now wisp-release-trigger.timer'
+            drift=1
+        fi
         ;;
     *) usage ;;
 esac

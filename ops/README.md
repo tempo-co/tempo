@@ -14,7 +14,7 @@ CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/
 | `sync-pins.sh` | Applies image-pin-only Compose changes from `main` before each production deploy |
 | `wisp-api-egress.sh` | Egress firewall for the API uid and production's container networks (see Egress firewall) |
 | `wizard.sh` | A new server's setup and its env file (see New host) |
-| `test-deploy.sh`, `test-sync-pins.sh`, `test-release-trigger.sh` | Offline tests of `deploy.sh`, `sync-pins.sh` and `release-trigger.sh`, run by CI's `Ops checks`: stub `docker` and `curl` in a temporary sandbox, never a Docker daemon, registry or GitHub |
+| `test-deploy.sh`, `test-sync-pins.sh`, `test-release-trigger.sh` | Offline tests of `deploy.sh`, `sync-pins.sh` and `release-trigger.sh`, run by CI's `Ops checks`: stub `docker` or `curl` in a temporary sandbox, never a Docker daemon, registry, GitHub or installed file |
 | `test-backup.sh` | Offline tests of `backup.sh`, `restore-drill.sh` and `failure-email.sh`, run by CI's `Ops checks`: stub `docker` and `restic` and use a local fake mail server |
 | `production.compose.yml` | Production stack: PostgreSQL, Redis, API, web and Caddy |
 | `Caddyfile` | Caddy's site config: HTTPS for `app.wispmoney.com`, HSTS, the bare domain's redirect (see Public entry) |
@@ -28,7 +28,7 @@ The production host uses wisp names: Compose project `wisp-production` (containe
 
 `wisp-deploy-production.timer` runs `deploy.sh production` every 5 minutes and deploys `:release`. A failed image pull is retried twice, 15 and 30 seconds apart, before the run fails. Before any API image change it takes a validated database backup into `/var/lib/wisp-deploy/pre-deploy-backups`, keeping the newest 3 there; a failed backup cancels the deploy. Images that fail to deploy are skipped until `:release` moves.
 
-`wisp-release-trigger.timer` starts the `Release` workflow on `main` at 02:23 UTC, because GitHub's own schedule is best-effort; the next deploy picks up the new `:release`, and releasing by hand is in `docs/ci-and-images.md` (Release). Its token, `RELEASE_TRIGGER_TOKEN` in `/etc/wisp/release-trigger.env` (mode 600), can only start this repository's workflows. A refused request (an expired token) fails the unit and sends the failure email.
+`wisp-release-trigger.timer` starts the `Release` workflow on `main` at 02:23 UTC, as GitHub's own schedule is best-effort; the next deploy picks up the new `:release`, and releasing by hand is in `docs/ci-and-images.md` (Release). Its token, `RELEASE_TRIGGER_TOKEN` in `/etc/wisp/release-trigger.env` can only start this repository's workflows; a refused request (an expired token) fails the unit and sends the failure email.
 
 PostgreSQL, Redis, Caddy, Mailpit and Tailscale (staging) are pinned by `tag@digest` in the Compose files, and Dependabot proposes weekly bumps (no PostgreSQL or Redis majors). Before every deploy run, `wisp-sync-pins.service` (root, `sync-pins.sh`) copies a merged bump from `main` into the installed Compose file when the only change is a tag@digest `image:` line for the same image, major version and variant that moves forward (a higher version, or the same tag at the digest Docker Hub currently serves); anything else needs `sudo ops/install.sh production`. The deploy run then recreates the services whose pin changed, taking the same backup first when PostgreSQL changes, and waits for health. No automatic rollback; after a failed pin update, deploys stop until a pin changes or the state directory's `failed-pins-*` file is removed.
 
