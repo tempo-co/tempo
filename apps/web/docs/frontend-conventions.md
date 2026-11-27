@@ -100,7 +100,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Copy
 
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
-- Never name the services Wisp is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Wisp itself in descriptions ("Bills and income found in your history"). The user's own banks and their export formats may be named, because that is how the user recognises them: account rows show bank names, and the bank picker names the file to pick ("CSV").
+- Never name the services Wisp is built on (its bank-data, AI or logo providers) in UI copy, placeholders or hints, except the registered provider in the shared bank-connection line (`src/components/shared/bank-connection-line.tsx`). Do not name Wisp itself in descriptions ("Bills and income found in your history"). The user's own banks and export formats may be named: account rows show bank names, and the bank picker names the file ("CSV").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
 - When something is briefly busy or failed for a moment, say what the user can do, not which internal process is busy ("Wisp is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
 

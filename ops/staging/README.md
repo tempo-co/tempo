@@ -17,6 +17,17 @@ Staging is a separate copy of Wisp on its own machine, apart from the production
 - The API container gets only the variables listed under its `environment:` in `ops/staging/docker-compose.yml`; there is no `env_file`. A new API setting reaches staging only through a line there.
 - What is deployed: the containers' `org.opencontainers.image.revision` labels (the deploy log prints them) and `http://127.0.0.1:8119/api/health`. The staging API is limited to one CPU.
 
+### Moving an install from the `tempo-staging` layout
+
+An install made before the Wisp names runs `tempo-staging-docker.service` with `~/.config/tempo-staging/`. `ops/install.sh staging` removes the old `tempo-deploy` command but copies none of the hand-made files, so move the install in this order before the next deploy:
+
+1. Stop the old projects (`docker compose -p tempo-staging stop`, the same for `tempo-staging-tailscale`) and `systemctl --user disable --now tempo-staging-docker.service`. Keep the old folders and volumes for rollback.
+2. `cp -a ~/.config/tempo-staging ~/.config/wisp-staging`. Delete the copied `TEMPO_API_IMAGE` and `TEMPO_WEB_IMAGE` lines, so the next deploy takes its first-start path, and set `STAGING_WEB_BASE_URL` to the `wisp-staging` origin.
+3. Install `ops/systemd/wisp-staging-docker.service` as a user unit and enable it. Then run `ops/install.sh staging`.
+4. `wisp-deploy staging --api main --web main` starts the stack on the empty daemon. Then run `~/.config/wisp-staging/wisp-staging-refresh.sh refresh --confirm-production-backup-refresh`, because a first start doesn't restore data.
+5. Log the sidecar in on its new state volume (Tailnet device), or copy the old state volume's files into it. Delete the old `tempo-staging` device in the tailnet admin first, so the node can take the name.
+6. Remove the old unit, folders and daemon data only once staging is healthy at its new address.
+
 ## Signing in
 
 Sign in with a synthetic account, never a restored login: `POST /api/auth/signup` with a random `@example.test` address, read the code from Mailpit (`http://127.0.0.1:8125/api/v1/messages`), then `POST /api/auth/signup/verify`. Send `Origin` set to the configured web origin on every write. The session cookie is `Secure` (staging runs with `NODE_ENV=production`), so over loopback HTTP send it back by hand in a `Cookie` header. The next database refresh deletes the account.
