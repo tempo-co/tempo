@@ -4,7 +4,7 @@ import {useMemo} from 'react';
 
 import {type InsightsNavigation, InsightsPage} from '@/features/insights/components/insights-page';
 import {insightsSearchSchema} from '@/features/insights/types/insights-search';
-import {DEFAULT_PERIOD} from '@/features/insights/utils/insights-period';
+import {periodSearch} from '@/features/insights/utils/insights-links';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
 
 export const Route = createFileRoute('/insights/')({
@@ -21,18 +21,7 @@ function Insights() {
   const navigation = useMemo<InsightsNavigation>(
     () => ({
       setPeriod: (period) =>
-        void navigate({
-          search: (prev) => ({
-            ...prev,
-            // A year goes in as a number, so the address reads `period=2025` rather than a quoted string.
-            period:
-              period === DEFAULT_PERIOD
-                ? undefined
-                : /^\d+$/.test(period)
-                  ? Number(period)
-                  : period,
-          }),
-        }),
+        void navigate({search: (prev) => ({...prev, period: periodSearch(period).period})}),
       setSearch: (next) => void navigate({replace: true, search: (prev) => ({...prev, ...next})}),
     }),
     [navigate],

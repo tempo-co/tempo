@@ -35,9 +35,9 @@ export class HomePage {
     this.yearTable = page.getByRole('region', {name: 'Year by year'});
   }
 
-  /** The month dialog, named by its title ("March 2026"). */
-  monthDialog(title: string) {
-    return this.page.getByRole('dialog', {name: title});
+  /** A month's page in Insights, named by its title ("March 2026"). */
+  monthPage(title: string) {
+    return this.page.getByRole('article', {name: title});
   }
 
   async expectToBeOnPage() {

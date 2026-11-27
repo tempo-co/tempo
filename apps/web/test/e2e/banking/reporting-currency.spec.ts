@@ -183,10 +183,10 @@ test.describe('fully mocked', () => {
     await page.route('**/bank-transactions/cash-flow?**', (route) =>
       fulfillJson(route, {...history.flow, baseCurrency: currency}),
     );
-    await page.goto('/?month=2026-10');
+    await page.goto('/insights/months/2026-10');
 
     const setup = page.getByRole('region', {name: QUESTION});
-    const month = homePage.monthDialog('October 2026');
+    const month = homePage.monthPage('October 2026');
     await expect(setup.getByText('Choose a currency before saving.')).toBeVisible();
     await expect(homePage.whereYouStand).toBeHidden();
     await expect(month).toBeHidden();
@@ -205,7 +205,10 @@ test.describe('fully mocked', () => {
     await expect(month).toBeVisible({timeout: 10_000});
     await expect(page.getByRole('heading', {name: 'Recalculating totals in GBP'})).toBeHidden();
     await expect(month.getByRole('region', {name: 'The month'})).toContainText('£');
-    await page.keyboard.press('Escape');
+    await page
+      .getByRole('navigation', {name: 'Primary'})
+      .getByRole('link', {name: 'Home', exact: true})
+      .click();
     await expect(homePage.totalBalance).toContainText('£');
   });
 
@@ -224,9 +227,9 @@ test.describe('fully mocked', () => {
       await held;
       return route.fallback();
     });
-    await page.goto('/?month=2026-10');
+    await page.goto('/insights/months/2026-10');
 
-    const month = homePage.monthDialog('October 2026');
+    const month = homePage.monthPage('October 2026');
     // Whether the history may be added up is still unknown: nothing of it shows.
     await expect.poll(() => asked).toBe(true);
     await page.waitForTimeout(300);
@@ -452,8 +455,8 @@ test.describe('fully mocked', () => {
     const spending = page.getByRole('region', {name: 'Spending by category'});
     await expect(spending).toHaveAttribute('aria-busy', 'true');
     expect(await spending.innerText()).not.toContain('$');
-    await page.goto('/?month=2026-10');
-    const month = homePage.monthDialog('October 2026');
+    await page.goto('/insights/months/2026-10');
+    const month = homePage.monthPage('October 2026');
     await expect(month.getByRole('region', {name: 'The month'})).toContainText('$');
     const went = month.getByRole('region', {name: 'Where it went'});
     await expect(went).toBeVisible();
@@ -570,7 +573,7 @@ test.describe('fully mocked', () => {
     await expect(page.getByLabel('Loading recurring payments')).toBeVisible();
     await expect(page.getByTestId('recurring-summary')).toBeHidden();
 
-    await open('/?month=2026-10', '/merchants/ranking?');
+    await open('/insights/months/2026-10', '/merchants/ranking?');
     const biggest = page.getByRole('region', {name: 'Biggest merchants'});
     await expect(biggest.getByText('Loading merchants')).toBeVisible();
     await expect(biggest.getByRole('listitem')).toHaveCount(0);

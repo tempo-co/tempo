@@ -1,6 +1,7 @@
 import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import {
+	type BankTransactionCategoryFilterValue,
 	MERCHANT_LIST_DEFAULT_LIMIT,
 	MERCHANT_RANKING_BASELINE_PERIODS,
 	MERCHANT_RANKING_DEFAULT_LIMIT,
@@ -89,12 +90,12 @@ export class MerchantSpendingService {
 
 	async list(
 		owner: ReportingOwner,
-		{search, from, to, offset = 0, limit = MERCHANT_LIST_DEFAULT_LIMIT}: MerchantGroupsQuery,
+		{search, from, to, category, offset = 0, limit = MERCHANT_LIST_DEFAULT_LIMIT}: MerchantGroupsQuery,
 	): Promise<MerchantGroupsResponse> {
 		const {id: accountId} = owner;
 		const baseCurrency = totalsCurrency(owner);
 		const needle = search?.trim().toLocaleLowerCase();
-		const groups = (await this.findGroups(accountId, undefined, {from, to}))
+		const groups = (await this.findGroups(accountId, undefined, {from, to}, category))
 			.filter(
 				(group) =>
 					!needle ||
@@ -266,8 +267,8 @@ export class MerchantSpendingService {
 	}
 
 	/**
-	 * Totals per group over the rows in `range` (all time without it), optionally only the given groups; groups without
-	 * rows are absent. Rows are totalled per
+	 * Totals per group over the rows in `range` (all time without it) and of `category` (every category without it),
+	 * optionally only the given groups; groups without rows are absent. Rows are totalled per
 	 * merchant key first and the few keys are then mapped to their groups, so the brand lookup runs once per key rather
 	 * than once per row. Logos are left out: `withLogos` adds them for the groups a response shows.
 	 */
@@ -275,6 +276,7 @@ export class MerchantSpendingService {
 		accountId: string,
 		groupIds?: readonly string[],
 		range?: {from?: string; to?: string},
+		category?: BankTransactionCategoryFilterValue,
 	): Promise<Group[]> {
 		if (groupIds?.length === 0) return [];
 		// Byte order groups exactly like the database's deterministic collation and sorts the history much faster.
@@ -297,7 +299,7 @@ export class MerchantSpendingService {
 			.addSelect(`to_char(MAX("transaction"."date"), 'YYYY-MM-DD')`, 'lastDate')
 			.andWhere(`"transaction"."merchantKey" IS NOT NULL AND NOT ${SQL_INTERNAL}`)
 			.groupBy('1');
-		applyBankTransactionFilters(variants, {date: range});
+		applyBankTransactionFilters(variants, {date: range, categories: category ? [category] : undefined});
 		const [variantSql, parameters]: [string, unknown[]] = variants.getQueryAndParameters();
 		// The same group as SQL_MERCHANT_GROUP gives each of the key's rows; the default collation keeps the key index.
 		const groupId = `CASE WHEN variant."key" = '' THEN NULL ELSE COALESCE((SELECT 'b_' || md5(lower(${sqlMerchantGroupName('merchant')})) FROM "merchants" merchant WHERE merchant."accountId" = $${parameters.length + 1} AND merchant."key" = variant."key" COLLATE "default" AND merchant."status" = '${MERCHANT_STATUSES.IDENTIFIED}' AND btrim(merchant."brand") <> ''), 'k_' || md5(variant."key")) END`;

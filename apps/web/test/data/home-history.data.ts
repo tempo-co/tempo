@@ -166,7 +166,7 @@ const defaultIncome = (month: string): Record<string, number> => {
 
 const sum = (values: Record<string, number>) => Object.values(values).reduce((a, b) => a + b, 0);
 
-/** Every response Home and the month dialog read, consistent with each other. */
+/** Every response Home and the month page read, consistent with each other. */
 export function homeHistory(options: HomeHistoryOptions = {}) {
   const spendingOf = options.spending ?? defaultSpending;
   const incomeOf = options.income ?? defaultIncome;
@@ -651,7 +651,7 @@ export async function mockHistoryEndpoints(page: Page, history: HomeHistory = ho
   });
 }
 
-/** Answers every request Home, its month dialog and Insights make from {@link homeHistory}. */
+/** Answers every request Home, Insights and the month page make from {@link homeHistory}. */
 export async function mockHomeHistory(
   page: Page,
   history: HomeHistory = homeHistory(),

@@ -71,7 +71,7 @@ const STAGGER: [string, number][] = [
   ['**/bank-transactions/breakdown?**', 800],
   ['**/recurring-series/summary?**', 1100],
   ['**/bank-transactions/review-counts', 1400],
-  // A month's transactions and biggest merchants, when the month dialog is open.
+  // A month's transactions and biggest merchants, on the month page.
   ['**/bank-transactions?**', 1200],
   ['**/merchants/ranking?**', 1300],
   // The running month's usual by this day.
@@ -176,8 +176,8 @@ for (const width of [1440, 390]) {
     await mockLoadingHome(page);
     await staggerHome(page);
 
-    await page.goto('/?month=2026-10');
-    const dialog = homePage.monthDialog('October 2026');
+    await page.goto('/insights/months/2026-10');
+    const dialog = homePage.monthPage('October 2026');
     await expect(dialog.getByRole('region', {name: 'The month'})).toContainText('€3,000');
     await expect(
       dialog.getByRole('region', {name: 'Transactions'}).getByRole('listitem'),
@@ -246,8 +246,8 @@ test('the running month asks for its transactions once, up to today, while the r
   });
 
   try {
-    await page.goto('/?month=2026-11');
-    const dialog = homePage.monthDialog('November 2026');
+    await page.goto('/insights/months/2026-11');
+    const dialog = homePage.monthPage('November 2026');
     const transactions = dialog.getByRole('region', {name: 'Transactions'});
     // The transactions are in before the month's figures.
     await expect(transactions.getByRole('listitem').first()).toBeVisible();
@@ -259,10 +259,10 @@ test('the running month asks for its transactions once, up to today, while the r
     release();
   }
   await expect(
-    homePage.monthDialog('November 2026').getByRole('region', {name: 'The month'}),
+    homePage.monthPage('November 2026').getByRole('region', {name: 'The month'}),
   ).toContainText('Kept so far');
   await expect(
-    homePage.monthDialog('November 2026').getByRole('region', {name: 'The month'}),
+    homePage.monthPage('November 2026').getByRole('region', {name: 'The month'}),
   ).not.toHaveAttribute('aria-busy');
   expect(asked).toEqual(['2026-11-01..2026-11-05']);
 });

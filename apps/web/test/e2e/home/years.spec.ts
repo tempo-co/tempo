@@ -170,18 +170,20 @@ test('a month’s whole row in year by year opens it, and its link opens it from
   await kept.hover();
   await expect(june).not.toHaveCSS('background-color', plain);
   await kept.click();
-  await expect(page).toHaveURL(/[?&]month=2025-06/);
-  await expect(homePage.monthDialog('June 2025')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(homePage.monthDialog('June 2025')).toBeHidden();
+  await expect(page).toHaveURL(/\/insights\/months\/2025-06$/);
+  await expect(homePage.monthPage('June 2025')).toBeVisible();
+  await page.goBack();
+  await expect(homePage.monthPage('June 2025')).toBeHidden();
+  await year.press('Enter');
+  await expect(year).toHaveAttribute('aria-expanded', 'true');
   const july = table.getByRole('link', {name: 'July'});
   await july.focus();
   await expect(
     table.getByRole('row').filter({has: page.getByRole('link', {name: 'July'})}),
   ).toHaveCSS('outline-style', 'solid');
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/[?&]month=2025-07/);
-  await expect(homePage.monthDialog('July 2025')).toBeVisible();
+  await expect(page).toHaveURL(/\/insights\/months\/2025-07$/);
+  await expect(homePage.monthPage('July 2025')).toBeVisible();
 });
 
 test('spending by category shows a month on average per year, with small categories folded', async ({

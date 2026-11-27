@@ -74,7 +74,7 @@ const toDate = (value: unknown) => (typeof value === 'string' ? new Date(value) 
 /** A recurring series' key: 32 lowercase hex characters. */
 export const recurringSeriesKeySchema = z.string().regex(/^[0-9a-f]{32}$/);
 
-function isBankTransactionCategoryFilterValue(
+export function isBankTransactionCategoryFilterValue(
   value: string,
 ): value is BankTransactionCategoryFilterValue {
   return (BANK_TRANSACTION_CATEGORY_FILTER_VALUES as readonly string[]).includes(value);

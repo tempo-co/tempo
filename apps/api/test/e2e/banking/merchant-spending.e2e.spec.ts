@@ -212,6 +212,44 @@ describe('Merchant spending', () => {
 		await ownerAgent.get('/merchants').query({from: '2026-13-01'}).expect(400);
 	});
 
+	it('ranks the owner’s merchants by one category’s rows only, reconciling with the transactions of that category', async () => {
+		const eatingOut = await ownerAgent
+			.get('/merchants')
+			.query({category: 'EATING_OUT', from: '2026-09-01', to: '2026-10-31'})
+			.expect(200);
+		// The brand's refund is a REFUND row, so it stays out of what was spent eating out.
+		expect(eatingOut.body).toEqual({
+			baseCurrency: 'EUR',
+			total: 1,
+			merchants: [
+				expect.objectContaining({
+					id: BURGER,
+					spent: '31.00',
+					received: '0.00',
+					count: 3,
+					lastDate: '2026-10-12',
+				}),
+			],
+		});
+		const rows = await ownerAgent
+			.get('/bank-transactions')
+			.query({'filter[merchantGroup]': BURGER, 'filter[categories][]': 'EATING_OUT'})
+			.expect(200);
+		expect(rows.body.total).toBe(3);
+
+		const shopping = await ownerAgent.get('/merchants').query({category: 'SHOPPING'}).expect(200);
+		expect(shopping.body).toMatchObject({
+			total: 1,
+			merchants: [{id: CORNER, spent: '10.00', count: 3}],
+		});
+		// Another owner's shopping with the same brand is theirs alone.
+		const other = await otherAgent.get('/merchants').query({category: 'SHOPPING'}).expect(200);
+		expect(other.body).toMatchObject({total: 1, merchants: [{id: BURGER, spent: '999.00', count: 1}]});
+		const none = await ownerAgent.get('/merchants').query({category: 'TRAVEL'}).expect(200);
+		expect(none.body).toMatchObject({total: 0, merchants: []});
+		await ownerAgent.get('/merchants').query({category: 'NOT_A_CATEGORY'}).expect(400);
+	});
+
 	it('shows a group’s all-time totals and variants, reconciling with the transactions filtered by it', async () => {
 		const {body} = await ownerAgent.get(`/merchants/${BURGER}`).expect(200);
 		expect(body).toEqual({

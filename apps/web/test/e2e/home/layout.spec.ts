@@ -174,8 +174,8 @@ for (const [name, history] of [
       await expectNoHorizontalOverflow(page);
       expect.soft(await brokenAmounts(page)).toEqual([]);
 
-      await page.goto('/?month=2025-09');
-      const dialog = homePage.monthDialog('September 2025');
+      await page.goto('/insights/months/2025-09');
+      const dialog = homePage.monthPage('September 2025');
       await expect(dialog.getByRole('region', {name: 'Biggest merchants'})).toBeVisible();
       await expectLoaded(dialog);
       await capture('month');
@@ -187,7 +187,7 @@ for (const [name, history] of [
         .evaluateAll((rows) => rows.map((row) => row.clientHeight));
       expect(rowHeights.length).toBeGreaterThan(0);
       expect.soft([...new Set(rowHeights)]).toEqual([60]);
-      if (width < 640) expect.soft(await smallTargets(page, '[role="dialog"]')).toEqual([]);
+      if (width < 640) expect.soft(await smallTargets(page, 'article')).toEqual([]);
       const sections = await dialog.evaluate((element) =>
         Array.from(element.querySelectorAll('section'))
           .filter((section) => section.scrollWidth > section.clientWidth + 1)
@@ -254,9 +254,9 @@ for (const {width, rows} of [
   }) => {
     await page.setViewportSize({width, height: 900});
     await mockSyntheticHome(page);
-    await page.goto('/?month=2026-03');
+    await page.goto('/insights/months/2026-03');
 
-    const figures = homePage.monthDialog('March 2026').getByRole('region', {name: 'The month'});
+    const figures = homePage.monthPage('March 2026').getByRole('region', {name: 'The month'});
     await expectLoaded(figures);
     const card = await boxOf(figures);
     const cells = await figures.evaluate((element) =>
@@ -314,10 +314,8 @@ test('Home’s text actions and Load more buttons share one style with the month
   for (const action of actions) styles.push(await style(action));
   await actions[2].click();
   styles.push(await style(spending.getByRole('button', {name: 'Show fewer'})));
-  await page.goto('/?month=2026-03');
-  const transactions = homePage
-    .monthDialog('March 2026')
-    .getByRole('region', {name: 'Transactions'});
+  await page.goto('/insights/months/2026-03');
+  const transactions = homePage.monthPage('March 2026').getByRole('region', {name: 'Transactions'});
   styles.push(await style(transactions.getByRole('link', {name: 'Open in Transactions'})));
   const headings = [await heading(transactions.getByRole('heading', {name: 'Transactions'}))];
   // Paged lists end in a full-width Load more.
@@ -685,6 +683,35 @@ for (const [name, data] of Object.entries(insightsData)) {
       await expectNoHorizontalOverflow(page);
       expect.soft(await brokenAmounts(page)).toEqual([]);
       expect.soft(await outside(details, 'button, a, h2, dd')).toEqual([]);
+
+      // A category's page, by month and (over the whole history) by year, with the longest category name.
+      for (const period of ['12m', 'all']) {
+        await page.goto(
+          `/insights/categories/HOUSING_AND_UTILITIES${period === 'all' ? '?period=all' : ''}`,
+        );
+        const spending = page.getByRole('region', {name: 'Spending'});
+        const merchants = page.getByRole('region', {name: 'Top merchants'});
+        const transactions = page.getByRole('region', {name: 'Transactions'});
+        await expect(spending.getByRole('list', {name: /^Spent per/})).toBeVisible();
+        await expect(merchants.getByRole('button', {name: /Example/}).first()).toBeVisible();
+        await expect(transactions.getByRole('listitem').first()).toBeVisible();
+        await expectLoaded(page);
+        await capture(`insights-category-${period}`);
+        await expectNoHorizontalOverflow(page);
+        expect.soft(await brokenAmounts(page)).toEqual([]);
+        if (width < 640) expect.soft(await smallTargets(page, 'main')).toEqual([]);
+        expect.soft(await outside(spending, 'dd, li, span')).toEqual([]);
+        expect.soft(await outside(merchants, 'button, span')).toEqual([]);
+        // Transaction rows keep the shared row height.
+        const rowHeights = await transactions
+          .getByRole('listitem')
+          .evaluateAll((rows) => rows.map((row) => row.clientHeight));
+        expect.soft([...new Set(rowHeights)]).toEqual([60]);
+        const main = await boxOf(spending);
+        const side = await boxOf(page.getByRole('complementary', {name: 'Category rail'}));
+        if (width >= 1280) expect(side.x).toBeGreaterThan(main.x + main.width);
+        else expect(side.y).toBeGreaterThan(main.y + main.height);
+      }
       expect(errors).toEqual([]);
     });
   }

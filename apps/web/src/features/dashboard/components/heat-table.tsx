@@ -6,6 +6,7 @@ import {type ReactNode, useMemo, useState} from 'react';
 import {TextAction} from '@/components/shared/text-action';
 import {Card} from '@/components/ui/card';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
+import type {InsightsPeriodSearch} from '@/features/insights/types/insights-search';
 import {cn} from '@/utils/cn';
 
 import {
@@ -37,7 +38,8 @@ import {Bone, LoadingLabel, TextBone} from './loading';
  * Rows are categories (or sources), columns years, newest first. A cell is a month on average in that year, so a
  * part year compares fairly with a whole one. Each row is shaded against its own highest year; the first numeric
  * column is the change on the year before. Small rows fold into one "more" row that opens them. Every cell opens
- * its transactions. On a phone each row shows the latest year and its change, and opens into the other years.
+ * its transactions; with `categorySearch` a category's name opens its page over that period. On a phone each row
+ * shows the latest year and its change, and opens into the other years and the category's page.
  */
 export function HeatTable({
   title,
@@ -46,6 +48,7 @@ export function HeatTable({
   currency,
   kind,
   columnWidth,
+  categorySearch,
 }: {
   title: string;
   periods: BankTransactionBreakdownPeriod[];
@@ -54,6 +57,8 @@ export function HeatTable({
   kind: 'category' | 'source';
   /** A CSS width shared by both tables' year columns, from {@link yearColumnWidth}. */
   columnWidth: string;
+  /** Where a category's page opens: Insights' period. Without it, names are not links. */
+  categorySearch?: InsightsPeriodSearch;
 }) {
   const [all, setAll] = useState(false);
   const missingBaseAmounts = useHasMissingBaseAmounts();
@@ -124,6 +129,15 @@ export function HeatTable({
                         {row.name}
                       </TextAction>
                     </span>
+                  ) : row.category && categorySearch ? (
+                    <Link
+                      to='/insights/categories/$category'
+                      params={{category: row.category}}
+                      search={categorySearch}
+                      className='-ml-2 flex rounded-sm pl-2 hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+                    >
+                      <CategoryName category={row.category} className='min-h-10 pr-2' />
+                    </Link>
                   ) : row.category ? (
                     <CategoryName category={row.category} className='min-h-10 pr-2' />
                   ) : row.source ? (
@@ -158,6 +172,7 @@ export function HeatTable({
         onMore={() => setAll(true)}
         fewer={fewer}
         columnWidth={columnWidth}
+        categorySearch={categorySearch}
       />
     </Card>
   );
@@ -313,6 +328,7 @@ function PhoneRows({
   onMore,
   fewer,
   columnWidth,
+  categorySearch,
 }: {
   model: HeatTableModel;
   /** The rows the table shows, folded or not. */
@@ -320,6 +336,7 @@ function PhoneRows({
   onMore: () => void;
   fewer: ReactNode;
   columnWidth: string;
+  categorySearch?: InsightsPeriodSearch;
 }) {
   const {kind, years, latest, previous} = model;
   const [open, setOpen] = useState<string | null>(null);
@@ -438,6 +455,19 @@ function PhoneRows({
                     </li>
                   ))}
                 </ul>
+              )}
+              {expanded && row.category && categorySearch && (
+                <div className='bg-muted/20 px-4 pb-2'>
+                  <TextAction asChild>
+                    <Link
+                      to='/insights/categories/$category'
+                      params={{category: row.category}}
+                      search={categorySearch}
+                    >
+                      Open {row.name} <ChevronRight aria-hidden='true' />
+                    </Link>
+                  </TextAction>
+                </div>
               )}
             </li>
           );

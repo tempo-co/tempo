@@ -1,6 +1,7 @@
 import type {Page} from '@playwright/test';
 import type {
   BankBalanceTrend,
+  BankTransactionBreakdown,
   BankTransactionCashFlow,
   MerchantGroupsResponse,
 } from '@tempo/contracts';
@@ -133,6 +134,107 @@ test.describe('Insights over the seeded history', () => {
     await details.getByRole('button', {name: 'Close merchant'}).click();
     await expect(page).toHaveURL(/\/insights\?period=2026$/);
     await expect(top).toBeVisible();
+  });
+
+  test('a category and a month open on their own pages over the picked period, and an old month link lands on its page', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 1440, height: 1000});
+    const categoryLists = new Map<string, MerchantGroupsResponse>();
+    page.on('response', async (response) => {
+      const url = new URL(response.url());
+      const category = url.searchParams.get('category');
+      if (!url.pathname.endsWith('/merchants') || !category || !response.ok()) return;
+      categoryLists.set(
+        `${category} ${url.searchParams.get('from')}..${url.searchParams.get('to')}`,
+        (await response.json()) as MerchantGroupsResponse,
+      );
+    });
+    const breakdown = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname.endsWith('/bank-transactions/breakdown') &&
+        url.searchParams.get('by') === 'category' &&
+        url.searchParams.get('interval') === 'month'
+      );
+    });
+    const {flow, range} = await openInsights(page);
+    const categories = ((await (await breakdown).json()) as BankTransactionBreakdown).periods;
+    await page.getByRole('radiogroup', {name: 'Period'}).getByRole('radio', {name: '2026'}).click();
+    await expect(page).toHaveURL(/\/insights\?period=2026$/);
+
+    // The period's biggest category opens its page, keeping the period.
+    const first = page.getByRole('region', {name: 'Categories'}).getByRole('link').first();
+    const href = (await first.getAttribute('href'))!;
+    const key = decodeURIComponent(href.match(/\/insights\/categories\/([^?]+)/)![1]);
+    await first.click();
+    await expect(page).toHaveURL(`/insights/categories/${key}?period=2026`);
+    const whole = (cents: number) =>
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: flow.baseCurrency ?? 'EUR',
+        maximumFractionDigits: 0,
+      }).format(cents / 100);
+    const spent = categories
+      .filter((period) => period.start >= '2026-01' && period.start < '2026-11')
+      .reduce(
+        (sum, period) =>
+          sum +
+          Math.round(Number(period.parts.find((part) => part.key === key)?.amount ?? 0) * 100),
+        0,
+      );
+    await expect(page.getByTestId('category-figure').first()).toHaveText(`Spent${whole(spent)}`);
+    // One bar a month of 2026 that has history, through the running October.
+    await expect(
+      page.getByRole('list', {name: /^Spent per month, .+ 2026 to October 2026$/}),
+    ).toBeVisible();
+    // Its top merchants are the API's ranking of that category's rows over the period.
+    const listed = `${key} ${range('2026-01')}`;
+    await expect.poll(() => categoryLists.has(listed)).toBe(true);
+    const merchants = categoryLists
+      .get(listed)!
+      .merchants.filter((merchant) => Number(merchant.spent) > 0)
+      .slice(0, 6);
+    const top = page.getByRole('region', {name: 'Top merchants'});
+    expect(merchants.length).toBeGreaterThan(0);
+    await expect(top.getByRole('listitem')).toHaveCount(merchants.length);
+    await expect(top.getByRole('listitem').first()).toContainText(merchants[0].name);
+    const transactions = page.getByRole('region', {name: 'Transactions'});
+    const all = new URL(
+      (await transactions.getByRole('link', {name: 'Open in Transactions'}).getAttribute('href'))!,
+      page.url(),
+    ).searchParams;
+    expect(JSON.parse(all.get('categories')!)).toEqual([key]);
+    await page.getByRole('main').getByRole('link', {name: 'Insights', exact: true}).click();
+    await expect(page).toHaveURL(/\/insights\?period=2026$/);
+
+    // A month's bar opens its page; the arrows step through the seeded history, August to the running October, in
+    // place, and Back returns to Insights.
+    await page.getByRole('link', {name: /^September 2026:/}).click();
+    await expect(page).toHaveURL('/insights/months/2026-09?period=2026');
+    await expect(page.getByRole('article', {name: 'September 2026'})).toBeVisible();
+    const previous = page.getByRole('button', {name: 'Previous month'});
+    const next = page.getByRole('button', {name: 'Next month'});
+    await previous.click();
+    await expect(page).toHaveURL('/insights/months/2026-08?period=2026');
+    await expect(page.getByRole('article', {name: 'August 2026'})).toBeVisible();
+    await expect(previous).toBeDisabled();
+    await next.click();
+    await expect(page).toHaveURL('/insights/months/2026-09?period=2026');
+    await next.click();
+    await expect(page).toHaveURL('/insights/months/2026-10?period=2026');
+    const october = page.getByRole('article', {name: 'October 2026'});
+    await expect(october.getByRole('region', {name: 'The month'})).toContainText('Kept so far');
+    await expect(next).toBeDisabled();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/insights\?period=2026$/);
+
+    // A link to a month over Home opens the month's page. It opens in a tab of its own: a full load here would drop the
+    // bodies of reads the recorders above still wait on.
+    const link = await page.context().newPage();
+    await link.goto('/?month=2026-08');
+    await expect(link).toHaveURL('/insights/months/2026-08');
+    await expect(link.getByRole('article', {name: 'August 2026'})).toBeVisible();
   });
 
   test('on a phone a merchant opens in a sheet over Insights', async ({page}) => {

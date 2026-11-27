@@ -3,6 +3,7 @@ import {ChevronRight} from 'lucide-react';
 import {type CSSProperties, Fragment, useState} from 'react';
 
 import {Card} from '@/components/ui/card';
+import type {InsightsPeriodSearch} from '@/features/insights/types/insights-search';
 import {cn} from '@/utils/cn';
 
 import {FIGURE_CHAR, figureColumnWidth, pct, signed, wholeCents} from '../utils/format';
@@ -11,10 +12,17 @@ import type {MonthPoint, Overview, YearRow} from '../utils/overview';
 import {Bone, LoadingLabel, TextBone} from './loading';
 
 /**
- * Years newest first; a click anywhere on a year opens it into its months. Columns drop away on narrow screens, and
- * the layout is fixed, so opening a year never moves a column.
+ * Years newest first; a click anywhere on a year opens it into its months, and a month opens its page, carrying
+ * Insights' `period` when the table stands on Insights. Columns drop away on narrow screens, and the layout is fixed,
+ * so opening a year never moves a column.
  */
-export function YearTable({overview}: {overview: Overview}) {
+export function YearTable({
+  overview,
+  search = {},
+}: {
+  overview: Overview;
+  search?: InsightsPeriodSearch;
+}) {
   const [open, setOpen] = useState<string | null>(
     overview.years[overview.years.length - 1]?.year ?? null,
   );
@@ -84,6 +92,7 @@ export function YearTable({overview}: {overview: Overview}) {
                         point={point}
                         currency={currency}
                         maxFlow={maxFlow / 12}
+                        search={search}
                       />
                     ))}
               </Fragment>
@@ -362,10 +371,12 @@ function MonthLine({
   point,
   currency,
   maxFlow,
+  search,
 }: {
   point: MonthPoint;
   currency: string | null;
   maxFlow: number;
+  search: InsightsPeriodSearch;
 }) {
   const navigate = useNavigate();
   return (
@@ -373,15 +384,16 @@ function MonthLine({
     <tr
       onClick={(event) => {
         if ((event.target as Element).closest('a')) return;
-        void navigate({to: '/', search: (prev) => ({...prev, month: point.month})});
+        void navigate({to: '/insights/months/$month', params: {month: point.month}, search});
       }}
       // Month rows already sit on a tint, so their hover is the full accent to show against it.
       className='cursor-pointer border-b border-border/60 bg-muted/20 hover:bg-accent has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-ring'
     >
       <td className='py-0.5 pr-1 pl-7 sm:pr-3 sm:pl-12'>
         <Link
-          to='/'
-          search={(prev) => ({...prev, month: point.month})}
+          to='/insights/months/$month'
+          params={{month: point.month}}
+          search={search}
           className='inline-flex min-h-11 min-w-11 items-center outline-none sm:min-h-8'
         >
           {formatMonth(point.month, 'MMMM')}
