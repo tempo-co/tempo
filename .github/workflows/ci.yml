@@ -109,7 +109,7 @@ jobs:
 
             - name: Check deploy scripts and Compose files
               run: |
-                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/restore-drill.sh ops/failure-email.sh ops/wisp-staging-copy.sh ops/wisp-staging-copy-serve.sh ops/wizard.sh ops/test-deploy.sh ops/test-sync-pins.sh ops/test-backup.sh .github/scripts/move-tag.sh .github/scripts/move-tag.test.sh .github/scripts/released-revision.sh
+                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/tempo-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/restore-drill.sh ops/failure-email.sh ops/wisp-staging-copy.sh ops/wisp-staging-copy-serve.sh ops/wizard.sh ops/release-trigger.sh ops/test-deploy.sh ops/test-sync-pins.sh ops/test-backup.sh ops/test-release-trigger.sh .github/scripts/move-tag.sh .github/scripts/move-tag.test.sh .github/scripts/released-revision.sh
                   export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d WISP_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
                   docker compose -f ops/production.compose.yml config -q
                   docker run --rm -v "$PWD/ops/Caddyfile:/etc/caddy/Caddyfile:ro" "$(docker compose -f ops/production.compose.yml config --images caddy)" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
@@ -123,6 +123,7 @@ jobs:
                   ops/test-deploy.sh
                   ops/test-sync-pins.sh
                   ops/test-backup.sh
+                  ops/test-release-trigger.sh
                   .github/scripts/move-tag.test.sh
 
     api-lint-format:

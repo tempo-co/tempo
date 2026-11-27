@@ -213,6 +213,7 @@ CALLBACK_PATH=/bank-connections/callback
 # Installed paths (ops/README.md, Production).
 SERVER_ENV=/etc/wisp/production.env
 SERVER_BACKUP_ENV=/etc/wisp/backup.env
+SERVER_RELEASE_ENV=/etc/wisp/release-trigger.env
 SERVER_KEY=/etc/wisp/enable-banking-private.key
 API_UID=10001
 
@@ -283,7 +284,7 @@ tailnet_only() {
 # ── Server setup ──────────────────────────────────────────────────────────
 
 setup_wizard() {
-TOTAL_STAGES=15
+TOTAL_STAGES=16
 banner "Wisp server setup"
 
 stage "Check the server"
@@ -425,6 +426,7 @@ say "The env files belong to $USER (mode 600): the deploy, backup and failure-em
 root install -d -m 755 /etc/wisp
 [[ -e $SERVER_ENV ]] || root install -m 600 -o "$USER" -g "$USER" /dev/null "$SERVER_ENV"
 [[ -e $SERVER_BACKUP_ENV ]] || root install -m 600 -o "$USER" -g "$USER" /dev/null "$SERVER_BACKUP_ENV"
+[[ -e $SERVER_RELEASE_ENV ]] || root install -m 600 -o "$USER" -g "$USER" /dev/null "$SERVER_RELEASE_ENV"
 [[ -d /var/lib/wisp-deploy ]] || root install -d -m 755 -o "$USER" -g "$USER" /var/lib/wisp-deploy
 pause
 
@@ -489,15 +491,32 @@ fi
 ENV_FILE=$SERVER_ENV
 pause
 
+stage "Nightly release trigger"
+ENV_FILE=$SERVER_RELEASE_ENV
+say "Each night at 02:23 UTC the server starts the Release workflow on GitHub; it needs a token that can only start workflows."
+if [[ -z $(_existing RELEASE_TRIGGER_TOKEN || true) ]]; then
+  open_url "https://github.com/settings/personal-access-tokens/new"
+  step "Fine-grained token: owner tempo-co, only the tempo repository, permission Actions: read and write, nothing else, expiry one year."
+  ask_secret RELEASE_TRIGGER_TOKEN "The token:"
+  [[ $RELEASE_TRIGGER_TOKEN =~ ^[A-Za-z0-9_]+$ ]] || fail_stop "that does not look like a GitHub token"
+  write_env RELEASE_TRIGGER_TOKEN "$RELEASE_TRIGGER_TOKEN"
+  unset RELEASE_TRIGGER_TOKEN
+  note "Note the token's expiry date: when it lapses, the nightly release fails and sends a failure email."
+else
+  say "The token is set."
+fi
+ENV_FILE=$SERVER_ENV
+pause
+
 stage "Install the production units"
-say "Deploy (:release), pin sync, Caddy's config, backups, the drill, the failure hook and the egress firewall."
+say "Deploy (:release), the nightly release trigger, pin sync, Caddy's config, backups, the drill, the failure hook and the egress firewall."
 root "$REPO/ops/install.sh" production
 pause
 
 stage "First deploy"
 docker manifest inspect ghcr.io/tempo-co/api:release >/dev/null 2>&1 ||
   fail_stop "no :release image yet: run the Release workflow once (gh workflow run release.yml --ref main), then run setup again"
-root systemctl enable --now wisp-deploy-production.timer
+root systemctl enable --now wisp-deploy-production.timer wisp-release-trigger.timer
 say "The first deploy pulls the images and starts the stack (a few minutes):"
 root systemctl start wisp-deploy-production.service
 if bash -c "$HEALTH_WAIT"; then say "The app answers on the server."; else fail_stop "the app is not healthy: journalctl -u wisp-deploy-production.service -n 50"; fi

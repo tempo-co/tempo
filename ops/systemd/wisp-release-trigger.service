@@ -1,0 +1,14 @@
+# Installed by `sudo ops/install.sh production`, which fills in @USER@.
+# The GitHub token comes from /etc/wisp/release-trigger.env (see "Production" in ops/README.md).
+[Unit]
+Description=Start the nightly Release workflow on GitHub
+OnFailure=wisp-failure-email@%n.service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@USER@
+EnvironmentFile=/etc/wisp/release-trigger.env
+ExecStart=/usr/local/lib/wisp-deploy/release-trigger.sh
+TimeoutStartSec=5min
