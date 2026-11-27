@@ -261,7 +261,7 @@ describe('Reporting currency', () => {
 	});
 
 	it.each([
-		['a currency Tempo cannot convert into', 'BGN', REPORTING_CURRENCY_UNSUPPORTED],
+		['a currency Wisp cannot convert into', 'BGN', REPORTING_CURRENCY_UNSUPPORTED],
 		['a code in lower case', 'gbp', /three-letter currency code/],
 		['no currency', undefined, /three-letter currency code/],
 	])('refuses %s and changes nothing', async (_case, currency, message) => {

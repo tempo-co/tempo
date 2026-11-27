@@ -7,7 +7,7 @@ import {installSchemaExtras} from '@core/database/synchronized-schema-extras';
 
 import {getApp} from '../../setup/e2e.setup';
 
-const COPY_DATABASE = 'tempo_staging_copy';
+const COPY_DATABASE = 'wisp_staging_copy';
 // The filter the production server's staging-copy job runs on a restored backup.
 const FILTER_SQL = readFileSync(join(__dirname, '../../../wisp-staging-copy.sql'), 'utf8');
 // Reference data no account owns; the copy keeps it whole.

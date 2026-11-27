@@ -33,11 +33,11 @@ function fakeQueryable(accountIds: string[], updateRowCount = 1) {
 
 describe('staging account password reset', () => {
 	it('accepts only the dedicated staging refresh database and local Postgres service', () => {
-		expect(() => assertStagingDatabaseTarget('tempo_staging_refresh', 'postgres')).not.toThrow();
-		expect(() => assertStagingDatabaseTarget('tempo_staging', 'postgres')).toThrow(
+		expect(() => assertStagingDatabaseTarget('wisp_staging_refresh', 'postgres')).not.toThrow();
+		expect(() => assertStagingDatabaseTarget('wisp_staging', 'postgres')).toThrow(
 			'staging refresh database host and name',
 		);
-		expect(() => assertStagingDatabaseTarget('tempo_staging_refresh', 'production-db.internal')).toThrow(
+		expect(() => assertStagingDatabaseTarget('wisp_staging_refresh', 'production-db.internal')).toThrow(
 			'staging refresh database host and name',
 		);
 	});

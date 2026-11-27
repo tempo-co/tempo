@@ -11,12 +11,12 @@ const FOOTER =
 const resetPasswordContext = {
 	name: 'Example User',
 	resetUrl:
-		'https://tempo.example.test/tempo/reset-password?email=example%40example.test&token=00000000-0000-0000-0000-000000000000',
+		'https://wisp.example.test/wisp/reset-password?email=example%40example.test&token=00000000-0000-0000-0000-000000000000',
 	expiration: '1 hour',
 };
 const welcomeContext = {
 	name: 'Example User',
-	verificationUrl: 'https://tempo.example.test/tempo/verify?token=synthetic',
+	verificationUrl: 'https://wisp.example.test/wisp/verify?token=synthetic',
 	code: '123456',
 	expiration: '1 hour',
 };
@@ -31,7 +31,7 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 			subject: 'Your Example Bank connection to Wisp ends soon',
 			bankName: 'Example Bank',
 			consentEndsOn: '1 January 2030 at 00:00 UTC',
-			bankConnectionsUrl: 'https://tempo.example.test/accounts',
+			bankConnectionsUrl: 'https://wisp.example.test/accounts',
 		},
 	},
 	{
@@ -41,7 +41,7 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 			bankName: 'Example Bank',
 			reason: 'Recent sync attempts did not succeed.',
 			lastSyncDescription: 'The last successful sync was on 1 January 2030 at 00:00 UTC.',
-			bankConnectionsUrl: 'https://tempo.example.test/accounts',
+			bankConnectionsUrl: 'https://wisp.example.test/accounts',
 		},
 	},
 	{
@@ -56,7 +56,7 @@ const emailTemplates: Array<{name: string; context: Record<string, string>}> = [
 		name: 'verify-new-email',
 		context: {
 			name: 'Example User',
-			verificationUrl: 'https://tempo.example.test/tempo/verify?token=synthetic',
+			verificationUrl: 'https://wisp.example.test/wisp/verify?token=synthetic',
 			expiration: '1 hour',
 		},
 	},

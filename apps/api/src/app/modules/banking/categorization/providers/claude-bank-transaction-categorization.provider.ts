@@ -104,7 +104,7 @@ const CREDIT_BALANCE_PATTERN = /credit balance is too low/i;
 // Adaptive thinking shares this budget with the reply, about 40 tokens per row of a 50-row group; a
 // reply cut off at the limit fails the group rather than leaving it pending.
 const CATEGORIZATION_MAX_TOKENS = 16_384;
-// The categorizing call returns its answer as the input of this tool, which Tempo reads and never runs. A strict
+// The categorizing call returns its answer as the input of this tool, which Wisp reads and never runs. A strict
 // json_schema format made the model often skip thinking and send well-known merchants to review. Adaptive thinking
 // rejects a forced tool choice, so the choice stays auto and the description asks for exactly one call.
 const STRUCTURED_OUTPUT_TOOL = 'StructuredOutput';

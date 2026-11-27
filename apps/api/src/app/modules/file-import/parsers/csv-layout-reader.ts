@@ -32,7 +32,7 @@ export type TableCell = {text: string; number: boolean};
 
 export type CsvLayoutReadOptions = {
 	/**
-	 * The owner's saved layouts rather than Tempo's: tried newest first, a header that matches but whose rows do not
+	 * The owner's saved layouts rather than Wisp's: tried newest first, a header that matches but whose rows do not
 	 * read lets the next one try, and every read must be plausible (at least one row, not every amount zero, every
 	 * date from 1990 to a year from `today`).
 	 */

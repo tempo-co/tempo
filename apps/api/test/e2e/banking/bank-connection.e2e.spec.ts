@@ -1614,7 +1614,7 @@ describe('BankConnectionController', () => {
 			},
 		);
 		getAccountTransactions.mockClear();
-		// The bank serves the dormant account's last 80 days only, not the 207 Tempo asks for.
+		// The bank serves the dormant account's last 80 days only, not the 207 Wisp asks for.
 		const dormantEarliestRow = addDays(firstRun!.requestedTo!, -80);
 		getAccountTransactions.mockImplementation(async (accountId) =>
 			fetchedTransactions(
@@ -3476,7 +3476,7 @@ describe('BankConnectionController', () => {
 		]);
 		getAccountBalances.mockClear();
 		getAccountTransactions.mockClear();
-		// A code Tempo does not know, with a Retry-After shorter than the minimum cooldown.
+		// A code Wisp does not know, with a Retry-After shorter than the minimum cooldown.
 		getAccountBalances.mockRejectedValueOnce(new EnableBankingClientError('TOO_MANY_REQUESTS_EXAMPLE', 429, 17));
 		getAccountBalances.mockResolvedValue(makeBalances());
 		getAccountTransactions.mockResolvedValue(fetchedTransactions([]));
@@ -3565,9 +3565,9 @@ describe('BankConnectionController', () => {
 		}
 	});
 
-	it('keeps the connection authorized for a retry and logs an error when the provider refuses Tempo itself', async () => {
+	it('keeps the connection authorized for a retry and logs an error when the provider refuses Wisp itself', async () => {
 		const {connection} = await createAuthorizedConnection('application-refused-session');
-		// HTTP 401 without a session code: Tempo's own JWT, key or clock, not the user's consent.
+		// HTTP 401 without a session code: Wisp's own JWT, key or clock, not the user's consent.
 		getSessionAccounts.mockRejectedValueOnce(new EnableBankingClientError('UNAUTHORIZED_ACCESS', 401));
 		getAccountBalances.mockClear();
 		getAccountTransactions.mockClear();
@@ -3583,7 +3583,7 @@ describe('BankConnectionController', () => {
 			expect(saved).toMatchObject({status: 'AUTHORIZED', syncStatus: 'FAILED', syncFailureCount: 1});
 			expect(saved.nextSyncAt!.getTime()).toBeGreaterThan(Date.now());
 			expect(error.mock.calls.map(([message]) => String(message))).toContain(
-				`Enable Banking refused Tempo's application credentials during the session request for connection ${connection.id}: session UNAUTHORIZED_ACCESS HTTP 401`,
+				`Enable Banking refused Wisp's application credentials during the session request for connection ${connection.id}: session UNAUTHORIZED_ACCESS HTTP 401`,
 			);
 		} finally {
 			error.mockRestore();
@@ -3632,7 +3632,7 @@ describe('BankConnectionController', () => {
 				syncCoveredThrough: null,
 			});
 			expect(JSON.stringify(response)).not.toContain('ASPSP_ACCOUNT_NOT_ACCESSIBLE');
-			// The run keeps why it was partial, by Tempo account id, without provider ids or messages.
+			// The run keeps why it was partial, by Wisp account id, without provider ids or messages.
 			const failures = [
 				{
 					kind: 'transactions',

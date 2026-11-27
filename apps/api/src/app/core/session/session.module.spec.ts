@@ -26,7 +26,7 @@ describe('SessionModule', () => {
 			NODE_ENV: 'test',
 			SESSION_SECRET: 'test-secret',
 			SESSION_EXPIRATION: '7d',
-			SESSION_REDIS_KEY: 'tempo:session',
+			SESSION_REDIS_KEY: 'wisp:session',
 		};
 		const config = {
 			get: jest.fn((key: keyof typeof configValues) => configValues[key]),
@@ -39,7 +39,7 @@ describe('SessionModule', () => {
 		const sessionMiddleware = new SessionMiddleware({} as SessionService);
 		new SessionModule(redisClient, config, sessionMiddleware).configure(consumer);
 
-		expect(RedisStore).toHaveBeenCalledWith({client: redisClient, prefix: 'tempo:session:', disableTouch: true});
+		expect(RedisStore).toHaveBeenCalledWith({client: redisClient, prefix: 'wisp:session:', disableTouch: true});
 		expect(forRoutes).toHaveBeenCalledWith('*');
 	});
 });

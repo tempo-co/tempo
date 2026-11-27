@@ -324,13 +324,13 @@ describe('MCP tool registration', () => {
 	});
 
 	it.each([
-		[400, 'Tempo API HTTP 400: Request refused. Check tool input.'],
-		[401, 'Tempo API HTTP 401: Token rejected or expired.'],
-		[403, 'Tempo API HTTP 403: Permission denied. Check token scope and account access.'],
-		[404, 'Tempo API HTTP 404: Resource not found or not accessible to this token.'],
-		[422, 'Tempo API HTTP 422: Request refused. Check tool input.'],
-		[429, 'Tempo API HTTP 429: Rate limit reached. Retry later.'],
-		[503, 'Tempo API HTTP 503: Tempo API unavailable. Retry later.'],
+		[400, 'Wisp API HTTP 400: Request refused. Check tool input.'],
+		[401, 'Wisp API HTTP 401: Token rejected or expired.'],
+		[403, 'Wisp API HTTP 403: Permission denied. Check token scope and account access.'],
+		[404, 'Wisp API HTTP 404: Resource not found or not accessible to this token.'],
+		[422, 'Wisp API HTTP 422: Request refused. Check tool input.'],
+		[429, 'Wisp API HTTP 429: Rate limit reached. Retry later.'],
+		[503, 'Wisp API HTTP 503: Wisp API unavailable. Retry later.'],
 	])('returns static error text when a read fails with HTTP %i', async (status, text) => {
 		respond = async () => {
 			throw new ToolReadError(status);
@@ -346,7 +346,7 @@ describe('MCP tool registration', () => {
 		try {
 			expect(await call('list_accounts')).toEqual({
 				isError: true,
-				content: [{type: 'text', text: 'Tempo API HTTP 500: Tempo API unavailable. Retry later.'}],
+				content: [{type: 'text', text: 'Wisp API HTTP 500: Wisp API unavailable. Retry later.'}],
 			});
 			expect(log).toHaveBeenCalledTimes(1);
 			expect(log).toHaveBeenCalledWith(

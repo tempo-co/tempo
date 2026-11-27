@@ -57,7 +57,7 @@ export function looksLikeOfx(bytes: Uint8Array): boolean {
 
 /**
  * Reads the bank statements (`STMTRS`) and card statements (`CCSTMTRS`) of an OFX or QFX file, version 1.x (SGML,
- * leaf elements left unclosed) or 2.x (XML), into one normalized statement each. Elements Tempo does not use,
+ * leaf elements left unclosed) or 2.x (XML), into one normalized statement each. Elements Wisp does not use,
  * including vendor elements, are skipped. Markup declarations (a DTD, entities, comments) are refused; CDATA is
  * text as written, and elsewhere only the predefined and numeric character references are decoded. A statement without a currency is `parse_failed`.
  */

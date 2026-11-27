@@ -34,9 +34,9 @@ import {
 import {sampleTable} from '@modules/file-import/parsers/table-sample';
 
 /** The folder of the real-file corpus (see `docs/real-file-corpus.md`); the check is skipped without it. */
-export const CORPUS_ENV = 'TEMPO_IMPORT_CORPUS';
+export const CORPUS_ENV = 'WISP_IMPORT_CORPUS';
 /** `subscription`: also rerun the column mapper on each CSV file through the local `claude` CLI. Off by default. */
-export const MAPPER_ENV = 'TEMPO_IMPORT_CORPUS_MAPPER';
+export const MAPPER_ENV = 'WISP_IMPORT_CORPUS_MAPPER';
 
 export type CorpusEntry = {
 	id: string;

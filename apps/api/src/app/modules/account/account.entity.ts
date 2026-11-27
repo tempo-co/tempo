@@ -4,7 +4,7 @@ import {Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique,
 import {APP_TIME_ZONE} from '@core/time/app-time-zone';
 
 /**
- * `AUTOMATIC`: every account held one currency, so Tempo used it. `SETUP_PENDING`: accounts hold several currencies
+ * `AUTOMATIC`: every account held one currency, so Wisp used it. `SETUP_PENDING`: accounts hold several currencies
  * and the owner has not chosen yet (`baseCurrency` keeps an automatic one meanwhile). `CONFIRMED`: the owner chose.
  */
 export const BASE_CURRENCY_STATES = ['AUTOMATIC', 'SETUP_PENDING', 'CONFIRMED'] as const;

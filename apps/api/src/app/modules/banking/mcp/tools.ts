@@ -83,9 +83,9 @@ const rangeLimits = (intervals: readonly (keyof typeof MAX_RANGE_PERIODS)[]) =>
  */
 export function createToolServer(reader: ToolReader, timeZone: string, now: () => Date = () => new Date()): McpServer {
 	const server = new McpServer(
-		{name: 'tempo', version: '0.1.0'},
+		{name: 'wisp', version: '0.1.0'},
 		{
-			instructions: `Combined money figures are in the response's baseCurrency, the owner's reporting currency. When baseCurrency is null, Tempo has no reporting currency yet or is still converting amounts into a new one: do not present those figures as totals. Amounts with their own currency field are always in that currency. ${BANK_DATA_NOTICE}`,
+			instructions: `Combined money figures are in the response's baseCurrency, the owner's reporting currency. When baseCurrency is null, Wisp has no reporting currency yet or is still converting amounts into a new one: do not present those figures as totals. Amounts with their own currency field are always in that currency. ${BANK_DATA_NOTICE}`,
 		},
 	);
 	const annotations = {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true};
@@ -206,7 +206,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'transaction_totals',
 		{
-			description: `Exact decimal-string spending, income and net across ALL matching transactions, plus count and the excluded missingBaseAmount count. Uses Tempo base-currency and spending semantics, not a page sum. ${BANK_DATA_NOTICE}`,
+			description: `Exact decimal-string spending, income and net across ALL matching transactions, plus count and the excluded missingBaseAmount count. Uses Wisp base-currency and spending semantics, not a page sum. ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({filters: filtersSchema.optional()}),
 			annotations,
 		},
@@ -268,7 +268,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'merchant_ranking',
 		{
-			description: `Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Tempo's spending semantics. ${asOfDefault} ${BANK_DATA_NOTICE}`,
+			description: `Top merchants by net spending in the week, month or year containing period, each against its usual amount in earlier periods, using Wisp's spending semantics. ${asOfDefault} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				interval: z.enum(CASH_FLOW_INTERVALS),
 				period: z.iso.date(),
@@ -293,7 +293,7 @@ export function createToolServer(reader: ToolReader, timeZone: string, now: () =
 	server.registerTool(
 		'merchant_periods',
 		{
-			description: `How much was spent at and received from one merchant group per week, month or year, using Tempo's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)} ${BANK_DATA_NOTICE}`,
+			description: `How much was spent at and received from one merchant group per week, month or year, using Wisp's spending semantics; id comes from list_merchants, merchant_ranking or a transaction's merchantGroupId. ${asOfDefault} ${rangeLimits(CASH_FLOW_INTERVALS)} ${BANK_DATA_NOTICE}`,
 			inputSchema: z.strictObject({
 				id: merchantId,
 				interval: z.enum(CASH_FLOW_INTERVALS),

@@ -889,7 +889,7 @@ describe('Bank imports', () => {
 
 	it("takes the closing balance a statement of any bank states when its rows' order is unknown, until its import is undone", async () => {
 		const {agent} = await createOwner();
-		// Two entries of a bank whose entry order Tempo does not know: no row gets a balance after.
+		// Two entries of a bank whose entry order Wisp does not know: no row gets a balance after.
 		const stated = statement(
 			[
 				{amount: '-10.00', bookingDate: '2026-10-05', reference: 'R1'},
@@ -4265,7 +4265,7 @@ describe('Bank imports', () => {
 			file: 2,
 		},
 		{
-			name: 'a table in no layout Tempo knows',
+			name: 'a table in no layout Wisp knows',
 			files: () => [ARCHIVE, Buffer.from('Date,Amount\n2026-03-02,1.00\n')],
 			status: 422,
 			code: 'layout_unknown',

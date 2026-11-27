@@ -96,7 +96,7 @@ export class BankImportLayoutService {
 	 * The banks the owner can pick for a layout (`BankImportBanks`): their own banks only, those of their bank
 	 * connections, of their imported-files accounts that record a bank by name (kept from a removed connection, or
 	 * from earlier imports) and of their saved layouts; never Revolut, whose own files already name their accounts'
-	 * bank. Each bank once, spelled as a connection, saved layout or Tempo's built-in format writes it, else as the
+	 * bank. Each bank once, spelled as a connection, saved layout or Wisp's built-in format writes it, else as the
 	 * account records it. Only names the proposal's layout can be confirmed under (`layoutBankRefusal`).
 	 */
 	async knownBanks(ownerId: Account['id'], proposalId: string): Promise<BankImportBanks> {
@@ -656,7 +656,7 @@ export function mappingOf(layout: CsvLayout, header: readonly string[] | null): 
 	};
 }
 
-/** The rows as Tempo would store them: the first 5 and the last 2, counts, dates and totals per currency. */
+/** The rows as Wisp would store them: the first 5 and the last 2, counts, dates and totals per currency. */
 export function previewOf(statements: readonly NormalizedStatement[]): BankImportLayoutPreview {
 	return previewOfRows(
 		statements.flatMap((statement) => statement.rows),

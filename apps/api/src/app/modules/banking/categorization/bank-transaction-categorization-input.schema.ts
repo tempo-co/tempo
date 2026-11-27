@@ -7,7 +7,7 @@ import {BANK_TRANSACTION_DIRECTIONS, CREDIT_DEBIT_INDICATORS} from '../bank-tran
 import {BANK_TRANSACTION_CATEGORIZATION_MAX_WEB_SEARCH_QUERY_LENGTH} from './bank-transaction-categorization.constants';
 
 /**
- * The one definition of what Tempo sends the model about a transaction. It yields the TypeScript types, the fields the
+ * The one definition of what Wisp sends the model about a transaction. It yields the TypeScript types, the fields the
  * provider serializes, the fields the input hash covers, and the JSON Schema of a request (`input` in
  * `providers/claude-categorization-contract.json`, written by `npm run contract:input`).
  */

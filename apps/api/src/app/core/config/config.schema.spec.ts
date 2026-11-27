@@ -7,9 +7,9 @@ const baseConfig = {
 	API_URL: 'http://api:3000',
 	DB_HOST: 'postgres',
 	DB_PORT: '5432',
-	DB_USERNAME: 'tempo',
+	DB_USERNAME: 'wisp',
 	DB_PASSWORD: 'test-password',
-	DB_NAME: 'tempo',
+	DB_NAME: 'wisp',
 	DB_SYNCHRONIZE: 'false',
 	SESSION_SECRET: 'x'.repeat(32),
 	SESSION_EXPIRATION: '30d',
@@ -189,11 +189,11 @@ describe('session cookie configuration', () => {
 	it('accepts an isolated mounted-path cookie contract', () => {
 		const parsed = configSchema.parse({
 			...baseConfig,
-			SESSION_COOKIE_NAME: 'tempo_staging_session',
+			SESSION_COOKIE_NAME: 'wisp_staging_session',
 			SESSION_COOKIE_PATH: '/staging',
 		});
 
-		expect(parsed.SESSION_COOKIE_NAME).toBe('tempo_staging_session');
+		expect(parsed.SESSION_COOKIE_NAME).toBe('wisp_staging_session');
 		expect(parsed.SESSION_COOKIE_PATH).toBe('/staging');
 	});
 });

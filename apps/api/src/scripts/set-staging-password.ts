@@ -3,7 +3,7 @@ import {DataSource} from 'typeorm';
 
 import {VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_NAME} from '../../scripts/seed-data/seed.constants';
 
-const REFRESH_DATABASE = 'tempo_staging_refresh';
+const REFRESH_DATABASE = 'wisp_staging_refresh';
 
 export function assertStagingDatabaseTarget(databaseName: string | undefined, host: string | undefined): void {
 	if (databaseName !== REFRESH_DATABASE || host !== 'postgres') {

@@ -4,7 +4,7 @@ import {installSchemaExtras} from '@core/database/synchronized-schema-extras';
 
 import {getApp} from '../../setup/e2e.setup';
 
-const FRESH_DATABASE = 'tempo_fresh_install';
+const FRESH_DATABASE = 'wisp_fresh_install';
 
 describe('Fresh database install', () => {
 	let fresh: DataSource;

@@ -293,7 +293,7 @@ export class BankImportService {
 								closingBalance: accountRows[index].closingBalance,
 							})),
 						),
-						// On a synced account only the days its bank sync does not cover can be missing from Tempo.
+						// On a synced account only the days its bank sync does not cover can be missing from Wisp.
 						statementGaps: accountRows.flatMap(({gaps, currency}, index) => {
 							const {account, connection} = accounts[index];
 							const covered =
@@ -1740,7 +1740,7 @@ type AccountStatements = ImportedAccount & {rows: AccountRows};
 
 /**
  * Refuses the drop with `account_bank_conflict` when statements naming an account by an id that is no IBAN give
- * evidence of two banks of the same kind (`differentBanks`): the same id at another bank, which Tempo cannot tell
+ * evidence of two banks of the same kind (`differentBanks`): the same id at another bank, which Wisp cannot tell
  * apart. A statement disagreeing with the bank the imported-files account records is named first, then a later
  * statement disagreeing with an earlier one of the drop.
  */

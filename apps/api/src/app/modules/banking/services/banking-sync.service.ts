@@ -116,7 +116,7 @@ type SyncFetchResult = {
 	targeted: boolean;
 	/** Provider calls that failed on their own and a targeted retry can repeat. */
 	retryCalls: BankSyncRetryCall[];
-	/** Something failed that only a full sync can retry, such as Tempo's credentials or an unexpected exception. */
+	/** Something failed that only a full sync can retry, such as Wisp's credentials or an unexpected exception. */
 	fullRetry: boolean;
 };
 
@@ -557,9 +557,9 @@ export class BankingSyncService {
 				case 'application_auth':
 					applicationRefused = true;
 					fullRetry = true;
-					// Every connection's sync fails the same way until Tempo's credentials, key or clock are fixed.
+					// Every connection's sync fails the same way until Wisp's credentials, key or clock are fixed.
 					this.logger.error(
-						`Enable Banking refused Tempo's application credentials during the ${kind} request for connection ${connectionId}: ${describeBankSyncFailures([failure])}`,
+						`Enable Banking refused Wisp's application credentials during the ${kind} request for connection ${connectionId}: ${describeBankSyncFailures([failure])}`,
 					);
 					break;
 				case 'failed':
