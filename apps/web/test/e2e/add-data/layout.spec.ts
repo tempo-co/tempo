@@ -120,9 +120,8 @@ test.describe('Add data sheet layout', () => {
             right.name.length - left.name.length ||
             right.exportSteps.steps.join('').length - left.exportSteps.steps.join('').length,
         )[0];
-        await sheet
-          .getByRole('button', {name: new RegExp(`^${longest.name.replace(/[()]/g, '\\$&')}`)})
-          .click();
+        // Its row's name is the bank's name followed by its country.
+        await sheet.getByRole('button', {name: longest.name}).click();
         await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
         await expectInside(page, sheet);
 

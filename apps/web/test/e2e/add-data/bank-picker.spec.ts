@@ -92,7 +92,7 @@ test.describe('the bank picker in Add data', () => {
     // Changing the bank goes back to the picker, where a verified bank's steps follow the same way.
     await sheet.getByRole('button', {name: 'Change bank'}).click();
     await expect(sheet.getByRole('heading', {name: 'Which bank is the file from?'})).toBeVisible();
-    await sheet.getByRole('button', {name: new RegExp(`^${RABOBANK.name}`)}).click();
+    await sheet.getByRole('button', {name: RABOBANK.name}).click();
     await expect(
       sheet
         .getByRole('list', {name: `How to get the file from ${RABOBANK.name}`})
