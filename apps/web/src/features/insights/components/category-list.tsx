@@ -1,3 +1,4 @@
+import {Link} from '@tanstack/react-router';
 import type {CSSProperties} from 'react';
 
 import {Card} from '@/components/ui/card';
@@ -5,7 +6,7 @@ import {CategoryName} from '@/features/dashboard/components/category-name';
 import {FIGURE_CHAR, figureColumnWidth, wholeCents} from '@/features/dashboard/utils/format';
 import {cn} from '@/utils/cn';
 
-import {categoryPageHref} from '../utils/insights-links';
+import type {InsightsPeriodSearch} from '../types/insights-search';
 import type {CategoryRow} from '../utils/period-figures';
 
 /** The figure columns take the room their longest figure needs, so large amounts fit and the columns line up. */
@@ -19,12 +20,13 @@ const ROW =
 export function CategoryList({
   rows,
   currency,
-  period,
+  search,
   periodLabel,
 }: {
   rows: CategoryRow[];
   currency: string | null;
-  period: string;
+  /** The period the category's page opens on. */
+  search: InsightsPeriodSearch;
   periodLabel: string;
 }) {
   const widths = {
@@ -66,8 +68,10 @@ export function CategoryList({
           <ul className='divide-y divide-border/60 pb-1'>
             {rows.map((row) => (
               <li key={row.category}>
-                <a
-                  href={categoryPageHref(row.category, period)}
+                <Link
+                  to='/insights/categories/$category'
+                  params={{category: row.category}}
+                  search={search}
                   className={cn(
                     ROW,
                     'text-body hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
@@ -81,7 +85,7 @@ export function CategoryList({
                   <span className='text-right numeric whitespace-nowrap'>
                     {wholeCents(row.total, currency)}
                   </span>
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

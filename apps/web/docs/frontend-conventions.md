@@ -74,7 +74,7 @@ Value axes take their ticks from `axisTicks` (`src/features/dashboard/utils/char
 about 6% headroom, passed as explicit `ticks` rather than `tickCount`. A Recharts `Bar` has no default fill: a `Cell`
 without `fill` takes the bar's, and with neither the bar renders black.
 
-HTML bars (the Insights cash flow) use `axisTicks` too, and a pair is a link only while it is a 44px target.
+HTML bars (Insights) use `axisTicks` too, and a pair is a link only while it is a 44px target.
 
 ## Settings lists
 
@@ -107,6 +107,7 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 
 - Dialog state that Back should close lives in the host route's search schema; see `docs/browser-and-e2e-testing.md` for the close/back rule and the test.
 - A rail's opened item (the Insights merchant) lives in the search with `replace`: beside the content from 1280px, in a `Sheet` narrower (bottom on phones).
+- A page's step to a sibling (the month arrows) replaces the entry.
 - Input limits that reach the URL use one exported constant for the schema and the input's `maxLength` (`BANK_TRANSACTION_SEARCH_MAX_LENGTH`).
 
 ## Query caches

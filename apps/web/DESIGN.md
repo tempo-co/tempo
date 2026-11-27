@@ -420,9 +420,10 @@ optional detail line and the next action. Never centre the state or float a larg
 
 ### Navigation
 
-Navigation is a quiet index with no breadcrumbs; the title and the active item say where you are.
-Pages: `/`, `/transactions`, `/insights`, `/recurring`, `/accounts`, `/settings/<section>`; the old
-`/bank-connections` and `/bank-transactions` redirect with their query.
+Navigation is a quiet index without breadcrumbs; the title and active item say where you are.
+Pages: `/`, `/transactions`, `/insights` (with `categories/<key>`, `months/<YYYY-MM>`), `/recurring`,
+`/accounts`, `/settings/<section>`; old `/bank-connections` and `/bank-transactions` redirect with
+their query.
 
 - **Desktop (`md` up):** the shadcn `Sidebar`, 240px on the page with a hairline edge, collapsing
   to 56px of icons (kept per device; always icons below 1024px). Top: logo, collapse button, Add data in `primary`. Then the

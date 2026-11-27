@@ -1,42 +1,44 @@
 import {Link, useNavigate} from '@tanstack/react-router';
 import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
 import {ChevronLeft, ChevronRight, CircleAlert} from 'lucide-react';
-import {type KeyboardEvent, type ReactNode} from 'react';
+import {type ReactNode, useCallback, useEffect} from 'react';
 
+import {AppBodyLayout} from '@/components/shared/layout/app-body';
 import {LoadMore} from '@/components/shared/load-more';
 import {LoadErrorState} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
-import {
-  ResponsiveDialog,
-  ResponsiveDialogContent,
-  ResponsiveDialogCornerClose,
-  ResponsiveDialogDescription,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-} from '@/components/ui/responsive-dialog';
-import {ScrollArea} from '@/components/ui/scroll-area';
+import {TooltipProvider} from '@/components/ui/tooltip';
 import {useHasMissingBaseAmounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {TransactionListRow} from '@/features/banking/components/transaction-list-row';
+import {useGetBankTransactionBreakdown} from '@/features/dashboard/api/use-get-bank-transaction-breakdown';
+import {useGetBankTransactionSummary} from '@/features/dashboard/api/use-get-bank-transaction-summary';
+import {useGetBankTransactionTotals} from '@/features/dashboard/api/use-get-bank-transaction-totals';
+import {useGetMonthTransactions} from '@/features/dashboard/api/use-get-month-transactions';
+import {useOverview} from '@/features/dashboard/api/use-overview';
+import {CategoryName, SourceTile} from '@/features/dashboard/components/category-name';
+import {
+  Bone,
+  LoadingLabel,
+  TextBone,
+  TileRowsSkeleton,
+} from '@/features/dashboard/components/loading';
+import {categoryDrill, periodDrill, sourceDrill} from '@/features/dashboard/utils/drill-links';
+import {pct, signed, signedPct, wholeCents} from '@/features/dashboard/utils/format';
+import {formatMoney, toCents} from '@/features/dashboard/utils/money';
+import {formatMonth, monthDates, shiftMonth} from '@/features/dashboard/utils/month';
+import {type MonthPoint, type Overview, partCents} from '@/features/dashboard/utils/overview';
 import {useGetMerchantRanking} from '@/features/merchants/api/use-get-merchant-ranking';
 import {MerchantRow} from '@/features/merchants/components/merchant-row';
 import {countLabel, formatUsualComparison} from '@/features/merchants/utils/merchant-format';
 import {useFiguresCurrencyAccepted} from '@/features/reporting-currency/api/use-reporting-currency';
 import {missingAmountsLabel} from '@/features/reporting-currency/utils/currency-names';
+import {useLocalDate} from '@/hooks/use-local-date';
 import {cn} from '@/utils/cn';
 
-import {useGetBankTransactionBreakdown} from '../api/use-get-bank-transaction-breakdown';
-import {useGetBankTransactionSummary} from '../api/use-get-bank-transaction-summary';
-import {useGetBankTransactionTotals} from '../api/use-get-bank-transaction-totals';
-import {useGetMonthTransactions} from '../api/use-get-month-transactions';
-import {useOverview} from '../api/use-overview';
-import {categoryDrill, periodDrill, sourceDrill} from '../utils/drill-links';
-import {pct, signed, signedPct, wholeCents} from '../utils/format';
-import {formatMoney, toCents} from '../utils/money';
-import {formatMonth, monthDates, shiftMonth} from '../utils/month';
-import {type MonthPoint, type Overview, partCents} from '../utils/overview';
-import {CategoryName, SourceTile} from './category-name';
-import {Bone, LoadingLabel, TextBone, TileRowsSkeleton} from './loading';
+import type {InsightsPeriodSearch} from '../types/insights-search';
+import {InsightsBackLink} from './insights-back-link';
+import {InsightsGate} from './insights-page';
 
 /** A past month's usual is the mean of this many months before, every one inside the history. */
 const USUAL_MONTHS = 12;
@@ -46,75 +48,116 @@ const USUAL_MONTHS = 12;
  */
 const SAME_DAY_USUAL_MONTHS = 3;
 
-/** One month over Home, at `?month=YYYY-MM`: Back or Escape closes it, the arrows (or ← →) step months. */
-export function MonthDialog({
+/**
+ * One month at `/insights/months/YYYY-MM`, keeping Insights' period for the way back: its money, where it went and
+ * came from, its transactions and biggest merchants. The arrows (or ← →) put the month before or after in place of
+ * this one, so Back leaves the month in one step.
+ */
+export function MonthPage({month, search}: {month: string; search: InsightsPeriodSearch}) {
+  const today = useLocalDate();
+  return (
+    // One provider for the page, so moving between figures shows the next tip without a new delay.
+    <TooltipProvider delayDuration={300}>
+      <AppBodyLayout>
+        <InsightsGate title={<MonthTitle month={month} search={search} overview={null} />}>
+          <MonthReport month={month} today={today} search={search} />
+        </InsightsGate>
+      </AppBodyLayout>
+    </TooltipProvider>
+  );
+}
+
+function MonthReport({
   month,
   today,
-  onStep,
-  onOpenChange,
+  search,
 }: {
-  month: string | null;
+  month: string;
   today: string;
-  onStep: (month: string) => void;
-  onOpenChange: (open: boolean) => void;
+  search: InsightsPeriodSearch;
 }) {
-  // Nothing is requested while the month is closed; Home's own history reads keep the cache warm.
-  const history = useOverview(today, {enabled: month !== null});
-  const {overview} = history;
-  const index =
-    overview && month ? overview.months.findIndex((point) => point.month === month) : -1;
-  const prev = overview && index > 0 ? overview.months[index - 1].month : null;
-  const next =
-    overview && index >= 0 && index < overview.months.length - 1
-      ? overview.months[index + 1].month
-      : null;
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (
-      event.target instanceof HTMLElement &&
-      event.target.closest('input, textarea, select, [contenteditable]')
-    )
-      return;
-    const target = event.key === 'ArrowLeft' ? prev : event.key === 'ArrowRight' ? next : null;
-    if (!target) return;
-    event.preventDefault();
-    onStep(target);
-  };
+  const history = useOverview(today);
   return (
-    <ResponsiveDialog open={month !== null} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent
-        onKeyDown={onKeyDown}
-        className='flex h-[94dvh] max-h-[94dvh] flex-col gap-0 overflow-hidden p-0 sm:h-[min(94vh,--spacing(288))] sm:max-h-[94vh] sm:max-w-6xl [&>button:last-child]:hidden'
-      >
-        <ResponsiveDialogCornerClose label='Close the month' />
-        <ResponsiveDialogHeader className='shrink-0 border-b py-2 pr-16 pl-1 text-left sm:pl-4'>
-          <nav aria-label='Months' className='flex items-center gap-1'>
-            <StepButton month={prev} label='Previous month' icon={ChevronLeft} onStep={onStep} />
-            {/*
-              As wide as the longest month, "September 2026" (about 8.3em in Inter bold), whatever month it shows, so the
-              arrows stay put while stepping. In em, so it grows with the text; a narrow phone takes the section title's size to fit.
-            */}
-            <ResponsiveDialogTitle className='w-[8.5em] shrink-0 text-center text-page-title whitespace-nowrap max-[22rem]:text-section-title'>
-              {month ? formatMonth(month) : ''}
-            </ResponsiveDialogTitle>
-            <StepButton month={next} label='Next month' icon={ChevronRight} onStep={onStep} />
-          </nav>
-          <ResponsiveDialogDescription className='sr-only'>
-            What came in and went out, and where it went.
-          </ResponsiveDialogDescription>
-        </ResponsiveDialogHeader>
-        {/* Keyed by month, so stepping starts at the top. */}
-        <ScrollArea
-          key={month}
-          type='always'
-          className='min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block'
-        >
-          <div className='@container p-4 sm:p-6'>
-            {month && <MonthView month={month} today={today} history={history} />}
-          </div>
-        </ScrollArea>
-      </ResponsiveDialogContent>
-    </ResponsiveDialog>
+    <article aria-label={formatMonth(month)} className='@container grid gap-4'>
+      <MonthTitle month={month} search={search} overview={history.overview} />
+      <MonthView month={month} today={today} history={history} search={search} />
+    </article>
+  );
+}
+
+/** The months before and after `month` in the history; none while it loads. */
+function neighbours(overview: Overview | null, month: string) {
+  const index = overview ? overview.months.findIndex((point) => point.month === month) : -1;
+  return {
+    prev: overview && index > 0 ? overview.months[index - 1].month : null,
+    next:
+      overview && index >= 0 && index < overview.months.length - 1
+        ? overview.months[index + 1].month
+        : null,
+  };
+}
+
+/** The way back to Insights, then the month's name between its arrows. */
+function MonthTitle({
+  month,
+  search,
+  overview,
+}: {
+  month: string;
+  search: InsightsPeriodSearch;
+  overview: Overview | null;
+}) {
+  const navigate = useNavigate();
+  const {prev, next} = neighbours(overview, month);
+  // Stepping replaces the month, so Back leaves the month page in one step.
+  const step = useCallback(
+    (target: string) =>
+      void navigate({
+        to: '/insights/months/$month',
+        params: {month: target},
+        search,
+        replace: true,
+      }),
+    [navigate, search],
+  );
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')
+      )
+        return;
+      const target = event.key === 'ArrowLeft' ? prev : event.key === 'ArrowRight' ? next : null;
+      if (!target) return;
+      event.preventDefault();
+      step(target);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [step, prev, next]);
+  return (
+    <header className='grid justify-items-start gap-1'>
+      <InsightsBackLink search={search} />
+      <nav aria-label='Months' className='-ml-3 flex items-center gap-1'>
+        <StepButton month={prev} label='Previous month' icon={ChevronLeft} onStep={step} />
+        {/*
+          As wide as the longest month, "September 2026" (about 8.3em in Inter bold), whatever month it shows, so the
+          arrows stay put while stepping. In em, so it grows with the text.
+        */}
+        <h1 className='w-[8.5em] shrink-0 text-center text-page-title whitespace-nowrap'>
+          {formatMonth(month)}
+        </h1>
+        <StepButton month={next} label='Next month' icon={ChevronRight} onStep={step} />
+      </nav>
+    </header>
   );
 }
 
@@ -151,10 +194,12 @@ function MonthView({
   month,
   today,
   history: {overview, isError, error, refetch},
+  search,
 }: {
   month: string;
   today: string;
   history: ReturnType<typeof useOverview>;
+  search: InsightsPeriodSearch;
 }) {
   const dates = monthDates(month);
   const point = overview?.months.find((item) => item.month === month);
@@ -263,7 +308,7 @@ function MonthView({
           ) : (
             <PartsSkeleton title='Where it came from' rows={2} />
           )}
-          <BiggestMerchants month={month} today={today} />
+          <BiggestMerchants month={month} today={today} search={search} />
         </div>
       </div>
     </div>
@@ -622,7 +667,15 @@ function WhereItCameFrom({
 
 const MERCHANTS = 8;
 
-function BiggestMerchants({month, today}: {month: string; today: string}) {
+function BiggestMerchants({
+  month,
+  today,
+  search,
+}: {
+  month: string;
+  today: string;
+  search: InsightsPeriodSearch;
+}) {
   // A stable date after a past month ends ranks the whole month without changing its cache key each day.
   const asOf = month === today.slice(0, 7) ? today : `${shiftMonth(month, 1)}-01`;
   const {ranking, isPending, error, refetch} = useGetMerchantRanking(
@@ -632,7 +685,8 @@ function BiggestMerchants({month, today}: {month: string; today: string}) {
     MERCHANTS,
   );
   const navigate = useNavigate();
-  const open = (merchant: string) => void navigate({to: '/insights', search: {merchant}});
+  const open = (merchant: string) =>
+    void navigate({to: '/insights', search: {...search, merchant}});
   const accepted = useFiguresCurrencyAccepted();
   // A ranking read mid-conversion or in another currency waits for its refetch; an empty one has nothing to label.
   const waiting = !!ranking && ranking.merchants.length > 0 && !accepted(ranking.baseCurrency);

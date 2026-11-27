@@ -1,3 +1,4 @@
+import type {BankTransactionCategoryFilterValue} from './categories.js';
 import type {CashFlowInterval} from './dashboard.js';
 
 /**
@@ -50,6 +51,8 @@ export type MerchantGroupsQuery = {
 	/** The first and last day (`YYYY-MM-DD`) of the rows to total; all time without them. */
 	from?: string;
 	to?: string;
+	/** Only the rows of one category (or `UNCATEGORIZED`), as the transaction list's category filter selects them. */
+	category?: BankTransactionCategoryFilterValue;
 	offset?: number;
 	limit?: number;
 };

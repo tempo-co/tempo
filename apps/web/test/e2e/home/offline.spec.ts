@@ -37,7 +37,7 @@ const reviewBadge = (page: Page, count: number) =>
   page.getByRole('link', {name: `Transactions, ${count} to check`}).first();
 const monthRows = (page: Page, title: string) =>
   page
-    .getByRole('dialog', {name: title})
+    .getByRole('article', {name: title})
     .getByRole('region', {name: 'Transactions'})
     .getByRole('listitem');
 const connection: BankConnection = {
@@ -93,9 +93,12 @@ async function mockHome(page: Page, padding = 0) {
 
 /** Opens September's transactions, then Home with its review badge, and waits for both to be saved. */
 async function openSavedHome(page: Page) {
-  await page.goto('/?month=2026-09');
+  await page.goto('/insights/months/2026-09');
   await expect(monthRows(page, 'September 2026')).toHaveCount(3);
-  await page.keyboard.press('Escape');
+  await page
+    .getByRole('navigation', {name: 'Primary'})
+    .getByRole('link', {name: 'Home', exact: true})
+    .click();
   await expect(reviewBadge(page, 3)).toBeVisible();
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await page.clock.runFor(1100);
@@ -151,12 +154,12 @@ test.describe('saved Home', () => {
       .click();
     await expect(monthRows(page, 'September 2026')).toHaveCount(3);
     await page.getByRole('button', {name: 'Previous month'}).click();
-    await expect(page).toHaveURL(/month=2026-08/);
-    await expect(page.getByRole('dialog', {name: 'August 2026'})).toContainText('In€3,000');
+    await expect(page).toHaveURL(/\/insights\/months\/2026-08$/);
+    await expect(page.getByRole('article', {name: 'August 2026'})).toContainText('In€3,000');
     await expect(monthRows(page, 'August 2026')).toHaveCount(0);
     await page.getByRole('button', {name: 'Next month'}).click();
     await expect(monthRows(page, 'September 2026')).toHaveCount(3);
-    await page.keyboard.press('Escape');
+    await page.goBack();
     await expect(totalBalance(page)).toHaveText('€24,300');
 
     // The connected bank's logo is saved, so it shows offline too.
@@ -180,14 +183,14 @@ test.describe('saved Home', () => {
   test('shares the recent-data budget with transaction views on every page', async ({page}) => {
     test.setTimeout(30000);
     await mockHome(page, 700_000);
-    await page.goto('/?month=2026-07');
+    await page.goto('/insights/months/2026-07');
     await expect(monthRows(page, 'July 2026')).toHaveCount(3);
     for (const [month, title] of [
       ['2026-08', 'August 2026'],
       ['2026-09', 'September 2026'],
     ]) {
       await page.getByRole('button', {name: 'Next month'}).click();
-      await expect(page).toHaveURL(new RegExp(`month=${month}`));
+      await expect(page).toHaveURL(new RegExp(`/insights/months/${month}$`));
       await expect(monthRows(page, title)).toHaveCount(3);
       await page.clock.runFor(1100);
     }
@@ -245,8 +248,7 @@ test('logout removes saved Home data and prevents an offline reload from reopeni
   await page.clock.runFor(1100);
   expect(await readCache(page)).toBe(null);
   await context.setOffline(true);
-  await page.goto('/?month=2026-09');
+  await page.goto('/insights/months/2026-09');
   await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
-  await expect(page.getByRole('region', {name: 'Where you stand'})).toHaveCount(0);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('article')).toHaveCount(0);
 });

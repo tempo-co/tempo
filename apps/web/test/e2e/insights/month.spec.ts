@@ -25,15 +25,15 @@ test('a month shows its money, where it went against the usual, where it came fr
     transactionsPerMonth: 45,
   });
   await mockSourceLogo(page);
-  await page.goto('/?month=2026-03');
+  await page.goto('/insights/months/2026-03');
 
-  const dialog = homePage.monthDialog('March 2026');
-  const figures = dialog.getByRole('region', {name: 'The month'});
+  const view = homePage.monthPage('March 2026');
+  const figures = view.getByRole('region', {name: 'The month'});
   await expect(figures).toHaveText(
     'In€3,000Out€3,500Kept−€500−17% of inBalance at month end€18,500−€500 on Feb',
   );
 
-  const went = dialog.getByRole('region', {name: 'Where it went'});
+  const went = view.getByRole('region', {name: 'Where it went'});
   await expect(went).toContainText('usual, last 12 months');
   const categories = went.getByRole('link');
   await expect(categories).toHaveCount(7);
@@ -57,7 +57,7 @@ test('a month shows its money, where it went against the usual, where it came fr
   expect(await fill(swatch)).toBe(await fill(usual));
   expect((await boxOf(swatch)).width).toBe(2);
 
-  const came = dialog.getByRole('region', {name: 'Where it came from'});
+  const came = view.getByRole('region', {name: 'Where it came from'});
   await expect(came.getByRole('link')).toHaveText(['Example Employer€3,000']);
   await expectSourceTile(came, 'Example Employer', 'logo');
   // A source opens its rows by the key the breakdown groups them by, whatever their names.
@@ -67,7 +67,7 @@ test('a month shows its money, where it went against the usual, where it came fr
   expect(JSON.parse(drill.get('cashFlows')!)).toEqual(['INCOME']);
 
   // A page of 20, then one more each press until the 45 are in; the button spans the list.
-  const transactions = dialog.getByRole('region', {name: 'Transactions'});
+  const transactions = view.getByRole('region', {name: 'Transactions'});
   const rows = transactions.getByRole('listitem');
   const more = transactions.getByRole('button', {name: 'Load more'});
   await expect(rows).toHaveCount(20);
@@ -96,11 +96,9 @@ test('a later page of the month’s transactions that fails keeps the loaded one
     const index = params.get('pagination[pageIndex]');
     return params.has('filter[date][from]') && index && index !== '0' ? index : null;
   });
-  await page.goto('/?month=2026-03');
+  await page.goto('/insights/months/2026-03');
 
-  const transactions = homePage
-    .monthDialog('March 2026')
-    .getByRole('region', {name: 'Transactions'});
+  const transactions = homePage.monthPage('March 2026').getByRole('region', {name: 'Transactions'});
   await expectFailedPageRetried(transactions, transactions.getByRole('listitem'), later, {
     loaded: 20,
     after: 40,
@@ -114,12 +112,12 @@ test('a refresh that fails keeps the loaded month, its parts and its merchants',
   homePage,
 }) => {
   await mockSyntheticHome(page, {clock: 'installed'});
-  await page.goto('/?month=2026-03');
-  const dialog = homePage.monthDialog('March 2026');
-  const figures = dialog.getByRole('region', {name: 'The month'});
-  const went = dialog.getByRole('region', {name: 'Where it went'}).getByRole('link');
-  const came = dialog.getByRole('region', {name: 'Where it came from'}).getByRole('link');
-  const merchants = dialog.getByRole('region', {name: 'Biggest merchants'});
+  await page.goto('/insights/months/2026-03');
+  const view = homePage.monthPage('March 2026');
+  const figures = view.getByRole('region', {name: 'The month'});
+  const went = view.getByRole('region', {name: 'Where it went'}).getByRole('link');
+  const came = view.getByRole('region', {name: 'Where it came from'}).getByRole('link');
+  const merchants = view.getByRole('region', {name: 'Biggest merchants'});
   await expect(figures).toContainText('In€3,000');
   await expect(went.first()).toHaveText('Travel€1,500none usually');
   await expect(came).toHaveText(['Example Employer€3,000']);
@@ -143,20 +141,20 @@ test('a refresh that fails keeps the loaded month, its parts and its merchants',
   await expect(went.first()).toHaveText('Travel€1,500none usually');
   await expect(came).toHaveText(['Example Employer€3,000']);
   await expect(merchants).toContainText('Example Landlord');
-  await expect(dialog.getByText(/Couldn't load/)).toHaveCount(0);
+  await expect(view.getByText(/Couldn't load/)).toHaveCount(0);
 });
 
 test('a month without a full year of history before it has no usual', async ({page, homePage}) => {
   await mockSyntheticHome(page, {history: homeHistory({sourceLogos: true})});
   await mockSourceLogo(page);
-  await page.goto('/?month=2025-06');
+  await page.goto('/insights/months/2025-06');
 
-  const dialog = homePage.monthDialog('June 2025');
-  await expect(dialog.getByRole('region', {name: 'The month'})).toContainText('Kept+€5,000');
-  const went = dialog.getByRole('region', {name: 'Where it went'});
+  const view = homePage.monthPage('June 2025');
+  await expect(view.getByRole('region', {name: 'The month'})).toContainText('Kept+€5,000');
+  const went = view.getByRole('region', {name: 'Where it went'});
   await expect(went.getByRole('link').first()).toHaveText('Housing and utilities€1,200');
   await expect(went).not.toContainText('usual');
-  const came = dialog.getByRole('region', {name: 'Where it came from'});
+  const came = view.getByRole('region', {name: 'Where it came from'});
   await expect(came.getByRole('link')).toHaveText([
     'Example Bonus€4,000',
     'Example Employer€3,000',
@@ -180,64 +178,82 @@ test('the running month reads as so far, against the usual by this day of the mo
           : {...USUAL_SPENDING},
   });
   await mockSyntheticHome(page, {history});
-  await page.goto('/?month=2026-11');
+  await page.goto('/insights/months/2026-11');
 
-  const dialog = homePage.monthDialog('November 2026');
-  await expect(dialog.getByRole('region', {name: 'The month'})).toHaveText(
+  const view = homePage.monthPage('November 2026');
+  await expect(view.getByRole('region', {name: 'The month'})).toHaveText(
     'In€0Out€1,300Kept so far−€1,300Balance now€24,200−€1,300 on Oct',
   );
-  const went = dialog.getByRole('region', {name: 'Where it went'});
+  const went = view.getByRole('region', {name: 'Where it went'});
   await expect(went).toContainText('usual by this day, last 3 months');
   await expect(went.getByRole('link')).toHaveText([
     'Housing and utilities€1,2000% on usual',
     'Groceries€100none usually',
   ]);
-  await expect(dialog.getByRole('region', {name: 'Where it came from'})).toContainText(
-    'No income.',
-  );
-  await expect(dialog.getByRole('button', {name: 'Next month'})).toBeDisabled();
+  await expect(view.getByRole('region', {name: 'Where it came from'})).toContainText('No income.');
+  await expect(view.getByRole('button', {name: 'Next month'})).toBeDisabled();
 });
 
-test('arrows step through months in place, and Back returns to Home', async ({page, homePage}) => {
+test('arrows step through months in place, and Back returns to where the month was opened', async ({
+  page,
+  homePage,
+}) => {
   await mockSyntheticHome(page);
   await page.goto('/');
   await expect(homePage.totalBalance).toHaveText('€24,300');
-  await page.goto('/?month=2025-01');
+  await page.goto('/insights/months/2025-01');
   const length = await page.evaluate(() => history.length);
 
-  await expect(homePage.monthDialog('January 2025')).toBeVisible();
+  await expect(homePage.monthPage('January 2025')).toBeVisible();
   await page.getByRole('button', {name: 'Previous month'}).click();
-  await expect(page).toHaveURL(/[?&]month=2024-12/);
-  await expect(homePage.monthDialog('December 2024')).toBeVisible();
+  await expect(page).toHaveURL(/\/insights\/months\/2024-12$/);
+  await expect(homePage.monthPage('December 2024')).toBeVisible();
   // The first month of history has nothing before it.
   await expect(page.getByRole('button', {name: 'Previous month'})).toBeDisabled();
 
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
-  await expect(page).toHaveURL(/[?&]month=2025-02/);
-  await expect(homePage.monthDialog('February 2025')).toBeVisible();
+  await expect(page).toHaveURL(/\/insights\/months\/2025-02$/);
+  await expect(homePage.monthPage('February 2025')).toBeVisible();
   expect(await page.evaluate(() => history.length)).toBe(length);
 
   await page.goBack();
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('article')).toHaveCount(0);
   await expect(homePage.totalBalance).toHaveText('€24,300');
 });
 
-test('Escape and the close button leave the month', async ({page, homePage}) => {
+test('a month opened from Home goes back to Insights over the same period', async ({
+  page,
+  homePage,
+}) => {
   await mockSyntheticHome(page);
   await page.goto('/');
   await homePage.yearTable.getByRole('link', {name: 'October'}).click();
-  const dialog = homePage.monthDialog('October 2026');
-  await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL('/');
+  await expect(page).toHaveURL('/insights/months/2026-10');
+  await expect(homePage.monthPage('October 2026')).toBeVisible();
+  await page.getByRole('main').getByRole('link', {name: 'Insights', exact: true}).click();
+  await expect(page).toHaveURL('/insights');
 
-  await homePage.yearTable.getByRole('link', {name: 'September'}).click();
-  await page.getByRole('button', {name: 'Close the month'}).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page).toHaveURL('/');
+  await page.goto('/insights/months/2026-09?period=6m');
+  await expect(homePage.monthPage('September 2026')).toBeVisible();
+  await page.getByRole('button', {name: 'Next month'}).click();
+  await expect(page).toHaveURL('/insights/months/2026-10?period=6m');
+  await homePage
+    .monthPage('October 2026')
+    .getByRole('link', {name: 'Insights', exact: true})
+    .click();
+  await expect(page).toHaveURL('/insights?period=6m');
+  await expect(page.getByRole('radio', {name: '6 months'})).toBeChecked();
+});
+
+test('a link to a month over Home opens the month’s page', async ({page, homePage}) => {
+  await mockSyntheticHome(page);
+  await page.goto('/?month=2026-03');
+  await expect(page).toHaveURL('/insights/months/2026-03');
+  await expect(
+    homePage.monthPage('March 2026').getByRole('region', {name: 'The month'}),
+  ).toContainText('In€3,000');
 });
 
 test('a merchant opens its details in Insights', async ({page, homePage}) => {
@@ -249,10 +265,10 @@ test('a merchant opens its details in Insights', async ({page, homePage}) => {
   await page.route('**/merchants?**', (route) =>
     fulfillJson(route, {baseCurrency: 'EUR', merchants: [], total: 0}),
   );
-  await page.goto('/?month=2026-10');
+  await page.goto('/insights/months/2026-10');
 
   const merchants = homePage
-    .monthDialog('October 2026')
+    .monthPage('October 2026')
     .getByRole('region', {name: 'Biggest merchants'});
   await expect(merchants.getByRole('button')).toHaveCount(2);
   await merchants.getByRole('button', {name: /Example Market/}).click();
@@ -261,15 +277,15 @@ test('a merchant opens its details in Insights', async ({page, homePage}) => {
 
 test('a month outside the history says so', async ({page, homePage}) => {
   await mockSyntheticHome(page);
-  await page.goto('/?month=2019-04');
-  await expect(homePage.monthDialog('April 2019')).toContainText('No history for April 2019.');
+  await page.goto('/insights/months/2019-04');
+  await expect(homePage.monthPage('April 2019')).toContainText('No history for April 2019.');
 });
 
-test('an invalid month is ignored', async ({page, homePage}) => {
+test('an address with an invalid month opens Insights over its period', async ({page}) => {
   await mockSyntheticHome(page);
-  await page.goto('/?month=2026-13');
-  await expect(homePage.totalBalance).toHaveText('€24,300');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.goto('/insights/months/2026-13?period=2025');
+  await expect(page).toHaveURL('/insights?period=2025');
+  await expect(page.getByRole('radio', {name: '2025'})).toBeChecked();
 });
 
 for (const width of [1440, 390, 320]) {
@@ -281,7 +297,7 @@ for (const width of [1440, 390, 320]) {
     test.slow();
     await page.setViewportSize({width, height: 900});
     await mockSyntheticHome(page);
-    await page.goto('/?month=2025-01');
+    await page.goto('/insights/months/2025-01');
     const prev = page.getByRole('button', {name: 'Previous month'});
     const next = page.getByRole('button', {name: 'Next month'});
     const places = [];
@@ -299,10 +315,10 @@ for (const width of [1440, 390, 320]) {
       'November',
       'December',
     ]) {
-      const dialog = homePage.monthDialog(`${month} 2025`);
-      const title = dialog.getByRole('heading', {name: `${month} 2025`});
+      const view = homePage.monthPage(`${month} 2025`);
+      const title = view.getByRole('heading', {name: `${month} 2025`});
       await expect(title).toBeVisible();
-      // The longest month fits on one line beside both arrows and the close button.
+      // The longest month fits on one line between both arrows.
       expect(
         await title.evaluate((el) => {
           const range = document.createRange();
@@ -319,8 +335,6 @@ for (const width of [1440, 390, 320]) {
       expect(Math.abs(place.right - places[0].right)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(place.slot - places[0].slot)).toBeLessThanOrEqual(0.5);
     }
-    const close = await boxOf(page.getByRole('button', {name: 'Close the month'}));
-    expect(places[0].right + 44).toBeLessThanOrEqual(close.x);
   });
 }
 
@@ -331,11 +345,11 @@ for (const width of [1440, 390]) {
   }) => {
     await page.setViewportSize({width, height: 900});
     await mockSyntheticHome(page);
-    await page.goto('/?month=2026-03');
-    const dialog = homePage.monthDialog('March 2026');
-    await expectLoaded(dialog);
+    await page.goto('/insights/months/2026-03');
+    const view = homePage.monthPage('March 2026');
+    await expectLoaded(view);
     for (const name of ['Where it went', 'Where it came from']) {
-      const section = dialog.getByRole('region', {name});
+      const section = view.getByRole('region', {name});
       const heading = await boxOf(section.getByRole('heading'));
       const rows = section.getByRole('link');
       await expect(rows.first()).toBeVisible();
@@ -359,26 +373,3 @@ for (const width of [1440, 390]) {
     }
   });
 }
-
-test.describe('on a phone', () => {
-  test.use({viewport: {width: 390, height: 844}, hasTouch: true});
-
-  test('the month is a near full-height drawer without sideways scrolling', async ({
-    page,
-    homePage,
-  }) => {
-    await mockSyntheticHome(page);
-    await page.goto('/?month=2026-03');
-    const dialog = homePage.monthDialog('March 2026');
-    await expect(dialog.getByRole('region', {name: 'Where it went'})).toBeVisible();
-    await expectLoaded(dialog);
-    const box = await dialog.boundingBox();
-    expect(box!.height).toBeGreaterThan(844 * 0.9);
-    const overflow = await dialog.evaluate((element) =>
-      Array.from(element.querySelectorAll('section')).some(
-        (section) => section.scrollWidth > section.clientWidth + 1,
-      ),
-    );
-    expect(overflow).toBe(false);
-  });
-});

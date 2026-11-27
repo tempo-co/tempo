@@ -22,9 +22,9 @@ test('a real category total in a month reconciles with its transaction drill', a
     await page.request.get(`${API_URL}/bank-transactions/review-counts`)
   ).json()) as BankTransactionReviewCounts;
 
-  await page.goto('/?month=2026-08');
+  await page.goto('/insights/months/2026-08');
   const row = page
-    .getByRole('dialog', {name: 'August 2026'})
+    .getByRole('article', {name: 'August 2026'})
     .getByRole('region', {name: 'Where it went'})
     .getByRole('link', {name: /Not categorized/});
   await expect(row).toContainText(
@@ -115,10 +115,10 @@ test('a real income source reconciles with its drill, from its month and from it
   };
 
   const august = await sourceOf('month', '2026-08-01', '2026-08-31');
-  await page.goto('/?month=2026-08');
+  await page.goto('/insights/months/2026-08');
   await expectDrill(
     page
-      .getByRole('dialog', {name: 'August 2026'})
+      .getByRole('article', {name: 'August 2026'})
       .getByRole('region', {name: 'Where it came from'})
       .getByRole('link', {name: new RegExp(august.label)}),
     august,

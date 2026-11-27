@@ -231,8 +231,8 @@ test('the balance chart reads out the month under the pointer, and a click opens
   await page.mouse.move(0, 0);
   await expect(readout).not.toBeVisible();
   await page.mouse.click(march.centre.x, march.centre.y);
-  await expect(page).toHaveURL(/[?&]month=2026-03/);
-  await expect(homePage.monthDialog('March 2026')).toBeVisible();
+  await expect(page).toHaveURL(/\/insights\/months\/2026-03$/);
+  await expect(homePage.monthPage('March 2026')).toBeVisible();
 });
 
 test('over the last month, the balance chart reads out the day under the pointer, and a click opens its month', async ({
@@ -262,8 +262,8 @@ test('over the last month, the balance chart reads out the day under the pointer
   await expect(readout).toContainText('Thu 5 Nov · so far');
   await expect(readout).toContainText('Open November ›');
   await page.mouse.click(fifteenth.centre.x, fifteenth.centre.y);
-  await expect(page).toHaveURL(/[?&]month=2026-10/);
-  await expect(homePage.monthDialog('October 2026')).toBeVisible();
+  await expect(page).toHaveURL(/\/insights\/months\/2026-10$/);
+  await expect(homePage.monthPage('October 2026')).toBeVisible();
 });
 
 test('repeats show bills and income a month, late bills first, and open their series', async ({
@@ -428,13 +428,13 @@ test('a click on the balance chart opens its month and leaves no focus outline',
   await page.mouse.click(box.x + 4, box.y + box.height / 2);
   // Give a navigation the time it would take.
   await page.waitForTimeout(300);
-  expect(page.url()).not.toMatch(/[?&]month=/);
+  expect(page.url()).not.toMatch(/\/insights\/months\//);
   // The last month sits at the right edge of the plot.
   await page.mouse.click(box.x + box.width - 16, box.y + box.height / 2);
-  await expect(page).toHaveURL(/[?&]month=2026-11/);
-  const dialog = homePage.monthDialog('November 2026');
+  await expect(page).toHaveURL(/\/insights\/months\/2026-11$/);
+  const dialog = homePage.monthPage('November 2026');
   await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.goBack();
   await expect(dialog).toBeHidden();
   const outlines = await chart.evaluate((element) =>
     Array.from(element.querySelectorAll('*'))
@@ -471,18 +471,18 @@ test.describe('touch chart inspection', () => {
     // From the month slots, not the tick labels: WebKit misplaces SVG tick label boxes.
     const june = await monthSlot(plot, 0, 6);
     await page.touchscreen.tap(june.centre.x, june.centre.y);
-    await expect(page).toHaveURL(/[?&]month=2026-06/);
-    await expect(homePage.monthDialog('June 2026')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(homePage.monthDialog('June 2026')).toBeHidden();
+    await expect(page).toHaveURL(/\/insights\/months\/2026-06$/);
+    await expect(homePage.monthPage('June 2026')).toBeVisible();
+    await page.goBack();
+    await expect(homePage.monthPage('June 2026')).toBeHidden();
 
     // A day of the last month opens its month too.
     await homePage.whereYouStand.getByRole('radio', {name: '1M', exact: true}).click();
     await expect(plot).toHaveAttribute('aria-label', /each day end/);
     const october = await monthSlot(plot, 20, 31);
     await page.touchscreen.tap(october.centre.x, october.centre.y);
-    await expect(page).toHaveURL(/[?&]month=2026-10/);
-    await expect(homePage.monthDialog('October 2026')).toBeVisible();
+    await expect(page).toHaveURL(/\/insights\/months\/2026-10$/);
+    await expect(homePage.monthPage('October 2026')).toBeVisible();
   });
 });
 

@@ -96,9 +96,9 @@ test('a month viewed in the last 30 seconds opens again from cache', async ({pag
     if (path.endsWith('/bank-transactions') || path.endsWith('/merchants/ranking'))
       reads.push(path);
   });
-  await page.goto('/?month=2026-09');
+  await page.goto('/insights/months/2026-09');
   const transactions = (title: string) =>
-    homePage.monthDialog(title).getByRole('region', {name: 'Transactions'}).getByRole('listitem');
+    homePage.monthPage(title).getByRole('region', {name: 'Transactions'}).getByRole('listitem');
   await expect(transactions('September 2026')).toHaveCount(15);
   await expect.poll(() => reads.length).toBe(2);
 

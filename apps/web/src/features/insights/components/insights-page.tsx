@@ -1,4 +1,4 @@
-import {Link} from '@tanstack/react-router';
+import {Link, useNavigate, useRouter} from '@tanstack/react-router';
 import {History, Landmark} from 'lucide-react';
 import {type ReactNode, useState, useSyncExternalStore} from 'react';
 
@@ -26,8 +26,8 @@ import {useIsMobile} from '@/hooks/use-is-mobile';
 import {useLocalDate} from '@/hooks/use-local-date';
 
 import {useInsightsHistory} from '../api/use-insights-history';
-import type {InsightsSearch} from '../types/insights-search';
-import {monthPageHref} from '../utils/insights-links';
+import type {InsightsPeriodSearch, InsightsSearch} from '../types/insights-search';
+import {periodSearch} from '../utils/insights-links';
 import {formatPeriodSpan, periodMonths, periodOptions} from '../utils/insights-period';
 import {buildMoneyFlow} from '../utils/money-flow';
 import {
@@ -82,31 +82,26 @@ export function InsightsPage({
   search: InsightsSearch;
   navigation: InsightsNavigation;
 }) {
-  const reporting = useReportingCurrency();
   return (
     // One provider for the page, so moving between figures shows the next tip without a new delay.
     <TooltipProvider delayDuration={300}>
       <AppBodyLayout>
-        {reportingCurrencyKnown(reporting) ? (
-          <InsightsBody search={search} navigation={navigation} />
-        ) : (
-          <PageTitle />
-        )}
+        <InsightsGate title={<PageTitle />}>
+          <InsightsReport search={search} navigation={navigation} />
+        </InsightsGate>
       </AppBodyLayout>
     </TooltipProvider>
   );
 }
 
-function InsightsBody({
-  search,
-  navigation,
-}: {
-  search: InsightsSearch;
-  navigation: InsightsNavigation;
-}) {
+/**
+ * What stands in for a page of Insights until its figures can be shown: a failed bank read, no bank yet, a reporting
+ * currency to pick, or totals being recalculated, each under the page's `title`.
+ */
+export function InsightsGate({title, children}: {title: ReactNode; children: ReactNode}) {
+  const reporting = useReportingCurrency();
   const {bankConnections, isError, error, refetch} = useGetAllBankConnections();
-  const {data: reporting} = useReportingCurrency();
-  const title = <PageTitle />;
+  if (!reportingCurrencyKnown(reporting)) return title;
   if (isError)
     return (
       <>
@@ -130,21 +125,21 @@ function InsightsBody({
         </StateMessage>
       </>
     );
-  if (reporting?.setupRequired && reporting.currency === null)
+  if (reporting.data?.setupRequired && reporting.data.currency === null)
     return (
       <>
         {title}
         <ReportingCurrencySetup />
       </>
     );
-  if (reporting?.recalculating)
+  if (reporting.data?.recalculating)
     return (
       <>
         {title}
-        <RecalculatingTotals currency={reporting.currency} />
+        <RecalculatingTotals currency={reporting.data.currency} />
       </>
     );
-  return <InsightsReport search={search} navigation={navigation} />;
+  return children;
 }
 
 function InsightsReport({
@@ -168,6 +163,11 @@ function InsightsReport({
   const figures = sliced ? flowTotals(sliced.months) : null;
   const currency = overview?.currency ?? null;
   const byYear = (sliced?.months.length ?? 0) > MONTH_BARS;
+  const kept = periodSearch(period);
+  const router = useRouter();
+  const navigate = useNavigate();
+  const monthLink = (month: string) =>
+    ({to: '/insights/months/$month', params: {month}, search: kept}) as const;
   const bars: FlowBar[] | null = sliced
     ? byYear
       ? sliced.years.map((year) => ({
@@ -187,7 +187,8 @@ function InsightsReport({
           income: point.income,
           spending: point.spending,
           complete: point.complete,
-          href: monthPageHref(point.month, period),
+          href: router.buildLocation(monthLink(point.month)).href,
+          onOpen: () => void navigate(monthLink(point.month)),
         }))
     : null;
   const flow =
@@ -290,6 +291,7 @@ function InsightsReport({
           />
           {search.view === 'table' && (
             <PeriodTables
+              search={kept}
               sliced={sliced}
               breakdowns={breakdowns}
               from={from}
@@ -320,7 +322,7 @@ function InsightsReport({
             <CategoryList
               rows={categories}
               currency={currency}
-              period={period}
+              search={kept}
               periodLabel={periodLabel}
             />
           ) : history.breakdownsError ? (
@@ -392,6 +394,7 @@ function Section({title, loaded, children}: {title: string; loaded: boolean; chi
 
 /** Behind Table: the period's years and months, and its spending and income by year. */
 function PeriodTables({
+  search,
   sliced,
   breakdowns,
   from,
@@ -399,6 +402,7 @@ function PeriodTables({
   error,
   onRetry,
 }: {
+  search: InsightsPeriodSearch;
   sliced: ReturnType<typeof sliceOverview> | null;
   breakdowns: ReturnType<typeof useInsightsHistory>['breakdowns'];
   from: string;
@@ -418,7 +422,7 @@ function PeriodTables({
     : '';
   return (
     <>
-      <YearTable key={`${from}-${to}`} overview={sliced} />
+      <YearTable key={`${from}-${to}`} overview={sliced} search={search} />
       {years ? (
         <>
           <HeatTable
@@ -428,6 +432,7 @@ function PeriodTables({
             currency={sliced.currency}
             kind='category'
             columnWidth={columnWidth}
+            categorySearch={search}
           />
           <HeatTable
             title='Income by source'
