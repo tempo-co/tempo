@@ -14,7 +14,7 @@ import type {
 } from '@wisp/contracts';
 import {bankNameKey} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
-import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
+import {Between, DataSource, EntityManager, FindOperator, In, IsNull, Not} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
 import {BankAccount} from '@modules/banking/bank-account.entity';
@@ -36,7 +36,7 @@ import {
 	matchWithReferenceFallback,
 } from '@modules/banking/bank-transaction-matcher';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
-import {BATCH_WRITE_CHUNK_SIZE, chunkArray} from '@modules/banking/banking.utils';
+import {BATCH_WRITE_CHUNK_SIZE, addDays, chunkArray} from '@modules/banking/banking.utils';
 import {isManualCategorySource} from '@modules/banking/categorization/bank-transaction-categorization.types';
 import {AccountHistoryWriteBusyError} from '@modules/banking/errors/account-history-write-busy.error';
 import {isIbanIdentificationHash, verifyIbanAgainstIdentificationHash} from '@modules/banking/own-transfer/iban';
@@ -53,6 +53,7 @@ import {BANK_CONNECTION_PROVIDERS} from '@modules/banking/services/banking-sync.
 import {DerivedDataRefreshService} from '@modules/banking/services/derived-data-refresh.service';
 import {FileAccountBalanceService} from '@modules/banking/services/file-account-balance.service';
 import {fileAccountProviderId} from '@modules/banking/services/file-connection';
+import type {FinalSyncDays} from '@modules/banking/sync-coverage';
 
 import {BANK_IMPORT_NEVER_SENT_ROW_KINDS, BankImportDoubtfulRow} from './bank-import-doubtful-row.entity';
 import {BankImportLayoutService, previewOfRows, previewRow} from './bank-import-layout.service';
@@ -332,42 +333,21 @@ export class BankImportService {
 					const added = await this.accountHistoryWriter.addFileRows(
 						write,
 						{account, connection, importId: record.id},
-						async ({finalDays, insert}) => {
-							for (const index of indexes) {
-								const matching = matchingOf(targets[index], accountRows[index]);
-								const fileIbanConfirmed = matching === 'betweenFiles';
-								// Candidates are read again per format, inside the transaction, so they include the rows
-								// the formats and statements before this one just inserted. Each format numbers its rows in
-								// a scheme of its own, so whether the bank's references are set aside is decided per format.
-								for (const {format, layout, rows, newestFirst} of accountRows[index].byFormat) {
-									const numbering = statementNumbering(format, layout);
-									const incoming = rows.map(toMatchRow);
-									// Only there are imported rows told apart by numbering; elsewhere every imported row
-									// keeps its references, as sync's set-aside decision rests on sync's references alone.
-									const candidates = await this.findMatchCandidates(
-										manager,
-										ownerId,
-										account.id,
-										rows,
-										fileIbanConfirmed ? numbering : null,
-									);
-									const ladder = matchRows(incoming, candidates, matching);
-									const {referencesSetAside} = ladder;
-									const outcomes = decideOnFinalDays(rows, ladder.outcomes, finalDays);
+						async ({finalDays, insert}) =>
+							matchOnAccount(
+								indexes.map((index) => ({target: targets[index], rows: accountRows[index]})),
+								finalDays,
+								(rows, numbering) =>
+									this.findMatchCandidates(manager, ownerId, account.id, rows, numbering),
+								async ({format, rows, numbering}, outcomes, newRows, referencesSetAside) => {
 									if (referencesSetAside) {
 										this.logger.log(
 											`Import ${record.id} matched ${rows.length} ${format} row(s) of account ${account.id} without the bank's references: none is the file's`,
 										);
 									}
-									const newRows = new Set(
-										rows.filter((_, rowIndex) => outcomes[rowIndex].kind === 'new'),
-									);
-									if (newRows.size > 0) {
-										// Stored newest first, so the transaction list shows a day's rows in that order.
+									if (newRows.length > 0) {
 										await insert(
-											newestFirst
-												.filter((row) => newRows.has(row))
-												.map((row) => toTransactionInput(row, account.currency)),
+											newRows.map((row) => toTransactionInput(row, account.currency)),
 											{statementNumbering: numbering},
 										);
 									}
@@ -392,9 +372,8 @@ export class BankImportService {
 										await manager.getRepository(BankImportDoubtfulRow).insert(chunk);
 									}
 									addLadderCounts(counts, outcomes);
-								}
-							}
-						},
+								},
+							),
 					);
 					persistedTransactionIds.push(...added.change.writtenIds);
 					if (added.balance)
@@ -444,14 +423,13 @@ export class BankImportService {
 		);
 		const found = await Promise.all(
 			targets.map(async (target, index) => {
-				const matching = matchingOf(target, accountRows[index]);
-				if (target.account) return {account: target.account, rows: accountRows[index], matching};
+				if (target.account) return {account: target.account, rows: accountRows[index], target};
 				const rows =
 					target.kind === 'file' && target.bank
 						? withoutAccount(accountRows[index], target.bank)
 						: accountRows[index];
 				const {account, identity} = await findFileAccountIn(this.dataSource.manager, ownerId, null, rows);
-				return {account, identity, rows: accountRows[index], matching};
+				return {account, identity, rows: accountRows[index], target};
 			}),
 		);
 		refuseBankConflicts(
@@ -464,33 +442,29 @@ export class BankImportService {
 
 		// Two statements reaching one account are one account of the import, as its summary lists them: an account it
 		// creates for a file that names none is its bank's, named ignoring case and spacing, as `findFileAccountIn` finds it.
-		const byAccount = new Map<string, BankImportPreviewAccount>();
-		const partsOf = new Map<string, {parts: AccountRows['byFormat']; matching: ReturnType<typeof matchingOf>}>();
+		const byAccount = new Map<string, {account: BankImportPreviewAccount; statements: AccountStatement[]}>();
 		for (const entry of found) {
-			const {account, rows} = entry;
+			const {account, rows, target} = entry;
 			const key =
 				account?.id ??
 				(rows.bank
 					? `new-bank:${bankNameKey(rows.bank)}:${rows.currency}`
 					: `new:${entry.identity!.providerAccountId}`);
 			const days = rows.byFormat.flatMap((part) => part.rows.flatMap((row) => matchDay(row) ?? [])).sort();
-			const before = partsOf.get(key);
-			partsOf.set(key, {
-				parts: [...(before?.parts ?? []), ...rows.byFormat],
-				matching: before?.matching ?? entry.matching,
-			});
 			const known = byAccount.get(key);
 			if (known) {
-				known.dateFrom = [known.dateFrom, days[0]].filter((day) => day != null).sort()[0] ?? null;
-				known.dateTo =
-					[known.dateTo, days.at(-1)]
+				known.statements.push({target, rows});
+				known.account.dateFrom =
+					[known.account.dateFrom, days[0]].filter((day) => day != null).sort()[0] ?? null;
+				known.account.dateTo =
+					[known.account.dateTo, days.at(-1)]
 						.filter((day) => day != null)
 						.sort()
 						.at(-1) ?? null;
 				continue;
 			}
 			const synced = !!account && account.bankConnection.provider !== BANK_CONNECTION_PROVIDERS.FILE;
-			byAccount.set(key, {
+			const previewed: BankImportPreviewAccount = {
 				id: account?.id ?? null,
 				name: account ? account.name : entry.identity!.name,
 				alias: account?.alias ?? null,
@@ -503,14 +477,14 @@ export class BankImportService {
 				rowCount: 0,
 				dateFrom: days[0] ?? null,
 				dateTo: days.at(-1) ?? null,
-			});
+			};
+			byAccount.set(key, {account: previewed, statements: [{target, rows}]});
 		}
-		for (const [key, account] of byAccount) {
-			const {parts, matching} = partsOf.get(key)!;
-			account.rowCount = distinctRowCount(parts, matching);
+		for (const {account, statements: reaching} of byAccount.values()) {
+			account.rowCount = await rowsAddedToEmpty(reaching);
 		}
 		const days = statements.flatMap(({rows}) => rows.flatMap((row) => matchDay(row) ?? [])).sort();
-		const accounts = [...byAccount.values()];
+		const accounts = [...byAccount.values()].map(({account}) => account);
 		return {
 			rowCount: sum(accounts.map(({rowCount}) => rowCount)),
 			dateFrom: days[0] ?? null,
@@ -1367,10 +1341,8 @@ export class BankImportService {
 	}
 
 	/**
-	 * The account's stored rows, any status, whose date lies within the ladder's window around the file's days.
-	 * `numbering`: the incoming rows' (`statementNumbering`), or null to count every imported row as the same
-	 * numbering. With one, an imported row of another recorded numbering is not; a row stored before numberings were
-	 * recorded still is, so its reference conflicts.
+	 * The account's stored rows, any status, whose day lies within the ladder's window around the file's days
+	 * (`matchWindow`), as the ladder compares them (`toMatchCandidate`).
 	 */
 	private async findMatchCandidates(
 		manager: EntityManager,
@@ -1379,12 +1351,8 @@ export class BankImportService {
 		rows: readonly NormalizedRow[],
 		numbering: string | null = null,
 	): Promise<MatchExistingRow[]> {
-		const days = rows.flatMap((row) => {
-			const day = matchDay(row);
-			return day ? [day] : [];
-		});
-		if (days.length === 0) return [];
-		days.sort();
+		const window = matchWindow(rows);
+		if (!window) return [];
 		const existing = await manager.getRepository(BankTransaction).find({
 			select: {
 				id: true,
@@ -1396,35 +1364,24 @@ export class BankImportService {
 				entryReference: true,
 				counterpartyName: true,
 				description: true,
+				transactionDate: true,
 				createdAt: true,
 				importId: true,
 				statementNumbering: true,
 			},
-			where: {
+			where: window.where.map((dates) => ({
 				bankAccountId,
 				bankAccount: {bankConnection: {accountId: ownerId}},
-				bookingDate: Raw(
-					(column) =>
-						`COALESCE(${column}, "valueDate", "transactionDate") BETWEEN (:from)::date - ${MATCH_WINDOW_DAYS} AND (:to)::date + ${MATCH_WINDOW_DAYS}`,
-					{from: days[0], to: days.at(-1)},
-				),
-			},
+				...dates,
+			})),
+			order: {createdAt: 'ASC', id: 'ASC'},
 		});
-		return existing.map((row) => ({
-			id: row.id,
-			createdAt: row.createdAt,
-			text: matchText(row.counterpartyName, row.description),
-			amount: row.amount,
-			currency: row.currency,
-			bookingDate: row.bookingDate,
-			valueDate: row.valueDate,
-			balanceAfter: row.balanceAfterAmount,
-			reference: row.entryReference,
-			source: row.importId,
-			sameNumbering:
-				row.importId !== null &&
-				(numbering === null || row.statementNumbering === null || row.statementNumbering === numbering),
-		}));
+		// `createdAt` reads back to the millisecond, losing the microsecond stamps that order the rows one write stored
+		// (`insertImportedTransactions`), so the ladder takes the database's order as each row's rank.
+		return existing
+			.map((row, rank) => ({...row, createdAt: new Date(rank)}))
+			.filter(window.contains)
+			.map((row) => toMatchCandidate(row, numbering));
 	}
 
 	/**
@@ -1979,21 +1936,159 @@ function matchRows(
 	return {outcomes: matchTransactions(incoming, candidates), referencesSetAside: false};
 }
 
+/** One statement of a drop that reaches an account, and where it was routed. */
+type AccountStatement = {target: Target; rows: AccountRows};
+
+/** A stored row as the ladder reads it (`findMatchCandidates`). */
+type StoredMatchRow = Pick<
+	BankTransaction,
+	| 'id'
+	| 'createdAt'
+	| 'amount'
+	| 'currency'
+	| 'bookingDate'
+	| 'valueDate'
+	| 'balanceAfterAmount'
+	| 'entryReference'
+	| 'counterpartyName'
+	| 'description'
+	| 'importId'
+	| 'statementNumbering'
+>;
+
 /**
- * An account's rows across the parts of a drop that reach it, a payment two of them state counted once: each part is
- * matched against the parts before it, as the import matches each against the rows the parts before it inserted, and
- * the way the import would match them there (`matchingOf`).
+ * The import's ladder over the statements of a drop that reach one account, in drop order and each by format: every
+ * format's rows meet the stored rows `findCandidates` returns, which include those the formats before it added, the
+ * way the import matches its statement there (`matchingOf`). Each format numbers its rows in a scheme of its own, so
+ * whether the bank's references are set aside is decided per format; only on an imported-files account its IBAN found
+ * are imported rows told apart by numbering, as elsewhere sync's set-aside decision rests on sync's references alone.
+ * `record` takes each format's outcomes, with final days applied, and its new rows in the order they are stored,
+ * before the next format is matched.
  */
-function distinctRowCount(parts: AccountRows['byFormat'], matching: ReturnType<typeof matchingOf>): number {
-	const earlier: MatchExistingRow[] = [];
-	for (const {rows: formatRows} of parts) {
-		const incoming = formatRows.map(toMatchRow);
-		const {outcomes} = matchRows(incoming, earlier, matching);
-		const added = incoming.filter((_, index) => outcomes[index].kind !== 'matched');
-		const createdAt = new Date(earlier.length);
-		earlier.push(...added.map((row, index) => ({...row, id: String(earlier.length + index), createdAt})));
+async function matchOnAccount(
+	statements: readonly AccountStatement[],
+	finalDays: FinalSyncDays | null,
+	findCandidates: (
+		rows: readonly NormalizedRow[],
+		numbering: string | null,
+	) => MatchExistingRow[] | Promise<MatchExistingRow[]>,
+	record: (
+		part: AccountRows['byFormat'][number] & {numbering: string},
+		outcomes: ImportOutcome[],
+		newRows: NormalizedRow[],
+		referencesSetAside: boolean,
+	) => void | Promise<void>,
+): Promise<void> {
+	for (const {target, rows: accountRows} of statements) {
+		const matching = matchingOf(target, accountRows);
+		for (const part of accountRows.byFormat) {
+			const numbering = statementNumbering(part.format, part.layout);
+			const candidates = await findCandidates(part.rows, matching === 'betweenFiles' ? numbering : null);
+			const ladder = matchRows(part.rows.map(toMatchRow), candidates, matching);
+			const outcomes = decideOnFinalDays(part.rows, ladder.outcomes, finalDays);
+			const added = new Set(part.rows.filter((_, index) => outcomes[index].kind === 'new'));
+			// Stored newest first, so the transaction list shows a day's rows in that order.
+			const newRows = part.newestFirst.filter((row) => added.has(row));
+			await record({...part, numbering}, outcomes, newRows, ladder.referencesSetAside);
+		}
 	}
-	return earlier.length;
+}
+
+/** The source of the rows `rowsAddedToEmpty` holds as stored: one import's. */
+const PREVIEWED_IMPORT_ID = 'preview';
+
+/**
+ * The rows the import adds from these statements to an account that holds none yet: `matchOnAccount` over the rows
+ * it adds, held as the import stores them (`toTransactionInput`, with its numbering and import), each stamped just
+ * before the row stored before it as `insertImportedTransactions` stamps rows, so the ladder meets them in the same
+ * order. A payment two statements state counts once; a row the import would ask about is not counted.
+ */
+async function rowsAddedToEmpty(statements: readonly AccountStatement[]): Promise<number> {
+	const stored: Array<StoredMatchRow & Pick<BankTransaction, 'transactionDate'>> = [];
+	await matchOnAccount(
+		statements,
+		null,
+		(rows, numbering) => {
+			const window = matchWindow(rows);
+			return window ? stored.filter(window.contains).map((row) => toMatchCandidate(row, numbering)) : [];
+		},
+		({numbering}, _outcomes, newRows) => {
+			for (const row of newRows) {
+				const input = toTransactionInput(row, row.currency);
+				stored.push({
+					id: String(stored.length).padStart(6, '0'),
+					createdAt: new Date(-stored.length),
+					amount: input.amount,
+					currency: input.currency,
+					bookingDate: input.bookingDate ?? null,
+					valueDate: input.valueDate ?? null,
+					transactionDate: input.transactionDate ?? null,
+					balanceAfterAmount: input.balanceAfterAmount ?? null,
+					entryReference: input.entryReference ?? null,
+					counterpartyName: input.counterpartyName ?? null,
+					description: input.description ?? null,
+					importId: PREVIEWED_IMPORT_ID,
+					statementNumbering: numbering,
+				});
+			}
+		},
+	);
+	return stored.length;
+}
+
+type MatchWindow = {
+	where: Array<Partial<Record<'bookingDate' | 'valueDate' | 'transactionDate', FindOperator<string>>>>;
+	contains: (row: Pick<BankTransaction, 'bookingDate' | 'valueDate' | 'transactionDate'>) => boolean;
+};
+
+/** The days PostgreSQL's `date` and a `YYYY-MM-DD` string both hold. */
+const FIRST_DAY = '0001-01-01';
+const LAST_DAY = '9999-12-31';
+
+/**
+ * The stored rows the ladder compares a file's rows with: those whose day (booking date, else value date, else
+ * transaction date) lies within `MATCH_WINDOW_DAYS` of the file's first and last day, bounds kept within
+ * `FIRST_DAY` and `LAST_DAY`; null for rows without a day. `contains` decides it, for rows read from the database
+ * (`findMatchCandidates`) and rows held in memory (`rowsAddedToEmpty`) alike; `where` only narrows the read to
+ * rows with any date within the bounds.
+ */
+function matchWindow(rows: readonly NormalizedRow[]): MatchWindow | null {
+	const days = rows.flatMap((row) => matchDay(row) ?? []).sort();
+	if (days.length === 0) return null;
+	const shifted = addDays(days[0], -MATCH_WINDOW_DAYS);
+	const from = /^\d{4}-/.test(shifted) && shifted > FIRST_DAY ? shifted : FIRST_DAY;
+	const later = addDays(days.at(-1)!, MATCH_WINDOW_DAYS);
+	const to = /^\d{4}-/.test(later) && later < LAST_DAY ? later : LAST_DAY;
+	return {
+		where: [{bookingDate: Between(from, to)}, {valueDate: Between(from, to)}, {transactionDate: Between(from, to)}],
+		contains: ({bookingDate, valueDate, transactionDate}) => {
+			const day = bookingDate ?? valueDate ?? transactionDate;
+			return day !== null && day >= from && day <= to;
+		},
+	};
+}
+
+/**
+ * A stored row as the ladder compares it with a file's rows. `numbering`: the file rows' (`statementNumbering`), or
+ * null to count every imported row as the same numbering. With one, an imported row of another recorded numbering
+ * is not; a row stored before numberings were recorded still is, so its reference conflicts.
+ */
+function toMatchCandidate(row: StoredMatchRow, numbering: string | null): MatchExistingRow {
+	return {
+		id: row.id,
+		createdAt: row.createdAt,
+		text: matchText(row.counterpartyName, row.description),
+		amount: row.amount,
+		currency: row.currency,
+		bookingDate: row.bookingDate,
+		valueDate: row.valueDate,
+		balanceAfter: row.balanceAfterAmount,
+		reference: row.entryReference,
+		source: row.importId,
+		sameNumbering:
+			row.importId !== null &&
+			(numbering === null || row.statementNumbering === null || row.statementNumbering === numbering),
+	};
 }
 
 /** The bank an account's files name it at: the bank of a file that names no account, else of its first format. */
