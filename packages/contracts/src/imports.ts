@@ -230,7 +230,10 @@ export type BankImportPreviewAccount = {
 	bankName: string | null;
 	/** Whether the rows go to an imported-files account rather than one bank sync holds. */
 	imported: boolean;
-	/** The drop's rows for this account, a payment that several statements or export formats state counted once. */
+	/**
+	 * The rows the import adds to this account from the drop as if it held none yet: a payment that several statements
+	 * or export formats state counted once, a row the import would ask about not counted.
+	 */
 	rowCount: number;
 	/** Earliest and latest day of those rows; null when it has none. */
 	dateFrom: string | null;

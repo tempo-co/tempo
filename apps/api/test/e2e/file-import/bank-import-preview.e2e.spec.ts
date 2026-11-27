@@ -13,7 +13,7 @@ import {BankImportLayoutMiss} from '@modules/file-import/bank-import-layout-miss
 import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
-import {EXAMPLE_IBAN} from '../../fixtures/statement-file.fixture';
+import {CamtEntry, EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
@@ -193,13 +193,24 @@ describe('Bank import preview', () => {
 		expect(await written(other.owner)).toEqual(nothing);
 	});
 
-	it('refuses a file it cannot read as the import does, with the same code and file', async () => {
-		const {agent} = await createOwner();
-		const refused = await send(agent, '/bank-imports/preview', [
-			ARCHIVE,
-			Buffer.from('Example notes\nmore notes\n'),
-		]).expect(415);
+	it('refuses a file it cannot read as the import does, with the same code and file, writing only the miss of the bank picked', async () => {
+		const {owner, agent} = await createOwner();
+		const nothing = await written(owner);
+		const refused = await send(
+			agent,
+			'/bank-imports/preview',
+			[ARCHIVE, Buffer.from('Example notes\nmore notes\n')],
+			{
+				bankId: 'ing-nl',
+			},
+		).expect(415);
 		expect(refused.body).toMatchObject({code: 'unsupported_format', file: 2});
+		expect(await written(owner)).toEqual({...nothing, misses: 1});
+		expect(await misses.findOneByOrFail({accountId: owner.id})).toMatchObject({
+			bankId: 'ing-nl',
+			outcome: 'refused',
+			refusalCode: 'unsupported_format',
+		});
 	});
 
 	it('refuses a drop with no files', async () => {
@@ -218,4 +229,157 @@ describe('Bank import preview', () => {
 		const summary = (await send(agent, '/bank-imports', drop).expect(201)).body as BankImportSummary;
 		expect(summary).toMatchObject({rowsParsed: 24, rowsAdded: 8});
 	});
+
+	/** The drop previewed, then imported: the one account it lists, and the import's summary. */
+	async function previewThenImport(agent: TestAgent, drop: Buffer[], fields: Record<string, string> = {}) {
+		const preview = (await send(agent, '/bank-imports/preview', drop, fields).expect(200))
+			.body as BankImportPreview;
+		const summary = (await send(agent, '/bank-imports', drop, fields).expect(201)).body as BankImportSummary;
+		expect(preview.accounts).toHaveLength(1);
+		expect(summary.accounts).toHaveLength(1);
+		return {account: preview.accounts[0], summary};
+	}
+
+	it("counts the rows the import adds to a synced account the statements name, keeping the references between the drop's own formats", async () => {
+		const {owner, agent} = await createOwner();
+		const connection = await fixtures.createConnection(owner, {aspspName: 'Example Bank'});
+		const synced = await fixtures.createBankAccount(connection, {iban: EXAMPLE_IBAN});
+		// Twenty payments in CAMT.053 and in MT940, each numbering them its own way, and one more MT940 payment of the
+		// first one's amount a day later: the import asks about every MT940 row, as both are the drop's own.
+		const payments = Array.from({length: 20}, (_, index) => ({
+			day: `2026-10-${String(index + 1).padStart(2, '0')}`,
+			amount: `-${index + 11}.00`,
+		}));
+		const camt = Buffer.from(
+			camt053([
+				{
+					iban: EXAMPLE_IBAN,
+					entries: payments.map(({day, amount}, index) => camtDebit(amount, day, `CAMT-${index + 1}`)),
+				},
+			]),
+		);
+		const mt940 = mt940Statement(EXAMPLE_IBAN, [
+			...payments.map(({day, amount}, index) => ({day, amount, reference: `MT-${index + 1}`})),
+			{day: '2026-10-02', amount: '-11.00', reference: 'MT-EXTRA'},
+		]);
+
+		const {account, summary} = await previewThenImport(agent, [camt, mt940]);
+
+		expect(summary).toMatchObject({rowsAdded: 20, rowsDoubtful: 21, accounts: [{id: synced.id}]});
+		expect(account).toMatchObject({id: synced.id, rowCount: 20});
+	});
+
+	it('counts the rows the import adds to an account two statements reach under their own matching', async () => {
+		const {owner, agent} = await createOwner();
+		// The MT940 statement names its account by BLZ and Kontonummer, which this synced account's IBAN holds; the
+		// owner sends it to the imported-files account the CAMT.053 statement's IBAN finds.
+		const connection = await fixtures.createConnection(owner, {aspspName: 'Example Bank'});
+		await fixtures.createBankAccount(connection, {iban: OTHER_EXAMPLE_IBAN});
+		const earlier = await send(agent, '/bank-imports', [
+			Buffer.from(camt053([{iban: EXAMPLE_IBAN, entries: [camtDebit('-5.00', '2026-01-05', 'CAMT-JAN')]}])),
+		]).expect(201);
+		const [fileAccount] = (earlier.body as BankImportSummary).accounts;
+
+		// Five payments in both formats, numbered differently, and in each one more payment a day after one of them.
+		const payments = Array.from({length: 5}, (_, index) => ({
+			day: `2026-10-0${index + 5}`,
+			amount: `-${index + 21}.00`,
+		}));
+		const camt = Buffer.from(
+			camt053([
+				{
+					iban: EXAMPLE_IBAN,
+					entries: [
+						...payments.map(({day, amount}, index) => camtDebit(amount, day, `CAMT-${index + 1}`)),
+						camtDebit('-21.00', '2026-10-06', 'CAMT-EXTRA'),
+					],
+				},
+			]),
+		);
+		const mt940 = mt940Statement('37040044/0532013000', [
+			...payments.map(({day, amount}, index) => ({day, amount, reference: `MT-${index + 1}`})),
+			{day: '2026-10-07', amount: '-22.00', reference: 'MT-EXTRA'},
+		]);
+
+		const {account, summary} = await previewThenImport(agent, [camt, mt940], {
+			accountChoices: JSON.stringify({'Example Bank:EUR': fileAccount.id}),
+		});
+
+		expect(summary).toMatchObject({rowsAdded: 7, accounts: [{id: fileAccount.id}]});
+		expect(account).toMatchObject({id: fileAccount.id, rowCount: 7});
+	});
+
+	it("counts the rows the import adds when an earlier format's reference recurs outside the later format's days", async () => {
+		const {agent} = await createOwner();
+		// The bank gives an August payment and an October one the same reference; the MT940 statement states the
+		// October one with it, and another payment of that amount two days later.
+		const camt = Buffer.from(
+			camt053([
+				{
+					iban: EXAMPLE_IBAN,
+					entries: [camtDebit('-12.00', '2026-08-03', 'REF-R'), camtDebit('-40.00', '2026-10-05', 'REF-R')],
+				},
+			]),
+		);
+		const mt940 = mt940Statement(EXAMPLE_IBAN, [
+			{day: '2026-10-06', amount: '-40.00', reference: 'REF-R'},
+			{day: '2026-10-07', amount: '-40.00', reference: 'REF-Q'},
+		]);
+
+		const {account, summary} = await previewThenImport(agent, [camt, mt940]);
+
+		expect(summary).toMatchObject({rowsAdded: 3, rowsMatchedByReference: 1, rowsDoubtful: 0});
+		expect(account).toMatchObject({id: null, rowCount: 3});
+	});
+
+	it("counts the rows the import adds when a later format's look-alikes meet an earlier format's in stored order", async () => {
+		const {agent} = await createOwner();
+		// Two debits of one amount and day, one with the bank's reference; the MT940 statement states that day's two
+		// without references that conflict with the first, and one more the next day.
+		const camt = Buffer.from(
+			camt053([
+				{
+					iban: EXAMPLE_IBAN,
+					entries: [camtDebit('-10.00', '2026-10-05', 'REF-R'), camtDebit('-10.00', '2026-10-05')],
+				},
+			]),
+		);
+		const mt940 = mt940Statement(EXAMPLE_IBAN, [
+			{day: '2026-10-05', amount: '-10.00', reference: 'NONREF'},
+			{day: '2026-10-05', amount: '-10.00', reference: 'REF-S'},
+			{day: '2026-10-06', amount: '-10.00', reference: 'REF-T'},
+		]);
+
+		const {account, summary} = await previewThenImport(agent, [camt, mt940]);
+
+		expect(summary).toMatchObject({rowsAdded: 2, rowsDoubtful: 2});
+		expect(account).toMatchObject({id: null, rowCount: 2});
+	});
 });
+
+function camtDebit(amount: string, bookingDate: string, reference?: string): CamtEntry {
+	return {amount: amount.replace('-', ''), indicator: 'DBIT', bookingDate, reference, info: 'Example Shop'};
+}
+
+/** An MT940 statement of debits, opening at 1,000.00 and closing at what its rows leave. */
+function mt940Statement(account: string, rows: Array<{day: string; amount: string; reference: string}>): Buffer {
+	const cents = (amount: string) => Math.round(Number(amount) * 100);
+	const money = (value: number) => (Math.abs(value) / 100).toFixed(2).replace('.', ',');
+	const short = (day: string) => day.slice(2).replaceAll('-', '');
+	const closing = rows.reduce((total, {amount}) => total + cents(amount), 100_000);
+	return Buffer.from(
+		[
+			':20:EXAMPLE-1',
+			`:25:${account}`,
+			':28C:1/1',
+			`:60F:C${short(rows[0].day)}EUR1000,00`,
+			...rows.flatMap(({day, amount, reference}) => [
+				`:61:${short(day)}${short(day).slice(2)}D${money(cents(amount))}NTRFNONREF//${reference}`,
+				':86:Example Shop',
+			]),
+			`:62F:C${short(rows.at(-1)!.day)}EUR${money(closing)}`,
+			'-',
+			'',
+		].join('\r\n'),
+	);
+}
