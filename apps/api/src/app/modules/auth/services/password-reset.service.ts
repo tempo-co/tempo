@@ -68,7 +68,7 @@ export class PasswordResetService {
 		await this.emailService.send(
 			{
 				to: account.email,
-				subject: 'Reset your Tempo password',
+				subject: 'Reset your Wisp password',
 				template: 'reset-password',
 				context: {name: account.name, resetUrl, expiration},
 			},

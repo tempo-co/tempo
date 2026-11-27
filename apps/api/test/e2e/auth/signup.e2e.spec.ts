@@ -22,9 +22,19 @@ import {
 	VERIFIED_ACCOUNT_EMAIL,
 	VERIFIED_ACCOUNT_PASSWORD,
 } from '../../../scripts/seed-data/seed.constants';
-import {getApp, getSessionCookie, loginAgent, webOrigin} from '../../setup/e2e.setup';
+import {
+	EMAIL_FROM_E2E,
+	EMAIL_REPLY_TO_E2E,
+	configureEmailSenderE2e,
+	getApp,
+	getSessionCookie,
+	loginAgent,
+	webOrigin,
+} from '../../setup/e2e.setup';
 import {createAccountCredentials, expectValidationMessage} from '../../utils/auth-utils';
 import {EmailUtils, MAILPIT_API_URL} from '../../utils/email-utils';
+
+configureEmailSenderE2e();
 
 describe('AuthController - Signup', () => {
 	let mailpitApiUrl: string;
@@ -57,7 +67,16 @@ describe('AuthController - Signup', () => {
 		const code = EmailUtils.extractCode(body);
 
 		expect(welcomeEmail?.To[0].Address).toEqual(email);
-		expect(welcomeEmail?.Subject).toBe('Confirm your email for Tempo');
+		expect(welcomeEmail?.From).toEqual({Name: EMAIL_FROM_E2E.name, Address: EMAIL_FROM_E2E.address});
+		expect(welcomeEmail?.ReplyTo).toEqual([{Name: '', Address: EMAIL_REPLY_TO_E2E}]);
+		expect(welcomeEmail?.Subject).toBe('Confirm your email for Wisp');
+		// The header is the only image: no other remote content, so opening the email tells nobody anything.
+		const images = welcomeEmail?.HTML.match(/<img\b[^>]*>/g) ?? [];
+		expect(images).toHaveLength(1);
+		expect(images[0]).toContain(`src="${webUrl}/email-header.png"`);
+		expect(images[0]).toContain('alt="Wisp"');
+		expect(images[0]).toMatch(/width="\d+"[^>]*height="\d+"|height="\d+"[^>]*width="\d+"/);
+		expect(welcomeEmail?.HTML).toContain(`href="${webUrl}/official"`);
 		expect(body).toEqual(EmailUtils.getWelcomeEmailBody(email, name, webUrl, code, emailVerificationExpiration));
 	}
 

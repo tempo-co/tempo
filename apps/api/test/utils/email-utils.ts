@@ -21,7 +21,10 @@ const SLOW_EMAIL_QUEUE_MS = 1_000;
 
 const isEmpty = (counts: Record<string, number>) => Object.values(counts).every((count) => count === 0);
 
-const EMAIL_FOOTER = 'Sent by Tempo because of activity on your account. Need help? Reply to this email.';
+/** The plain-text footer every email ends with, as Mailpit derives it from the HTML. */
+export const emailFooterText = (webUrl: string) =>
+	`Sent by Wisp because of activity on your account. Questions? Reply to this email or write to support@wispmoney.com.
+Wisp's official addresses ( ${webUrl}/official )`;
 
 export class EmailUtils {
 	static async clearEmails(apiUrl: string) {
@@ -134,41 +137,46 @@ export class EmailUtils {
 	) {
 		const ex = ms(ms(expiration as ms.StringValue), {long: true});
 
-		return `Welcome to Tempo, ${name}
+		return `Welcome to Wisp, ${name}
 Confirm your email address to finish signing up.
 Confirm email ( ${webUrl}/verify-email?email=${encodeURIComponent(email)}&code=${code} )
 The link and code expire in ${ex}. You can also manually enter the code below.
 ${code}
-If you didn't sign up for Tempo, you can ignore this email.
-${EMAIL_FOOTER}`;
+If you didn't sign up for Wisp, you can ignore this email.
+${emailFooterText(webUrl)}`;
 	}
 
 	static getPasswordResetEmailBody(email: Account['email'], webUrl: string, token: string, expiration: string) {
 		const ex = ms(ms(expiration as ms.StringValue), {long: true});
 
-		return `Reset your Tempo password
-You asked to reset your Tempo password. Use the button below to choose a new one.
+		return `Reset your Wisp password
+You asked to reset your Wisp password. Use the button below to choose a new one.
 Reset password ( ${webUrl}/reset-password?email=${encodeURIComponent(email)}&token=${token} )
 This link expires in ${ex}.
 If you didn't ask for this, you can ignore this email. Your password stays the same.
-${EMAIL_FOOTER}`;
+${emailFooterText(webUrl)}`;
 	}
 
 	static getVerifyNewEmailBody(email: Account['email'], webUrl: string, token: string, expiration: string) {
 		const ex = ms(ms(expiration as ms.StringValue), {long: true});
 
 		return `Confirm your new email
-You asked to use this address for your Tempo account. Confirm it to finish the change.
+You asked to use this address for your Wisp account. Confirm it to finish the change.
 Confirm email ( ${webUrl}/verify-email-change?email=${encodeURIComponent(email)}&token=${token} )
 This link expires in ${ex}. Your current email keeps working until you confirm.
 If you didn't ask for this, you can ignore this email.
-${EMAIL_FOOTER}`;
+${emailFooterText(webUrl)}`;
 	}
 
-	static getEmailChangedBody(name: Account['name'], oldEmail: Account['email'], newEmail: Account['email']) {
-		return `Your Tempo email was changed, ${name}
+	static getEmailChangedBody(
+		name: Account['name'],
+		oldEmail: Account['email'],
+		newEmail: Account['email'],
+		webUrl: string,
+	) {
+		return `Your Wisp email was changed, ${name}
 You now sign in with ${newEmail} instead of ${oldEmail}.
 If you didn't make this change, reset your password and reply to this email right away.
-${EMAIL_FOOTER}`;
+${emailFooterText(webUrl)}`;
 	}
 }

@@ -76,7 +76,7 @@ test.describe('Alerts from the service worker', () => {
       origin,
       registrationId,
       data: JSON.stringify({
-        title: 'Tempo',
+        title: 'Wisp',
         body: 'A bank has stopped syncing',
         url: `${origin}/accounts`,
         tag: 'bank-connections',
@@ -102,14 +102,14 @@ test.describe('Alerts from the service worker', () => {
     );
     expect(shown).toEqual([
       {
-        title: 'Tempo',
+        title: 'Wisp',
         body: 'A bank has stopped syncing',
         tag: 'bank-connections',
         data: {url: `${origin}/accounts`},
       },
     ]);
 
-    // A click on the notification: Tempo's open window goes to the alert's screen.
+    // A click on the notification: Wisp's open window goes to the alert's screen.
     await worker.evaluate(async () => {
       const scope = self as unknown as WorkerScope;
       const [notification] = await scope.registration.getNotifications();
@@ -118,7 +118,7 @@ test.describe('Alerts from the service worker', () => {
     await expect(page).toHaveURL(`${origin}/accounts`);
   });
 
-  test('opens only Tempo pages from a notification', async ({page, context, baseURL}) => {
+  test('opens only Wisp pages from a notification', async ({page, context, baseURL}) => {
     const origin = new URL(baseURL!).origin;
     await context.grantPermissions(['notifications'], {origin});
     await page.goto('/settings/notifications');
@@ -127,7 +127,7 @@ test.describe('Alerts from the service worker', () => {
 
     await worker.evaluate(async () => {
       const scope = self as unknown as WorkerScope;
-      await scope.registration.showNotification('Tempo', {
+      await scope.registration.showNotification('Wisp', {
         tag: 'elsewhere',
         data: {url: 'https://elsewhere.example.test/'},
       });

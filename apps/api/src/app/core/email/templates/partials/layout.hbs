@@ -83,6 +83,17 @@
             style="width:100%;max-width:500px;border:1px solid #D0C8B9;border-collapse:collapse;background-color:#FBF8F1;"
           >
             <tr>
+              <td style="padding:24px 24px 0;">
+                <img
+                  src="{{@headerImageUrl}}"
+                  alt="Wisp"
+                  width="127"
+                  height="48"
+                  style="display:block;width:127px;height:48px;border:0;outline:none;text-decoration:none;font-size:24px;font-weight:800;line-height:48px;color:#232B66;"
+                >
+              </td>
+            </tr>
+            <tr>
               <td class="email-text" style="padding:24px;line-height:1.5;color:#28252B;">
                 {{> @partial-block }}
               </td>
@@ -92,7 +103,13 @@
             class="email-muted"
             style="max-width:500px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#6E675E;text-align:center;"
           >
-            Sent by Tempo because of activity on your account. Need help? Reply to this email.
+            Sent by Wisp because of activity on your account. Questions? Reply to this email or write to support@wispmoney.com.
+          </p>
+          <p
+            class="email-muted"
+            style="max-width:500px;margin:8px auto 0;font-size:12px;line-height:1.5;color:#6E675E;text-align:center;"
+          >
+            <a href="{{@officialAddressesUrl}}" class="email-link" style="color:#8F4032;">Wisp's official addresses</a>
           </p>
         </td>
       </tr>

@@ -73,6 +73,7 @@ services:
       EMAIL_PORT: '587'
       EMAIL_SECURE: 'false'
       EMAIL_REQUIRE_TLS: 'true'
+      EMAIL_REPLY_TO: support@wispmoney.com
       ENABLE_BANKING_PRIVATE_KEY_PATH: /run/secrets/enable-banking-private.key
     volumes:
       - type: bind

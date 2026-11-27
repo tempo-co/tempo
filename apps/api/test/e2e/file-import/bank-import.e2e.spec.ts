@@ -4565,7 +4565,7 @@ describe('Bank imports', () => {
 		await digest.send(now);
 
 		const email = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
-		expect(email).toMatchObject({Subject: 'Tempo: banks to add'});
+		expect(email).toMatchObject({Subject: 'Wisp: banks to add'});
 		expect(email?.Text).toContain('Example Digest Bank (DE): 2 accounts, a saved layout to build from');
 		expect(email?.Text).toContain('BoursoBank (FR): 1 account, a saved layout to build from');
 		expect(email?.Text).toContain('Example Picked Bank: 1 account, a saved layout to build from');

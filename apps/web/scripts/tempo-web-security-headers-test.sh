@@ -122,6 +122,9 @@ check() {
 }
 check spa / spa
 check asset /favicon.svg spa
+# Emails link the header image by absolute URL; a missing file would come back as the app page.
+email_header_type=$(curl -fsS --max-time 5 -o /dev/null -w '%{content_type}' "http://127.0.0.1:$port/email-header.png")
+[[ $email_header_type == image/png ]] || { echo "email header image served as '$email_header_type'" >&2; exit 1; }
 check deep-link /bank-transactions spa
 encoded_search=$(python3 -c 'from urllib.parse import quote; print(quote("€" * 1000))')
 check unicode-api-search "/api/bank-transactions?filter%5Bsearch%5D=$encoded_search" proxy

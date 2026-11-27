@@ -155,7 +155,7 @@ describe('AccountController - DELETE /accounts/me', () => {
 			.set('Origin', webOrigin())
 			.send({email})
 			.expect(200);
-		const resetEmail = await EmailUtils.findEmailByRecipient(email, mailpitApiUrl, 'Reset your Tempo password');
+		const resetEmail = await EmailUtils.findEmailByRecipient(email, mailpitApiUrl, 'Reset your Wisp password');
 		const resetToken = EmailUtils.extractToken(resetEmail?.Text);
 
 		// Wrong password is rejected and the account survives.

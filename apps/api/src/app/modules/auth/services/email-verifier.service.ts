@@ -21,8 +21,8 @@ import {PasswordResetService} from './password-reset.service';
 
 type PendingEmailChange = {tokenHash: string; email: Account['email']};
 
-export const EMAIL_CHANGE_VERIFICATION_SUBJECT = 'Confirm your new Tempo email';
-export const EMAIL_CHANGED_SUBJECT = 'Your Tempo email was changed';
+export const EMAIL_CHANGE_VERIFICATION_SUBJECT = 'Confirm your new Wisp email';
+export const EMAIL_CHANGED_SUBJECT = 'Your Wisp email was changed';
 
 /** Wrong guesses a signup code survives; the last one deletes it, so only a resent code works. */
 export const SIGNUP_CODE_MAX_ATTEMPTS = 5;
@@ -105,7 +105,7 @@ export class EmailVerifierService {
 		await this.emailService.send(
 			{
 				to: email,
-				subject: 'Confirm your email for Tempo',
+				subject: 'Confirm your email for Wisp',
 				template: 'welcome',
 				context: {name, verificationUrl, code, expiration},
 			},

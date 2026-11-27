@@ -268,7 +268,7 @@ describe('Push notifications', () => {
 				{
 					endpoint: endpoint('bank-once'),
 					payload: {
-						title: 'Tempo',
+						title: 'Wisp',
 						body: 'A bank has stopped syncing',
 						url: `${webBaseUrl}/accounts`,
 						tag: 'bank-connections',

@@ -3898,7 +3898,7 @@ describe('BankConnectionController', () => {
 			await expect(app.get(BankingSyncProcessor).process(scheduledRun())).rejects.toBe(outage);
 
 			const email = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
-			expect(email).toMatchObject({Subject: 'Tempo: scheduled bank sync failed'});
+			expect(email).toMatchObject({Subject: 'Wisp: scheduled bank sync failed'});
 			expect(email?.Text).toContain('ExampleDatabaseOutage');
 			expect(email?.Text).not.toContain('ECONNREFUSED');
 
