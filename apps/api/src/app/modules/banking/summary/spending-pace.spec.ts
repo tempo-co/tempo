@@ -56,30 +56,37 @@ describe('spending pace', () => {
 });
 
 describe('usual pace', () => {
+	const covered = (from: string, to: string) => [{from, to}];
+
 	it.each([
 		[
 			'a long history',
-			'2024-03-09',
-			'2026-10-14',
+			covered('2024-03-09', '2026-10-14'),
 			['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
 		],
-		['a history from a 1st', '2026-07-01', '2026-10-14', ['2026-07', '2026-08', '2026-09']],
-		['a history from mid-month', '2026-07-02', '2026-10-14', ['2026-08', '2026-09']],
+		['data from a 1st', covered('2026-07-01', '2026-10-14'), ['2026-07', '2026-08', '2026-09']],
+		['data from mid-month', covered('2026-07-02', '2026-10-14'), ['2026-08', '2026-09']],
 		[
 			'data through a month end',
-			'2024-03-09',
-			'2026-09-30',
+			covered('2024-03-09', '2026-09-30'),
 			['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
 		],
 		[
 			'data that stopped in August',
-			'2024-03-09',
-			'2026-08-20',
+			covered('2024-03-09', '2026-08-20'),
 			['2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07'],
 		],
-		['no history', null, null, []],
-	])('averages the complete months before this one, six at most: %s', (_, first, lastCovered, expected) => {
-		expect(usualPaceMonths('2026-10', first, lastCovered)).toEqual(expected);
+		[
+			'a gap from 29 March to 1 June',
+			[
+				{from: '2026-01-03', to: '2026-03-28'},
+				{from: '2026-06-02', to: '2026-10-14'},
+			],
+			['2026-02', '2026-07', '2026-08', '2026-09'],
+		],
+		['no data', [], []],
+	])('averages the months before this one that the data covers whole, six at most: %s', (_, days, expected) => {
+		expect(usualPaceMonths('2026-10', days)).toEqual(expected);
 	});
 
 	it('averages the newest six complete months, each through the same day of the month', () => {
@@ -94,7 +101,7 @@ describe('usual pace', () => {
 		const pace = buildHomePace({
 			month: '2026-10',
 			lastCoveredDay: '2026-10-14',
-			historyStart: '2025-11-03',
+			coveredDays: covered('2025-11-03', '2026-10-14'),
 			spending,
 		});
 
@@ -111,8 +118,13 @@ describe('usual pace', () => {
 			['2026-09', cents({3: 1000})],
 			['2026-10', cents({1: 700})],
 		]);
-		const pace = (historyStart: string) =>
-			buildHomePace({month: '2026-10', lastCoveredDay: '2026-10-05', historyStart, spending});
+		const pace = (from: string) =>
+			buildHomePace({
+				month: '2026-10',
+				lastCoveredDay: '2026-10-05',
+				coveredDays: covered(from, '2026-10-05'),
+				spending,
+			});
 
 		expect(pace('2026-08-20').usual).toBeNull();
 		expect(pace('2026-08-20').daily).toHaveLength(5);
@@ -126,7 +138,12 @@ describe('usual pace', () => {
 			['2026-10', cents({1: 500, 15: 400, 20: 99_900})],
 		]);
 		const through = (lastCoveredDay: string | null) =>
-			buildHomePace({month: '2026-10', lastCoveredDay, historyStart: '2026-08-01', spending});
+			buildHomePace({
+				month: '2026-10',
+				lastCoveredDay,
+				coveredDays: lastCoveredDay ? covered('2026-08-01', lastCoveredDay) : [],
+				spending,
+			});
 
 		expect(through('2026-10-15').daily).toHaveLength(15);
 		expect(through('2026-10-15').daily.at(-1)).toEqual({day: 15, spending: '4.00', cumulative: '9.00'});

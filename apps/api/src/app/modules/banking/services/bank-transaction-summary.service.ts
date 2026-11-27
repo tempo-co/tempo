@@ -107,16 +107,9 @@ export class BankTransactionSummaryService {
 	async getSpendingPace(owner: ReportingOwner & CoverageOwner, {asOf}: HomeReadQuery): Promise<SpendingPace> {
 		const month = asOf.slice(0, 7);
 		const monthStart = `${month}-01`;
-		const [{firstCoveredDay, lastCoveredDay}, firstTransactionDate] = await Promise.all([
-			this.dataCoverageService.findCoveredSpan(owner, asOf),
-			findFirstTransactionDate(this.bankTransactionRepository, owner.id),
-		]);
-		// The data starts at the first covered day even when nothing was booked on it, such as an import from the 1st.
-		const historyStart =
-			firstCoveredDay && (!firstTransactionDate || firstCoveredDay < firstTransactionDate)
-				? firstCoveredDay
-				: firstTransactionDate;
-		const months = usualPaceMonths(month, historyStart, lastCoveredDay);
+		const coveredDays = await this.dataCoverageService.findCoveredDays(owner, asOf);
+		const lastCoveredDay = coveredDays.at(-1)?.to ?? null;
+		const months = usualPaceMonths(month, coveredDays);
 		const from = months.length > 0 ? `${months[0]}-01` : monthStart;
 		// Through the last covered day; only the earlier months when it lies before this month.
 		const to = lastCoveredDay && lastCoveredDay >= monthStart ? lastCoveredDay : addDays(monthStart, -1);
@@ -132,7 +125,7 @@ export class BankTransactionSummaryService {
 			}
 			spending.set(row.month, addTo(spending.get(row.month) ?? new Map<number, bigint>(), row.day, -cents));
 		}
-		const pace = buildHomePace({month, lastCoveredDay, historyStart, spending});
+		const pace = buildHomePace({month, lastCoveredDay, coveredDays, spending});
 		return {
 			baseCurrency: totalsCurrency(owner),
 			month,

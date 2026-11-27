@@ -276,11 +276,23 @@ test.describe('Home on a phone', () => {
     viewport: {width: 390, height: 844},
   });
 
-  test('fits the screen', async ({page, homePage}) => {
-    await mockSyntheticHome(page);
+  test('fits the screen, and Accounts leaves a hidden account out', async ({page, homePage}) => {
+    const hidden = {
+      ...HOME_CONNECTION.bankAccounts[0],
+      id: '00000000-0000-4000-8000-0000000000a9',
+      name: 'Example Hidden Account',
+      currentBalanceAmount: '900.00',
+      currentBalanceInBaseCurrency: '900.00',
+      isHidden: true,
+    };
+    await mockSyntheticHome(page, {
+      connections: [{...HOME_CONNECTION, bankAccounts: [...HOME_CONNECTION.bankAccounts, hidden]}],
+    });
     await page.goto('/');
     await expect(homePage.paceFigure).toHaveText('€1,200');
     await expect(homePage.accountsTotal).toHaveText('€24,300.00');
+    await expect(homePage.card('Accounts')).toContainText('1 account');
+    await expect(homePage.card('Accounts')).not.toContainText('Example Hidden Account');
     await expectLoaded(page.getByRole('main'));
     await expectNoHorizontalOverflow(page);
   });

@@ -6,6 +6,7 @@
 import {
 	type BaselineDay,
 	type BaselineTotal,
+	type DateRange,
 	MIN_USUAL_PACE_MONTHS,
 	type SpendingPaceDay,
 	USUAL_PACE_MONTHS,
@@ -58,13 +59,15 @@ const USUAL_PACE_LOOKBACK_MONTHS = 24;
 
 /**
  * The complete months the usual pace of `month` averages, oldest first: the newest `USUAL_PACE_MONTHS` before it that
- * the data covers whole, from their first day (the data starts on or before it) to their last (the last covered day is
- * on or after it).
+ * one run of covered days holds whole, from the 1st to the last day.
  */
-export function usualPaceMonths(month: string, historyStart: string | null, lastCoveredDay: string | null): string[] {
-	if (!historyStart || !lastCoveredDay) return [];
+export function usualPaceMonths(month: string, coveredDays: readonly DateRange[]): string[] {
 	return previousMonths(month, USUAL_PACE_LOOKBACK_MONTHS)
-		.filter((earlier) => `${earlier}-01` >= historyStart && `${earlier}-${daysInMonth(earlier)}` <= lastCoveredDay)
+		.filter((earlier) => {
+			const first = `${earlier}-01`;
+			const last = `${earlier}-${daysInMonth(earlier)}`;
+			return coveredDays.some((range) => range.from <= first && last <= range.to);
+		})
 		.slice(-USUAL_PACE_MONTHS);
 }
 
@@ -73,8 +76,8 @@ export type HomePaceInput = {
 	month: string;
 	/** The newest day the owner's data covers, not after this month; null without any. */
 	lastCoveredDay: string | null;
-	/** Where the owner's data starts: the first covered day or first transaction, whichever is earlier. */
-	historyStart: string | null;
+	/** The days the owner's data covers, merged and oldest first (`DataCoverageService.findCoveredDays`). */
+	coveredDays: readonly DateRange[];
 	/** Spending by month (`YYYY-MM`) and day; days after the last covered day are ignored. */
 	spending: ReadonlyMap<string, DailyCents>;
 };
@@ -84,14 +87,14 @@ export type HomePaceInput = {
  * months before it, each added up through the same day of the month. No usual pace while fewer than
  * `MIN_USUAL_PACE_MONTHS` complete months exist.
  */
-export function buildHomePace({month, lastCoveredDay, historyStart, spending}: HomePaceInput): {
+export function buildHomePace({month, lastCoveredDay, coveredDays, spending}: HomePaceInput): {
 	daily: SpendingPaceDay[];
 	usual: UsualPace | null;
 } {
 	const monthDays = daysInMonth(month);
 	// A last covered day before this month leaves none of it covered.
 	const throughDay = lastCoveredDay?.startsWith(month) ? Number(lastCoveredDay.slice(8)) : 0;
-	const months = usualPaceMonths(month, historyStart, lastCoveredDay);
+	const months = usualPaceMonths(month, coveredDays);
 	const pace = buildSpendingPace({
 		daysInMonth: monthDays,
 		throughDay,

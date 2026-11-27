@@ -119,6 +119,18 @@ describe('Spending pace and data coverage', () => {
 		expect(pace.usual).toBeNull();
 	});
 
+	it('leaves a hidden account out of the coverage and the pace', async () => {
+		const {agent, bankAccount} = await syncedOwner('2026-10-14T08:00:00.000Z');
+		await fixtures.createTransactions(bankAccount, [bookedRow('2026-10-02', '-40.00')]);
+		await fixtures.bankAccounts.update({id: bankAccount.id}, {isHidden: true});
+
+		const coverage = (await agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)).body as DataCoverage;
+		const pace = (await agent.get(PACE).query({asOf: AS_OF}).expect(200)).body as SpendingPace;
+
+		expect(coverage).toMatchObject({lastCoveredDay: null, accounts: []});
+		expect(pace).toMatchObject({lastCoveredDay: null, daily: [], spending: '0.00'});
+	});
+
 	it('refuses a date that is not a calendar date', async () => {
 		const {agent} = await syncedOwner(null);
 
@@ -185,7 +197,8 @@ describe('Spending pace and data coverage', () => {
 				],
 			});
 
-			// Another owner sees only their own account, its sync history from any day, cut to the window.
+			// Another owner sees only their own account, its sync history from its first transaction, cut to the window.
+			await fixtures.createTransactions(other.bankAccount, [bookedRow('2026-09-02', '-20.00')]);
 			const theirs = (await other.agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)).body as DataCoverage;
 			expect(theirs).toMatchObject({
 				lastCoveredDay: '2026-10-17',

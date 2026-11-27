@@ -13,7 +13,7 @@ The bank an account is held at, as Tempo records it: the institution name of its
 _Avoid_: institution key, bank code
 
 **Data coverage**:
-The days an owner's data has come in for, per account: a connected account through the day of its last successful sync, and any account over the date ranges of its imported statements that are not undone. The newest covered day across accounts is the **last covered day**; a day after it is not in yet, which is not the same as a day with no spending.
+The days an owner's data has come in for, per shown account (a hidden one covers nothing): a connected account from its first transaction (or earlier, where the sync recorded covering) through the day of its last successful sync, and any account over the date ranges of its imported statements that are not undone. The newest covered day across accounts is the **last covered day**; a day after it is not in yet, which is not the same as a day with no spending.
 _Avoid_: freshness, sync range, data gap
 
 **Derived-data refresh**:
@@ -33,7 +33,7 @@ An owner's transactions that wait for them to pick a category: those the AI coul
 _Avoid_: to review, needs attention, uncategorised
 
 **Usual pace**:
-How much an owner usually has spent by each day of a month: the average, day by day, of their newest six complete months before this one, shown once two complete months exist. A month is complete when their data covers it whole: their data starts (the first covered day or first transaction) on or before its 1st, and the last covered day is on or after its last day. This month's spending is compared with it up to the last covered day.
+How much an owner usually has spent by each day of a month: the average, day by day, of their newest six complete months before this one, shown once two complete months exist. A month is complete when their data covers every day of it, from the 1st to the last. This month's spending is compared with it up to the last covered day.
 _Avoid_: baseline, typical spending, average month
 
 **Verified bank**:
