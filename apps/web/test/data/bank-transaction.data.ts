@@ -30,6 +30,7 @@ export function createBankTransaction(overrides: Partial<BankTransaction> = {}):
     ownTransfer: null,
     ownTransferOverride: null,
     currencyExchangeCounterpart: null,
+    leftOutOfTotals: false,
     categoryConfidence: null,
     providerTransactionDescription: null,
     merchantCategoryCode: null,

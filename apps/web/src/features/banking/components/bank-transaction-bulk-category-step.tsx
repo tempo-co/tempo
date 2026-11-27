@@ -1,7 +1,7 @@
 import type {
   BankTransactionBulkCategoryPreview,
   BankTransactionBulkCategoryScope,
-  BankTransactionBulkCategorySelection,
+  BankTransactionBulkSelection,
   BankTransactionCategory,
 } from '@tempo/contracts';
 import {CircleAlert} from 'lucide-react';
@@ -22,7 +22,7 @@ import {MerchantLogoTile} from './merchant-logo-tile';
 /** A category picked for the selected rows, with the other rows from their payees that could follow. */
 export type BulkCategoryDraft = {
   /** The picked ids, or the list's filter when every matching row is picked. */
-  selection: BankTransactionBulkCategorySelection;
+  selection: BankTransactionBulkSelection;
   category: BankTransactionCategory;
   preview: BankTransactionBulkCategoryPreview;
 };

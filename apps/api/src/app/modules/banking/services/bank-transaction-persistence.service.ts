@@ -72,8 +72,15 @@ export type ImportedTransactionsTarget = {
 	statementNumbering: string | null;
 };
 
-/** An owner's choices on a row that move with it: a manual category and an own-transfer choice. */
-export type OwnerEdits = {category: string | null; ownTransferOverride: OwnTransferOverride | null};
+/**
+ * An owner's choices on a row that move with it: a manual category, an own-transfer choice, and leaving it out of totals
+ * (absent on choices recorded before it existed).
+ */
+export type OwnerEdits = {
+	category: string | null;
+	ownTransferOverride: OwnTransferOverride | null;
+	leftOutOfTotals?: boolean;
+};
 
 export type SweepImportedRowsResult = {
 	removedCount: number;
@@ -728,8 +735,8 @@ export class BankTransactionPersistenceService {
 		});
 		const editsOf = (row: BankTransaction): OwnerEdits | null => {
 			const category = isManualCategorySource(row.categorySource) ? row.category : null;
-			return category || row.ownTransferOverride
-				? {category, ownTransferOverride: row.ownTransferOverride}
+			return category || row.ownTransferOverride || row.leftOutOfTotals
+				? {category, ownTransferOverride: row.ownTransferOverride, leftOutOfTotals: row.leftOutOfTotals}
 				: null;
 		};
 		// Rows with edits choose first, so a row without any never takes the look-alike one with edits needs. The
@@ -748,7 +755,7 @@ export class BankTransactionPersistenceService {
 			const target = targets.get(row.id);
 			if (!target) continue;
 			const applied = await this.applyOwnerEdits(repository, ownerId, target, editsOf(row)!, aspspName);
-			if (applied.category || applied.ownTransferOverride) moved += 1;
+			if (applied.category || applied.ownTransferOverride || applied.leftOutOfTotals) moved += 1;
 			if (applied.ownTransferOverride) recomputeIds.push(target);
 		}
 
@@ -785,8 +792,8 @@ export class BankTransactionPersistenceService {
 	}
 
 	/**
-	 * Gives a row an owner's manual category and own-transfer choice, each only where the row has none of its own at
-	 * the moment of the write, so a choice saved on it meanwhile is kept. Says which of the two landed.
+	 * Gives a row an owner's manual category, own-transfer choice and leaving it out of totals, each only where the row
+	 * has none of its own at the moment of the write, so a choice saved on it meanwhile is kept. Says which landed.
 	 */
 	async applyOwnerEdits(
 		repository: Repository<BankTransaction>,
@@ -794,8 +801,8 @@ export class BankTransactionPersistenceService {
 		transactionId: string,
 		edits: OwnerEdits,
 		aspspName: string | undefined,
-	): Promise<{category: boolean; ownTransferOverride: boolean}> {
-		const applied = {category: false, ownTransferOverride: false};
+	): Promise<{category: boolean; ownTransferOverride: boolean; leftOutOfTotals: boolean}> {
+		const applied = {category: false, ownTransferOverride: false, leftOutOfTotals: false};
 		if (edits.category) {
 			const target = await repository.findOneBy({
 				id: transactionId,
@@ -826,6 +833,17 @@ export class BankTransactionPersistenceService {
 				.andWhere(`"ownTransferOverride" IS NULL`)
 				.execute();
 			applied.ownTransferOverride = (result.affected ?? 0) > 0;
+		}
+		if (edits.leftOutOfTotals) {
+			const result = await repository
+				.createQueryBuilder()
+				.update()
+				.set({leftOutOfTotals: true})
+				.where('id = :id', {id: transactionId})
+				.andWhere(OWNED_BANK_ACCOUNT_SQL, {ownerId})
+				.andWhere(`NOT "leftOutOfTotals"`)
+				.execute();
+			applied.leftOutOfTotals = (result.affected ?? 0) > 0;
 		}
 		return applied;
 	}

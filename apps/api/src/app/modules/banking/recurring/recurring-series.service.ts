@@ -25,7 +25,7 @@ import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
 import {MerchantLogoService} from '../merchant-logos/merchant-logo.service';
 import {type ReportingOwner, totalsCurrency} from '../reporting-currency';
-import {SQL_INTERNAL, createOwnerScopedQuery} from '../services/bank-transaction-filters';
+import {SQL_COUNTED_IN_TOTALS, createOwnerScopedQuery} from '../services/bank-transaction-filters';
 import {daysInMonth, formatCents, previousMonths} from '../summary/bank-transaction-summary';
 import {type ContinuationPair, findContinuationPairs} from './recurring-continuation';
 import {RecurringContinuationUnlink} from './recurring-continuation-unlink.entity';
@@ -504,7 +504,7 @@ export class RecurringSeriesService {
 		return detection;
 	}
 
-	/** The owner's payments that can be recurring: settled, booked, not internal, refunded or zero. */
+	/** The owner's payments that can be recurring: settled, booked, counted in totals, not refunded or zero. */
 	private candidateRows(accountId: Account['id'], repository = this.bankTransactionRepository) {
 		return createOwnerScopedQuery(repository, accountId)
 			.andWhere('transaction.merchantKey IS NOT NULL')
@@ -512,7 +512,7 @@ export class RecurringSeriesService {
 			.andWhere("UPPER(transaction.transactionStatus) IS DISTINCT FROM 'PDNG'")
 			.andWhere("transaction.creditDebitIndicator IN ('DBIT', 'CRDT')")
 			.andWhere('transaction.category IS DISTINCT FROM :refund', {refund: REFUND})
-			.andWhere(`NOT ${SQL_INTERNAL}`)
+			.andWhere(SQL_COUNTED_IN_TOTALS)
 			.andWhere('transaction.amount <> 0');
 	}
 }

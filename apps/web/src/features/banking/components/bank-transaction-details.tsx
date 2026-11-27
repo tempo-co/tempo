@@ -1,15 +1,17 @@
 import {Link} from '@tanstack/react-router';
 import {BankTransaction, BankTransactionCounterpart} from '@tempo/contracts';
-import {ArrowDown, ArrowRight, Check, ChevronRight, Landmark} from 'lucide-react';
+import {ArrowDown, ArrowRight, Check, ChevronRight, EyeOff, Landmark} from 'lucide-react';
 import {useState} from 'react';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
+import {Switch} from '@/components/ui/switch';
 import {useLocalDate} from '@/hooks/use-local-date';
 
 import {bankLogoKey, useBankLogos} from '../api/use-bank-logos';
 import {useGetBankTransactionRecurring} from '../api/use-get-bank-transaction-recurring';
+import {useUpdateLeftOutOfTotals} from '../api/use-left-out-of-totals';
 import {useUpdateBankTransactionOwnTransfer} from '../api/use-update-bank-transaction-own-transfer';
 import {RECURRING_CADENCE_LABELS} from '../types/recurring-series';
 import {
@@ -62,6 +64,7 @@ export function BankTransactionDetails({transaction}: {transaction: BankTransact
         </section>
       )}
       {!isMovement && <Recurring transaction={transaction} />}
+      <LeftOutSetting transaction={transaction} />
       <section className='pt-2' data-testid='bank-details-fold'>
         <Button
           variant='ghost'
@@ -406,6 +409,50 @@ function Recurring({transaction}: {transaction: BankTransaction}) {
         </div>
       )}
     </section>
+  );
+}
+
+/** The switch that leaves the row out of every total, and counts it again; the row and balances keep it. */
+function LeftOutSetting({transaction}: {transaction: BankTransaction}) {
+  const {updateLeftOutOfTotals, isPending, pendingValue} = useUpdateLeftOutOfTotals();
+  const id = `left-out-${transaction.id}`;
+  const leftOut =
+    isPending && pendingValue !== undefined ? pendingValue : transaction.leftOutOfTotals;
+  const status = isPending
+    ? 'Saving…'
+    : leftOut
+      ? 'Counted in no total. Your balance keeps it.'
+      : null;
+  return (
+    // The whole row is the switch's label, so it is a large enough target on phones.
+    <label
+      htmlFor={id}
+      className='flex min-h-11 cursor-pointer items-center gap-3 border-b py-5'
+      data-testid='left-out-setting'
+    >
+      <EyeOff className='size-5 shrink-0 text-muted-foreground' aria-hidden='true' />
+      <span className='min-w-0 flex-1'>
+        <span className='block font-medium'>Leave out of totals</span>
+        {status && (
+          <span
+            id={`${id}-status`}
+            aria-live='polite'
+            className='mt-1 block text-body-small text-muted-foreground'
+          >
+            {status}
+          </span>
+        )}
+      </span>
+      <Switch
+        id={id}
+        checked={leftOut}
+        disabled={isPending}
+        aria-describedby={status ? `${id}-status` : undefined}
+        onCheckedChange={(next) =>
+          updateLeftOutOfTotals({id: transaction.id, leftOutOfTotals: next})
+        }
+      />
+    </label>
   );
 }
 

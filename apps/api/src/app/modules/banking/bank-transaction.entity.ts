@@ -156,6 +156,13 @@ export class BankTransaction {
 	@Column({type: 'varchar', length: 16, nullable: true})
 	ownTransferOverride: OwnTransferOverride | null;
 
+	/**
+	 * The owner left the row out of totals (`SQL_COUNTED_IN_TOTALS`); it stays in the list and in balances. Written only
+	 * by the owner, never by provider sync.
+	 */
+	@Column({type: 'boolean', default: false})
+	leftOutOfTotals: boolean;
+
 	@Column({type: 'jsonb', nullable: true})
 	merchantLocation: BankTransactionLocation | null;
 

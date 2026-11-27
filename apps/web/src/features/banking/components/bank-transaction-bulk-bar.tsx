@@ -1,8 +1,5 @@
-import {
-  BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS,
-  type BankTransactionCategory,
-} from '@tempo/contracts';
-import {Tag, X} from 'lucide-react';
+import {BANK_TRANSACTION_BULK_MAX_IDS, type BankTransactionCategory} from '@tempo/contracts';
+import {Eye, EyeOff, Tag, X} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 
 import {PendingLabel} from '@/components/shared/pending-label';
@@ -67,13 +64,58 @@ export function BankTransactionBulkBar({
         {/* On its own line, so a narrow bar keeps its actions in view. */}
         {tooMany && (
           <span className='block font-normal text-muted-foreground'>
-            Up to {BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS} at once
+            Up to {BANK_TRANSACTION_BULK_MAX_IDS} at once
           </span>
         )}
       </p>
       <span aria-hidden='true' className='mx-1 h-5 w-px shrink-0 bg-border' />
       <div className='flex min-w-0 items-center gap-1'>{children}</div>
     </div>
+  );
+}
+
+/** An action's label, read out but not shown on the narrowest phones, so every action keeps its place in the bar. */
+function BarLabel({children}: {children: ReactNode}) {
+  return <span className='max-[360px]:sr-only'>{children}</span>;
+}
+
+/**
+ * The bar's Leave out action, or Count in totals when every picked row is left out already. It applies at once; the
+ * rows show the result.
+ */
+export function BulkLeftOutAction({
+  tooMany,
+  allLeftOut,
+  isSaving,
+  onApply,
+}: {
+  tooMany: boolean;
+  /** Every picked row is left out, so the action counts them again. */
+  allLeftOut: boolean;
+  isSaving: boolean;
+  onApply: (leftOutOfTotals: boolean) => void;
+}) {
+  return (
+    <Button
+      variant='ghost'
+      disabled={isSaving || tooMany}
+      onClick={() => onApply(!allLeftOut)}
+      className='shrink-0'
+    >
+      {isSaving ? (
+        <PendingLabel>Saving…</PendingLabel>
+      ) : allLeftOut ? (
+        <>
+          <Eye aria-hidden='true' />
+          <BarLabel>Count in totals</BarLabel>
+        </>
+      ) : (
+        <>
+          <EyeOff aria-hidden='true' />
+          <BarLabel>Leave out</BarLabel>
+        </>
+      )}
+    </Button>
   );
 }
 
@@ -110,7 +152,7 @@ export function BulkCategoryAction({
       ) : (
         <>
           <Tag aria-hidden='true' />
-          Category
+          <BarLabel>Category</BarLabel>
         </>
       )}
     </Button>
