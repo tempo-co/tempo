@@ -43,6 +43,8 @@ export function AddDataProvider({children}: {children: ReactNode}) {
   const openerRef = useRef<HTMLElement | null>(null);
   // A second report of the same return (React's development double run) keeps the bank the first one read.
   const returnedBank = useRef<ConnectingBank | null>(null);
+  // Whether the empty Home is shown: the sheet reads it as it opens.
+  const firstRunRef = useRef(false);
 
   const ask = useCallback((next: AddDataAsk, event?: Opener) => {
     // From the click, not the focused element: Safari on iPhone does not focus a tapped button.
@@ -77,6 +79,9 @@ export function AddDataProvider({children}: {children: ReactNode}) {
         ask({kind: 'returned', result, bank});
       },
       importDropped: (files: File[]) => ask({kind: 'drop', files}),
+      setFirstRun: (shown: boolean) => {
+        firstRunRef.current = shown;
+      },
     }),
     [ask],
   );
@@ -99,6 +104,7 @@ export function AddDataProvider({children}: {children: ReactNode}) {
           <AddDataSheet
             ref={attach}
             openerRef={openerRef}
+            firstRunRef={firstRunRef}
             importOn={importOn}
             onConnect={connect}
             isStarting={isStarting}

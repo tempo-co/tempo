@@ -7,6 +7,7 @@ import type {
   BankImportError,
   BankImportLayout,
   BankImportNeverSentRow,
+  BankImportPreview,
   BankImportSummary,
   ConfirmBankImportLayoutProposalRequest,
   ResolveBankImportDoubtfulRowRequest,
@@ -88,7 +89,10 @@ export const IMPORTED_FILES: BankConnection = {
 
 export type ImportApi = {
   imports: BankImportSummary[];
+  /** The drops imported (`POST /bank-imports`). */
   uploads: Request[];
+  /** The drops read for Check what we found (`POST /bank-imports/preview`), refused ones included. */
+  previews: Request[];
   resolves: ResolveBankImportDoubtfulRowRequest[];
   /** The bodies of never-sent rows added, and how often the list of them was read. */
   adds: AddBankImportNeverSentRowsRequest[];
@@ -105,9 +109,57 @@ export type ImportApi = {
   removed: string[];
 };
 
+/** An answer to a drop: what the import replies, and what its preview replies before it. */
+export type UploadAnswer = ((route: Route, api: ImportApi) => Promise<void>) & {
+  /** A refusal answers the preview, and the drop is never imported. */
+  refusal?: true;
+  /** The summary the import replies with, which the preview describes. */
+  summary?: BankImportSummary;
+};
+
 /**
- * File import on: the import list, then `answer` for each upload in turn. Doubtful rows and their answers, and
- * undo, keep the list in step like the API does.
+ * What the preview of a drop the import answers with `summary` says: its accounts, the ones the import created as new,
+ * with the summary's rows and days.
+ */
+export function previewOf(summary: BankImportSummary = importSummary()): BankImportPreview {
+  const count = summary.accounts.length;
+  return {
+    rowCount: summary.rowsParsed,
+    dateFrom: summary.dateFrom,
+    dateTo: summary.dateTo,
+    accounts: summary.accounts.map((account, index) => {
+      // A found account as Accounts lists it, when it is one of the mocked ones.
+      const stored = account.created
+        ? undefined
+        : [...MOCK_CONNECTION.bankAccounts, ...IMPORTED_FILES.bankAccounts].find(
+            ({id}) => id === account.id,
+          );
+      const synced = !!stored && MOCK_CONNECTION.bankAccounts.includes(stored);
+      return {
+        id: account.created ? null : account.id,
+        name: stored ? stored.name : account.name,
+        alias: stored?.alias ?? null,
+        details: stored?.details ?? null,
+        cashAccountType: stored?.cashAccountType ?? null,
+        maskedIdentifier: stored?.maskedIdentifier ?? null,
+        currency: account.currency,
+        bankName: synced ? MOCK_CONNECTION.aspspName : null,
+        imported: !synced,
+        // The rows spread over the accounts, the first taking any left over.
+        rowCount:
+          Math.floor(summary.rowsParsed / count) + (index === 0 ? summary.rowsParsed % count : 0),
+        dateFrom: summary.dateFrom,
+        dateTo: summary.dateTo,
+      };
+    }),
+  };
+}
+
+/**
+ * File import on: the import list, then `answer` for each drop in turn. Each drop is read first (its preview): a
+ * refusal answers there and takes its turn; any other answer lets the preview through, described by its summary when
+ * it has one, and answers the import that follows. Doubtful rows and their answers, and undo, keep the list in step
+ * like the API does.
  */
 export async function mockFileImport(
   page: Page,
@@ -125,7 +177,7 @@ export async function mockFileImport(
     banksFailures = 0,
   }: {
     imports?: BankImportSummary[];
-    uploads?: ((route: Route, api: ImportApi) => Promise<void>)[];
+    uploads?: UploadAnswer[];
     doubtfulRows?: BankImportDoubtfulRow[];
     neverSentRows?: BankImportNeverSentRow[];
     /** Holds each add of never-sent rows until it resolves. */
@@ -147,6 +199,7 @@ export async function mockFileImport(
     added: new Set(),
     imports: [...imports],
     uploads: [],
+    previews: [],
     resolves: [],
     adds: [],
     neverSentReads: 0,
@@ -164,6 +217,15 @@ export async function mockFileImport(
     api.uploads.push(route.request());
     const answer = uploads.shift();
     if (!answer) throw new Error('Unexpected upload');
+    await answer(route, api);
+  });
+  await page.route(`${API_URL}/bank-imports/preview`, async (route) => {
+    if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
+    api.previews.push(route.request());
+    const answer = uploads[0];
+    if (!answer) throw new Error('Unexpected preview');
+    if (!answer.refusal) return fulfillJson(route, previewOf(answer.summary));
+    uploads.shift();
     await answer(route, api);
   });
   await page.route(`${API_URL}/bank-imports/*/doubtful-rows`, (route) =>
@@ -303,17 +365,33 @@ export async function mockSetBalance(
 }
 
 /** A drop the API imported: it heads the import list from then on. */
-export const created = (summary: BankImportSummary) => (route: Route, api: ImportApi) => {
-  api.imports = [summary, ...api.imports.filter(({id}) => id !== summary.id)];
-  return fulfillJson(route, summary, 201);
-};
-export const refused =
-  (error: Partial<BankImportError> & Pick<BankImportError, 'code'>) => (route: Route) =>
-    fulfillJson(
-      route,
-      {statusCode: 422, message: 'Refused.', file: null, ...error},
-      error.statusCode ?? 422,
-    );
+export const created = (summary: BankImportSummary): UploadAnswer =>
+  Object.assign(
+    (route: Route, api: ImportApi) => {
+      api.imports = [summary, ...api.imports.filter(({id}) => id !== summary.id)];
+      return fulfillJson(route, summary, 201);
+    },
+    {summary},
+  );
+/** A drop the API refused, as its preview already does. */
+export const refused = (
+  error: Partial<BankImportError> & Pick<BankImportError, 'code'>,
+): ((route: Route) => Promise<void>) & {refusal: true} =>
+  Object.assign(
+    (route: Route) =>
+      fulfillJson(
+        route,
+        {statusCode: 422, message: 'Refused.', file: null, ...error},
+        error.statusCode ?? 422,
+      ),
+    {refusal: true as const},
+  );
+
+/** Check what we found: its one Import, named for the drop's rows. */
+export async function importFound(dialog: Locator) {
+  await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
+  await dialog.getByRole('button', {name: /^Import [\d,]+ transactions?$/}).click();
+}
 
 /**
  * A balance field shows its currency inside, at the far right, over the padding its value scrolls short of; and

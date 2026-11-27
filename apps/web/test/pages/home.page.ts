@@ -10,7 +10,8 @@ export class HomePage {
   readonly welcomeToastDescription: Locator;
   readonly alreadyVerifiedToastTitle: Locator;
   readonly emptyStateTitle: Locator;
-  readonly addDataButton: Locator;
+  /** The empty Home's way into the first run: the bank picker. */
+  readonly chooseBankButton: Locator;
   readonly paceCard: Locator;
   readonly paceFigure: Locator;
   readonly accountsTotal: Locator;
@@ -27,9 +28,9 @@ export class HomePage {
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
     this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
     this.emptyStateTitle = page.getByRole('heading', {
-      name: 'Add data to see your month',
+      name: 'See where your money goes, from one bank statement',
     });
-    this.addDataButton = page.getByRole('main').getByRole('button', {name: 'Add data'});
+    this.chooseBankButton = page.getByRole('main').getByRole('button', {name: 'Choose your bank'});
     this.paceCard = this.card('Spending pace');
     this.paceFigure = this.paceCard.getByTestId('pace-figure');
     this.accountsTotal = this.card('Accounts').getByTestId('accounts-card-total');

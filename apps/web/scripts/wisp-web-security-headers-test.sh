@@ -258,7 +258,7 @@ print('wisp MCP proxy streaming and request limit: PASS')
 # A statement import, and the file sent to work out its columns, are larger than Nginx's default 1 MB request limit;
 # they must reach the API whole.
 upload = b'x' * (12 * 1024 * 1024)
-for path in ('/bank-imports', '/bank-imports/layout-proposals'):
+for path in ('/bank-imports', '/bank-imports/preview', '/bank-imports/layout-proposals'):
     imports = url.removesuffix('/mcp') + path
     with urllib.request.urlopen(urllib.request.Request(imports, data=upload, method='POST'), timeout=10) as response:
         assert response.status == 201, f'expected the {path} upload to reach the API, got {response.status}'

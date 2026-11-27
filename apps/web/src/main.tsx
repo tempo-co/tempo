@@ -13,6 +13,7 @@ import './index.css';
 import {queryClient, signOut} from './query-client';
 import {router} from './router';
 import {HttpError} from './utils/api';
+import {keepInstallPrompt} from './utils/installed-app';
 import {createOfflinePersistence, hasSavedAccount} from './utils/offline-storage';
 import {registerOfflineShell} from './utils/register-offline-shell';
 
@@ -31,6 +32,7 @@ if (!('locks' in navigator)) {
 } else {
   const persistOptions = createOfflinePersistence(queryClient, signOut);
   registerOfflineShell();
+  keepInstallPrompt();
 
   const appRoot = (
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>

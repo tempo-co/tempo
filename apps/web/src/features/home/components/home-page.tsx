@@ -1,8 +1,9 @@
-import {Check, Eye, LayoutGrid, Plus} from 'lucide-react';
+import type {BankConnection} from '@wisp/contracts';
+import {Check, Eye, LayoutGrid} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 
 import {AppBodyLayout} from '@/components/shared/layout/app-body';
-import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
+import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {useAddData} from '@/features/add-data/use-add-data';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
@@ -11,6 +12,7 @@ import {useGetRecurringSummary} from '@/features/banking/api/use-get-recurring-s
 import {isConnectedBank} from '@/features/banking/utils/bank-sync-status';
 import {useGetBankTransactionBreakdown} from '@/features/dashboard/api/use-get-bank-transaction-breakdown';
 import {useBankImports} from '@/features/file-import/api/use-bank-imports';
+import {useInstallCard} from '@/features/install/use-install';
 import {
   reportingCurrencyKnown,
   useFiguresCurrencyAccepted,
@@ -21,12 +23,14 @@ import {
   ReportingCurrencySetup,
 } from '@/features/reporting-currency/components/reporting-currency-setup';
 import {useCurrentAccount} from '@/hooks/use-current-account';
+import {useIsMobile} from '@/hooks/use-is-mobile';
 import {useIsWide} from '@/hooks/use-is-wide';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {useNow} from '@/hooks/use-now';
 
 import {useDataCoverage, useRecentTransactions, useSpendingPace} from '../api/use-home-reads';
 import {useHomeLayout} from '../use-home-layout';
+import {awaitingFirstFetch, isOnFirstFetch, onFirstFetch, withData} from '../utils/first-fetch';
 import {greeting} from '../utils/greeting';
 import {
   HOME_CARDS,
@@ -40,6 +44,7 @@ import {
 import {toDoRows} from '../utils/to-do-rows';
 import {AccountsCard} from './accounts-card';
 import {ComingUpCard} from './coming-up-card';
+import {DataOnItsWay, EmptyHome} from './first-run-home';
 import type {CardEditing} from './home-card';
 import {PaceCard} from './pace-card';
 import {RecentTransactionsCard} from './recent-transactions-card';
@@ -56,19 +61,31 @@ export function HomePage() {
   const reporting = useReportingCurrency();
   const {bankConnections, isError, error, refetch} = useGetAllBankConnections();
   const [editing, setEditing] = useState(false);
-  const title = <HomeTitle editing={editing} onEdit={setEditing} />;
 
   let body: ReactNode;
+  // Cards to customize only once Home shows them.
+  let cards = false;
+  let ownTitle = false;
   const connections = bankConnections?.filter(isConnectedBank);
   if (!reportingCurrencyKnown(reporting)) body = null;
   else if (isError && !bankConnections)
     body = <LoadErrorState title="Couldn't load your banks" error={error} onRetry={refetch} />;
-  else if (connections?.length === 0) body = <NoDataYet />;
+  else if (connections && withData(connections).length === 0) body = <EmptyHome />;
   else if (reporting.data?.setupRequired && reporting.data.currency === null)
     body = <ReportingCurrencySetup />;
   else if (reporting.data?.recalculating)
     body = <RecalculatingTotals currency={reporting.data.currency} />;
-  else body = <HomeCards connections={connections} editing={editing} />;
+  else if (connections && onFirstFetch(connections)) {
+    body = <FirstFetchHome connections={connections} editing={editing} onEdit={setEditing} />;
+    ownTitle = true;
+  } else {
+    body = <HomeCards connections={connections} editing={editing} />;
+    cards = true;
+  }
+  // A Home on a bank's first fetch has its own title, which says whether its cards show.
+  const title = ownTitle ? null : (
+    <HomeTitle editing={cards ? editing : undefined} onEdit={setEditing} />
+  );
 
   return (
     <AppBodyLayout>
@@ -80,40 +97,68 @@ export function HomePage() {
   );
 }
 
-/** "Good afternoon, Alex" when a name is set, otherwise the page's name; Customize beside it. */
-function HomeTitle({editing, onEdit}: {editing: boolean; onEdit: (editing: boolean) => void}) {
+/**
+ * "Good afternoon, Alex" when a name is set, otherwise the page's name beside Customize while Home shows its cards
+ * (`editing` set). Before then a nameless Home shows no title line, only the page's name for assistive technology.
+ */
+function HomeTitle({
+  editing,
+  onEdit,
+}: {
+  editing: boolean | undefined;
+  onEdit: (editing: boolean) => void;
+}) {
   const name = useCurrentAccount({skipFetch: true}).currentAccount?.name.trim().split(/\s+/)[0];
+  if (!name && editing === undefined) return <h1 className='sr-only'>Home</h1>;
   return (
     <header className='flex min-h-8 items-start justify-between gap-3'>
       <h1 className='min-w-0 truncate text-page-title'>
         {name ? `${greeting(new Date())}, ${name}` : 'Home'}
       </h1>
-      <Button
-        variant={editing ? 'default' : 'ghost'}
-        className='-my-1 shrink-0'
-        aria-pressed={editing}
-        onClick={() => onEdit(!editing)}
-      >
-        {editing ? <Check aria-hidden='true' /> : <LayoutGrid aria-hidden='true' />}
-        {editing ? 'Done' : 'Customize'}
-      </Button>
+      {editing !== undefined && (
+        <Button
+          variant={editing ? 'default' : 'ghost'}
+          className='-my-1 shrink-0'
+          aria-pressed={editing}
+          onClick={() => onEdit(!editing)}
+        >
+          {editing ? <Check aria-hidden='true' /> : <LayoutGrid aria-hidden='true' />}
+          {editing ? 'Done' : 'Customize'}
+        </Button>
+      )}
     </header>
   );
 }
 
-function NoDataYet() {
-  const {openMenu} = useAddData();
+/**
+ * Home while a bank is on its first fetch: it waits for the data instead of showing empty figures, unless transactions
+ * are already in (another bank's, or a file's), and then shows its cards.
+ */
+function FirstFetchHome({
+  connections,
+  editing,
+  onEdit,
+}: {
+  connections: BankConnection[];
+  editing: boolean;
+  onEdit: (editing: boolean) => void;
+}) {
+  const recent = useRecentTransactions();
+  const hasTransactions = recent.isError
+    ? true
+    : recent.total === undefined
+      ? undefined
+      : recent.total > 0;
+  const waiting = awaitingFirstFetch(connections, hasTransactions);
   return (
-    <StateMessage
-      icon={Plus}
-      title='Add data to see your month'
-      description='Import a statement file or connect a bank. Home then shows this month’s spending against your usual pace.'
-    >
-      <Button onClick={(event) => openMenu(event)}>
-        <Plus aria-hidden='true' />
-        Add data
-      </Button>
-    </StateMessage>
+    <>
+      <HomeTitle editing={waiting ? undefined : editing} onEdit={onEdit} />
+      {waiting ? (
+        <DataOnItsWay connections={connections.filter(isOnFirstFetch)} />
+      ) : (
+        <HomeCards connections={connections} editing={editing} />
+      )}
+    </>
   );
 }
 
@@ -147,6 +192,7 @@ function HomeCards({
   const recurring = useGetRecurringSummary(today);
   const review = useGetBankTransactionReviewCounts();
   const {reviewCounts} = review;
+  const install = useInstallCard(useIsMobile());
 
   // Figures read on the other side of a currency change wait for their refetch.
   const paceShown = pace.pace && accepted(pace.pace.baseCurrency) ? pace.pace : undefined;
@@ -162,7 +208,7 @@ function HomeCards({
   const hasData = recent.isError ? true : recent.total === undefined ? undefined : recent.total > 0;
   const rows =
     reviewCounts && hasData !== undefined
-      ? toDoRows({hasData, toCheck: reviewCounts.needsAttention})
+      ? toDoRows({hasData, toCheck: reviewCounts.needsAttention, install})
       : undefined;
 
   const runs = wide ? Object.values(visibleCards(layout)) : phoneRuns(layout);

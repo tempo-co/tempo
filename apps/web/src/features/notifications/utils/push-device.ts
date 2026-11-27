@@ -1,5 +1,7 @@
 import type {PushSubscriptionRegistration} from '@wisp/contracts';
 
+import {isAppleMobile, isStandalone} from '@/utils/installed-app';
+
 /**
  * Whether this browser can get Wisp's alerts, and if not, what would change that. iPhone and iPad deliver web push
  * only to apps added to the Home Screen on iOS 16.4 or later; on Android Wisp asks to be installed first, so alerts
@@ -8,20 +10,10 @@ import type {PushSubscriptionRegistration} from '@wisp/contracts';
 export type PushSupport =
   'supported' | 'ios-add-to-home-screen' | 'ios-update' | 'android-install' | 'unsupported';
 
-function isStandalone() {
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    (navigator as Navigator & {standalone?: boolean}).standalone === true
-  );
-}
-
 /** The iOS version an iPhone or iPad reports as major * 100 + minor (16.4 is 1604), or null for other devices. */
 function iosVersion(): number | null {
   const ua = navigator.userAgent;
-  // iPadOS reports a Mac user agent; a touch screen tells them apart.
-  const isIos =
-    /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  if (!isIos) return null;
+  if (!isAppleMobile()) return null;
   const match = /OS (\d+)[_.](\d+)/.exec(ua) ?? /Version\/(\d+)\.(\d+)/.exec(ua);
   return match ? Number(match[1]) * 100 + Number(match[2]) : null;
 }

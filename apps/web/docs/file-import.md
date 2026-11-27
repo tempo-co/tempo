@@ -39,16 +39,35 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   sent and no reply comes. The sent state says so again, with Done.
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
-  Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
-  screens get the button alone, full width. The picker accepts any extension, since banks name
+  Drag-over turns the rule to the ring token and the field to the accent wash. Touch screens and
+  windows narrower than 768px get a default `Alert` (`Info` glyph) that banking apps usually
+  can't export a statement but the bank's website can, then **Choose the file** alone, full width. The picker accepts any extension, since banks name
   their exports oddly. Files dragged over any signed-in page show a full-column overlay (dashed
   2px ring rule, page-field wash, "Drop to import") while the sheet is closed and no import runs;
-  a drop opens the sheet and imports at once. It is the only drop target outside the sheet.
-- **One sheet.** Choosing, importing, working out and checking the columns, the account
-  question, the summary (with the rows the bank never sent and the balance), the rows to check
+  a drop opens the sheet and reads the files at once. It is the only drop target outside the sheet.
+- **Check what we found.** Every drop is read first (`POST /bank-imports/preview`, "Finding
+  accounts and dates…") and imported only from this step: a line with the drop's transactions and
+  days ("Rename an account if you like"), then one bordered block per account it goes to, in the
+  summary's order: a name field (labelled "Name of account N", the account's name as Accounts
+  shows it), a `secondary` `New` or `Matched` badge, and a muted line with the bank, the account's details,
+  currency, its transactions and days. A muted line says the import can be undone from Accounts,
+  and the footer holds one **Import N transactions**. A name changed there is saved as the
+  account's own name once the import is in (the same write as Rename on Accounts: left empty or
+  typed as the account's own name, it goes back to that name; unchanged, nothing is saved), and a failed save says so in a toast. An import
+  refused as busy or failed for a lost connection stays on this step with the names typed, its
+  `Alert` (none when the shared toast already said so), and Import or Try again imports it as it
+  is; Add data reopens it there, and so does Check on the failure's toast when one shows. The back
+  arrow returns to the files. The account question's **Continue**, a page drop and Looks right
+  after working out the columns all come back here.
+- **First run.** While the empty Home shows, Add data opens the same steps in a centred dialog
+  (a bottom sheet on phones) instead of the side sheet. Its import shows "Building your Home", then
+  the dialog closes on the filled Home once the account list has the new accounts, and the summary
+  arrives as the toast.
+- **One sheet.** Choosing, reading, Check what we found, importing, working out and checking the
+  columns, the account question, the summary (with the rows the bank never sent and the balance), the rows to check
   and the undo confirmation are steps of the Add data sheet (a side sheet on desktop, one bottom sheet on
-  phones), each with a scrolling body and a footer that stays in reach. It never closes by itself.
-  Closing it does not cancel an upload; the outcome then arrives as a toast (View reopens the
+  phones), each with a scrolling body and a footer that stays in reach. It closes by itself only after a first run's import.
+  Closing it does not cancel an upload; the outcome then arrives as a toast (Check reopens Check what we found, View the
   summary), and Add data reopens at a running import or a refusal that kept its files. Focus
   returns to whatever opened it.
 - **Refusals.** A drop is all or nothing, so a refusal is a `destructive` `Alert` whose

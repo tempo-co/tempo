@@ -5,8 +5,8 @@ import {createHookHarness} from '../utils/hook-harness';
 
 type Controller = {importDropped: (files: File[]) => void};
 
-test('two drops before the page renders start one upload, the first', () => {
-  const uploads: string[][] = [];
+test('two drops before the page renders read one of them, the first', () => {
+  const reads: string[][] = [];
   class HttpError extends Error {}
   const {renderHook} = createHookHarness({
     '@/utils/api': {
@@ -17,9 +17,12 @@ test('two drops before the page renders start one upload, the first', () => {
       isAuthError: () => false,
     },
     '../api/use-import-files': {
-      useImportFiles: () => ({
-        importFiles: ({files}: {files: File[]}) => {
-          uploads.push(files.map(({name}) => name));
+      useImportFiles: () => ({importFiles: () => new Promise(() => undefined)}),
+    },
+    '../api/use-preview-files': {
+      usePreviewFiles: () => ({
+        previewFiles: ({files}: {files: File[]}) => {
+          reads.push(files.map(({name}) => name));
           return new Promise(() => undefined);
         },
       }),
@@ -40,5 +43,5 @@ test('two drops before the page renders start one upload, the first', () => {
   controller.importDropped([new File(['synthetic'], 'first.xml')]);
   controller.importDropped([new File(['synthetic'], 'second.xml')]);
 
-  expect(uploads).toEqual([['first.xml']]);
+  expect(reads).toEqual([['first.xml']]);
 });

@@ -1,4 +1,5 @@
 import {createServer} from 'node:http';
+
 import {bankLogoReference} from '/bank-logo-reference.ts';
 
 const streams = new Set();
@@ -20,7 +21,12 @@ const server = createServer((request, response) => {
     response.writeHead(204).end();
     return;
   }
-  if (request.method === 'POST' && ['/bank-imports', '/bank-imports/layout-proposals'].includes(request.url)) {
+  if (
+    request.method === 'POST' &&
+    ['/bank-imports', '/bank-imports/preview', '/bank-imports/layout-proposals'].includes(
+      request.url,
+    )
+  ) {
     let bytes = 0;
     request.on('data', (chunk) => (bytes += chunk.length));
     request.on('end', () => {

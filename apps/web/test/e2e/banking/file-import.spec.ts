@@ -6,6 +6,7 @@ import {
   type BankImportDoubtfulRow,
   type BankImportLayoutProposal,
   type BankImportNeverSentRow,
+  type UpdateBankAccountRequest,
 } from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
@@ -23,6 +24,7 @@ import {
   created,
   expectCurrencyInside,
   expectInsideViewport,
+  importFound,
   importSummary,
   mockFileImport,
   mockSetBalance,
@@ -197,12 +199,26 @@ test.describe('statement file import on Accounts', () => {
     expect(await page.getByRole('tab', {name: 'Imports'}).count()).toBe(0);
   });
 
-  test('imports chosen files and shows what they added, where they went and when', async ({
+  test('reads chosen files, lists the account they go to for renaming, then imports them and shows what they added, where they went and when', async ({
     page,
   }) => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     const summary = importSummary();
+    // The account a rename saves, which the connection list then lists.
+    let checking = CHECKING;
+    await mockBankConnections(page, () => [{...MOCK_CONNECTION, bankAccounts: [checking]}]);
+    const renames: unknown[] = [];
+    await page.route(
+      `${API_URL}/bank-connections/${MOCK_CONNECTION.id}/accounts/${CHECKING.id}`,
+      async (route) => {
+        expect(route.request().method()).toBe('PATCH');
+        const body = route.request().postDataJSON() as UpdateBankAccountRequest;
+        renames.push(body);
+        checking = {...CHECKING, alias: body.alias ?? null};
+        await fulfillJson(route, checking);
+      },
+    );
     const api = await mockFileImport(page, {
       uploads: [
         async (route, api) => {
@@ -234,6 +250,25 @@ test.describe('statement file import on Accounts', () => {
         statement('statement-july.xml'),
       ]);
 
+    // Read first: the account the files go to, already in Wisp, with their rows and days, and nothing imported.
+    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
+    await expect(dialog).toContainText(
+      '313 transactions from 1 May – 30 Oct 2026. Rename an account if you like.',
+    );
+    const found = dialog.getByTestId('bank-import-found-account');
+    await expect(found).toHaveCount(1);
+    await expect(found).toContainText('Matched');
+    await expect(found).toContainText(
+      'Mock ASPSP · Current account · ••1234 · EUR · 313 transactions · 1 May – 30 Oct 2026',
+    );
+    const name = found.getByRole('textbox', {name: 'Name of account 1'});
+    await expect(name).toHaveValue('Mock ASPSP checking account');
+    await expect(dialog).toContainText('You can undo this import from Accounts.');
+    expect(api.previews).toHaveLength(1);
+    expect(api.uploads).toHaveLength(0);
+    await name.fill('Example everyday account');
+    await dialog.getByRole('button', {name: 'Import 313 transactions'}).click();
+
     await expect(dialog.getByRole('button', {name: 'Importing…'})).toBeDisabled();
     await expect(
       dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
@@ -257,7 +292,7 @@ test.describe('statement file import on Accounts', () => {
     // holder name.
     const wentTo = summaryBody.getByTestId('bank-import-accounts').getByRole('listitem');
     await expect(wentTo).toHaveCount(1);
-    await expect(wentTo).toContainText('Mock ASPSP checking account');
+    await expect(wentTo).toContainText('Example everyday account');
     await expect(wentTo).toContainText('Current account · ••1234 · EUR · Mock ASPSP');
     await expect(wentTo.getByTestId('bank-logo')).toBeVisible();
     await expect(dialog.getByTestId('bank-import-undone')).toHaveCount(0);
@@ -268,10 +303,13 @@ test.describe('statement file import on Accounts', () => {
     await expect(dialog.getByText(/^Balance of/)).toHaveCount(0);
 
     expect(api.uploads).toHaveLength(1);
-    const form = sentForm(api.uploads[0]);
-    expect(form.files).toEqual(['statement-may.xml', 'statement-june.xml', 'statement-july.xml']);
-    // The bank picked for the drop goes with it.
-    expect(form.fields).toEqual({bankId: 'other'});
+    // The import sends the drop as it was read, with the bank picked for it; the name typed is saved on the account.
+    for (const request of [api.previews[0], api.uploads[0]]) {
+      const form = sentForm(request);
+      expect(form.files).toEqual(['statement-may.xml', 'statement-june.xml', 'statement-july.xml']);
+      expect(form.fields).toEqual({bankId: 'other'});
+    }
+    expect(renames).toEqual([{alias: 'Example everyday account'}]);
 
     // Done closes it, and focus returns to the button that opened it.
     await dialog.getByRole('button', {name: 'Done'}).click();
@@ -281,7 +319,7 @@ test.describe('statement file import on Accounts', () => {
     await page.getByRole('tab', {name: 'Imports'}).click();
     const row = page.getByTestId('bank-import-row').first();
     await expect(row).toContainText('3 files · 212 new');
-    await expect(row).toContainText('Today · Mock ASPSP checking account · 3 need a look');
+    await expect(row).toContainText('Today · Example everyday account · 3 need a look');
   });
 
   test('says when everything in the files was already there', async ({page}) => {
@@ -297,6 +335,7 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+    await importFound(dialog);
 
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
     await expect(dialog.getByText('Nothing new in these files')).toBeVisible();
@@ -335,6 +374,7 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-a.xml')]);
+    await importFound(dialog);
 
     const gaps = dialog.getByTestId('bank-import-statement-gaps');
     await expect(gaps.getByText('Some days are missing')).toBeVisible();
@@ -399,6 +439,7 @@ test.describe('statement file import on Accounts', () => {
     await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    await importFound(dialog);
 
     // Nothing waits for the owner: one folded line, not a row to check.
     const summaryBody = dialog.getByTestId('bank-import-summary');
@@ -526,6 +567,7 @@ test.describe('statement file import on Accounts', () => {
     await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    await importFound(dialog);
     const summaryBody = dialog.getByTestId('bank-import-summary');
     await summaryBody
       .getByRole('button', {name: 'Not added: 502 rows your bank never sent'})
@@ -609,6 +651,7 @@ test.describe('statement file import on Accounts', () => {
     await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('june.xml')]);
+    await importFound(dialog);
     const list = dialog.getByTestId('bank-import-never-sent');
     await list.getByRole('button', {name: 'Not added: 2 rows your bank never sent'}).click();
     await list.getByRole('button', {name: 'Add Example Fee on 3 Jun'}).click();
@@ -819,8 +862,11 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-april.xml')]);
+    await importFound(dialog);
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
-    expect(api.uploads).toHaveLength(2);
+    // The refused drop was only read; the one chosen after it was read, then imported.
+    expect(api.previews).toHaveLength(2);
+    expect(api.uploads).toHaveLength(1);
   });
 
   test('an old Excel file is refused with the formats to download instead', async ({page}) => {
@@ -982,13 +1028,15 @@ test.describe('statement file import on Accounts', () => {
     await expect(bank).toHaveText('ING');
 
     await dialog.getByRole('button', {name: 'Looks right'}).click();
+    await importFound(dialog);
 
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
     expect(api.confirms).toEqual([{bankName: 'ING'}]);
     // The saved proposal's banks are not read again.
     expect(api.banksReads).toBe(1);
-    // The same drop went again, unchanged.
-    expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
+    // The same drop was read again, unchanged, then imported.
+    expect([...api.previews, ...api.uploads].map((request) => sentForm(request).files)).toEqual([
+      ['statement-april.xml', 'export-example.csv'],
       ['statement-april.xml', 'export-example.csv'],
       ['statement-april.xml', 'export-example.csv'],
     ]);
@@ -1106,6 +1154,7 @@ test.describe('statement file import on Accounts', () => {
     );
 
     await confirm.click();
+    await importFound(dialog);
 
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     expect(api.confirms).toEqual([
@@ -1182,6 +1231,7 @@ test.describe('statement file import on Accounts', () => {
     await expect(preview.getByLabel('Bank name')).toHaveValue('example  bank');
     await expectNoHorizontalOverflow(page);
     await dialog.getByRole('button', {name: 'Looks right'}).click();
+    await importFound(dialog);
 
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     expect(api.confirms).toEqual([{bankName: 'example  bank'}]);
@@ -1235,7 +1285,8 @@ test.describe('statement file import on Accounts', () => {
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
     expect(api.rejects).toEqual([layoutProposal().id]);
     expect(api.confirms).toEqual([]);
-    expect(api.uploads).toHaveLength(1);
+    expect(api.previews).toHaveLength(1);
+    expect(api.uploads).toHaveLength(0);
   });
 
   test('says when a try at working out columns failed or found nothing, and when the limit allows another', async ({
@@ -1350,10 +1401,12 @@ test.describe('statement file import on Accounts', () => {
     const alert = dialog.getByRole('alert');
     await expect(alert.getByText('These files are too large together')).toBeVisible();
     await expect(alert).toContainText('Import them in smaller batches. Nothing was imported.');
+    expect(api.previews).toHaveLength(0);
     expect(api.uploads).toHaveLength(0);
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-a.xml')]);
+    await importFound(dialog);
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     expect(api.uploads).toHaveLength(1);
   });
@@ -1456,8 +1509,8 @@ test.describe('statement file import on Accounts', () => {
     await expect(tiles.nth(2).locator('svg.lucide-files')).toBeVisible();
     for (const [index, type] of ['wallet', 'piggy-bank', 'landmark'].entries())
       await expect(tiles.nth(index).locator(`svg.lucide-${type}`)).toBeVisible();
-    const importButton = dialog.getByRole('button', {name: 'Import', exact: true});
-    await expect(importButton).toBeDisabled();
+    const continueButton = dialog.getByRole('button', {name: 'Continue'});
+    await expect(continueButton).toBeDisabled();
 
     // Arrow keys move between the choices.
     await radios.first().focus();
@@ -1465,15 +1518,19 @@ test.describe('statement file import on Accounts', () => {
     await page.keyboard.press('ArrowDown');
     await expect(question.getByRole('radio', {name: /Rainy day/})).toBeChecked();
     await question.getByText('Example Holder', {exact: true}).click();
-    await expect(importButton).toBeEnabled();
-    await importButton.click();
+    await expect(continueButton).toBeEnabled();
+    await continueButton.click();
+    await importFound(dialog);
 
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
-    expect(api.uploads).toHaveLength(2);
-    const retry = sentForm(api.uploads[1]);
-    // The same file goes again, with the answer.
-    expect(retry.files).toEqual(['statement.csv']);
-    expect(JSON.parse(retry.fields.accountChoices)).toEqual({'Example Bank:EUR': CHECKING.id});
+    expect(api.previews).toHaveLength(2);
+    expect(api.uploads).toHaveLength(1);
+    // The same file is read again with the answer, then imported with it.
+    for (const request of [api.previews[1], api.uploads[0]]) {
+      const retry = sentForm(request);
+      expect(retry.files).toEqual(['statement.csv']);
+      expect(JSON.parse(retry.fields.accountChoices)).toEqual({'Example Bank:EUR': CHECKING.id});
+    }
   });
 
   test("shows a saved layout's rows for a file without a header or account, then sends the answer", async ({
@@ -1550,10 +1607,11 @@ test.describe('statement file import on Accounts', () => {
       await expectNoHorizontalOverflow(page);
     }
     await question.getByText('A new account').click();
-    await dialog.getByRole('button', {name: 'Import', exact: true}).click();
+    await dialog.getByRole('button', {name: 'Continue'}).click();
+    await importFound(dialog);
 
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
-    expect(JSON.parse(sentForm(api.uploads[1]).fields.accountChoices)).toEqual({
+    expect(JSON.parse(sentForm(api.uploads[0]).fields.accountChoices)).toEqual({
       'Example Bank:EUR': 'new',
     });
   });
@@ -1617,9 +1675,10 @@ test.describe('statement file import on Accounts', () => {
         .getByRole('group', {name: `Example Bank · ${currency}`})
         .getByText('A new account')
         .click();
-    await dialog.getByRole('button', {name: 'Import', exact: true}).click();
+    await dialog.getByRole('button', {name: 'Continue'}).click();
+    await importFound(dialog);
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
-    const retry = sentForm(api.uploads[2]);
+    const retry = sentForm(api.uploads[0]);
     expect(JSON.parse(retry.fields.accountChoices)).toEqual({
       'Example Bank:EUR': 'new',
       'Example Bank:USD': 'new',
@@ -1960,6 +2019,7 @@ test.describe('statement file import on Accounts', () => {
     await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xml')]);
+    await importFound(dialog);
 
     const prompt = dialog.getByTestId('bank-import-balances');
     const field = prompt.getByLabel('Balance of Example Card · EUR today');
@@ -2027,6 +2087,7 @@ test.describe('statement file import on Accounts', () => {
     await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog.getByTestId('bank-import-file-input').setInputFiles([statement('statement.xml')]);
+    await importFound(dialog);
     const prompt = dialog.getByTestId('bank-import-balances');
     await prompt.getByLabel('Balance of Example Card · EUR today').fill('-40.5');
     await prompt.getByRole('button', {name: 'Save'}).click();
@@ -2065,6 +2126,7 @@ test.describe('statement file import on Accounts', () => {
     await column.dispatchEvent('dragover', {dataTransfer: transfer});
     await column.dispatchEvent('drop', {dataTransfer: transfer});
     await expect(page.getByTestId('bank-import-page-drop')).toHaveCount(0);
+    await importFound(page.getByRole('dialog'));
     await expect(
       page.getByRole('dialog').getByRole('heading', {name: 'Imported 1 file'}),
     ).toBeVisible();
@@ -2100,6 +2162,7 @@ test.describe('statement file import on Accounts', () => {
       return data;
     });
     await area.dispatchEvent('drop', {dataTransfer: transfer});
+    await importFound(dialog);
     await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     expect(api.uploads).toHaveLength(1);
   });
@@ -2122,6 +2185,7 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('a.xml'), statement('b.xml'), statement('c.xml')]);
+    await importFound(dialog);
     await expect(dialog.getByRole('button', {name: 'Importing…'})).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -2154,6 +2218,7 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('a.xml'), statement('b.xml'), statement('c.xml')]);
+    await importFound(dialog);
     await expect(dialog.getByRole('button', {name: 'Importing…'})).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -2168,6 +2233,7 @@ test.describe('statement file import on Accounts', () => {
     await column.dispatchEvent('dragover', {dataTransfer: transfer});
     await column.dispatchEvent('drop', {dataTransfer: transfer});
     await expect(page.getByTestId('bank-import-page-drop')).toHaveCount(0);
+    expect(api.previews).toHaveLength(1);
     expect(api.uploads).toHaveLength(1);
 
     // The running import still owns the dialog, and its result arrives as before.
@@ -2187,8 +2253,12 @@ test.describe('statement file import on Accounts', () => {
     const api = await mockFileImport(page, {
       uploads: [
         refused({code: 'import_busy', statusCode: 503}),
-        // The proxy in front of the API answers with its own page, not a typed refusal.
-        (route) => route.fulfill({status: 413, contentType: 'text/html', body: '<html>413</html>'}),
+        // The proxy in front of the API answers the read with its own page, not a typed refusal.
+        Object.assign(
+          (route: Route) =>
+            route.fulfill({status: 413, contentType: 'text/html', body: '<html>413</html>'}),
+          {refusal: true as const},
+        ),
       ],
     });
     await page.goto('/accounts');
@@ -2208,16 +2278,36 @@ test.describe('statement file import on Accounts', () => {
     await expect(alert.getByText('These files are too large together')).toBeVisible();
     await expect(alert).toContainText('Import them in smaller batches. Nothing was imported.');
     await expect(dialog.getByRole('list', {name: 'Chosen files'})).toHaveCount(0);
-    expect(api.uploads).toHaveLength(2);
+    expect(api.previews).toHaveLength(2);
+    expect(api.uploads).toHaveLength(0);
   });
 
-  test('a server failure says so at the end of the dialog, and Try again sends the same files', async ({
+  test('a server failure after the sheet closed is told in a toast, Import a file reopens Check what we found with the name typed, and Try again imports the same files and settles the toast', async ({
     page,
   }) => {
+    const summary = importSummary({filesCount: 2});
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await mockBankConnections(page, () => [{...MOCK_CONNECTION, bankAccounts: [CHECKING]}]);
+    const renames: unknown[] = [];
+    await page.route(
+      `${API_URL}/bank-connections/${MOCK_CONNECTION.id}/accounts/${CHECKING.id}`,
+      async (route) => {
+        renames.push(route.request().postDataJSON());
+        await fulfillJson(route, {...CHECKING, alias: 'Example everyday account'});
+      },
+    );
     const api = await mockFileImport(page, {
       uploads: [
-        (route) => fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
-        created(importSummary({filesCount: 2})),
+        // The read goes through; the import after it fails on the server once the sheet has closed.
+        Object.assign(
+          async (route: Route) => {
+            await held;
+            await fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+          },
+          {summary},
+        ),
+        created(summary),
       ],
     });
     await page.goto('/accounts');
@@ -2225,40 +2315,97 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+    const name = dialog
+      .getByTestId('bank-import-found-account')
+      .getByRole('textbox', {name: 'Name of account 1'});
+    await name.fill('Example everyday account');
+    try {
+      await importFound(dialog);
+      await expect(dialog.getByRole('button', {name: 'Importing…'})).toBeDisabled();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+    } finally {
+      release();
+    }
 
+    // The sheet is closed, so the failure arrives as a toast.
+    const failed = page.getByText("Couldn't import these files");
+    await expect(failed).toBeVisible();
+    expect(await countAfterToasts(page, failed)).toBe(1);
+    // Import a file comes back to Check what we found as it was left, with why it failed.
+    await page.getByRole('button', {name: 'Import a file'}).first().click();
     const alert = dialog.getByRole('alert');
     await expect(alert.getByText("Couldn't import these files")).toBeVisible();
     await expect(alert).toContainText('The server ran into a problem.');
     await expect(alert).toContainText(/500 · \d{2}:\d{2}/);
-    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
+    await expect(name).toHaveValue('Example everyday account');
+    const found = dialog.getByTestId('bank-import-found-account');
     expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
-      (await boxOf(supportedFiles)).y + (await boxOf(supportedFiles)).height,
+      (await boxOf(found)).y + (await boxOf(found)).height,
     );
 
     await alert.getByRole('button', {name: 'Try again'}).click();
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
+    // The import is in, so the failure's toast leaves at once and cannot offer the drop again. The short wait keeps
+    // the toast's own timeout out of it.
+    await expect(
+      page.locator('[data-sonner-toast][data-removed="false"]', {
+        hasText: "Couldn't import these files",
+      }),
+    ).toHaveCount(0, {timeout: 500});
     expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
       ['statement-a.xml', 'statement-b.xml'],
       ['statement-a.xml', 'statement-b.xml'],
     ]);
+    expect(api.previews).toHaveLength(1);
+    expect(renames).toEqual([{alias: 'Example everyday account'}]);
   });
 
-  test('a lost connection keeps the chosen files for another try', async ({page}) => {
+  test('a rename that fails after the import says so once, and the import stands', async ({
+    page,
+  }) => {
+    await mockBankConnections(page, () => [{...MOCK_CONNECTION, bankAccounts: [CHECKING]}]);
+    await page.route(
+      `${API_URL}/bank-connections/${MOCK_CONNECTION.id}/accounts/${CHECKING.id}`,
+      (route) => fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+    );
+    await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
+    await page.goto('/accounts');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml')]);
+    await dialog
+      .getByTestId('bank-import-found-account')
+      .getByRole('textbox', {name: 'Name of account 1'})
+      .fill('Example everyday account');
+    await importFound(dialog);
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(
+      await countAfterToasts(page, page.getByText("Couldn't rename Mock ASPSP checking account")),
+    ).toBe(1);
+    await expect(
+      page.getByText('The import is done. Rename the account on Accounts.'),
+    ).toBeVisible();
+  });
+
+  test('a lost connection keeps Check what we found for another try', async ({page}) => {
     await mockFileImport(page, {uploads: [(route) => route.abort('failed')]});
     await page.goto('/accounts');
     const dialog = await openImport(page);
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+    await importFound(dialog);
 
     // The api wrapper says the change was not confirmed; the dialog adds no second message.
     await expect(page.getByText(/Your change was not confirmed/)).toBeVisible();
-    await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+    expect(await countAfterToasts(page, page.getByText(/Your change was not confirmed/))).toBe(1);
+    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
     await expect(dialog.getByRole('alert')).toHaveCount(0);
-    await expect(
-      dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
-    ).toHaveCount(2);
-    await expect(dialog.getByRole('button', {name: 'Import', exact: true})).toBeEnabled();
+    await expect(dialog.getByRole('button', {name: /^Import [\d,]+ transactions?$/})).toBeEnabled();
   });
 
   test('keeps the column preview and Your layouts inside 390px and 320px with long names and amounts', async ({
@@ -2453,13 +2600,21 @@ test.describe('statement file import on Accounts', () => {
       // Phones choose files with the picker alone, then see every name in the drop and keep the footer in reach.
       const dialog = await openImport(page);
       await expect(dialog.getByTestId('bank-import-drop-area')).toHaveCount(0);
-      const choose = dialog.getByRole('button', {name: 'Choose files'});
+      const choose = dialog.getByRole('button', {name: 'Choose the file'});
       expect((await boxOf(choose)).width).toBeGreaterThan(250);
       await dialog
         .getByTestId('bank-import-file-input')
         .setInputFiles(
           Array.from({length: 12}, (_, index) => statement(`${index}${LONG_NAME.slice(1)}`)),
         );
+      await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
+      await expectInsideViewport(
+        page,
+        dialog.getByRole('button', {name: /^Import [\d,]+ transactions$/}),
+      );
+      await expectNoHorizontalOverflow(page);
+      await expectNothingWiderThan(dialog);
+      await importFound(dialog);
       const pending = dialog.getByRole('button', {name: 'Importing…'});
       await expect(pending).toBeVisible();
       await expectInsideViewport(page, pending);

@@ -1,6 +1,12 @@
 import {createFileRoute} from '@tanstack/react-router';
 
-import {SettingsGroup} from '@/features/settings/components/settings-group';
+import {InstallButton} from '@/features/install/components/install-button';
+import {useInstallWay} from '@/features/install/use-install';
+import {
+  SettingsGroup,
+  SettingsList,
+  SettingsRow,
+} from '@/features/settings/components/settings-group';
 import {ThemeSwitcher} from '@/features/settings/components/theme-switcher';
 
 export const Route = createFileRoute('/settings/appearance/')({
@@ -8,13 +14,32 @@ export const Route = createFileRoute('/settings/appearance/')({
 });
 
 function SettingsAppearanceIndex() {
+  const installWay = useInstallWay();
   return (
-    <SettingsGroup
-      id='theme-heading'
-      title='Theme'
-      description='System follows your device’s light or dark setting.'
-    >
-      <ThemeSwitcher />
-    </SettingsGroup>
+    <div className='space-y-3'>
+      <SettingsGroup
+        id='theme-heading'
+        title='Theme'
+        description='System follows your device’s light or dark setting.'
+      >
+        <ThemeSwitcher />
+      </SettingsGroup>
+      {/* Shown where this device can install Wisp and it does not run installed already. */}
+      {(installWay === 'steps' || installWay === 'prompt') && (
+        <SettingsGroup id='install-heading' title='App'>
+          <SettingsList>
+            <SettingsRow
+              label='Install Wisp'
+              value='Opens full screen from its own icon, like an app.'
+              action={
+                <InstallButton way={installWay} variant='outline' size='sm'>
+                  Install
+                </InstallButton>
+              }
+            />
+          </SettingsList>
+        </SettingsGroup>
+      )}
+    </div>
   );
 }

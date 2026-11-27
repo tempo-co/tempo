@@ -20,6 +20,7 @@ import type {
 	BankImportLayoutProposal,
 	BankImportList,
 	BankImportNeverSentRow,
+	BankImportPreview,
 	BankImportSummary,
 } from '@wisp/contracts';
 import {isPickableBankId} from '@wisp/contracts';
@@ -30,7 +31,7 @@ import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';
 
 import {BankImportLayoutService} from '../bank-import-layout.service';
 import {BankImportRefusalException} from '../bank-import-refusal.exception';
-import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportService} from '../bank-import.service';
+import {ACCOUNT_CHOICE_NEW, AccountChoices, BankImportRequest, BankImportService} from '../bank-import.service';
 import {BankRequestService} from '../bank-request.service';
 import {AddBankImportNeverSentRowsDto} from './add-bank-import-never-sent-rows.dto';
 import {
@@ -71,23 +72,24 @@ export class BankImportController {
 		@Body(BANK_IMPORT_BANK_FIELD) bankField: unknown,
 		@CurrentAccount() account: Account,
 	): Promise<BankImportSummary> {
-		// Checked as an array: a tampered request must not pass a look-alike with a length.
-		if (!Array.isArray(files) || files.length === 0) throw new BadRequestException(NO_FILES);
-		const bankId = parseBankId(bankField);
-		if (bankAccountId !== undefined && !(typeof bankAccountId === 'string' && isUUID(bankAccountId))) {
-			throw new BadRequestException(INVALID_ACCOUNT_ID);
-		}
-		if (bankAccountId !== undefined && accountChoices !== undefined) {
-			throw new BadRequestException(ACCOUNT_FIELDS_COMBINED);
-		}
-		const buffers = files.map(({buffer}) => buffer);
-		if (accountChoices !== undefined) {
-			return this.bankImportService.importFiles(account.id, buffers, {
-				accountChoices: parseAccountChoices(accountChoices),
-				bankId,
-			});
-		}
-		return this.bankImportService.importFiles(account.id, buffers, {bankAccountId: bankAccountId ?? null, bankId});
+		const drop = parseDrop(files, bankAccountId, accountChoices, bankField);
+		return this.bankImportService.importFiles(account.id, drop.files, drop.request);
+	}
+
+	/** The same drop and fields as an upload, read and routed without writing anything, for the owner to check. */
+	@Post('preview')
+	@HttpCode(200)
+	@Throttle({default: {limit: 10, ttl: minutes(1)}})
+	@UseInterceptors(BankImportUploadInterceptor)
+	async previewFiles(
+		@UploadedFiles() files: {buffer: Buffer}[] | undefined,
+		@Body(BANK_IMPORT_ACCOUNT_FIELD) bankAccountId: unknown,
+		@Body(BANK_IMPORT_ACCOUNT_CHOICES_FIELD) accountChoices: unknown,
+		@Body(BANK_IMPORT_BANK_FIELD) bankField: unknown,
+		@CurrentAccount() account: Account,
+	): Promise<BankImportPreview> {
+		const drop = parseDrop(files, bankAccountId, accountChoices, bankField);
+		return this.bankImportService.previewFiles(account.id, drop.files, drop.request);
 	}
 
 	@Get()
@@ -203,6 +205,29 @@ export class BankImportController {
 	async undo(@Param('importId', UUID_PIPE) importId: string, @CurrentAccount() account: Account): Promise<void> {
 		await this.bankImportService.undo(account.id, importId);
 	}
+}
+
+/** An upload's files and text fields as sent, checked: the files, and where the drop goes. */
+function parseDrop(
+	files: {buffer: Buffer}[] | undefined,
+	bankAccountId: unknown,
+	accountChoices: unknown,
+	bankField: unknown,
+): {files: Buffer[]; request: BankImportRequest} {
+	// Checked as an array: a tampered request must not pass a look-alike with a length.
+	if (!Array.isArray(files) || files.length === 0) throw new BadRequestException(NO_FILES);
+	const bankId = parseBankId(bankField);
+	if (bankAccountId !== undefined && !(typeof bankAccountId === 'string' && isUUID(bankAccountId))) {
+		throw new BadRequestException(INVALID_ACCOUNT_ID);
+	}
+	if (bankAccountId !== undefined && accountChoices !== undefined) {
+		throw new BadRequestException(ACCOUNT_FIELDS_COMBINED);
+	}
+	const buffers = files.map(({buffer}) => buffer);
+	if (accountChoices !== undefined) {
+		return {files: buffers, request: {accountChoices: parseAccountChoices(accountChoices), bankId}};
+	}
+	return {files: buffers, request: {bankAccountId: bankAccountId ?? null, bankId}};
 }
 
 /** `bankId` as sent: a bank of the list or `other`, else refused; null when the owner picked none. */

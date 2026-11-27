@@ -8,6 +8,7 @@ import {routeMockedBankApp} from '../../utils/bank-connections';
 import {
   TODAY,
   created,
+  importFound,
   importSummary,
   mockFileImport,
   refused,
@@ -125,11 +126,14 @@ test.describe('the bank picker in Add data', () => {
     await expect(sheet.getByText(UNTESTED)).toHaveCount(0);
 
     await sheet.getByTestId('bank-import-file-input').setInputFiles([statement('rabobank.csv')]);
+    await importFound(sheet);
     await expect(sheet.getByRole('heading', {name: /^Imported/})).toBeVisible();
-    expect(sentForm(api.uploads[0])).toEqual({
-      files: ['rabobank.csv'],
-      fields: {bankId: RABOBANK.id},
-    });
+    // The drop is read, then imported, with the picked bank's id.
+    for (const request of [api.previews[0], api.uploads[0]])
+      expect(sentForm(request)).toEqual({
+        files: ['rabobank.csv'],
+        fields: {bankId: RABOBANK.id},
+      });
   });
 
   test('a file whose columns cannot be worked out leads to Tell us your bank, which sends no file', async ({
@@ -165,7 +169,7 @@ test.describe('the bank picker in Add data', () => {
     await expect(sheet.getByRole('alert')).toContainText(
       "Wisp couldn't work out this file's columns",
     );
-    expect(sentForm(api.uploads[0]).fields).toEqual({bankId: 'other'});
+    expect(sentForm(api.previews[0]).fields).toEqual({bankId: 'other'});
     expect(sentForm(api.proposals[0]).fields).toEqual({bankId: 'other'});
 
     await sheet.getByRole('button', {name: 'Tell us your bank'}).click();

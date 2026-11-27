@@ -7,15 +7,7 @@ import {mockJson} from '../../utils/api-mocks';
 import {expectLoaded, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.describe('Home without banks', () => {
-  test('offers to add data', async ({page, homePage, freshAccount}) => {
-    await page.goto('/');
-    await expect(homePage.accountEmail).toHaveText(freshAccount.email);
-
-    await expect(homePage.emptyStateTitle).toBeVisible();
-    await homePage.addDataButton.click();
-    await expect(page.getByTestId('add-data-sheet')).toBeVisible();
-  });
-
+  // The empty Home and the first run from it: `first-run.spec.ts`.
   test('ignores connections that never finished authorizing', async ({
     page,
     homePage,
