@@ -1,6 +1,6 @@
 import type {BankImportSummary} from '@tempo/contracts';
 import {FileUp} from 'lucide-react';
-import {useState} from 'react';
+import {type MouseEvent, useState} from 'react';
 
 import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
@@ -15,7 +15,7 @@ import {
   importHeadline,
   needALook,
 } from '../utils/import-format';
-import {IMPORT_TILE} from './file-choice';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {importAccountName, useKnownAccounts} from './use-known-accounts';
 import {UNDO_FAILED, useUndoImport} from './use-undo-import';
 
@@ -36,8 +36,9 @@ export function ImportsList({
   title = 'Imports',
 }: {
   query: ReturnType<typeof useBankImports>;
-  onOpen: (summary: BankImportSummary) => void;
-  onReview: (summary: BankImportSummary) => void;
+  /** `event` is the click, whose button focus returns to. */
+  onOpen: (summary: BankImportSummary, event: MouseEvent<HTMLElement>) => void;
+  onReview: (summary: BankImportSummary, event: MouseEvent<HTMLElement>) => void;
   accountId?: string;
   title?: string;
 }) {
@@ -86,8 +87,8 @@ export function ImportsList({
           <ImportRow
             key={summary.id}
             summary={summary}
-            onOpen={() => onOpen(summary)}
-            onReview={() => onReview(summary)}
+            onOpen={(event) => onOpen(summary, event)}
+            onReview={(event) => onReview(summary, event)}
           />
         ))}
       </ul>
@@ -121,8 +122,8 @@ function ImportRow({
   onReview,
 }: {
   summary: BankImportSummary;
-  onOpen: () => void;
-  onReview: () => void;
+  onOpen: (event: MouseEvent<HTMLElement>) => void;
+  onReview: (event: MouseEvent<HTMLElement>) => void;
 }) {
   const known = useKnownAccounts();
   const {undoOrThrow, describe, isPending} = useUndoImport();

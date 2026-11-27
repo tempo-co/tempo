@@ -296,7 +296,7 @@ for "All", "Show fewer" and "Open in Transactions". Pending states pair motion w
 
 `Tabs`: a 32px `muted` track (44px on phones), `text-body-small` triggers, the chosen one on
 `card`. `Switch`: 20 by 36px, `primary` when on. `Table`: `text-body` cells with 16px sides and
-32px `text-label` headers. `Sheet`: a side or bottom overlay styled like the dialog.
+32px `text-label` headers. `Sheet`: a side overlay like the dialog.
 
 ### Toggles and segmented controls
 
@@ -340,7 +340,7 @@ Bank artwork keeps its original colours on the `bank-logo-plate`, a light plate 
 
 ### Overlays
 
-`ResponsiveDialog` is a `Dialog` on desktop and a bottom `Drawer` on phones: `rounded-lg` on the
+`ResponsiveDialog` is a `Dialog` on desktop (`side`: right `Sheet`) and a bottom `Drawer` on phones: `rounded-lg` on the
 page background, a `text-section-title` title over a muted `text-body-small` description.
 `DropdownMenu`, `Popover`, `Select` content and `Tooltip` are `popover` surfaces with the control
 radius; items are `text-body` with segment corners, tooltips `text-body-small`.

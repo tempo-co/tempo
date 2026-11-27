@@ -1,6 +1,7 @@
 import {test as setup} from '@playwright/test';
 
 import {
+  BULK_CATEGORY_USER_AUTH_FILE,
   EMAIL_CHANGE_USER_AUTH_FILE,
   OWN_TRANSFER_USER_AUTH_FILE,
   PW_RESET_USER_AUTH_FILE,
@@ -9,6 +10,8 @@ import {
   VERIFIED_USER_AUTH_FILE,
 } from './constants/auth.constants';
 import {
+  BULK_CATEGORY_ACCOUNT_EMAIL,
+  BULK_CATEGORY_ACCOUNT_PASSWORD,
   EMAIL_CHANGE_ACCOUNT_EMAIL,
   EMAIL_CHANGE_ACCOUNT_PASSWORD,
   OWN_TRANSFER_ACCOUNT_EMAIL,
@@ -64,6 +67,12 @@ const userConfig: UserConfig[] = [
     email: OWN_TRANSFER_ACCOUNT_EMAIL,
     password: OWN_TRANSFER_ACCOUNT_PASSWORD,
     authFile: OWN_TRANSFER_USER_AUTH_FILE,
+    landsOn: 'home',
+  },
+  {
+    email: BULK_CATEGORY_ACCOUNT_EMAIL,
+    password: BULK_CATEGORY_ACCOUNT_PASSWORD,
+    authFile: BULK_CATEGORY_USER_AUTH_FILE,
     landsOn: 'home',
   },
   {

@@ -264,5 +264,50 @@ export type BankTransactionCategoryUpdate = {
 	applyToTransactionIds?: string[];
 };
 
+/** Most selected rows one bulk category takes. */
+export const BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS = 500;
+
+/**
+ * `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. The
+ * rows are either `transactionIds` (at most `BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS`) or every row the Transactions
+ * list's `filter` matches; a request sends exactly one.
+ */
+export type BankTransactionBulkCategoryPreviewRequest = BankTransactionBulkCategorySelection & {
+	category: BankTransactionCategory;
+};
+
+/** The rows a bulk category is for; the API refuses a request with both or neither (400). */
+export type BankTransactionBulkCategorySelection = {transactionIds?: string[]; filter?: BankTransactionFilter};
+
+/** One of the owner's other rows from the selected rows' payees that changing all of them would change. */
+export type BankTransactionBulkCategoryPreviewTransaction = BankTransactionCategoryImpactTransaction & {
+	/** `APPLY` sets `appliedCategory`; `RECHECK` sends the row back to AI categorization (its payee's choices disagree). */
+	action: ManualCategoryFollowUpAction;
+	/** The category `APPLY` sets; `null` for `RECHECK`. */
+	appliedCategory: BankTransactionCategory | null;
+};
+
+/** `POST /bank-transactions/bulk-category/preview`. */
+export type BankTransactionBulkCategoryPreview = {
+	/** The rows past the selection that `ALL` changes, newest first by transaction date (then booking date), capped at 500. */
+	transactions: BankTransactionBulkCategoryPreviewTransaction[];
+	/** Every such row, including any past the cap; `ALL` changes only the listed ones. */
+	total: number;
+	/** How many rows the selection holds: the ids sent, or the rows the filter matches now. */
+	selected: number;
+};
+
+/** `SELECTED` changes only the selected rows; `ALL` also changes the rows the preview lists. */
+export const BANK_TRANSACTION_BULK_CATEGORY_SCOPES = ['SELECTED', 'ALL'] as const;
+export type BankTransactionBulkCategoryScope = (typeof BANK_TRANSACTION_BULK_CATEGORY_SCOPES)[number];
+
+/** `PATCH /bank-transactions/bulk-category` body. */
+export type BankTransactionBulkCategoryUpdate = BankTransactionBulkCategoryPreviewRequest & {
+	scope: BankTransactionBulkCategoryScope;
+};
+
+/** `PATCH /bank-transactions/bulk-category`: how many rows the write changed, the selection included. */
+export type BankTransactionBulkCategoryResult = {updated: number};
+
 /** `PATCH /bank-transactions/:id/own-transfer` body; `null` clears the owner's override. */
 export type BankTransactionOwnTransferUpdate = {override: OwnTransferOverride | null};

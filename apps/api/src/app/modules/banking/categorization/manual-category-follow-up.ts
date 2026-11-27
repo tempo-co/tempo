@@ -60,19 +60,8 @@ export function whereManualCategoryFollowUpCandidates<T extends WhereExpressionB
 		transactionIds?: readonly string[];
 	},
 ): T {
-	query
-		.where('"merchantKey" = :merchantKey', {merchantKey})
-		.andWhere(
-			`"bankAccountId" IN (
-				SELECT bank_account.id FROM bank_accounts bank_account
-				INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
-				WHERE connection."accountId" = :accountId
-			)`,
-			{accountId},
-		)
-		.andWhere(modelCategorizableSql())
-		.andWhere('"categoryStatus" IN (:...followUpStatuses)', {followUpStatuses: FOLLOW_UP_STATUSES})
-		.andWhere('"categoryInputHash" IS NOT NULL');
+	query.where('"merchantKey" = :merchantKey', {merchantKey});
+	whereFollowUpWritable(query, accountId);
 	if (followUp.action === 'APPLY') {
 		query.andWhere(
 			// A row that already has the category keeps its source: offering it would change nothing visible.
@@ -86,4 +75,73 @@ export function whereManualCategoryFollowUpCandidates<T extends WhereExpressionB
 		query.andWhere('id IN (:...followUpTransactionIds)', {followUpTransactionIds: transactionIds});
 	}
 	return query;
+}
+
+/**
+ * The follow-ups of one bulk category for the selected rows' merchants. Every selected row counts as the owner's
+ * choice of `category`, so a merchant whose choices agree applies `category` itself; the others are rechecked.
+ */
+export type BulkCategoryFollowUps = {
+	category: BankTransactionCategory;
+	applyMerchantKeys: readonly string[];
+	recheckMerchantKeys: readonly string[];
+};
+
+/**
+ * The rows a bulk category's follow-ups may change, under one correction's rules
+ * (`whereManualCategoryFollowUpCandidates`), leaving out the selected rows themselves. `transactionIds` narrows it to
+ * those rows. Column names are unqualified, so the query must select from `bank_transactions` alone.
+ */
+export function whereBulkCategoryFollowUpCandidates<T extends WhereExpressionBuilder>(
+	query: T,
+	{
+		accountId,
+		followUps: {category, applyMerchantKeys, recheckMerchantKeys},
+		selectedIds,
+		transactionIds,
+	}: {
+		accountId: string;
+		followUps: BulkCategoryFollowUps;
+		selectedIds: readonly string[];
+		transactionIds?: readonly string[];
+	},
+): T {
+	const apply =
+		applyMerchantKeys.length > 0
+			? `("merchantKey" IN (:...applyMerchantKeys) AND "category" IS DISTINCT FROM :followUpCategory)`
+			: null;
+	const recheck =
+		recheckMerchantKeys.length > 0
+			? `("merchantKey" IN (:...recheckMerchantKeys) AND "categorySource" = 'HISTORY')`
+			: null;
+	query.where(`(${[apply, recheck].filter(Boolean).join(' OR ') || 'FALSE'})`, {
+		applyMerchantKeys,
+		recheckMerchantKeys,
+		followUpCategory: category,
+	});
+	whereFollowUpWritable(query, accountId);
+	// An array parameter, so a filter's thousands of selected rows stay one bind value.
+	query.andWhere('NOT (id = ANY(:selectedIds))', {selectedIds});
+	if (transactionIds) {
+		query.andWhere(transactionIds.length > 0 ? 'id IN (:...followUpTransactionIds)' : 'FALSE', {
+			followUpTransactionIds: transactionIds,
+		});
+	}
+	return query;
+}
+
+/** The owner's rows a follow-up may write: not manual, not an own transfer or exchange, in a status automation writes. */
+function whereFollowUpWritable(query: WhereExpressionBuilder, accountId: string): void {
+	query
+		.andWhere(
+			`"bankAccountId" IN (
+				SELECT bank_account.id FROM bank_accounts bank_account
+				INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
+				WHERE connection."accountId" = :accountId
+			)`,
+			{accountId},
+		)
+		.andWhere(modelCategorizableSql())
+		.andWhere('"categoryStatus" IN (:...followUpStatuses)', {followUpStatuses: FOLLOW_UP_STATUSES})
+		.andWhere('"categoryInputHash" IS NOT NULL');
 }

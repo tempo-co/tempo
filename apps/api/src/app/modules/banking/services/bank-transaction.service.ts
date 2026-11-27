@@ -6,6 +6,7 @@ import type {
 	BankTransactionCategorizationStatus,
 	BankTransactionCategory,
 	BankTransactionCategoryImpact,
+	BankTransactionCategoryImpactTransaction,
 	BankTransactionCounterpart,
 	BankTransactionOwnTransfer,
 	BankTransactionRecurring,
@@ -146,15 +147,7 @@ export class BankTransactionService {
 		return {
 			action: followUp?.action ?? null,
 			category: followUp?.action === 'APPLY' ? followUp.category : null,
-			transactions: transactions.map((row) => ({
-				id: row.id,
-				transactionDate: row.transactionDate,
-				bookingDate: row.bookingDate,
-				displayDescription: row.displayDescription,
-				amount: row.amount,
-				currency: row.currency,
-				...toCategorizationFields(row),
-			})),
+			transactions: transactions.map(toCategoryImpactTransaction),
 			total,
 		};
 	}
@@ -326,6 +319,19 @@ export class BankTransactionService {
 			remittanceInformation: transaction.remittanceInformation,
 		};
 	}
+}
+
+/** A row a category change would also change, as the correction previews list it. */
+export function toCategoryImpactTransaction(row: BankTransaction): BankTransactionCategoryImpactTransaction {
+	return {
+		id: row.id,
+		transactionDate: row.transactionDate,
+		bookingDate: row.bookingDate,
+		displayDescription: row.displayDescription,
+		amount: row.amount,
+		currency: row.currency,
+		...toCategorizationFields(row),
+	};
 }
 
 /** The stored categorization columns as the API reports them; a row categorization has not reached is PENDING. */

@@ -21,6 +21,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
+import {SheetContent} from '@/components/ui/sheet';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {cn} from '@/utils/cn';
 
@@ -31,6 +32,8 @@ interface BaseProps {
 interface RootResponsiveDialogProps extends BaseProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** On desktop, a sheet along the window's right edge instead of a centred dialog; phones keep the bottom sheet. */
+  side?: boolean;
 }
 
 interface ResponsiveDialogProps extends BaseProps {
@@ -40,8 +43,13 @@ interface ResponsiveDialogProps extends BaseProps {
   'data-testid'?: string;
 }
 
-const ResponsiveDialogContext = React.createContext<{isDesktop: boolean; close: () => void}>({
+const ResponsiveDialogContext = React.createContext<{
+  isDesktop: boolean;
+  side: boolean;
+  close: () => void;
+}>({
   isDesktop: false,
+  side: false,
   close: () => {},
 });
 
@@ -58,7 +66,12 @@ const useResponsiveDialogContext = () => {
   return context;
 };
 
-const ResponsiveDialog = ({children, open: openProp, onOpenChange}: RootResponsiveDialogProps) => {
+const ResponsiveDialog = ({
+  children,
+  open: openProp,
+  onOpenChange,
+  side = false,
+}: RootResponsiveDialogProps) => {
   const isDesktop = !useIsMobile();
   const ResponsiveDialog = isDesktop ? Dialog : Drawer;
   // Without an `open` from the caller, an open dialog closes when it swaps between dialog and drawer.
@@ -72,7 +85,7 @@ const ResponsiveDialog = ({children, open: openProp, onOpenChange}: RootResponsi
   };
 
   return (
-    <ResponsiveDialogContext.Provider value={{isDesktop, close: () => setOpen(false)}}>
+    <ResponsiveDialogContext.Provider value={{isDesktop, side, close: () => setOpen(false)}}>
       <ResponsiveDialog open={open} onOpenChange={setOpen} {...(!isDesktop && {autoFocus: true})}>
         {children}
       </ResponsiveDialog>
@@ -130,8 +143,8 @@ const ResponsiveDialogContent = ({
   /** Replaces focusing the first control on open; call `preventDefault` and focus something else. */
   onOpenAutoFocus?: (event: Event) => void;
 }) => {
-  const {isDesktop, close} = useResponsiveDialogContext();
-  const ResponsiveDialogContent = isDesktop ? DialogContent : DrawerContent;
+  const {isDesktop, side, close} = useResponsiveDialogContext();
+  const ResponsiveDialogContent = !isDesktop ? DrawerContent : side ? SheetContent : DialogContent;
   const contentRef = React.useRef<HTMLDivElement | null>(null);
   const closeRef = React.useRef(close);
   React.useEffect(() => {
@@ -159,6 +172,8 @@ const ResponsiveDialogContent = ({
       className={className}
       onInteractOutside={keepOpenForToasts}
       onEscapeKeyDown={escapeToTopmost}
+      // Toasts move clear of a side sheet (index.css).
+      data-side-sheet={isDesktop && side ? '' : undefined}
       {...props}
     >
       {children}

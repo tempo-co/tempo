@@ -1,7 +1,7 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
 import type {BankTransactionCategory} from '@tempo/contracts';
-import {Raw, Repository} from 'typeorm';
+import {EntityManager, Raw, Repository} from 'typeorm';
 
 import {BankTransaction} from '../bank-transaction.entity';
 import {safeErrorName} from '../banking.utils';
@@ -14,11 +14,25 @@ import {CategorizationContextLoader, transactionDateSql} from './categorization-
 import {CategorizationScheduler, ManualCategoryFollowUpJobData} from './categorization-scheduler.service';
 import {historyCategoryValues, historyRecheckValues, manualCategoryValues} from './category-fields';
 import {
+	BulkCategoryFollowUps,
 	MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS,
 	ManualCategoryFollowUp,
 	planManualCategoryFollowUp,
+	whereBulkCategoryFollowUpCandidates,
 	whereManualCategoryFollowUpCandidates,
 } from './manual-category-follow-up';
+
+/** Matches a row's `bankAccountId` against the owner's accounts. */
+function ownedBankAccountId(accountId: string) {
+	return Raw(
+		(column) => `${column} IN (
+			SELECT bank_account.id FROM bank_accounts bank_account
+			INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
+			WHERE connection."accountId" = :accountId
+		)`,
+		{accountId},
+	);
+}
 
 /** The rows a correction would change on the owner's other transactions from the same merchant. */
 export type ManualCategoryPreview = {
@@ -52,7 +66,7 @@ export class ManualCategoryService {
 		if (!merchantKey) return {followUp: null, transactions: [], total: 0};
 		const counts = (
 			await this.contextLoader.loadManualCategoryCounts(accountId, [merchantKey], {
-				transactionId: transaction.id,
+				transactionIds: [transaction.id],
 				category,
 			})
 		).get(merchantKey);
@@ -85,6 +99,133 @@ export class ManualCategoryService {
 	}
 
 	/**
+	 * Plans a bulk category on the owner's selected rows: per merchant of the selection, the follow-up its other rows
+	 * would get with every selected row counted as the owner's choice of `category`, under one correction's rules. A
+	 * merchant whose choices then disagree is rechecked, or left alone with AI categorization off.
+	 */
+	async planBulkCategory(
+		accountId: string,
+		selected: readonly Pick<BankTransaction, 'id' | 'merchantKey'>[],
+		category: BankTransactionCategory,
+	): Promise<BulkCategoryFollowUps> {
+		const merchantKeys = [...new Set(selected.flatMap(({merchantKey}) => (merchantKey ? [merchantKey] : [])))];
+		const followUps = {category, applyMerchantKeys: [] as string[], recheckMerchantKeys: [] as string[]};
+		if (merchantKeys.length === 0) return followUps;
+		const counts = await this.contextLoader.loadManualCategoryCounts(accountId, merchantKeys, {
+			transactionIds: selected.map(({id}) => id),
+			category,
+		});
+		for (const merchantKey of merchantKeys) {
+			const followUp = planManualCategoryFollowUp(counts.get(merchantKey), this.scheduler.isEnabled());
+			if (followUp?.action === 'APPLY') followUps.applyMerchantKeys.push(merchantKey);
+			else if (followUp) followUps.recheckMerchantKeys.push(merchantKey);
+		}
+		return followUps;
+	}
+
+	/**
+	 * Lists the owner's other rows from the selection's merchants that a bulk category's follow-ups would change, newest
+	 * first and capped as one correction's preview is, without writing anything.
+	 */
+	async findBulkCategoryFollowUps(
+		accountId: string,
+		followUps: BulkCategoryFollowUps,
+		selectedIds: readonly string[],
+	): Promise<{transactions: BankTransaction[]; total: number}> {
+		const [transactions, total] = await whereBulkCategoryFollowUpCandidates(
+			this.repository.createQueryBuilder('transaction'),
+			{accountId, followUps, selectedIds},
+		)
+			.select([
+				'transaction.id',
+				'transaction.bankAccountId',
+				'transaction.merchantKey',
+				'transaction.transactionDate',
+				'transaction.bookingDate',
+				'transaction.displayDescription',
+				'transaction.amount',
+				'transaction.currency',
+				'transaction.category',
+				'transaction.categoryStatus',
+				'transaction.categorySource',
+			])
+			.orderBy(transactionDateSql(), 'DESC', 'NULLS FIRST')
+			.addOrderBy('transaction.id', 'DESC')
+			.take(MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS)
+			.getManyAndCount();
+		return {transactions, total};
+	}
+
+	/**
+	 * Writes a bulk category inside the caller's transaction: every selected row takes the owner's manual `category`,
+	 * then the listed follow-up rows take their follow-up (checked again against its rules, so a row that changed since
+	 * the preview is left alone). Returns how many rows changed, and the rechecked ids to enqueue once it commits.
+	 */
+	async writeBulkCategory(
+		manager: EntityManager,
+		accountId: string,
+		selected: readonly BankTransaction[],
+		followUps: BulkCategoryFollowUps,
+		followUpIds: readonly string[],
+	): Promise<{updated: number; recheckIds: string[]}> {
+		const repository = manager.getRepository(BankTransaction);
+		// One statement for the whole selection, however large: each row takes its own input hash from the map.
+		const inputHashes = Object.fromEntries(
+			selected.map((transaction) => [transaction.id, createBankTransactionCategorizationInputHash(transaction)]),
+		);
+		const rowInputHashSql = () => 'CAST(:inputHashes AS jsonb) ->> CAST("id" AS text)';
+		const result = await repository
+			.createQueryBuilder()
+			.update(BankTransaction)
+			.set({
+				...manualCategoryValues(followUps.category, ''),
+				categoryInputHash: rowInputHashSql,
+				categoryAppliedInputHash: rowInputHashSql,
+			})
+			.where('id = ANY(:selectedIds)', {selectedIds: selected.map(({id}) => id)})
+			.andWhere(
+				`"bankAccountId" IN (
+					SELECT bank_account.id FROM bank_accounts bank_account
+					INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
+					WHERE connection."accountId" = :accountId
+				)`,
+				{accountId},
+			)
+			.setParameter('inputHashes', JSON.stringify(inputHashes))
+			.execute();
+		let updated = result.affected ?? 0;
+		if (followUpIds.length === 0) return {updated, recheckIds: []};
+
+		const candidates = {accountId, selectedIds: selected.map(({id}) => id), transactionIds: followUpIds};
+		if (followUps.applyMerchantKeys.length > 0) {
+			const applied = await whereBulkCategoryFollowUpCandidates(
+				repository.createQueryBuilder().update(BankTransaction),
+				{...candidates, followUps: {...followUps, recheckMerchantKeys: []}},
+			)
+				.set(
+					historyCategoryValues(
+						followUps.category,
+						BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROVIDER,
+						BANK_TRANSACTION_CATEGORIZATION_MANUAL_HISTORY_PROMPT_VERSION,
+					),
+				)
+				.execute();
+			updated += applied.affected ?? 0;
+		}
+		if (followUps.recheckMerchantKeys.length === 0) return {updated, recheckIds: []};
+		const rechecked = await whereBulkCategoryFollowUpCandidates(
+			repository.createQueryBuilder().update(BankTransaction),
+			{...candidates, followUps: {...followUps, applyMerchantKeys: []}},
+		)
+			// The category stays until the model replaces it, so a failed enqueue never leaves a row empty.
+			.set(historyRecheckValues())
+			.returning(['id'])
+			.execute();
+		const recheckIds = ((rechecked.raw ?? []) as {id: string}[]).map(({id}) => id);
+		return {updated: updated + recheckIds.length, recheckIds};
+	}
+
+	/**
 	 * Saves the owner's manual category on an owned transaction, then applies the follow-up only to the selected rows
 	 * from the same merchant. Rows that are not selected keep their category and are not remembered, so a later
 	 * correction offers them again. Returns false when the row no longer exists. The owner's choice is kept even when
@@ -101,14 +242,7 @@ export class ManualCategoryService {
 		const result = await this.repository.update(
 			{
 				id: transaction.id,
-				bankAccountId: Raw(
-					(column) => `${column} IN (
-						SELECT bank_account.id FROM bank_accounts bank_account
-						INNER JOIN bank_connections connection ON connection.id = bank_account."bankConnectionId"
-						WHERE connection."accountId" = :accountId
-					)`,
-					{accountId},
-				),
+				bankAccountId: ownedBankAccountId(accountId),
 			},
 			values,
 		);

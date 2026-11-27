@@ -30,7 +30,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
-    const picker = page.getByTestId('bank-connection-picker');
+    const picker = page.getByTestId('add-data-sheet');
     await expect(picker).toBeVisible();
     await picker.evaluate(async (element) => {
       await Promise.all(element.getAnimations().map((animation) => animation.finished));

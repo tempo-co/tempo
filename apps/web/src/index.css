@@ -701,3 +701,10 @@
     @apply font-sans;
   }
 }
+
+/* A side sheet runs along the right edge, so toasts move to the left edge while one is open, clear of its footer.
+   Unlayered, like Sonner's injected position, which this outranks by specificity. */
+body:has([data-side-sheet][data-state='open']) [data-sonner-toaster][data-x-position='right'] {
+  right: auto;
+  left: var(--offset-left);
+}

@@ -22,7 +22,7 @@ import {
   useResolveDoubtfulRow,
 } from '../api/use-bank-import-doubtful-rows';
 import {formatCount, plural} from '../utils/import-format';
-import {IMPORT_TILE} from './file-choice';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {useKnownAccounts} from './use-known-accounts';
 
 /**

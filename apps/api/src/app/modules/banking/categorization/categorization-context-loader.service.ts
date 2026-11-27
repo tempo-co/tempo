@@ -284,19 +284,19 @@ export class CategorizationContextLoader {
 	}
 
 	/**
-	 * Counts the owner's reusable manual categories per merchant key. With a `correction`, that row counts as if the
-	 * owner had already set it manually to that category, under the same rules as every other manual row.
+	 * Counts the owner's reusable manual categories per merchant key. With a `correction`, its rows count as if the
+	 * owner had already set them manually to that category, under the same rules as every other manual row.
 	 */
 	async loadManualCategoryCounts(
 		accountId: string,
 		merchantKeys: readonly string[],
-		correction?: {transactionId: string; category: BankTransactionCategory},
+		correction?: {transactionIds: readonly string[]; category: BankTransactionCategory},
 	): Promise<Map<string, ManualCategoryCounts>> {
 		const category = correction
-			? 'CASE WHEN transaction.id = :correctedId THEN :correctedCategory ELSE transaction.category END'
+			? 'CASE WHEN transaction.id = ANY(:correctedIds) THEN :correctedCategory ELSE transaction.category END'
 			: 'transaction.category';
 		const isManual = correction
-			? '(transaction."categorySource" = :manualSource OR transaction.id = :correctedId)'
+			? '(transaction."categorySource" = :manualSource OR transaction.id = ANY(:correctedIds))'
 			: 'transaction."categorySource" = :manualSource';
 		const rows = await this.merchantHistoryQuery(accountId, merchantKeys, category)
 			.select('transaction.merchantKey', 'merchantKey')
@@ -304,7 +304,7 @@ export class CategorizationContextLoader {
 			.addSelect('COUNT(*)::int', 'count')
 			.andWhere(isManual, {
 				manualSource: 'MANUAL',
-				...(correction && {correctedId: correction.transactionId, correctedCategory: correction.category}),
+				...(correction && {correctedIds: correction.transactionIds, correctedCategory: correction.category}),
 			})
 			.groupBy('transaction."merchantKey"')
 			.addGroupBy(category)

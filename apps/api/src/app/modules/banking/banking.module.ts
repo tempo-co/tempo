@@ -55,6 +55,7 @@ import {BankingConsentRevocationModule} from './services/banking-consent-revocat
 import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {BankingSyncProcessor} from './services/banking-sync.processor';
 import {BankingSyncService} from './services/banking-sync.service';
+import {BulkCategoryService} from './services/bulk-category.service';
 import {DerivedDataRefreshService} from './services/derived-data-refresh.service';
 import {FileAccountBalanceService} from './services/file-account-balance.service';
 import {FxRateService} from './services/fx-rate.service';
@@ -107,6 +108,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		BankingSyncQueueService,
 		BankingSyncProcessor,
 		BankTransactionService,
+		BulkCategoryService,
 		BankTransactionSummaryService,
 		BankTransactionHistoryService,
 		MerchantSpendingService,

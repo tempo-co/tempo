@@ -55,6 +55,14 @@ const FRESH: ImportStep = {kind: 'choose', files: [], failure: null};
 /** Steps a drop on the page does not interrupt. */
 export const BUSY: readonly ImportStep['kind'][] = ['importing', 'proposing'];
 
+/**
+ * A step Import a file opens at again rather than starting fresh: an import still running, or a refusal that kept its
+ * files to try again, such as after closing the sheet while columns were worked out.
+ */
+export const isUnsettled = (step: ImportStep) =>
+  BUSY.includes(step.kind) ||
+  (step.kind === 'choose' && step.failure !== null && step.files.length > 0);
+
 export const ACCOUNT_QUESTION_TITLE = 'Which account is this?';
 export const IMPORT_FAILED_TITLE = "Couldn't import these files";
 
@@ -77,10 +85,11 @@ function toFailure(
 }
 
 /**
- * The import dialog's state, owned by the page so that an import keeps going when the dialog closes; its outcome
- * then arrives as a toast. The dialog never closes on its own.
+ * The import's state, owned by the shell so that an import keeps going when the Add data sheet closes; its outcome
+ * then arrives as a toast. The sheet never closes on its own. `onShow` hears every opening at a step of the import
+ * (a toast's View, a drop), for a sheet that also shows other steps.
  */
-export function useFileImport() {
+export function useFileImport({onShow}: {onShow?: () => void} = {}) {
   const [open, setOpenState] = useState(false);
   const [step, setStepState] = useState<ImportStep>(FRESH);
   // The step as last set, before React renders it, so a drop sees an import that has only just started.
@@ -122,10 +131,11 @@ export function useFileImport() {
 
   const show = useCallback(
     (next: ImportStep) => {
+      onShow?.();
       setStep(next);
       setOpen(true);
     },
-    [setOpen, setStep],
+    [onShow, setOpen, setStep],
   );
 
   const run = useCallback(
@@ -257,27 +267,20 @@ export function useFileImport() {
     [rejectLayout, setStep],
   );
 
-  /**
-   * The Import a file button: a fresh start, unless an import is still running or a refusal kept its files to try
-   * again, such as after closing the dialog while columns were worked out.
-   */
+  /** The Import a file button: a fresh start, unless the import is unsettled. */
   const openNew = useCallback(() => {
-    setStep((current) =>
-      BUSY.includes(current.kind) ||
-      (current.kind === 'choose' && current.failure !== null && current.files.length > 0)
-        ? current
-        : FRESH,
-    );
+    setStep((current) => (isUnsettled(current) ? current : FRESH));
     setOpen(true);
   }, [setOpen, setStep]);
 
   /** Files dropped on the page start importing at once, unless an import is still running. */
   const importDropped = useCallback(
     (files: File[]) => {
+      onShow?.();
       setOpen(true);
       if (!BUSY.includes(stepRef.current.kind)) void run(files);
     },
-    [run, setOpen],
+    [onShow, run, setOpen],
   );
 
   return {

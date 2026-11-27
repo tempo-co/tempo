@@ -1,5 +1,6 @@
 import type {BankConnection} from '@tempo/contracts';
 import {RefreshCw} from 'lucide-react';
+import type {MouseEvent} from 'react';
 
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
@@ -49,7 +50,7 @@ export function FreshnessLine({
 }: {
   freshness: AccountFreshness;
   onReconnect?: () => void;
-  onImport?: () => void;
+  onImport?: (event: MouseEvent<HTMLElement>) => void;
   isStarting?: boolean;
   names?: {account: string; bank: string};
   className?: string;

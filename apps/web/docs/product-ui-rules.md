@@ -34,7 +34,8 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 - Fact grids are two lines: a label over one value. Fold secondary detail into the label ("Next · in 29 days"). A value that can grow without bound moves to a wrapping badge. Estimates are whole amounts with "about" ("about €63"); in a fact grid the "about" goes in the label.
 - Detail views list their items inline, newest first, with Load more and the shared row, and keep the open entity in the URL (with `replace`).
 - A row to check shows "To check" in the warning colour in place of a category: there is no guess to show.
-- A page's rail shows the view's own cards while nothing is open (Transactions: the view's totals and the To check count). A step started in the details, such as updating other transactions, replaces them until it is saved or cancelled.
+- A page's rail shows the view's own cards while nothing is open (Transactions: the view's totals and the To check count). A step started in the details or the bulk bar, such as updating other transactions, replaces them until it is saved or cancelled.
+- Bulk actions: on desktop a list has a checkbox column that is always there, faint until its row is hovered or checked, with "Select all N" ("3 of N selected") above the rows and Shift-click ranges; once every loaded row is picked and the filters match more, "Select all M matching" picks those too; phones show checkboxes only in Select mode. While rows are picked a press picks a row instead of opening it, and a bar under the list ("3 selected") holds the actions. An action that can reach other rows asks once ("Just these 3 / Change all 7") and reports the result in a toast.
 - Optional columns keep their grid track: render an empty cell so the next column starts at the same x in every state.
 
 ## Filters and pickers
