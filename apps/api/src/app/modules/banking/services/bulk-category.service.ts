@@ -47,7 +47,7 @@ export class BulkCategoryService {
 		selection: BulkSelection,
 		category: BankTransactionCategory,
 	): Promise<BankTransactionBulkCategoryPreview> {
-		const resolved = await this.resolve(accountId, selection);
+		const resolved = await resolveBulkSelection(this.recurringSeriesService, accountId, selection);
 		const selected = await findSelectedTransactions(this.repository.manager, accountId, resolved);
 		const followUps = await this.manualCategoryService.planBulkCategory(accountId, selected, category);
 		const {transactions, total} = await this.manualCategoryService.findBulkCategoryFollowUps(
@@ -80,7 +80,7 @@ export class BulkCategoryService {
 		category: BankTransactionCategory,
 		scope: BankTransactionBulkCategoryScope,
 	): Promise<BankTransactionBulkCategoryResult> {
-		const resolved = await this.resolve(accountId, selection);
+		const resolved = await resolveBulkSelection(this.recurringSeriesService, accountId, selection);
 		const selected = await findSelectedTransactions(this.repository.manager, accountId, resolved);
 		const followUps = await this.manualCategoryService.planBulkCategory(accountId, selected, category);
 		const followUpRows =
@@ -129,10 +129,6 @@ export class BulkCategoryService {
 	) {
 		const selected = await findSelectedTransactions(manager, accountId, selection);
 		return this.manualCategoryService.writeBulkCategory(manager, accountId, selected, followUps, followUpIds);
-	}
-
-	private resolve(accountId: Account['id'], selection: BulkSelection): Promise<ResolvedBulkSelection> {
-		return resolveBulkSelection(this.recurringSeriesService, accountId, selection);
 	}
 }
 
