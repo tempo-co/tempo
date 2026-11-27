@@ -223,7 +223,7 @@ test('arrows step through months in place, and Back returns to where the month w
   await expect(homePage.totalBalance).toHaveText('€24,300');
 });
 
-test('a month opened from Home goes back to Insights over the same period', async ({
+test('a month goes back to Insights, over the period it was opened with', async ({
   page,
   homePage,
 }) => {
