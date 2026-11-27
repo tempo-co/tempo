@@ -6,10 +6,10 @@
 # Exits 3 when the tag does not exist.
 set -euo pipefail
 repo=$1 tag=$2
-token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo:pull" | jq -r .token)
-get() { curl -fsSL -H "Authorization: Bearer $token" -H "Accept: $2" "https://ghcr.io/v2/$repo/$1"; }
+token=$(curl -fsS -m 30 "https://ghcr.io/token?scope=repository:$repo:pull" | jq -r .token)
+get() { curl -fsSL -m 30 -H "Authorization: Bearer $token" -H "Accept: $2" "https://ghcr.io/v2/$repo/$1"; }
 accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
-code=$(curl -sS -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $accept" "https://ghcr.io/v2/$repo/manifests/$tag")
+code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $accept" "https://ghcr.io/v2/$repo/manifests/$tag")
 if [[ $code == 404 ]]; then
     echo "$repo:$tag does not exist" >&2
     exit 3

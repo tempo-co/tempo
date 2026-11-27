@@ -26,6 +26,8 @@ jobs:
             ops: ${{ steps.paths.outputs.ops }}
             e2e: ${{ steps.paths.outputs.e2e }}
             corpus: ${{ steps.paths.outputs.corpus }}
+            api_image: ${{ steps.paths.outputs.api_image }}
+            api_main: ${{ steps.paths.outputs.api_main }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -37,6 +39,9 @@ jobs:
             # A push to main compares each app with the commit its current `:main` image was built
             # from, so a change whose release was skipped (a newer commit released that app first) is
             # still released by the next push; ops compares with the previous main. When a base is unknown, the area runs.
+            # Without `api`, web E2E uses `:main`, pinned here as `api_main` to the digest that was checked.
+            # `api_image` builds this run's API image instead: when `api` is set, or when that `:main` can't
+            # be shown to include the last API change in the base (a PR while main's release still runs).
             - name: Detect changed areas
               id: paths
               env:
@@ -59,7 +64,9 @@ jobs:
                   if [[ $GITHUB_EVENT_NAME == pull_request ]]; then
                       base=$(git rev-parse HEAD^1)
                       api_base=$base web_base=$base ops_base=$base
+                      api_tip=$base
                   else
+                      api_tip=HEAD
                       api_base=$(.github/scripts/released-revision.sh "$OWNER/api" main) || api_base=''
                       web_base=$(.github/scripts/released-revision.sh "$OWNER/web" main) || web_base=''
                       ops_base=$BEFORE
@@ -73,7 +80,16 @@ jobs:
                   corpus=$(touched "$api_base" '^apps/api/src/app/modules/file-import/|^apps/api/test/corpus/|^packages/contracts/src/banks\.ts$')
                   e2e=false
                   if [[ $api == true || $web == true ]]; then e2e=true; fi
-                  printf 'api=%s\nweb=%s\nops=%s\ne2e=%s\ncorpus=%s\n' "$api" "$web" "$ops" "$e2e" "$corpus" | tee -a "$GITHUB_OUTPUT"
+                  api_image=$api api_main=''
+                  if [[ $api == false && $e2e == true ]]; then
+                      if api_main=$(.github/scripts/released-digest.sh "$OWNER/api" main) &&
+                          .github/scripts/released-is-current.sh "$OWNER/api" "$api_main" "$api_tip" apps/api packages/contracts .dockerignore; then
+                          :
+                      else
+                          api_image=true api_main=''
+                      fi
+                  fi
+                  printf 'api=%s\nweb=%s\nops=%s\ne2e=%s\ncorpus=%s\napi_image=%s\napi_main=%s\n' "$api" "$web" "$ops" "$e2e" "$corpus" "$api_image" "$api_main" | tee -a "$GITHUB_OUTPUT"
 
     # Not gated: every change can touch a living doc or a path one names.
     docs:
@@ -109,7 +125,7 @@ jobs:
 
             - name: Check deploy scripts and Compose files
               run: |
-                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/wisp-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/restore-drill.sh ops/failure-email.sh ops/wisp-staging-copy.sh ops/wisp-staging-copy-serve.sh ops/wizard.sh ops/release-trigger.sh ops/test-deploy.sh ops/test-sync-pins.sh ops/test-backup.sh ops/test-release-trigger.sh .github/scripts/move-tag.sh .github/scripts/move-tag.test.sh .github/scripts/released-revision.sh
+                  shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/wisp-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/restore-drill.sh ops/failure-email.sh ops/wisp-staging-copy.sh ops/wisp-staging-copy-serve.sh ops/wizard.sh ops/release-trigger.sh ops/test-deploy.sh ops/test-sync-pins.sh ops/test-backup.sh ops/test-release-trigger.sh .github/scripts/move-tag.sh .github/scripts/move-tag.test.sh .github/scripts/released-revision.sh .github/scripts/released-digest.sh .github/scripts/released-is-current.sh .github/scripts/released-is-current.test.sh
                   export WISP_API_IMAGE=api WISP_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d WISP_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
                   docker compose -f ops/production.compose.yml config -q
                   docker run --rm -v "$PWD/ops/Caddyfile:/etc/caddy/Caddyfile:ro" "$(docker compose -f ops/production.compose.yml config --images caddy)" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
@@ -125,6 +141,7 @@ jobs:
                   ops/test-backup.sh
                   ops/test-release-trigger.sh
                   .github/scripts/move-tag.test.sh
+                  .github/scripts/released-is-current.test.sh
 
     api-lint-format:
         name: API lint & format
@@ -302,7 +319,8 @@ jobs:
         name: API image
         runs-on: ubuntu-latest
         needs: [changes, api-lint-format]
-        if: needs.changes.outputs.api == 'true'
+        # `!cancelled()` lets a web-only PR build the image while `API lint & format` is skipped.
+        if: ${{ !cancelled() && needs.changes.outputs.api_image == 'true' && needs.api-lint-format.result != 'failure' }}
         permissions:
             contents: read
             packages: write
@@ -377,6 +395,7 @@ jobs:
                   name: api-image
                   path: ${{ runner.temp }}/api-image.tar
                   retention-days: 1
+                  overwrite: true
                   if-no-files-found: error
 
     web-lint-format:
@@ -453,7 +472,7 @@ jobs:
         timeout-minutes: 30
         runs-on: ubuntu-latest
         needs: [changes, api-image]
-        if: ${{ !cancelled() && needs.changes.outputs.e2e == 'true' && (needs.api-image.result == 'success' || (needs.api-image.result == 'skipped' && needs.changes.outputs.api != 'true')) }}
+        if: ${{ !cancelled() && needs.changes.outputs.e2e == 'true' && (needs.api-image.result == 'success' || (needs.api-image.result == 'skipped' && needs.changes.outputs.api_image != 'true')) }}
         strategy:
             fail-fast: false
             matrix:
@@ -464,6 +483,8 @@ jobs:
                 working-directory: apps/web
         env:
             API_CHANGED: ${{ needs.changes.outputs.api }}
+            API_BUILT: ${{ needs.changes.outputs.api_image }}
+            API_MAIN: ${{ needs.changes.outputs.api_main }}
             WEB_CHANGED: ${{ needs.changes.outputs.web }}
             API_IMAGE: ${{ needs.api-image.outputs.image }}
         steps:
@@ -473,7 +494,7 @@ jobs:
                   persist-credentials: false
 
             - name: Download this run's unpublished API image
-              if: env.API_CHANGED == 'true' && !contains(env.API_IMAGE, '@sha256:')
+              if: env.API_BUILT == 'true' && !contains(env.API_IMAGE, '@sha256:')
               uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   name: api-image
@@ -485,20 +506,20 @@ jobs:
                   ARCHIVE: ${{ runner.temp }}/api-image.tar
               run: |
                   set -euo pipefail
-                  if [[ $API_CHANGED == true && -f $ARCHIVE ]]; then
+                  if [[ $API_BUILT != true ]]; then
+                      source='main'
+                  elif [[ $API_CHANGED == true ]]; then
+                      source='this run'
+                  else
+                      source='this run, because `:main` was not shown to include the last API change in the base'
+                  fi
+                  if [[ $API_BUILT == true && -f $ARCHIVE ]]; then
                       docker load --input "$ARCHIVE"
                       image=$API_IMAGE
-                      source='this run (not published)'
+                      source="$source (not published)"
                   else
-                      if [[ $API_CHANGED == true ]]; then
-                          ref=$API_IMAGE
-                          source='this run'
-                      else
-                          ref=ghcr.io/wispmoney/api:main
-                          source='main'
-                      fi
-                      docker pull "$ref"
-                      image=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -m1 '^ghcr.io/wispmoney/api@sha256:')
+                      if [[ $API_BUILT == true ]]; then image=$API_IMAGE; else image=ghcr.io/wispmoney/api@$API_MAIN; fi
+                      docker pull "$image"
                   fi
                   revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
                   echo "image=$image" >> "$GITHUB_OUTPUT"
