@@ -828,7 +828,7 @@ describe('Hosted MCP', () => {
 					for (const authorization of [
 						undefined,
 						'Basic example',
-						'Bearer tempo_pat_invalid',
+						'Bearer wisp_pat_invalid',
 						'Bearer',
 						`Bearer ${token} extra`,
 					]) {

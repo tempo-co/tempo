@@ -53,7 +53,7 @@ describe('Personal access tokens', () => {
 					accountId: id,
 					name: 'Example migration client',
 					tokenHash: 'a'.repeat(64),
-					prefix: 'tempo_pat_example',
+					prefix: 'wisp_pat_example',
 				}),
 			);
 			expect((await tokens.findOneByOrFail({id: saved.id})).scopes).toEqual(['read']);
@@ -63,7 +63,7 @@ describe('Personal access tokens', () => {
 					accountId: id,
 					name: 'Example duplicate client',
 					tokenHash: 'a'.repeat(64),
-					prefix: 'tempo_pat_example',
+					prefix: 'wisp_pat_example',
 				}),
 			).rejects.toMatchObject({code: '23505'});
 			await runner.query('ROLLBACK TO SAVEPOINT duplicate_token_hash');
@@ -169,7 +169,7 @@ describe('Personal access tokens', () => {
 			.expect(401);
 		const invalidResponse = await otherAgent
 			.get('/bank-transactions')
-			.auth('tempo_pat_invalid', {type: 'bearer'})
+			.auth('wisp_pat_invalid', {type: 'bearer'})
 			.expect(401);
 		expect(revokedResponse.headers['set-cookie']).toBeUndefined();
 		expect(invalidResponse.headers['set-cookie']).toBeUndefined();
@@ -213,7 +213,7 @@ describe('Personal access tokens', () => {
 		await agent.delete(`${PATH}/${created.id}`).set('Origin', ORIGIN).expect(204);
 	});
 
-	it('creates a read-only secret once, lists active metadata and revokes it', async () => {
+	it('creates a read-only wisp_pat_ secret once, lists active metadata and revokes it', async () => {
 		const app = getApp();
 		const agent = await loginAgent(app.getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
 		const {body: created} = await agent
@@ -235,7 +235,7 @@ describe('Personal access tokens', () => {
 		);
 		expect((await otherAgent.get(PATH).expect(200)).body).toEqual([]);
 		await otherAgent.delete(`${PATH}/${created.id}`).set('Origin', ORIGIN).expect(404);
-		expect(created.token).toMatch(/^tempo_pat_[A-Za-z0-9_-]{43}$/);
+		expect(created.token).toMatch(/^wisp_pat_[A-Za-z0-9_-]{43}$/);
 		expect(created.token.startsWith(created.prefix)).toBe(true);
 		const {body: listed} = await agent.get(PATH).expect(200);
 		const {token, ...metadata} = created;
@@ -248,6 +248,24 @@ describe('Personal access tokens', () => {
 		expect(JSON.stringify(listed)).not.toContain(stored.tokenHash);
 		await agent.delete(`${PATH}/${created.id}`).set('Origin', ORIGIN).expect(204);
 		expect((await agent.get(PATH).expect(200)).body).toEqual([]);
+	});
+	it('refuses a stored token with the tempo_pat_ prefix', async () => {
+		const app = getApp();
+		const agent = await loginAgent(app.getHttpServer(), VERIFIED_ACCOUNT_EMAIL, VERIFIED_ACCOUNT_PASSWORD);
+		const {body: created} = await agent.post(PATH).set('Origin', ORIGIN).send({name: 'Example client'}).expect(201);
+		await agent.delete(`${PATH}/${created.id}`).set('Origin', ORIGIN).expect(204);
+		const oldToken = `tempo_pat_${'A'.repeat(43)}`;
+		const tokens = app.get(DataSource).getRepository(PersonalAccessToken);
+		const saved = await tokens.save(
+			tokens.create({
+				accountId: (await tokens.findOneByOrFail({id: created.id})).accountId,
+				name: 'Example old client',
+				tokenHash: createHash('sha256').update(oldToken).digest('hex'),
+				prefix: oldToken.slice(0, 20),
+			}),
+		);
+		await request(app.getHttpServer()).get('/bank-transactions').auth(oldToken, {type: 'bearer'}).expect(401);
+		await tokens.delete(saved.id);
 	});
 	it('expires a token after its chosen lifetime, keeping it listed until revoked', async () => {
 		const app = getApp();
