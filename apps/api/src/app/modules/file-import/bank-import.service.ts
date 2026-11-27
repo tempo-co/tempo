@@ -1380,6 +1380,7 @@ export class BankImportService {
 				{
 					category: isManualCategorySource(imported.categorySource) ? imported.category : null,
 					ownTransferOverride: imported.ownTransferOverride,
+					leftOutOfTotals: imported.leftOutOfTotals,
 				},
 				candidate.bankAccount?.bankConnection?.aspspName,
 			);

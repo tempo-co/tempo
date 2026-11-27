@@ -86,6 +86,8 @@ export const BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES = [
 	// The two kinds of internal movement, for narrowing `INTERNAL`.
 	'CURRENCY_EXCHANGE',
 	BANK_TRANSACTION_OWN_TRANSFER_FILTER,
+	// Rows the owner left out of totals: listed, counted in none.
+	'LEFT_OUT',
 ] as const;
 export type BankTransactionCashFlowFilterValue = (typeof BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES)[number];
 
@@ -155,6 +157,8 @@ export type BankTransaction = {
 	ownTransferOverride: OwnTransferOverride | null;
 	/** The other leg of a currency exchange, or null when it is not one or the legs could not be matched. */
 	currencyExchangeCounterpart: BankTransactionCounterpart | null;
+	/** The owner left the row out of totals: it stays in the list and in balances, and counts in no total. */
+	leftOutOfTotals: boolean;
 	categoryConfidence: string | null;
 	providerTransactionDescription: string | null;
 	merchantCategoryCode: string | null;
@@ -264,20 +268,19 @@ export type BankTransactionCategoryUpdate = {
 	applyToTransactionIds?: string[];
 };
 
-/** Most selected rows one bulk category takes. */
-export const BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS = 500;
+/** Most picked rows one bulk action takes; a selection by the list's filter has no limit. */
+export const BANK_TRANSACTION_BULK_MAX_IDS = 500;
 
 /**
- * `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. The
- * rows are either `transactionIds` (at most `BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS`) or every row the Transactions
- * list's `filter` matches; a request sends exactly one.
+ * The rows a bulk action is for: the owner's picked `transactionIds` (at most `BANK_TRANSACTION_BULK_MAX_IDS`), or
+ * every row the Transactions list's `filter` matches. A request sends exactly one; the API refuses both or neither (400).
  */
-export type BankTransactionBulkCategoryPreviewRequest = BankTransactionBulkCategorySelection & {
+export type BankTransactionBulkSelection = {transactionIds?: string[]; filter?: BankTransactionFilter};
+
+/** `POST /bank-transactions/bulk-category/preview` body: the owner's selected rows and the category picked for them. */
+export type BankTransactionBulkCategoryPreviewRequest = BankTransactionBulkSelection & {
 	category: BankTransactionCategory;
 };
-
-/** The rows a bulk category is for; the API refuses a request with both or neither (400). */
-export type BankTransactionBulkCategorySelection = {transactionIds?: string[]; filter?: BankTransactionFilter};
 
 /** One of the owner's other rows from the selected rows' payees that changing all of them would change. */
 export type BankTransactionBulkCategoryPreviewTransaction = BankTransactionCategoryImpactTransaction & {
@@ -311,3 +314,13 @@ export type BankTransactionBulkCategoryResult = {updated: number};
 
 /** `PATCH /bank-transactions/:id/own-transfer` body; `null` clears the owner's override. */
 export type BankTransactionOwnTransferUpdate = {override: OwnTransferOverride | null};
+
+/** `PATCH /bank-transactions/:id/left-out-of-totals` body; the response is the updated {@link BankTransaction}. */
+export type BankTransactionLeftOutOfTotalsUpdate = {leftOutOfTotals: boolean};
+
+/** `PATCH /bank-transactions/bulk-left-out-of-totals` body: leaves the selected rows out of totals, or counts them again. */
+export type BankTransactionBulkLeftOutOfTotalsUpdate = BankTransactionBulkSelection &
+	BankTransactionLeftOutOfTotalsUpdate;
+
+/** `PATCH /bank-transactions/bulk-left-out-of-totals`: how many selected rows the write changed; rows already so are not. */
+export type BankTransactionBulkLeftOutOfTotalsResult = {updated: number};

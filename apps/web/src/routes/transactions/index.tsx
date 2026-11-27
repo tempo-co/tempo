@@ -1,9 +1,9 @@
 import {createFileRoute, stripSearchParams, useNavigate} from '@tanstack/react-router';
 import {zodValidator} from '@tanstack/zod-adapter';
 import {
-  BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS,
+  BANK_TRANSACTION_BULK_MAX_IDS,
   BANK_TRANSACTION_SEARCH_MAX_LENGTH,
-  type BankTransactionBulkCategorySelection,
+  type BankTransactionBulkSelection,
   BankTransactionCategory,
 } from '@tempo/contracts';
 import {CircleCheck, Layers, ListChecks} from 'lucide-react';
@@ -22,9 +22,11 @@ import {toBankTransactionFilter} from '@/features/banking/api/bank-transaction-f
 import {useBankTransactionLedger} from '@/features/banking/api/use-bank-transaction-ledger';
 import {usePreviewBulkCategory} from '@/features/banking/api/use-bulk-category';
 import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
+import {useUpdateBulkLeftOutOfTotals} from '@/features/banking/api/use-left-out-of-totals';
 import {
   BankTransactionBulkBar,
   BulkCategoryAction,
+  BulkLeftOutAction,
 } from '@/features/banking/components/bank-transaction-bulk-bar';
 import {
   type BulkCategoryDraft,
@@ -100,7 +102,7 @@ function TransactionsPage() {
     JSON.stringify({filters, sort}),
   );
   const picked = selection.allMatching ? total : selection.selectedIds.length;
-  const tooMany = !selection.allMatching && picked > BANK_TRANSACTION_BULK_CATEGORY_MAX_IDS;
+  const tooMany = !selection.allMatching && picked > BANK_TRANSACTION_BULK_MAX_IDS;
   // Phones show checkboxes only in Select mode; desktop always does.
   const [selectMode, setSelectMode] = useState(false);
   const showCheckboxes = hasRail || selectMode;
@@ -111,11 +113,13 @@ function TransactionsPage() {
     setSelectMode(false);
     setBulkDraft(null);
   };
-  const pickBulkCategory = (category: BankTransactionCategory) => {
-    // Every matching row goes as the list's filters, which the server matches again when it writes.
-    const picks: BankTransactionBulkCategorySelection = selection.allMatching
+  // Every matching row goes as the list's filters, which the server matches again when it writes.
+  const bulkSelection = (): BankTransactionBulkSelection =>
+    selection.allMatching
       ? {filter: toBankTransactionFilter(filters)}
       : {transactionIds: selection.selectedIds};
+  const pickBulkCategory = (category: BankTransactionCategory) => {
+    const picks = bulkSelection();
     previewBulkCategory(
       {...picks, category},
       {
@@ -127,6 +131,24 @@ function TransactionsPage() {
         },
       },
     );
+  };
+  const {updateBulkLeftOutOfTotals, isPending: isSavingLeftOut} = useUpdateBulkLeftOutOfTotals();
+  // Every picked row is left out already: the list shows only those, or each picked one is marked.
+  const leftOutIds = new Set(transactions.filter((row) => row.leftOutOfTotals).map(({id}) => id));
+  const allLeftOut = selection.allMatching
+    ? filters.cashFlows?.length === 1 && filters.cashFlows[0] === 'LEFT_OUT'
+    : picked > 0 && selection.selectedIds.every((id) => leftOutIds.has(id));
+  const applyLeftOut = async (leftOutOfTotals: boolean) => {
+    try {
+      await updateBulkLeftOutOfTotals({...bulkSelection(), leftOutOfTotals});
+      // Rows past the loaded ones change too, so the outcome is said once.
+      toast.success(
+        leftOutOfTotals ? `${picked} left out of totals` : `${picked} counted in totals again`,
+      );
+      endSelection();
+    } catch (error) {
+      if (!wasToasted(error)) toast.error("Couldn't change what counts in totals. Try again.");
+    }
   };
   // The step stands for the rows it was asked for: picking or dropping a row, or another view, ends it.
   const isDraftSelection = ({selection: {transactionIds}}: BulkCategoryDraft) =>
@@ -217,6 +239,12 @@ function TransactionsPage() {
             sheet={!hasRail}
             isChecking={isCheckingBulk}
             onPick={pickBulkCategory}
+          />
+          <BulkLeftOutAction
+            tooMany={tooMany}
+            allLeftOut={allLeftOut}
+            isSaving={isSavingLeftOut}
+            onApply={(leftOutOfTotals) => void applyLeftOut(leftOutOfTotals)}
           />
         </BankTransactionBulkBar>
       )}

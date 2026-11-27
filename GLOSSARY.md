@@ -16,6 +16,10 @@ _Avoid_: institution key, bank code
 Bringing the values Tempo computes from an owner's transaction history (reporting currency, currency exchanges, own transfers, categories, merchant logos) up to date after a write to that history.
 _Avoid_: post-sync hook, follow-up steps, after-write steps
 
+**Leave out of totals**:
+An owner's choice that one of their transactions counts in no total (spending, income, merchants, recurring payments, the AI assistant's reads), as own transfers and currency exchanges never do; the transaction stays in their list, marked as left out, and in their balances, because the money did move. Putting it back counts it again.
+_Avoid_: exclude, hide, ignore
+
 **To check**:
 An owner's transactions that wait for them to pick a category: those the AI could not place (Needs review) and those whose categorisation failed. A transaction leaves To check when the owner picks its category; Tempo keeps no guess for it, so there is nothing to confirm.
 _Avoid_: to review, needs attention, uncategorised
