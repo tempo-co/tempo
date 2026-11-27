@@ -36,7 +36,7 @@ Staging fetches over SSH as `wisp-staging-feed`, a system account whose only acc
 On the laptop, as the staging user (the secret key stays there):
 
 ```bash
-cd ~/.config/tempo-staging
+cd ~/.config/wisp-staging
 install -d -m 700 feed-gnupg feed-ssh
 gpg --homedir feed-gnupg --batch --passphrase '' --quick-gen-key 'Wisp staging feed <staging-feed@example.invalid>' future-default default never
 gpg --homedir feed-gnupg --armor --export staging-feed@example.invalid >staging-feed.pub.asc
@@ -60,9 +60,9 @@ sudo systemctl enable --now wisp-staging-copy.timer && sudo systemctl start wisp
 Back on the laptop, pin the server's host key (check its fingerprint against the server's) and name the feed account:
 
 ```bash
-cd ~/.config/tempo-staging
+cd ~/.config/wisp-staging
 ssh-keyscan -t ed25519 <server tailnet name> >feed-ssh/known_hosts
 printf 'STAGING_FEED_SSH=wisp-staging-feed@<server tailnet name>\n' >feed.env
 ```
 
-The next `tempo-deploy staging` that changes an image restores from the server's copy.
+The next `wisp-deploy staging` that changes an image restores from the server's copy.

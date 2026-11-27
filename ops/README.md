@@ -120,11 +120,11 @@ Redis's default user has no password and full rights; the API uses it from the `
 
 ## Staging
 
-An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://wisp-staging.<tailnet>.ts.net/` for testing on mobile devices. Deploy any API/web pair with one command; an omitted component keeps its current image:
+An isolated rootless Docker daemon (`wisp-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://wisp-staging.<tailnet>.ts.net/` for testing on mobile devices. Deploy any API/web pair with one command; an omitted component keeps its current image:
 
 ```bash
 ops/install.sh staging                         # after changing ops/
-tempo-deploy staging --api pr-115 --web main
+wisp-deploy staging --api pr-115 --web main
 ```
 
 A successful deploy refreshes the staging database from production data, so staging stays on loopback and the tailnet: no Funnel, port forward or other route. See [`staging/README.md`](staging/README.md).

@@ -67,6 +67,19 @@ link() {
     fi
 }
 
+# A file an earlier layout installed; in check mode, report it if it is still there.
+remove_old() {
+    local file
+    for file in "$@"; do
+        if ! $CHECK; then
+            rm -f "$file"
+        elif [[ -e $file || -L $file ]]; then
+            echo "leftover $file"
+            drift=1
+        fi
+    done
+}
+
 install_script() {
     local dir=$1
     copy 755 "$REPO/ops/deploy.sh" "$dir/deploy.sh"
@@ -84,13 +97,15 @@ install_script() {
 case ${1:-} in
     staging)
         [[ $EUID != 0 ]] || { echo 'run the staging install as the staging user, not root' >&2; exit 1; }
-        install_script "$HOME/.local/lib/tempo-deploy"
+        install_script "$HOME/.local/lib/wisp-deploy"
         $CHECK || mkdir -p "$HOME/.local/bin"
-        link "$HOME/.local/lib/tempo-deploy/deploy.sh" "$HOME/.local/bin/tempo-deploy"
-        copy 644 "$REPO/ops/staging/docker-compose.yml" "$HOME/.config/tempo-staging/staging.compose.yml"
-        copy 700 "$REPO/ops/staging/tempo-staging-refresh.sh" "$HOME/.config/tempo-staging/tempo-staging-refresh.sh"
-        copy 644 "$REPO/ops/staging/tailscale.compose.yml" "$HOME/.config/tempo-staging/tailscale.compose.yml"
-        copy 644 "$REPO/ops/staging/tailscale-serve.json" "$HOME/.config/tempo-staging/tailscale-serve.json"
+        link "$HOME/.local/lib/wisp-deploy/deploy.sh" "$HOME/.local/bin/wisp-deploy"
+        # The old command deployed with the old paths; staging's data and config folders stay for the cutover.
+        remove_old "$HOME/.local/bin/tempo-deploy"
+        copy 644 "$REPO/ops/staging/docker-compose.yml" "$HOME/.config/wisp-staging/staging.compose.yml"
+        copy 700 "$REPO/ops/staging/wisp-staging-refresh.sh" "$HOME/.config/wisp-staging/wisp-staging-refresh.sh"
+        copy 644 "$REPO/ops/staging/tailscale.compose.yml" "$HOME/.config/wisp-staging/tailscale.compose.yml"
+        copy 644 "$REPO/ops/staging/tailscale-serve.json" "$HOME/.config/wisp-staging/tailscale-serve.json"
         ;;
     production)
         [[ $EUID == 0 && -n ${SUDO_USER:-} && $SUDO_USER != root ]] || { echo 'run the production install with sudo as the deployment user' >&2; exit 1; }

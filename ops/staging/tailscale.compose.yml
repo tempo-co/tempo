@@ -1,5 +1,5 @@
 # Gives staging its own tailnet device (https://wisp-staging.<tailnet>.ts.net) for testing from
-# other tailnet devices such as a phone. Installed to ~/.config/tempo-staging/tailscale.compose.yml
+# other tailnet devices such as a phone. Installed to ~/.config/wisp-staging/tailscale.compose.yml
 # by `ops/install.sh staging` and run on the staging rootless daemon. The node is logged in once and
 # keeps its identity in the state volume, so no auth key is passed after that. Separate project, so
 # staging deploys never recreate it unless its pinned image changes.

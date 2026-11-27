@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Replace the staging database with production data, or with seed data.
 #
-#   tempo-staging-refresh.sh refresh --confirm-production-backup-refresh   # run by `tempo-deploy staging`
-#   tempo-staging-refresh.sh seed --confirm-seeded-reset
+#   wisp-staging-refresh.sh refresh --confirm-production-backup-refresh   # run by `wisp-deploy staging`
+#   wisp-staging-refresh.sh seed --confirm-seeded-reset
 #
 # A refresh takes its data from the production server's encrypted owner-only copy, fetched over the
 # tailnet as the account in feed.env (see feed.env.example) and decrypted here. Restores into a
@@ -12,21 +12,21 @@
 set -Eeuo pipefail
 shopt -s inherit_errexit
 
-CONFIG_DIR=$HOME/.config/tempo-staging
-STATE_DIR=$HOME/.local/state/tempo-staging
+CONFIG_DIR=$HOME/.config/wisp-staging
+STATE_DIR=$HOME/.local/state/wisp-staging
 FEED_ENV=$CONFIG_DIR/feed.env
 FEED_SSH_DIR=$CONFIG_DIR/feed-ssh
 FEED_GNUPG=$CONFIG_DIR/feed-gnupg
 # Always the staging daemon, whatever the caller's environment points at.
 unset DOCKER_CONTEXT TEMPO_API_IMAGE TEMPO_WEB_IMAGE STAGING_DB_NAME STAGING_DB_USERNAME STAGING_DB_PASSWORD
-export DOCKER_HOST=unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tempo-staging/docker.sock
+export DOCKER_HOST=unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wisp-staging/docker.sock
 export DOCKER_CONFIG=$CONFIG_DIR/docker-config
 TEMP_DB=wisp_staging_refresh
 PREVIOUS_DB=wisp_staging_previous
-DUMP_PATH=/tmp/tempo-staging-refresh.dump
+DUMP_PATH=/tmp/wisp-staging-refresh.dump
 HEALTH_URLS=(http://127.0.0.1:8119/api/health http://127.0.0.1:8119/)
 
-log() { echo "tempo-staging-refresh: $*"; }
+log() { echo "wisp-staging-refresh: $*"; }
 die() {
     log "ERROR: $*" >&2
     exit 1
