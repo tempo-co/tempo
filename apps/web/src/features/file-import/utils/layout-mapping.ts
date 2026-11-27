@@ -69,7 +69,7 @@ export function previewRowTitle(row: BankImportLayoutPreviewRow) {
   return row.description || row.counterparty || 'Transaction';
 }
 
-/** `Tempo read 03/04/2026 as 3 April 2026`: the date check of a file whose dates read both ways. */
+/** `Wisp read 03/04/2026 as 3 April 2026`: the date check of a file whose dates read both ways. */
 export function dateCheckCopy({written, date}: {written: string; date: string}) {
   const read = new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
@@ -77,10 +77,10 @@ export function dateCheckCopy({written, date}: {written: string; date: string}) 
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(`${date}T00:00:00Z`));
-  return `Tempo read ${written} as ${read}`;
+  return `Wisp read ${written} as ${read}`;
 }
 
-/** The bank choice that reveals a field for a bank Tempo does not list; no bank name holds a control character. */
+/** The bank choice that reveals a field for a bank Wisp does not list; no bank name holds a control character. */
 export const OTHER_BANK = '\u0000other';
 
 /**

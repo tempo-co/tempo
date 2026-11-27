@@ -4,8 +4,10 @@ import {zodValidator} from '@tanstack/zod-adapter';
 import {CategoryPage} from '@/features/insights/components/category-page';
 import {insightsPeriodSearchSchema} from '@/features/insights/types/insights-search';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 
 export const Route = createFileRoute('/insights/categories/$category')({
+  head: pageHead('Insights'),
   component: Category,
   validateSearch: zodValidator(insightsPeriodSearchSchema),
   beforeLoad: ({context}) => {

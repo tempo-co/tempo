@@ -56,7 +56,7 @@ function dayGap(date: string | null, fileDate: string | null) {
 
 /**
  * The import's rows held for the owner: each next to the stored transactions it could be, as one choice between
- * them and a new transaction. A row a bank sync later doubled is already in Tempo; its choice is between one of the
+ * them and a new transaction. A row a bank sync later doubled is already in Wisp; its choice is between one of the
  * bank's rows (the file's copy goes) and keeping both. Choices change freely until Save sends them, one row at a time. A saved answer is
  * final (the API cannot change it) and collapses its block to a line saying what was chosen; a row left without a
  * choice stays open for later. A long list shows a page of rows at a time; choices on every shown row count.
@@ -174,13 +174,13 @@ export function DoubtfulRowsReview({
         <p>Choose what each one is, then save. You can change a choice until you save it.</p>
         {synced && (
           <p>
-            These are almost always in Tempo already from your bank, so leaving them without an
+            These are almost always in Wisp already from your bank, so leaving them without an
             answer loses nothing.
           </p>
         )}
         {doubled && (
           <p>
-            Some are in Tempo twice, from the file and from your bank. Until you answer, both count
+            Some are in Wisp twice, from the file and from your bank. Until you answer, both count
             in your totals.
           </p>
         )}
@@ -250,7 +250,7 @@ function DoubtfulRowBlock({
   onPick: (pick: Pick) => void;
 }) {
   const {row: fileRow} = row;
-  // Already in Tempo from the file; the candidates are what bank sync brought since.
+  // Already in Wisp from the file; the candidates are what bank sync brought since.
   const inTempo = row.importedTransactionId !== null;
   const title = fileRow.description || fileRow.counterpartyName || 'Transaction';
   const fileDate = fileRow.bookingDate ?? fileRow.valueDate;
@@ -277,7 +277,7 @@ function DoubtfulRowBlock({
         </span>
         <Title
           title={title}
-          detail={`${date} · from the file${inTempo ? ', already in Tempo' : ''}`}
+          detail={`${date} · from the file${inTempo ? ', already in Wisp' : ''}`}
         />
         <Amount amount={fileRow.amount} currency={fileRow.currency} />
       </div>
@@ -301,7 +301,7 @@ function DoubtfulRowBlock({
                 : 'Could be the same as'
               : inTempo
                 ? 'Nothing from your bank matches it now'
-                : 'Nothing already in Tempo matches it now'}
+                : 'Nothing already in Wisp matches it now'}
           </p>
           {row.candidates.map((candidate) => {
             const day = candidateDate(candidate);

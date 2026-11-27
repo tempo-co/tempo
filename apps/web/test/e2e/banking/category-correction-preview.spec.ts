@@ -460,9 +460,7 @@ for (const viewport of [
       expect(state.writes).toEqual([]);
     });
 
-    test('closing a pending preview neither saves later nor marks Tempo offline', async ({
-      page,
-    }) => {
+    test('closing a pending preview neither saves later nor marks Wisp offline', async ({page}) => {
       const state = await mockCorrection(page);
       await page.clock.install();
       await page.clock.resume();
@@ -486,7 +484,7 @@ for (const viewport of [
         // A false offline transition would show the banner and start a health probe after 10s.
         await page.clock.runFor(11_000);
         await expect(
-          page.getByTitle('Tempo is unreachable. Changes cannot be saved until it reconnects.'),
+          page.getByTitle('Wisp is unreachable. Changes cannot be saved until it reconnects.'),
         ).toHaveCount(0);
         expect(healthReads).toBe(0);
         const response = page.waitForResponse(`**/bank-transactions/${ID}/category-impact?**`);

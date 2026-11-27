@@ -1152,15 +1152,15 @@ test.describe('mocked Enable Banking bank connection', () => {
     expect((await boxOf(page.getByTestId('accounts-total'))).width).toBe(first.width);
   });
 
-  test('says Tempo is not answering, without mentioning sessions, when the first check fails', async ({
+  test('says Wisp is not answering, without mentioning sessions, when the first check fails', async ({
     page,
   }) => {
     await page.route('**/accounts/me', (route) => route.abort('failed'));
     await page.goto('/accounts');
 
-    await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
+    await expect(page.getByRole('heading', {name: "Can't reach Wisp"})).toBeVisible();
     await expect(page.locator('body')).toContainText(
-      "Tempo isn't answering right now. Try again in a moment.",
+      "Wisp isn't answering right now. Try again in a moment.",
     );
   });
 
@@ -1206,7 +1206,7 @@ test.describe('account loading errors', () => {
     await expect(alert).toContainText(/503 · \d{2}:\d{2}/);
   });
 
-  test('loads accounts once when Tempo answers after an unanswered first session check', async ({
+  test('loads accounts once when Wisp answers after an unanswered first session check', async ({
     page,
   }) => {
     let connectionRequests = 0;
@@ -1220,8 +1220,8 @@ test.describe('account loading errors', () => {
     );
 
     await page.goto('/accounts');
-    await expect(page.getByRole('heading', {name: "Can't reach Tempo"})).toBeVisible();
-    // Focus makes Tempo check its connection now instead of on its next timer.
+    await expect(page.getByRole('heading', {name: "Can't reach Wisp"})).toBeVisible();
+    // Focus makes Wisp check its connection now instead of on its next timer.
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
     await expect(page.getByRole('heading', {name: "Couldn't load accounts"})).toBeVisible();

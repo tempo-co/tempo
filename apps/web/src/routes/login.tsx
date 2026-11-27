@@ -32,7 +32,7 @@ function LogIn() {
   const {redirect, email} = Route.useSearch();
 
   return (
-    <AuthLayout title='Log in to Tempo'>
+    <AuthLayout title='Log in to Wisp' officialLink>
       <FadeSwitch
         viewKey='initial-options'
         wrapperClassName='relative flex flex-col space-y-3'

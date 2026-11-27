@@ -12,10 +12,10 @@ function pwaManifestPlugin(basePath: string): Plugin {
     generateBundle() {
       const icon = (name: string) => `${basePath}${name}`;
       const manifest = {
-        name: 'Tempo',
-        short_name: 'Tempo',
+        name: 'Wisp',
+        short_name: 'Wisp',
         id: basePath,
-        description: 'Personal finance overview and bank account tracker',
+        description: 'A read-only view of your bank accounts: balances, transactions and where your money goes.',
         start_url: basePath,
         scope: basePath,
         display: 'standalone',

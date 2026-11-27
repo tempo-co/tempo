@@ -52,7 +52,7 @@ test('a refusal names its file only among several, and always says nothing was i
     retry: true,
   });
   expect(describeRefusal(refusal({code: 'import_busy', statusCode: 503}), names)).toMatchObject({
-    title: 'Tempo is busy right now',
+    title: 'Wisp is busy right now',
     description: 'Try again in a moment. Nothing was imported.',
     retry: true,
   });
@@ -79,16 +79,16 @@ test('a refusal names its file only among several, and always says nothing was i
   });
 });
 
-test('a table in no layout Tempo knows is offered to have its columns worked out, only while that is on', () => {
+test('a table in no layout Wisp knows is offered to have its columns worked out, only while that is on', () => {
   const names = ['statement-april.xml', 'export.csv'];
   expect(
     describeRefusal(refusal({code: 'layout_unknown', file: 2}), names, {mapper: true}),
   ).toEqual({
     kind: 'refused',
     code: 'layout_unknown',
-    title: "Tempo doesn't know this file's layout yet",
+    title: "Wisp doesn't know this file's layout yet",
     description:
-      'export.csv: Tempo can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
+      'export.csv: Wisp can work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
     retry: false,
     mapFile: 2,
   });
@@ -100,12 +100,12 @@ test('a table in no layout Tempo knows is offered to have its columns worked out
   ).toMatchObject({
     title: "This file doesn't look the way ING's exports usually do",
     description:
-      'statement-april.xml: Try exporting it again, or use CAMT.053 or MT940 if your bank offers them. Tempo can also work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
+      'statement-april.xml: Try exporting it again, or use CAMT.053 or MT940 if your bank offers them. Wisp can also work out which column is which. It sends the column headings and the shape of a few rows, with letters and digits masked, to its AI service. Nothing was imported.',
     mapFile: 1,
   });
   expect(describeRefusal(refusal({code: 'layout_unknown', file: 1}), ['export.csv'])).toMatchObject(
     {
-      description: "It isn't a layout Tempo knows yet. Nothing was imported.",
+      description: "It isn't a layout Wisp knows yet. Nothing was imported.",
       mapFile: null,
     },
   );
@@ -214,10 +214,10 @@ test("a server error shows the import route is there only when the API's own err
 test('a drop that added nothing says what it found', () => {
   expect(nothingNewCopy({filesCount: 2, rowsAlreadyPresent: 1313})).toEqual({
     title: 'Nothing new in these files',
-    description: 'All 1,313 transactions are already in Tempo.',
+    description: 'All 1,313 transactions are already in Wisp.',
   });
   expect(nothingNewCopy({filesCount: 1, rowsAlreadyPresent: 1}).description).toBe(
-    'The only transaction is already in Tempo.',
+    'The only transaction is already in Wisp.',
   );
   expect(nothingNewCopy({filesCount: 1, rowsAlreadyPresent: 0})).toEqual({
     title: 'Nothing new in this file',

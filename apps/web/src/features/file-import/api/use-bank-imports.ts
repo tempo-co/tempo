@@ -49,7 +49,7 @@ export function useBankImports() {
         : error instanceof HttpError && isApiServerError(error.status, error.body)
           ? 'on'
           : 'unknown';
-  // Whether a table in no layout Tempo knows can have its columns worked out.
+  // Whether a table in no layout Wisp knows can have its columns worked out.
   const mapper = list?.mapper ?? false;
   return {data, error, isError, isFetching, refetch, state, mapper};
 }

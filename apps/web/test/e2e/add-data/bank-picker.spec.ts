@@ -163,7 +163,7 @@ test.describe('the bank picker in Add data', () => {
     await sheet.getByTestId('bank-import-file-input').setInputFiles([statement('export.csv')]);
     await sheet.getByRole('button', {name: 'Work out the columns'}).click();
     await expect(sheet.getByRole('alert')).toContainText(
-      "Tempo couldn't work out this file's columns",
+      "Wisp couldn't work out this file's columns",
     );
     expect(sentForm(api.uploads[0]).fields).toEqual({bankId: 'other'});
     expect(sentForm(api.proposals[0]).fields).toEqual({bankId: 'other'});

@@ -57,9 +57,11 @@ import {useRowSelection} from '@/hooks/use-row-selection';
 import {wasToasted} from '@/utils/api';
 import {cn} from '@/utils/cn';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 import {savedDataStatus} from '@/utils/query-status';
 
 export const Route = createFileRoute('/transactions/')({
+  head: pageHead('Transactions'),
   component: TransactionsPage,
   validateSearch: zodValidator(bankTransactionSearchParamsSchema),
   // The list loads more in place, so page keys from older links are dropped.

@@ -20,6 +20,7 @@ import {balanceActionOf} from '@/features/file-import/utils/balance-copy';
 import {ReportingCurrencySetup} from '@/features/reporting-currency/components/reporting-currency-setup';
 import {useNow} from '@/hooks/use-now';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 import {savedDataStatus} from '@/utils/query-status';
 
 const bankConnectionResultSchema = z.enum(['connected', 'cancelled', 'error']);
@@ -31,6 +32,7 @@ const searchSchema = z.object({
 });
 
 export const Route = createFileRoute('/accounts/')({
+  head: pageHead('Accounts'),
   component: AccountsIndex,
   validateSearch: zodValidator(searchSchema),
   beforeLoad: ({context}) => {

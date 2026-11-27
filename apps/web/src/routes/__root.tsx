@@ -1,4 +1,5 @@
 import {
+  HeadContent,
   Outlet,
   type ParsedLocation,
   createRootRouteWithContext,
@@ -12,12 +13,14 @@ import {SidebarInset, SidebarProvider} from '@/components/ui/sidebar';
 import {AddDataDrop, AddDataProvider} from '@/features/add-data/components/add-data-provider';
 import {MONTH_PATTERN} from '@/features/dashboard/utils/month';
 import {DeviceAlerts} from '@/features/notifications/components/device-alerts';
+import {APP_TITLE} from '@/utils/page-title';
 
 export const Route = createRootRouteWithContext<{
   isAuthenticated: boolean;
   isEmailVerified: boolean;
 }>()({
   component: Root,
+  head: () => ({meta: [{title: APP_TITLE}]}),
   beforeLoad: ({location}) => openRetiredDialogLinks(location),
 });
 
@@ -55,6 +58,7 @@ function Root() {
   if (!isAuthenticated || !isEmailVerified) {
     return (
       <>
+        <HeadContent />
         <main>
           <Outlet />
         </main>
@@ -65,6 +69,7 @@ function Root() {
 
   return (
     <SidebarProvider>
+      <HeadContent />
       <AddDataProvider>
         <AppSidebar />
         <SidebarInset>

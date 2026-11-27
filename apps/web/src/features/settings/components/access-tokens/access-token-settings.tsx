@@ -28,7 +28,7 @@ export function AccessTokenSettings() {
     <SettingsGroup
       id='access-tokens-heading'
       title='Access tokens'
-      description='Access tokens let MCP clients, such as AI assistants, read your Tempo data.'
+      description='Access tokens let MCP clients, such as AI assistants, read your Wisp data.'
       action={
         hasTokens && (
           <Button ref={headerCreate} size='sm' onClick={startCreating} className='max-sm:h-11'>

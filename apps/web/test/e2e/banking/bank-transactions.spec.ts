@@ -402,7 +402,7 @@ test.describe('bank transactions', () => {
     expect(new URL(sharedUrl).searchParams.get('transactionId')).toBe(DETAIL_TRANSACTION_ID);
 
     // Wait until the opened transaction is saved for offline use, then change it on the server: after
-    // a reload the inspector shows the transaction as Tempo has it now, not the saved copy.
+    // a reload the inspector shows the transaction as Wisp has it now, not the saved copy.
     await expect
       .poll(() =>
         page.evaluate(

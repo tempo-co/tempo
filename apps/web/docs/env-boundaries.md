@@ -9,7 +9,7 @@ How the build, the E2E stack and the API image fit together, and the traps at ea
 | Variable | Read by | Notes |
 | --- | --- | --- |
 | `VITE_API_URL` | `src/utils/api.ts` | `Dockerfile.production` builds with `/api`; Nginx proxies `/api/` to the API. |
-| `VITE_APP_URL` | `playwright.config.ts` (`webServer.url`, `baseURL`) | Empty means `page.goto('/login')` fails with "Cannot navigate to invalid URL". |
+| `VITE_APP_URL` | `playwright.config.ts` (`webServer.url`, `baseURL`), `index.html` | The app's own origin. `index.html` builds the link-preview image's absolute address from it; `Dockerfile.production` defaults it to `https://app.wispmoney.com`. Empty means `page.goto('/login')` fails with "Cannot navigate to invalid URL". |
 | `VITE_EMAIL_UI_URL` | `test/utils/email-utils.ts` | Mailpit UI. |
 | `VITE_BASE_PATH` | `vite.config.ts` | Optional, default `/`. Sets Vite `base`, the generated manifest and the offline shell. See `docs/pwa.md`. |
 

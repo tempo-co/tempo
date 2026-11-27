@@ -8,6 +8,12 @@ The icons are the logo masters' web set, copied unchanged (DESIGN.md, Logo): `ic
 
 `index.html` links icons and the manifest with `%BASE_URL%`, so they follow `base`. `id` is set explicitly: without it the browser derives the app identity from `start_url`, and two apps on one origin would share an identity.
 
+## Page titles and link previews
+
+Each signed-in route sets its tab title with TanStack Router's `head` (`pageHead('Transactions')` from `src/utils/page-title.ts` reads "Transactions · Wisp"), and the root route renders them with `HeadContent`. Routes that set none, such as Home and sign-in, read "Wisp", as does the static `<title>` in `index.html` for the first paint.
+
+`index.html` also carries the description, `og:` and `twitter:` tags for pasted links. `og:image` points at `public/social-preview.png` (1200×630, the lockup on white, rendered from the logo masters' `wisp-lockup.svg`) at an absolute address built from `VITE_APP_URL` (`docs/env-boundaries.md`). Nginx gives the manifest its own content type, which its type list lacks.
+
 ## Offline shell
 
 `config/offline-shell.ts` emits `sw.js` at build time only (`apply: 'build'`). It caches `index.html`, the manifest, the hashed assets and every icon in `config/app-icons.ts`, under a cache name hashed from those files and the base path. It requires a base path that starts and ends with `/`. The bank picker's country flags (the `flag-icons` package, about 270 SVGs) are hashed assets left out of the cache: the browser downloads only the flags the picker shows, and connecting a bank needs the network anyway.

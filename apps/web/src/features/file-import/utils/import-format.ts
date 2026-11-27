@@ -73,7 +73,7 @@ export function nameEndsWithCurrency(name: string, currency: string) {
 export const STATEMENT_GAPS_COPY = {
   title: 'Some days are missing',
   description:
-    "These statements skip some days, so their transactions aren't in Tempo. Everything else was imported. Import the statements for these days to add them.",
+    "These statements skip some days, so their transactions aren't in Wisp. Everything else was imported. Import the statements for these days to add them.",
 };
 
 /** A gap's amount as its line ends: `-€1,200.00 missing`. */
@@ -113,8 +113,8 @@ export function nothingNewCopy(
       count === 0
         ? `There are no transactions in ${files}.`
         : count === 1
-          ? 'The only transaction is already in Tempo.'
-          : `All ${formatCount(count)} transactions are already in Tempo.`,
+          ? 'The only transaction is already in Wisp.'
+          : `All ${formatCount(count)} transactions are already in Wisp.`,
   };
 }
 

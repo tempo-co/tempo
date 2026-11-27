@@ -31,7 +31,7 @@ const savedAt = (page: Page) =>
     CACHE_KEY,
   );
 const isTransactionsRequest = (url: URL) => url.href.startsWith(`${API_URL}/bank-transactions?`);
-const saveFailedToast = (page: Page) => page.getByText('Tempo cannot save data for offline use');
+const saveFailedToast = (page: Page) => page.getByText('Wisp cannot save data for offline use');
 
 async function padTransactionPages(page: Page) {
   await page.route(isTransactionsRequest, async (route) => {

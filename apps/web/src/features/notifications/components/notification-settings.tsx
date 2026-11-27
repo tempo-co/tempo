@@ -22,11 +22,11 @@ import {NotificationPermissionError, type PushSupport, getPushSupport} from '../
 /** Why this device cannot get alerts, in the words of what to do about it. */
 const UNSUPPORTED: Record<Exclude<PushSupport, 'supported'>, string> = {
   'ios-add-to-home-screen':
-    'On iPhone and iPad, add Tempo to your Home Screen first: tap Share, then Add to Home Screen, and open Tempo from there.',
+    'On iPhone and iPad, add Wisp to your Home Screen first: tap Share, then Add to Home Screen, and open Wisp from there.',
   'ios-update': 'Notifications need iOS 16.4 or later. Update this device to turn them on.',
   'android-install':
-    'On Android, install Tempo first: open the browser menu, choose Install app, and open Tempo from your home screen.',
-  unsupported: 'This browser can’t show notifications from Tempo.',
+    'On Android, install Wisp first: open the browser menu, choose Install app, and open Wisp from your home screen.',
+  unsupported: 'This browser can’t show notifications from Wisp.',
 };
 
 function currentPermission(): NotificationPermission | null {
@@ -43,12 +43,12 @@ function ThisDevice({publicKey}: {publicKey: string | null}) {
   let status: string;
   let action = null;
   if (!publicKey) {
-    status = 'This Tempo server isn’t set up to send notifications.';
+    status = 'This Wisp server isn’t set up to send notifications.';
   } else if (support !== 'supported') {
     status = UNSUPPORTED[support];
   } else if (permission === 'denied') {
     status =
-      'Notifications are blocked for Tempo. Allow them in this browser’s site settings, then come back here.';
+      'Notifications are blocked for Wisp. Allow them in this browser’s site settings, then come back here.';
   } else if (device.isPending) {
     return <Skeleton className='h-16 w-full rounded-none' />;
   } else if (device.data) {
@@ -109,7 +109,7 @@ export function NotificationSettings() {
     <SettingsGroup
       id='alerts-heading'
       title='Alerts'
-      description='Tempo only interrupts you when something needs you and can’t wait until you next open it.'
+      description='Wisp only interrupts you when something needs you and can’t wait until you next open it.'
     >
       <SettingsList>
         <ThisDevice publicKey={publicKey} />

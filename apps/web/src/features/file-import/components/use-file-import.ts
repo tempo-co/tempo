@@ -55,7 +55,7 @@ export type ImportStep =
   /** `count` is how many rows there were to check when the review opened; answered rows stay listed. */
   | {kind: 'review'; summary: BankImportSummary; count: number}
   | {kind: 'undo'; summary: BankImportSummary}
-  /** "Tell us your bank" after a file Tempo cannot read; `back` is the refusal it came from. */
+  /** "Tell us your bank" after a file Wisp cannot read; `back` is the refusal it came from. */
   | {kind: 'tell'; back: Extract<ImportStep, {kind: 'choose'}>}
   | {kind: 'told'};
 

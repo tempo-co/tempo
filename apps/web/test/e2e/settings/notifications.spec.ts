@@ -290,7 +290,7 @@ test.describe('Notification settings', () => {
       fail: (route: Route) => route.fulfill({status: 401, json: {message: 'Unauthorized'}}),
     },
     {
-      failure: 'Tempo is rate limited',
+      failure: 'Wisp is rate limited',
       fail: (route: Route) => route.fulfill({status: 429, json: {message: 'Too many requests'}}),
     },
   ]) {
@@ -315,7 +315,7 @@ test.describe('Notification settings', () => {
       expect(await toasts()).toEqual([]);
       expect(requests).toEqual([]);
 
-      // A subscription the browser kept fails to register the same quiet way when Tempo opens, then succeeds.
+      // A subscription the browser kept fails to register the same quiet way when Wisp opens, then succeeds.
       await setPushOnLoad(page, {subscribed: true});
       failed = false;
       await page.reload();
@@ -331,7 +331,7 @@ test.describe('Notification settings', () => {
     });
   }
 
-  test('a device subscribed again while Tempo is offline sends nothing, shows no error and stays off', async ({
+  test('a device subscribed again while Wisp is offline sends nothing, shows no error and stays off', async ({
     page,
     context,
   }) => {
@@ -391,7 +391,7 @@ test.describe('Notification settings', () => {
               .getByRole('link', {name: 'Security'})
               .click();
             await page.getByTestId('log-out-button').click();
-            // The attempt goes on while Tempo confirms the logout.
+            // The attempt goes on while Wisp confirms the logout.
             await expect.poll(() => held.length).toBe(1);
           } else {
             const banks = page.getByRole('checkbox', {name: /Bank alerts/});
@@ -427,7 +427,7 @@ test.describe('Notification settings', () => {
     await page.getByRole('button', {name: 'Allow notifications'}).click();
 
     await expect(deviceRow(page)).toHaveText(
-      'Notifications are blocked for Tempo. Allow them in this browser’s site settings, then come back here.',
+      'Notifications are blocked for Wisp. Allow them in this browser’s site settings, then come back here.',
     );
     await expect(page.getByRole('button', {name: 'Allow notifications'})).toHaveCount(0);
     expect(requests).toEqual([]);
@@ -440,7 +440,7 @@ test.describe('Notification settings', () => {
     await page.goto('/settings/notifications');
 
     await expect(deviceRow(page)).toHaveText(
-      'This Tempo server isn’t set up to send notifications.',
+      'This Wisp server isn’t set up to send notifications.',
     );
     await expect(page.getByRole('button', {name: 'Allow notifications'})).toHaveCount(0);
     await expect(page.getByRole('checkbox', {name: /Bank alerts/})).toHaveCount(0);
@@ -452,7 +452,7 @@ test.describe('Notification settings', () => {
       userAgent:
         'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
       status:
-        'On iPhone and iPad, add Tempo to your Home Screen first: tap Share, then Add to Home Screen, and open Tempo from there.',
+        'On iPhone and iPad, add Wisp to your Home Screen first: tap Share, then Add to Home Screen, and open Wisp from there.',
     },
     {
       device: 'an iPhone before iOS 16.4',
@@ -465,7 +465,7 @@ test.describe('Notification settings', () => {
       userAgent:
         'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36',
       status:
-        'On Android, install Tempo first: open the browser menu, choose Install app, and open Tempo from your home screen.',
+        'On Android, install Wisp first: open the browser menu, choose Install app, and open Wisp from your home screen.',
     },
   ]) {
     test.describe(`on ${device}`, () => {
@@ -572,7 +572,7 @@ test.describe('Notification settings', () => {
     ]);
     expect((await pushState(page)).permissionRequests).toBe(0);
   });
-  test('a subscribed device opened while Tempo is unreachable registers nothing and shows no error', async ({
+  test('a subscribed device opened while Wisp is unreachable registers nothing and shows no error', async ({
     page,
   }) => {
     await stubPush(page, {permission: 'granted', subscribed: true});
@@ -581,7 +581,7 @@ test.describe('Notification settings', () => {
     await page.goto('/settings/notifications');
     await expect(deviceRow(page)).toHaveText('On. Alerts you have turned on arrive here.');
     await expect.poll(() => requests.length).toBe(1);
-    // The saved account lets Tempo open without a connection.
+    // The saved account lets Wisp open without a connection.
     await expect
       .poll(() => page.evaluate(() => localStorage.getItem('wisp-offline-cache')))
       .not.toBeNull();
@@ -644,14 +644,14 @@ test.describe('Notification settings', () => {
       expect(registrations).toBe(1);
     });
 
-    test('after opening while Tempo is unreachable, reads the settings only once Tempo confirms the session', async ({
+    test('after opening while Wisp is unreachable, reads the settings only once Wisp confirms the session', async ({
       page,
     }) => {
       await stubPush(page, {permission: 'granted'});
       const reads = await countSettingsReads(page, (route) => route.fulfill({json: settings()}));
       await recordSubscriptionRequests(page);
       await page.goto('/settings/appearance');
-      // The saved account lets Tempo open without a connection.
+      // The saved account lets Wisp open without a connection.
       await expect
         .poll(() => page.evaluate(() => localStorage.getItem('wisp-offline-cache')))
         .not.toBeNull();
@@ -673,7 +673,7 @@ test.describe('Notification settings', () => {
       await page.reload();
       await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
 
-      // Reconnecting probes Tempo, then asks it to confirm the session, which is held here.
+      // Reconnecting probes Wisp, then asks it to confirm the session, which is held here.
       unreachable = false;
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
       await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeHidden();

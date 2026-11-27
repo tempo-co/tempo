@@ -9,9 +9,43 @@ import {LoginPage} from '../../pages/login.page';
 import {fulfillJson} from '../../utils/api-mocks';
 
 test.describe('Login', () => {
-  test.describe('Opening Tempo signed out', () => {
+  test.describe('Opening Wisp signed out', () => {
     // Every script must pass through page.route, not the offline shell.
     test.use({storageState: {cookies: [], origins: []}, serviceWorkers: 'block'});
+
+    test('the login page is titled Wisp and its footer opens the official addresses', async ({
+      page,
+      loginPage,
+    }) => {
+      await loginPage.navigate();
+      await expect(page).toHaveTitle('Wisp');
+      await expect(page.getByRole('heading', {level: 1})).toHaveText('Log in to Wisp');
+
+      await page.getByRole('link', {name: 'Official addresses'}).click();
+      await expect(page).toHaveURL(/\/official$/);
+      await expect(page).toHaveTitle('Official addresses · Wisp');
+      const official = page.getByTestId('auth-page');
+      await expect(official.getByRole('heading', {level: 1})).toHaveText('Official addresses');
+      for (const [name, href] of [
+        ['wispmoney.com', 'https://wispmoney.com'],
+        ['app.wispmoney.com', 'https://app.wispmoney.com'],
+        ['no-reply@wispmoney.com', 'mailto:no-reply@wispmoney.com'],
+        ['support@wispmoney.com', 'mailto:support@wispmoney.com'],
+        ['github.com/wispmoney/wisp', 'https://github.com/wispmoney/wisp'],
+      ])
+        await expect(official.getByRole('link', {name, exact: true})).toHaveAttribute('href', href);
+      await expect(official).toContainText(
+        "We never ask for your bank password; you log in to your bank only on your bank's own site.",
+      );
+      await expect(official).toContainText(
+        "Bank connection by Enable Banking Oy, an account information service provider registered with the Finnish Financial Supervisory Authority. Wisp can only read your accounts; it can't move money.",
+      );
+      // The provider's name links its entry in the EBA payments register.
+      await expect(official.getByRole('link', {name: 'Enable Banking Oy'})).toHaveAttribute(
+        'href',
+        /^https:\/\/euclid\.eba\.europa\.eu\/register\/pir\//,
+      );
+    });
 
     test('shows the login form while the requested page is still loading', async ({
       page,

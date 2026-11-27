@@ -8,11 +8,11 @@ import {useRestoreDeviceSubscription} from '../api/use-restore-device-subscripti
 import {setAppBadge} from '../utils/push-device';
 
 /**
- * While Tempo is open and signed in, its app icon counts the transactions that need review, the Transactions tab's
+ * While Wisp is open and signed in, its app icon counts the transactions that need review, the Transactions tab's
  * count; signing out clears it, also when a review count read during sign-out arrives late. A
- * browser already subscribed to alerts is registered with this session once Tempo has confirmed the session, so
- * opening a saved Tempo offline tries no write. A browser that lost its subscription while notifications stay
- * allowed is subscribed again once Tempo has confirmed the session and answered with the alert settings.
+ * browser already subscribed to alerts is registered with this session once Wisp has confirmed the session, so
+ * opening a saved Wisp offline tries no write. A browser that lost its subscription while notifications stay
+ * allowed is subscribed again once Wisp has confirmed the session and answered with the alert settings.
  */
 export function DeviceAlerts() {
   const needsAttention = useGetBankTransactionReviewCounts().reviewCounts?.needsAttention;
@@ -28,7 +28,7 @@ export function DeviceAlerts() {
   useEffect(() => {
     if (!confirmedAccountId) return;
     void registerExistingSubscription().catch(() => {
-      /* Alerts resume the next time Tempo opens. */
+      /* Alerts resume the next time Wisp opens. */
     });
   }, [confirmedAccountId]);
   useRestoreDeviceSubscription(!!confirmedAccountId);

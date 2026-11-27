@@ -11,8 +11,11 @@ COPY apps/web/ ./
 
 ARG VITE_API_URL=/api
 ARG VITE_BASE_PATH=/
+# The app's public origin, which link previews name in their absolute image address.
+ARG VITE_APP_URL=https://app.wispmoney.com
 ENV VITE_API_URL=$VITE_API_URL \
-    VITE_BASE_PATH=$VITE_BASE_PATH
+    VITE_BASE_PATH=$VITE_BASE_PATH \
+    VITE_APP_URL=$VITE_APP_URL
 
 RUN npm run build
 

@@ -52,7 +52,7 @@ function firstDraft(bankId: PickedBankId) {
 }
 
 /**
- * "Tell us your bank", after a file Tempo cannot read: the bank's name, its country and the files it lets the owner
+ * "Tell us your bank", after a file Wisp cannot read: the bank's name, its country and the files it lets the owner
  * download. Nothing of the file goes with it, and the copy says no reply follows.
  */
 export function TellUsYourBankStep({

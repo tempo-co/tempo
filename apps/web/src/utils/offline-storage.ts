@@ -121,7 +121,7 @@ export function createOfflinePersistence(
       .sort((a, b) => a.state.dataUpdatedAt - b.state.dataUpdatedAt)[0];
     if (!oldest) {
       if (!saveFailed)
-        toast.warning('Tempo cannot save data for offline use', {
+        toast.warning('Wisp cannot save data for offline use', {
           id: SAVE_FAILED_TOAST,
           description: 'The browser refused to store it. What you open now may not work offline.',
           duration: Infinity,

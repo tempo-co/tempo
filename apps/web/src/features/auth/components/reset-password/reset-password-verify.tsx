@@ -60,7 +60,7 @@ export function ResetPasswordVerify({token, email}: ResetPasswordVerifyProps) {
           className='flex w-full flex-col gap-4 text-body'
         >
           <p className='leading-6 text-muted-foreground'>
-            Your new password is ready. You can now log in to your Tempo account.
+            Your new password is ready. You can now log in to your Wisp account.
           </p>
           <Button asChild className='w-full'>
             <Link to='/login' data-testid='return-to-login-link'>

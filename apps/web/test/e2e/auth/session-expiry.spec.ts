@@ -19,7 +19,7 @@ test.describe('auth errors during a session', () => {
     const connectionsResponse = page.waitForResponse(`${API_URL}/bank-connections`);
     await page.goto('/transactions');
     await expect(page.getByText('Coffee shop')).toBeVisible();
-    // Finish the initial connection load before expiring the Tempo session.
+    // Finish the initial connection load before expiring the Wisp session.
     await (await connectionsResponse).finished();
   });
 

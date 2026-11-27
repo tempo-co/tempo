@@ -5,15 +5,15 @@ import {HttpError, api} from '@/utils/api';
 
 export const CURRENT_ACCOUNT_KEY = ['currentAccount'];
 
-/** An account saved before this page load only decides routing once Tempo confirms it or is unreachable. */
+/** An account saved before this page load only decides routing once Wisp confirms it or is unreachable. */
 export const PAGE_LOADED_AT = Date.now();
 
 let savedSessionShown = false;
-/** Records that the saved account is on screen because Tempo was unreachable when the page loaded. */
+/** Records that the saved account is on screen because Wisp was unreachable when the page loaded. */
 export const markSavedSessionShown = () => {
   savedSessionShown = true;
 };
-/** Once shown, the saved account stays on screen while Tempo confirms it after reconnecting. */
+/** Once shown, the saved account stays on screen while Wisp confirms it after reconnecting. */
 export const wasSavedSessionShown = () => savedSessionShown;
 
 /** The signed-in check: the account, or a 401 when this browser has no session. */
@@ -36,7 +36,7 @@ export const useCurrentAccount = ({skipFetch = false} = {}) => {
   const isUnavailable = !data && !!error && error.status !== 401;
   const isEmailVerified = isAuthenticated && data?.isEmailVerified;
   const isSavedSessionUnconfirmed = !!data && dataUpdatedAt < PAGE_LOADED_AT && !error;
-  /** Tempo answered for this account since the page loaded, so it is reachable and the session live. */
+  /** Wisp answered for this account since the page loaded, so it is reachable and the session live. */
   const isConfirmed = !!data && dataUpdatedAt >= PAGE_LOADED_AT && !error;
 
   return {

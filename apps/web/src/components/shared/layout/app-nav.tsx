@@ -115,7 +115,7 @@ function HomeLink({className}: {className?: string}) {
   return (
     <Link
       to='/'
-      aria-label='Tempo home'
+      aria-label='Wisp home'
       className={cn(
         'press-feedback grid size-9 shrink-0 place-items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         className,

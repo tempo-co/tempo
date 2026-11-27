@@ -94,7 +94,7 @@ test.describe('the Wisp mark', () => {
     await mockSyntheticHome(page);
     await page.goto('/insights');
     const header = await boxOf(page.getByRole('banner'));
-    const link = page.getByRole('banner').getByRole('link', {name: 'Tempo home'});
+    const link = page.getByRole('banner').getByRole('link', {name: 'Wisp home'});
     const target = await boxOf(link);
     const mark = await boxOf(link.locator('svg'));
     expect(target).toMatchObject({width: 44, height: 44});
@@ -111,7 +111,7 @@ test.describe('the Wisp mark', () => {
     await page.setViewportSize({width: 1440, height: 900});
     await mockSyntheticHome(page);
     await page.goto('/insights');
-    const link = page.getByTestId('app-sidebar').getByRole('link', {name: 'Tempo home'});
+    const link = page.getByTestId('app-sidebar').getByRole('link', {name: 'Wisp home'});
     expect(await boxOf(link)).toMatchObject({width: 36, height: 36});
     expect(await boxOf(link.locator('svg'))).toMatchObject({width: 28, height: 28});
 
@@ -125,7 +125,7 @@ test.describe('the Wisp mark', () => {
       fulfillJson(route, {message: 'Unauthorized'}, 401),
     );
     await page.goto('/login');
-    const mark = await boxOf(page.getByRole('link', {name: 'Tempo home'}).locator('svg'));
+    const mark = await boxOf(page.getByRole('link', {name: 'Wisp home'}).locator('svg'));
     expect(mark.width).toBe(48);
     expect(mark.height).toBe(48);
   });

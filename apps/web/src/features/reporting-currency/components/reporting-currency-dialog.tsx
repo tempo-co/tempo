@@ -20,7 +20,7 @@ import {CurrencyList} from './currency-list';
 /** Changes the reporting currency: pick one, then Save. Nothing is saved on picking alone. */
 export function ReportingCurrencyDialog({settings}: {settings: ReportingCurrency}) {
   const [isOpen, setIsOpen] = useState(false);
-  // A currency Tempo can't convert into any more is no choice, so nothing starts selected then.
+  // A currency Wisp can't convert into any more is no choice, so nothing starts selected then.
   const saved = settings.currencyUnavailable ? null : settings.currency;
   const [selected, setSelected] = useState<string | null>(saved);
   const {choose, isPending} = useChooseReportingCurrency();

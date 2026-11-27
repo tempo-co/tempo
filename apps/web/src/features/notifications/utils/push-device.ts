@@ -1,8 +1,8 @@
 import type {PushSubscriptionRegistration} from '@tempo/contracts';
 
 /**
- * Whether this browser can get Tempo's alerts, and if not, what would change that. iPhone and iPad deliver web push
- * only to apps added to the Home Screen on iOS 16.4 or later; on Android Tempo asks to be installed first, so alerts
+ * Whether this browser can get Wisp's alerts, and if not, what would change that. iPhone and iPad deliver web push
+ * only to apps added to the Home Screen on iOS 16.4 or later; on Android Wisp asks to be installed first, so alerts
  * open the app rather than a browser tab.
  */
 export type PushSupport =
@@ -56,7 +56,7 @@ async function getRegistration() {
   return navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL);
 }
 
-/** This browser's push subscription for Tempo, if it has one and notifications are still allowed. */
+/** This browser's push subscription for Wisp, if it has one and notifications are still allowed. */
 export async function getDeviceSubscription(): Promise<PushSubscription | null> {
   if (!('Notification' in window) || Notification.permission !== 'granted') return null;
   const registration = await getRegistration();
@@ -124,8 +124,8 @@ export async function unsubscribeDevice(): Promise<string | null> {
 const TURNED_OFF_KEY = 'wisp-device-alerts-off';
 
 /**
- * Whether this device was turned off in Settings, so Tempo leaves it unsubscribed until Allow is tapped. Unreadable
- * storage counts as turned off: the choice can't be known, so Tempo doesn't subscribe on its own.
+ * Whether this device was turned off in Settings, so Wisp leaves it unsubscribed until Allow is tapped. Unreadable
+ * storage counts as turned off: the choice can't be known, so Wisp doesn't subscribe on its own.
  */
 export function isDeviceTurnedOff() {
   try {
