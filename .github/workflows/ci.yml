@@ -210,7 +210,7 @@ jobs:
             - name: Run unit tests
               run: npm run test
 
-    # Reads wispmoney/tempo-import-corpus with a read-only deploy key. Fork and Dependabot PRs get no
+    # Reads wispmoney/wisp-import-corpus with a read-only deploy key. Fork and Dependabot PRs get no
     # secret, so the job reports a skip there; any other run without the key fails. Every step after
     # the two key checks runs only with the key. Its output is counts and failing file ids, never rows.
     api-corpus-check:
@@ -248,7 +248,7 @@ jobs:
               if: env.HAS_KEY == 'true'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
-                  repository: wispmoney/tempo-import-corpus
+                  repository: wispmoney/wisp-import-corpus
                   ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
                   persist-credentials: false
                   path: corpus
