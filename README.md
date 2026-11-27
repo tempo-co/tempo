@@ -19,5 +19,3 @@ Wisp is a personal-finance app. It synchronizes real bank data through [Enable B
 | [`docs`](docs/ci-and-images.md) | CI and images for both apps, decision records (`docs/adr/`), agent-skill settings (`docs/agents/`) |
 
 Each app has its own `package.json`, lockfile and tooling; run npm commands inside its directory (`cd apps/api && npm ci`). Both need Node.js 26.x and Docker.
-
-The code is open to read, not to reuse: it is published for viewing only, and no licence is granted to use, copy or modify it ([LICENSE](LICENSE)).
