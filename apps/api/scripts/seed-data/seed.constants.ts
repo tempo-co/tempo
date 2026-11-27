@@ -26,6 +26,9 @@ export const OWN_TRANSFER_ACCOUNT_NAME = 'Own Transfer Account';
 export const OWN_TRANSFER_ACCOUNT_EMAIL = 'own-transfers@test.com';
 export const OWN_TRANSFER_ACCOUNT_PASSWORD = 'own-transfers';
 
+export const BULK_CATEGORY_ACCOUNT_NAME = 'Bulk Category Account';
+export const BULK_CATEGORY_ACCOUNT_EMAIL = 'bulk-category@test.com';
+export const BULK_CATEGORY_ACCOUNT_PASSWORD = 'bulk-category';
 export const RECURRING_ACCOUNT_NAME = 'Recurring Account';
 export const RECURRING_ACCOUNT_EMAIL = 'recurring@test.com';
 export const RECURRING_ACCOUNT_PASSWORD = 'recurring';

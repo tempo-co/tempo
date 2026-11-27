@@ -53,7 +53,9 @@ test.describe('bank transactions', () => {
     await page.getByRole('button', {name: 'Clear filters'}).click();
     await expect(page.getByText('Coffee shop')).toBeVisible();
 
-    await firstTransactionRow.click({position: {x: 8, y: 8}});
+    await firstTransactionRow
+      .getByRole('button', {name: 'View Coffee shop transaction details'})
+      .click({position: {x: 8, y: 8}});
     const inspector = page.getByTestId('bank-transaction-inspector');
     await expect(page).toHaveURL(/\/transactions(?:\?.*)?$/);
     const openedUrl = new URL(page.url());
@@ -1163,9 +1165,10 @@ test.describe('bank transactions', () => {
       rows.evaluateAll((elements) =>
         elements.flatMap((row) => {
           const amount = row.querySelector('[data-testid="ledger-row-amount"]');
-          const button = row.querySelector('button');
-          if (!amount || !button) return [];
-          const rowBox = button.getBoundingClientRect();
+          // The row: its button, or its checkbox and button together where the list has checkboxes.
+          const rowElement = row.firstElementChild;
+          if (!amount || !rowElement) return [];
+          const rowBox = rowElement.getBoundingClientRect();
           const amountBox = amount.getBoundingClientRect();
           return amount.scrollWidth > amount.clientWidth + 1 ||
             amountBox.right > rowBox.right + 1 ||
@@ -1194,11 +1197,11 @@ test.describe('bank transactions', () => {
       ).toContainText('1,284 transactions');
       await expect(rows.nth(0)).toContainText('-€12,345,678.90');
       await expect(rows.nth(1)).toContainText('-CHF 12,345,678.90');
-      // Each row's button fills its day card edge to edge (inside the 1px border), so hover and clicks do too.
+      // Each row fills its day card edge to edge (inside the 1px border), so hover and clicks do too.
       expect(
         await rows.evaluateAll((elements) =>
           elements.flatMap((row) => {
-            const button = row.querySelector('button')!.getBoundingClientRect();
+            const button = row.firstElementChild!.getBoundingClientRect();
             const card = row.closest('ul')!.getBoundingClientRect();
             return Math.abs(button.left - card.left - 1) > 0.5 ||
               Math.abs(card.right - 1 - button.right) > 0.5

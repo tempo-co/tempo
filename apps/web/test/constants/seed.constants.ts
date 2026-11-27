@@ -17,5 +17,7 @@ export const OWN_TRANSFER_ACCOUNT_PASSWORD = 'own-transfers';
 export const SEEDED_TRANSACTION_YEAR_NOW = new Date('2026-10-01T12:00:00.000Z');
 export const AFTER_SEEDED_TRANSACTION_YEAR_NOW = new Date('2027-01-15T12:00:00.000Z');
 
+export const BULK_CATEGORY_ACCOUNT_EMAIL = 'bulk-category@test.com';
+export const BULK_CATEGORY_ACCOUNT_PASSWORD = 'bulk-category';
 export const RECURRING_ACCOUNT_EMAIL = 'recurring@test.com';
 export const RECURRING_ACCOUNT_PASSWORD = 'recurring';

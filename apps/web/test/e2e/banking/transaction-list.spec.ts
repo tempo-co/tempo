@@ -2,6 +2,8 @@ import type {Locator, Page} from '@playwright/test';
 import type {
   BankConnection,
   BankTransaction,
+  BankTransactionBulkCategoryPreview,
+  BankTransactionBulkCategoryPreviewRequest,
   BankTransactionCategoryImpact,
   BankTransactionDayTotals,
   BankTransactionTotals,
@@ -112,7 +114,7 @@ const connection = (accounts: 'one' | 'several'): BankConnection => ({
 async function mockLedger(
   page: Page,
   rows: Row[],
-  {accounts = 'one'}: {accounts?: 'one' | 'several'} = {},
+  {accounts = 'one', bulkOthers = []}: {accounts?: 'one' | 'several'; bulkOthers?: Row[]} = {},
 ) {
   const requests = {
     list: [] as URLSearchParams[],
@@ -234,6 +236,28 @@ async function mockLedger(
       })),
     } satisfies BankTransactionCategoryImpact);
   });
+  // A bulk category's preview offers the rows the test puts in `bulkOthers`.
+  await page.route('**/bank-transactions/bulk-category/preview', (route) =>
+    fulfillJson(route, {
+      transactions: bulkOthers.map((other) => ({
+        id: other.id,
+        displayDescription: other.displayDescription,
+        transactionDate: other.transactionDate,
+        bookingDate: other.bookingDate,
+        amount: other.amount,
+        currency: other.currency,
+        category: other.category,
+        categorySource: other.categorySource,
+        categoryStatus: other.categoryStatus,
+        action: other.category === 'TRANSFER_OUT' ? 'RECHECK' : 'APPLY',
+        appliedCategory: other.category === 'TRANSFER_OUT' ? null : 'HOUSING_AND_UTILITIES',
+      })),
+      total: bulkOthers.length,
+      selected:
+        (route.request().postDataJSON() as BankTransactionBulkCategoryPreviewRequest).transactionIds
+          ?.length ?? 0,
+    } satisfies BankTransactionBulkCategoryPreview),
+  );
   await page.route(/\/bank-transactions\/[\da-f-]{36}\/category$/, (route) => {
     const segments = new URL(route.request().url()).pathname.split('/');
     const id = segments[segments.length - 2];
@@ -960,6 +984,24 @@ const worstCase = (): Row[] => [
   }),
 ];
 
+/** Other rows from the worst-case payees: a long name, an unbreakable reference with a huge amount, a recheck. */
+const worstCaseOthers = (): Row[] => [
+  row(10, '2026-10-30', {
+    displayDescription: 'Aleksandra Wiśniewska-Kowalczyk Interior Design and Renovation Studio',
+    amount: '-12345678.90',
+    currency: 'EUR',
+    category: 'HOME_IMPROVEMENT',
+  }),
+  row(11, '2026-10-29', {
+    displayDescription: '/TRTP/SEPA-TRANSFER/IBAN/NL91ABNA0417164300/REMI/INV-2026-000123456789',
+    amount: '-98765432.10',
+    currency: 'CHF',
+    category: 'TRANSFER_OUT',
+    categorySource: 'HISTORY',
+  }),
+  row(12, '2026-10-28', {displayDescription: 'Jo', amount: '-1.00', category: null}),
+];
+
 /** Visible amounts inside `scope` that break across lines or run out of their box. */
 const brokenAmounts = (scope: Locator) =>
   scope.evaluate((root) =>
@@ -1011,7 +1053,7 @@ for (const theme of ['light', 'dark'] as const) {
   }) => {
     test.slow();
     await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
-    await mockLedger(page, worstCase(), {accounts: 'several'});
+    await mockLedger(page, worstCase(), {accounts: 'several', bulkOthers: worstCaseOthers()});
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({width, height: 900});
       await page.goto('/transactions');
@@ -1027,7 +1069,10 @@ for (const theme of ['light', 'dark'] as const) {
       // Every row has the shared row height and tile, and its amount whole on its line.
       const sizes = await listRows(page).evaluateAll((rows) =>
         rows.map((candidate) => ({
-          row: Math.round(candidate.querySelector('button')!.getBoundingClientRect().height),
+          row: Math.round(
+            candidate.querySelector('button:not([role="checkbox"])')!.getBoundingClientRect()
+              .height,
+          ),
           tile: Math.round(
             candidate.querySelector('[data-testid="merchant-logo-tile"]')!.getBoundingClientRect()
               .width,
@@ -1069,6 +1114,42 @@ for (const theme of ['light', 'dark'] as const) {
         await page.keyboard.press('Escape');
         await expect(page).not.toHaveURL(/transactionId/);
       }
+
+      // Every row picked, the longest category, and the payees' other rows: the bar and the step fit.
+      if (width < 1440) await page.getByRole('button', {name: 'Select'}).click();
+      await page.getByRole('checkbox', {name: 'Select all 4'}).click();
+      const bar = page.getByRole('toolbar', {name: 'Selected transactions'});
+      await expect(bar).toContainText('4 selected');
+      const [barBox, mainBox] = await Promise.all([boxOf(bar), boxOf(page.locator('main'))]);
+      expect(barBox.x, `bar at ${width}px`).toBeGreaterThanOrEqual(mainBox.x);
+      expect(barBox.x + barBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1);
+      await expectNoHorizontalOverflow(page);
+      await bar.getByRole('button', {name: 'Category'}).click();
+      await (
+        width < 1440
+          ? page
+              .getByTestId('bulk-category-sheet')
+              .getByRole('button', {name: 'Housing and utilities'})
+          : page.getByRole('menuitem', {name: 'Housing and utilities'})
+      ).click();
+      const step = page.getByTestId('bulk-category-step');
+      await expect(step.getByRole('heading')).toHaveText('Change 4 to Housing and utilities?');
+      await animationsSettled(step);
+      const stepBox = await boxOf(step);
+      for (const button of await step.getByRole('button').all()) {
+        const box = await boxOf(button);
+        expect(box.x + box.width, `step button at ${width}px`).toBeLessThanOrEqual(
+          stepBox.x + stepBox.width + 1,
+        );
+      }
+      await expect(step.getByRole('button', {name: 'Change all 7'})).toBeVisible();
+      await expect(step).toContainText('AI picks again');
+      expect(await brokenAmounts(step), `step amounts at ${width}px`).toEqual([]);
+      await expectNoHorizontalOverflow(page);
+      await step.getByRole('button', {name: 'Cancel'}).click();
+      await expect(step).toBeHidden();
+      await bar.getByRole('button', {name: 'Clear the selection'}).click();
+      await expect(bar).toBeHidden();
     }
   });
 }
