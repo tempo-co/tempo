@@ -193,7 +193,7 @@ export class BankConnectionAlertService implements OnModuleInit {
 		const bankConnectionsUrl = createWebUrl('/accounts', this.configurationService.get('WEB_BASE_URL'));
 
 		if (alert === BANK_CONNECTION_ALERTS.SYNC_BROKEN) {
-			const subject = `Tempo can't sync ${bankName}`;
+			const subject = `Wisp can't sync ${bankName}`;
 			return {
 				to: account.email,
 				subject,
@@ -212,8 +212,8 @@ export class BankConnectionAlertService implements OnModuleInit {
 
 		const subject =
 			alert === BANK_CONNECTION_ALERTS.CONSENT_FINAL
-				? `Last day to reconnect ${bankName} in Tempo`
-				: `Your ${bankName} connection to Tempo ends soon`;
+				? `Last day to reconnect ${bankName} in Wisp`
+				: `Your ${bankName} connection to Wisp ends soon`;
 		return {
 			to: account.email,
 			subject,
@@ -229,10 +229,10 @@ export class BankConnectionAlertService implements OnModuleInit {
 
 	private describeSyncProblem(connection: BankConnection): string {
 		if (connection.status === BANK_CONNECTION_STATUSES.EXPIRED) {
-			return `The access you gave Tempo to ${connection.aspspName} has ended.`;
+			return `The access you gave Wisp to ${connection.aspspName} has ended.`;
 		}
 		if (connection.syncStatus === BANK_SYNC_STATUSES.RATE_LIMITED) {
-			return `${connection.aspspName} is limiting how often Tempo can fetch data.`;
+			return `${connection.aspspName} is limiting how often Wisp can fetch data.`;
 		}
 		return 'Recent sync attempts did not succeed.';
 	}

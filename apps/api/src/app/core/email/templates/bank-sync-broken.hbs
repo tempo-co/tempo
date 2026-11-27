@@ -1,10 +1,10 @@
 {{#> layout
     subject=subject
-    preheader=(concat "Check your " bankName " connection in Tempo.")
+    preheader=(concat "Check your " bankName " connection in Wisp.")
 }}
-  <h1>Tempo can't sync {{bankName}}</h1>
+  <h1>Wisp can't sync {{bankName}}</h1>
   <p>{{reason}} {{lastSyncDescription}}</p>
-  <p>Open your bank connections in Tempo to check it, and reconnect the bank if Tempo asks you to.</p>
+  <p>Open your bank connections in Wisp to check it, and reconnect the bank if Wisp asks you to.</p>
   {{> button
       url=bankConnectionsUrl
       text="View bank connections"

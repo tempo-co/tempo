@@ -86,7 +86,7 @@ export class BankCoverageDigestService implements OnModuleInit {
 		if (newBanks.length === 0 && missedBanks.length === 0) return;
 
 		const queued = await this.operatorAlertService.send(
-			{kind: 'bank-coverage', subject: 'Tempo: banks to add', text: digestText(newBanks, missedBanks)},
+			{kind: 'bank-coverage', subject: 'Wisp: banks to add', text: digestText(newBanks, missedBanks)},
 			now,
 		);
 		if (!queued) return;

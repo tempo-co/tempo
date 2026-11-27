@@ -77,7 +77,7 @@ async function setBadge(count) {
     else await self.navigator.clearAppBadge?.();
   } catch { /* Badging is best effort. */ }
 }
-// Only Tempo's own pages open from a notification.
+// Only Wisp's own pages open from a notification.
 function appUrl(url) {
   try {
     const target = new URL(url, self.location.origin);
@@ -90,7 +90,7 @@ self.addEventListener('push', (event) => {
   try { alert = event.data ? event.data.json() : {}; } catch { /* Show the plain alert. */ }
   event.waitUntil(Promise.all([
     typeof alert.badge === 'number' ? setBadge(alert.badge) : undefined,
-    self.registration.showNotification(alert.title || 'Tempo', {
+    self.registration.showNotification(alert.title || 'Wisp', {
       body: alert.body || '',
       tag: alert.tag,
       icon: BASE + 'icon-192.png',
