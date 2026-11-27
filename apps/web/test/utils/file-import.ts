@@ -220,6 +220,7 @@ export async function mockFileImport(
     await answer(route, api);
   });
   await page.route(`${API_URL}/bank-imports/preview`, async (route) => {
+    if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.continue();
     api.previews.push(route.request());
     const answer = uploads[0];
     if (!answer) throw new Error('Unexpected preview');

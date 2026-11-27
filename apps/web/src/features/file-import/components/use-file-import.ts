@@ -338,6 +338,8 @@ export function useFileImport({
       setStep({kind: 'importing', files});
       try {
         const summary = await importFiles({files, accountChoices, bankId});
+        // An earlier try's failure is settled now: its toast goes, so it cannot offer this drop again.
+        toast.dismiss('bank-import-failed');
         await nameAccounts(preview, names, summary);
         // A first run closes on Home once it has the accounts to show; its summary stays a toast away.
         const firstRun = firstRunRef.current;
@@ -360,7 +362,12 @@ export function useFileImport({
           if (!openRef.current && !(failure.kind === 'failed' && failure.toasted))
             toast.error(failure.kind === 'refused' ? failure.title : IMPORT_FAILED_TITLE, {
               id: 'bank-import-failed',
-              action: {label: 'Check', onClick: () => showFound(kept)},
+              // Only while that failure is still where the drop stands.
+              action: {
+                label: 'Check',
+                onClick: () =>
+                  stepRef.current === kept ? showFound(kept) : reopen(stepRef.current),
+              },
             });
           return;
         }

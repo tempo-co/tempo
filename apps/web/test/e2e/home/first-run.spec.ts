@@ -78,6 +78,7 @@ async function holdImports(page: Page) {
     await route.fallback();
   });
   await page.route(`${API_URL}/bank-transactions/review-counts`, async (route) => {
+    if (!['fetch', 'xhr'].includes(route.request().resourceType())) return route.fallback();
     const response = await route.fetch();
     const counts = (await response.json()) as BankTransactionReviewCounts;
     await route.fulfill({

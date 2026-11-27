@@ -193,13 +193,17 @@ describe('Bank import preview', () => {
 		expect(await written(other.owner)).toEqual(nothing);
 	});
 
-	it('refuses what the import refuses, with the same code and file', async () => {
+	it('refuses a file it cannot read as the import does, with the same code and file', async () => {
 		const {agent} = await createOwner();
 		const refused = await send(agent, '/bank-imports/preview', [
 			ARCHIVE,
 			Buffer.from('Example notes\nmore notes\n'),
 		]).expect(415);
 		expect(refused.body).toMatchObject({code: 'unsupported_format', file: 2});
+	});
+
+	it('refuses a drop with no files', async () => {
+		const {agent} = await createOwner();
 		await send(agent, '/bank-imports/preview', []).expect(400);
 	});
 

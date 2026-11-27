@@ -6,6 +6,7 @@ import {
   type BankImportDoubtfulRow,
   type BankImportLayoutProposal,
   type BankImportNeverSentRow,
+  type UpdateBankAccountRequest,
 } from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
@@ -212,9 +213,9 @@ test.describe('statement file import on Accounts', () => {
       `${API_URL}/bank-connections/${MOCK_CONNECTION.id}/accounts/${CHECKING.id}`,
       async (route) => {
         expect(route.request().method()).toBe('PATCH');
-        const body = route.request().postDataJSON() as {alias: string};
+        const body = route.request().postDataJSON() as UpdateBankAccountRequest;
         renames.push(body);
-        checking = {...CHECKING, alias: body.alias};
+        checking = {...CHECKING, alias: body.alias ?? null};
         await fulfillJson(route, checking);
       },
     );
@@ -2281,10 +2282,12 @@ test.describe('statement file import on Accounts', () => {
     expect(api.uploads).toHaveLength(0);
   });
 
-  test('a server failure says so under Check what we found, and Try again imports the same files under the name typed', async ({
+  test('a server failure after the sheet closed is told in a toast, Import a file reopens Check what we found with the name typed, and Try again imports the same files and settles the toast', async ({
     page,
   }) => {
     const summary = importSummary({filesCount: 2});
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
     await mockBankConnections(page, () => [{...MOCK_CONNECTION, bankAccounts: [CHECKING]}]);
     const renames: unknown[] = [];
     await page.route(
@@ -2296,10 +2299,12 @@ test.describe('statement file import on Accounts', () => {
     );
     const api = await mockFileImport(page, {
       uploads: [
-        // The read goes through; the import after it fails on the server.
+        // The read goes through; the import after it fails on the server once the sheet has closed.
         Object.assign(
-          (route: Route) =>
-            fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+          async (route: Route) => {
+            await held;
+            await fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+          },
           {summary},
         ),
         created(summary),
@@ -2314,11 +2319,23 @@ test.describe('statement file import on Accounts', () => {
       .getByTestId('bank-import-found-account')
       .getByRole('textbox', {name: 'Name of account 1'});
     await name.fill('Example everyday account');
-    await importFound(dialog);
+    try {
+      await importFound(dialog);
+      await expect(dialog.getByRole('button', {name: 'Importing…'})).toBeDisabled();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+    } finally {
+      release();
+    }
 
+    // The sheet is closed, so the failure arrives as a toast.
+    const failed = page.getByText("Couldn't import these files");
+    await expect(failed).toBeVisible();
+    expect(await countAfterToasts(page, failed)).toBe(1);
+    // Import a file comes back to Check what we found as it was left, with why it failed.
+    await page.getByRole('button', {name: 'Import a file'}).first().click();
     const alert = dialog.getByRole('alert');
     await expect(alert.getByText("Couldn't import these files")).toBeVisible();
-    expect(await countAfterToasts(page, page.getByText("Couldn't import these files"))).toBe(1);
     await expect(alert).toContainText('The server ran into a problem.');
     await expect(alert).toContainText(/500 · \d{2}:\d{2}/);
     await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
@@ -2327,15 +2344,16 @@ test.describe('statement file import on Accounts', () => {
     expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
       (await boxOf(found)).y + (await boxOf(found)).height,
     );
-    // Closed and opened again, Import a file comes back to it as it was left.
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await page.getByRole('button', {name: 'Import a file'}).first().click();
-    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
-    await expect(name).toHaveValue('Example everyday account');
 
     await alert.getByRole('button', {name: 'Try again'}).click();
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
+    // The import is in, so the failure's toast leaves at once and cannot offer the drop again. The short wait keeps
+    // the toast's own timeout out of it.
+    await expect(
+      page.locator('[data-sonner-toast][data-removed="false"]', {
+        hasText: "Couldn't import these files",
+      }),
+    ).toHaveCount(0, {timeout: 500});
     expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
       ['statement-a.xml', 'statement-b.xml'],
       ['statement-a.xml', 'statement-b.xml'],
