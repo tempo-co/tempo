@@ -254,7 +254,7 @@ export class BankTransactionSummaryService {
 	 * Only rows the reported balance holds are subtracted: those booked by the day it was reported, and booked
 	 * rows made by that day however late the bank books them (a weekend card payment booked on Monday is in
 	 * Sunday's balance). A day from the reported one on is that balance. A hidden account is listed with its balance
-	 * but counts in no total, and a period no shown account has history by is left out.
+	 * but counts in no total; a period only hidden accounts have history by has a null total.
 	 */
 	async getBalanceTrend(
 		owner: ReportingOwner,
@@ -325,13 +325,14 @@ export class BankTransactionSummaryService {
 		const periods: BankBalanceTrendPeriod[] = [];
 		for (const {start, periodEnd, end} of windows) {
 			const accounts = byEnd.get(end) ?? [];
+			if (!accounts.some((row) => row.included)) continue;
+			// A hidden account keeps its own balance history, for its page, but counts in no total.
 			const counted = accounts.filter((row) => row.included && !row.hidden);
-			if (counted.length === 0) continue;
 			periods.push({
 				start,
 				end,
 				complete: periodEnd < asOf && periodEnd <= to,
-				total: sumBalances(counted),
+				total: counted.length > 0 ? sumBalances(counted) : null,
 				accounts: accounts.map((row) => ({id: row.id, balance: row.balance})),
 			});
 		}

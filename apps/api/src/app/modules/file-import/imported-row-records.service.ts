@@ -216,8 +216,8 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 		manager: EntityManager,
 		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
-	): Promise<number> {
-		const [, removed]: [unknown, number] = await manager.query(
+	): Promise<void> {
+		await manager.query(
 			`DELETE FROM "bank_imports" bank_import
 			WHERE bank_import."accountId" = $2 AND $1 = ANY(bank_import."bankAccountIds")
 				AND NOT EXISTS (
@@ -260,7 +260,6 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 			WHERE bank_import."accountId" = $2 AND $1 = ANY(bank_import."bankAccountIds")`,
 			[bankAccountId, ownerId],
 		);
-		return removed;
 	}
 
 	async moveToConnection(

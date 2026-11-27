@@ -103,7 +103,7 @@ describe('Bank account settings', () => {
 			merchants: await get('/merchants', {}),
 			balanceTrend: await get('/bank-transactions/balance-trend', {
 				interval: 'month',
-				from: '2026-08-01',
+				from: '2026-03-01',
 				to: AS_OF,
 				asOf: AS_OF,
 			}),
@@ -239,6 +239,14 @@ describe('Bank account settings', () => {
 			total: '1500.00',
 			accounts: expect.arrayContaining([{id: card.id, balance: '200.00'}]),
 		});
+		// Before the main account's history, only the hidden account has a balance: no total, but its own history.
+		const march = (body: unknown) => (body as BankBalanceTrend).periods[0];
+		expect(march(before.balanceTrend)).toMatchObject({start: '2026-03-01', total: '500.00'});
+		expect(march(after.balanceTrend)).toMatchObject({
+			start: '2026-03-01',
+			total: null,
+			accounts: expect.arrayContaining([{id: card.id, balance: '500.00'}]),
+		});
 
 		// The AI assistant reads the same totals.
 		const reader = app.get(McpReaderService).forAccount(owner.owner);
@@ -295,10 +303,12 @@ describe('Bank account settings', () => {
 			.send({confirmation: 'DELETE'})
 			.expect(409);
 		await owner.agent.delete(`/bank-connections/${owner.connection.id}/accounts/${card.id}`).send({}).expect(400);
-		await owner.agent
-			.patch(`/bank-connections/${owner.connection.id}/accounts/${card.id}`)
-			.send({isHidden: 'yes'})
-			.expect(400);
+		for (const isHidden of ['yes', null]) {
+			await owner.agent
+				.patch(`/bank-connections/${owner.connection.id}/accounts/${card.id}`)
+				.send({isHidden})
+				.expect(400);
+		}
 
 		expect(await state()).toEqual(before);
 		expect({owner: await rows(owner.owner), other: await rows(other.owner)}).toEqual(rowsBefore);

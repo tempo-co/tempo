@@ -3,7 +3,7 @@ import {
 	type BankAccountRemoveRequest,
 	type UpdateBankAccountRequest,
 } from '@tempo/contracts';
-import {Equals, IsBoolean, IsOptional, IsString, MaxLength} from 'class-validator';
+import {Equals, IsBoolean, IsOptional, IsString, MaxLength, ValidateIf} from 'class-validator';
 
 import {BANKING_ACCOUNT_REMOVAL_CONFIRMATION_REQUIRED} from '../constants/banking-messages.constants';
 
@@ -14,8 +14,8 @@ export class UpdateBankAccountDto implements UpdateBankAccountRequest {
 	@MaxLength(BANK_ACCOUNT_ALIAS_MAX_LENGTH)
 	alias?: string | null;
 
-	/** `true` hides the account from lists and totals; `false` shows it again. */
-	@IsOptional()
+	/** `true` hides the account from lists and totals; `false` shows it again. Left out, it stays; null is refused. */
+	@ValidateIf((_dto, value) => value !== undefined)
 	@IsBoolean()
 	isHidden?: boolean;
 }

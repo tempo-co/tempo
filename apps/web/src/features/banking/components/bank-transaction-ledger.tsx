@@ -203,7 +203,6 @@ function SelectAllRow({
   );
 }
 
-/** The marker on a row the owner left out of totals. */
 /** The pill of a row no total counts: left out by the owner, or on an account they hid. */
 function LeftOutTag({hiddenAccount}: {hiddenAccount: boolean}) {
   return (

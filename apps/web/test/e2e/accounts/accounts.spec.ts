@@ -705,7 +705,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     page,
   }) => {
     const savingsId = MOCK_CONNECTION.bankAccounts[1].id;
-    const {connections, updates} = await mockAccountSettings(page, [MOCK_CONNECTION]);
+    const {connections, updates, failNext} = await mockAccountSettings(page, [MOCK_CONNECTION]);
     await mockAccountsApi(page, () => ({connections: connections()}));
     await page.goto('/accounts');
     await expect(page.getByTestId('accounts-total')).toContainText('1,335.00');
@@ -719,6 +719,11 @@ test.describe('mocked Enable Banking bank connection', () => {
     const field = rename.getByRole('textbox', {name: 'Name'});
     await expect(field).toHaveValue('Mock ASPSP savings account');
     await field.fill('  Holiday savings ');
+    // A failed save says so in the dialog, which keeps the edit for another try.
+    failNext.add('PATCH');
+    await rename.getByRole('button', {name: 'Save'}).click();
+    await expect(rename.getByRole('alert')).toContainText("Couldn't rename the account");
+    await expect(field).toHaveValue('  Holiday savings ');
     await rename.getByRole('button', {name: 'Save'}).click();
     await expect(rename).toHaveCount(0);
     await expect(page.getByRole('heading', {level: 1})).toHaveText('Holiday savings');
@@ -728,7 +733,11 @@ test.describe('mocked Enable Banking bank connection', () => {
       'Hidden: not in your lists or totals',
     );
     await expect(settings.getByRole('button', {name: 'Show in lists and totals'})).toBeVisible();
-    expect(updates).toEqual([{alias: 'Holiday savings'}, {isHidden: true}]);
+    expect(updates).toEqual([
+      {alias: 'Holiday savings'},
+      {alias: 'Holiday savings'},
+      {isHidden: true},
+    ]);
 
     await page.goto('/accounts');
     await expect(page.getByTestId('accounts-total')).toContainText('1,234.56');
@@ -757,7 +766,7 @@ test.describe('mocked Enable Banking bank connection', () => {
       details: 'Example Card',
     };
     const files = importedFiles([fileAccount]);
-    const {connections, updates, removals} = await mockAccountSettings(page, [
+    const {connections, updates, removals, failNext} = await mockAccountSettings(page, [
       MOCK_CONNECTION,
       files,
     ]);
@@ -800,10 +809,19 @@ test.describe('mocked Enable Banking bank connection', () => {
     await settings.getByRole('button', {name: 'Remove account'}).click();
     dialog = page.getByRole('dialog', {name: 'Remove Example Card?'});
     await expect(dialog.getByRole('button', {name: 'Hide it instead'})).toBeDisabled();
+    // A failed removal says so in the dialog, where it is tried again.
+    failNext.add('DELETE');
+    await dialog.getByRole('button', {name: 'Remove account'}).click();
+    await expect(dialog.getByRole('alert')).toContainText("Couldn't remove Example Card");
+    await expect(page).toHaveURL(new RegExp(`/accounts/${fileAccount.id}$`));
     await dialog.getByRole('button', {name: 'Remove account'}).click();
 
     await expect(page.getByText('Example Card removed with its 3 transactions')).toBeVisible();
     expect(removals).toEqual([
+      {
+        path: `/bank-connections/${files.id}/accounts/${fileAccount.id}`,
+        body: {confirmation: 'DELETE'},
+      },
       {
         path: `/bank-connections/${files.id}/accounts/${fileAccount.id}`,
         body: {confirmation: 'DELETE'},
@@ -1223,12 +1241,14 @@ test.describe('accounts without any', () => {
 
 /**
  * Answers an account's rename, hide and removal against the given connections, as the API keeps them: each PATCH body
- * and each DELETE is recorded, and `connections` reads the current state.
+ * and each DELETE is recorded, and `connections` reads the current state. A method put in `failNext` fails once with a
+ * server error, changing nothing.
  */
 async function mockAccountSettings(page: Page, initial: BankConnection[]) {
   let state = initial;
   const updates: unknown[] = [];
   const removals: {path: string; body: unknown}[] = [];
+  const failNext = new Set<string>();
   await page.route(
     (url) =>
       url.origin === API_URL && /^\/bank-connections\/[^/]+\/accounts\/[^/]+$/.test(url.pathname),
@@ -1236,8 +1256,11 @@ async function mockAccountSettings(page: Page, initial: BankConnection[]) {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       const accountId = path.slice(path.lastIndexOf('/') + 1);
+      const failing = failNext.delete(request.method());
       if (request.method() === 'DELETE') {
         removals.push({path, body: request.postDataJSON()});
+        if (failing)
+          return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
         state = state.map((connection) => ({
           ...connection,
           bankAccounts: connection.bankAccounts.filter(({id}) => id !== accountId),
@@ -1246,6 +1269,8 @@ async function mockAccountSettings(page: Page, initial: BankConnection[]) {
       }
       const body = request.postDataJSON() as UpdateBankAccountRequest;
       updates.push(body);
+      if (failing)
+        return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
       state = state.map((connection) => ({
         ...connection,
         bankAccounts: connection.bankAccounts.map((account) =>
@@ -1264,5 +1289,5 @@ async function mockAccountSettings(page: Page, initial: BankConnection[]) {
       return fulfillJson(route, account);
     },
   );
-  return {connections: () => state, updates, removals};
+  return {connections: () => state, updates, removals, failNext};
 }

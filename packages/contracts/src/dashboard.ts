@@ -98,7 +98,10 @@ export type BankBalanceTrendPeriod = {
 	end: string;
 	/** False while the period is still running. */
 	complete: boolean;
-	/** Sum of the shown accounts' balances; null when one with history by then has no exchange rate. Hidden accounts count in no total. */
+	/**
+	 * Sum of the shown accounts' balances; null when one with history by then has no exchange rate, or when only hidden
+	 * accounts have history by then. Hidden accounts count in no total.
+	 */
 	total: string | null;
 	/** Every connected account, hidden ones too; `balance` is null before its history starts or without a rate. */
 	accounts: Array<{id: string; balance: string | null}>;
@@ -108,7 +111,7 @@ export type BankBalanceTrendPeriod = {
 export type BankBalanceTrend = {
 	baseCurrency: string | null;
 	interval: BalanceTrendInterval;
-	/** Every period from the first one any shown connected account covers through `to`. */
+	/** Every period from the first one any connected account covers through `to`. */
 	periods: BankBalanceTrendPeriod[];
 };
 

@@ -14,8 +14,8 @@ import {HttpError, api} from '@/utils/api';
 type AccountRef = {connectionId: BankConnection['id']; accountId: BankAccount['id']};
 
 /**
- * Renames an account or hides it (or shows it again). The account shows the saved values at once; hiding also reads
- * every total again, since none of them counts a hidden account's rows.
+ * Renames an account or hides it (or shows it again). The account shows the saved values at once; every list and
+ * total is read again, since rows carry the account's name and no total counts a hidden account's rows.
  */
 export function useUpdateBankAccount() {
   const queryClient = useQueryClient();
@@ -29,7 +29,7 @@ export function useUpdateBankAccount() {
         `/bank-connections/${connectionId}/accounts/${accountId}`,
         body satisfies UpdateBankAccountRequest,
       ),
-    onSuccess: async (account, {isHidden}) => {
+    onSuccess: async (account) => {
       queryClient.setQueryData<BankConnection[]>(bankQueryKeys.connections, (connections) =>
         connections?.map((connection) => ({
           ...connection,
@@ -38,12 +38,10 @@ export function useUpdateBankAccount() {
           ),
         })),
       );
-      // A new name shows on every row of the account; hiding changes every total too.
+      // Every row and detail names the account, and hiding changes every total.
       await Promise.all([
         queryClient.invalidateQueries({queryKey: bankQueryKeys.connections}),
-        isHidden === undefined
-          ? queryClient.invalidateQueries({queryKey: bankQueryKeys.transactionsRoot})
-          : invalidateBankDerivedData(queryClient),
+        invalidateBankDerivedData(queryClient),
       ]);
     },
   });
