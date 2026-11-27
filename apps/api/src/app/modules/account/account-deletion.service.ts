@@ -15,7 +15,7 @@ import {BankingConsentRevocationService} from '@modules/banking/services/banking
 import {AccountService} from './account.service';
 import {emailChangeKey, revokePasswordResetToken, signupCodeKey} from './auth-secret-keys';
 
-const ACCOUNT_DELETED_EMAIL_SUBJECT = 'Your Tempo account has been deleted';
+const ACCOUNT_DELETED_EMAIL_SUBJECT = 'Your Wisp account has been deleted';
 export {ACCOUNT_DELETED_EMAIL_SUBJECT};
 export const ACCOUNT_DELETED_MESSAGE = 'Account has been deleted.';
 

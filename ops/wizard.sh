@@ -609,7 +609,7 @@ ask_secret EMAIL_PASSWORD "SMTP password (the API key's secret key):"
 [[ -n $EMAIL_PASSWORD ]] || fail_stop "the SMTP password is required"
 write_env EMAIL_PASSWORD "$EMAIL_PASSWORD"
 unset EMAIL_PASSWORD
-ask EMAIL_FROM "Sender, a wispmoney.com address (such as Wisp <hello@wispmoney.com>):"
+ask EMAIL_FROM "Sender, a wispmoney.com address (\"Wisp\" <no-reply@wispmoney.com>):"
 [[ $EMAIL_FROM == *@wispmoney.com* ]] || warn "Scaleway sends only from the verified domain, wispmoney.com"
 write_env EMAIL_FROM "$EMAIL_FROM"
 ask OPERATOR_ALERT_EMAIL "Where failure emails go (OPERATOR_ALERT_EMAIL):"

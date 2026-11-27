@@ -256,7 +256,7 @@ describe('AuthController - Change email', () => {
 
 			const notice = await EmailUtils.findEmailByRecipient(previousEmail, mailpitApiUrl, EMAIL_CHANGED_SUBJECT);
 			expect(EmailUtils.normalizeEmailText(notice?.Text)).toBe(
-				EmailUtils.getEmailChangedBody(EMAIL_CHANGE_ACCOUNT_NAME, previousEmail, newEmailAddress),
+				EmailUtils.getEmailChangedBody(EMAIL_CHANGE_ACCOUNT_NAME, previousEmail, newEmailAddress, webUrl),
 			);
 		});
 

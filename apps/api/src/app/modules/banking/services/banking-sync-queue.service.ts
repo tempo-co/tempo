@@ -71,7 +71,7 @@ export class BankingSyncQueueService implements OnModuleInit {
 			return;
 		await this.operatorAlertService.send({
 			kind: 'bank-sync-scheduler-not-installed',
-			subject: 'Tempo: scheduled bank sync could not start',
+			subject: 'Wisp: scheduled bank sync could not start',
 			text: [
 				'The API could not install the scheduled bank sync at start-up, so scheduled runs may not start.',
 				'Check the API log and Redis.',

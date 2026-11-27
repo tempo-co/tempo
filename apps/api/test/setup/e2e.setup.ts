@@ -10,6 +10,8 @@ import {ConfigurationService} from '@core/config/config.service';
 import {mcpOriginMiddleware} from '@core/personal-access-token/mcp-origin.middleware';
 
 export const OPERATOR_ALERT_E2E_EMAIL = 'operator@example.test';
+export const EMAIL_FROM_E2E = {name: 'Wisp', address: 'no-reply@example.test'};
+export const EMAIL_REPLY_TO_E2E = 'support@example.test';
 
 let app: INestApplication<Server>;
 let aiCategorizationEnabled = false;
@@ -19,6 +21,7 @@ let webPushEnabled = false;
 let fileImportEnabled = false;
 let fileImportMapperEnabled = false;
 let operatorAlertsEnabled = false;
+let emailSenderConfigured = false;
 
 export function enableAiCategorizationE2e(): void {
 	aiCategorizationEnabled = true;
@@ -47,6 +50,11 @@ export function enableOperatorAlertsE2e(): void {
 	operatorAlertsEnabled = true;
 }
 
+/** Gives the app a configured sender and Reply-To address, as production has; without it the code default sender is used. */
+export function configureEmailSenderE2e(): void {
+	emailSenderConfigured = true;
+}
+
 /** Gives the app throwaway VAPID keys; specs replace `WebPushSender.send`, so no push service is contacted. */
 export function enableWebPushE2e(): void {
 	webPushEnabled = true;
@@ -62,6 +70,14 @@ beforeAll(async () => {
 
 	if (operatorAlertsEnabled) process.env.OPERATOR_ALERT_EMAIL = OPERATOR_ALERT_E2E_EMAIL;
 	else delete process.env.OPERATOR_ALERT_EMAIL;
+
+	if (emailSenderConfigured) {
+		process.env.EMAIL_FROM = `"${EMAIL_FROM_E2E.name}" <${EMAIL_FROM_E2E.address}>`;
+		process.env.EMAIL_REPLY_TO = EMAIL_REPLY_TO_E2E;
+	} else {
+		delete process.env.EMAIL_FROM;
+		delete process.env.EMAIL_REPLY_TO;
+	}
 
 	if (webPushEnabled) {
 		const {publicKey, privateKey} = webPush.generateVAPIDKeys();

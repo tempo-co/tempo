@@ -115,13 +115,13 @@ describe('SMTP configuration', () => {
 			EMAIL_REQUIRE_TLS: 'true',
 			EMAIL_USERNAME: 'mailer@example.test',
 			EMAIL_PASSWORD: 'synthetic-app-password',
-			EMAIL_FROM: 'Tempo <mailer@example.test>',
+			EMAIL_FROM: 'Wisp <mailer@example.test>',
 		});
 
 		expect(parsed.EMAIL_REQUIRE_TLS).toBe(true);
 		expect(parsed.EMAIL_USERNAME).toBe('mailer@example.test');
 		expect(parsed.EMAIL_PASSWORD).toBe('synthetic-app-password');
-		expect(parsed.EMAIL_FROM).toBe('Tempo <mailer@example.test>');
+		expect(parsed.EMAIL_FROM).toBe('Wisp <mailer@example.test>');
 	});
 
 	it.each([
@@ -132,7 +132,7 @@ describe('SMTP configuration', () => {
 				EMAIL_PORT: '587',
 				EMAIL_SECURE: 'false',
 				EMAIL_REQUIRE_TLS: 'true',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			},
 		],
 		[
@@ -143,7 +143,7 @@ describe('SMTP configuration', () => {
 				EMAIL_SECURE: 'false',
 				EMAIL_USERNAME: 'mailer@example.test',
 				EMAIL_PASSWORD: 'synthetic-app-password',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			},
 		],
 		[
@@ -155,7 +155,7 @@ describe('SMTP configuration', () => {
 				EMAIL_REQUIRE_TLS: 'true',
 				EMAIL_USERNAME: 'mailer@example.test',
 				EMAIL_PASSWORD: 'synthetic-app-password',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			},
 		],
 		[
