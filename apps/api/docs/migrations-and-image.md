@@ -5,7 +5,7 @@ CI builds and releases this image; see the root `docs/ci-and-images.md`.
 ## Image
 
 - The image builds from the repository root (`docker build -f apps/api/Dockerfile .`). `@tempo/contracts` is a `file:../../packages/contracts` dependency, so the Dockerfile places the package at `/usr/packages/contracts`, two levels above the app directory, and the runtime stage keeps its `package.json` and `dist/` for the `node_modules` link.
-- The runtime stage sets `NODE_ENV=production` and ships only `dist/` and production dependencies. The Claude contract JSON files sit under `src/` and are imported, so the build emits them into `dist/`.
+- The runtime stage sets `NODE_ENV=production` and ships only `dist/`, production dependencies and `/usr/src/app/wisp-staging-copy.sql`, the staging copy filter the production server copies out of the running API (`docs/staging-feed.md`). The Claude contract JSON files sit under `src/` and are imported, so the build emits them into `dist/`.
 - The `Dockerfile` runs `scripts/runtime-image-smoke.js` (no dev dependencies, no env files, email templates present), so a built image is a smoke-tested image.
 - Email `.hbs` templates are copied to `dist/` by `nest-cli.json` assets and checked by the smoke script; keep templates under `src/app/core/email/templates`.
 - A new script that a CI job runs right after `npm ci` needs a `pre<script>` hook that runs `npm run contracts:build`, or it sees every contracts type as an error.

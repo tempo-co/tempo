@@ -14,6 +14,8 @@ The `Changes` job sets five flags. A PR compares its merge commit with the base 
 | `ops` | `ops/**` | `Ops checks` |
 | `corpus` | `apps/api/src/app/modules/file-import/**`, `apps/api/test/corpus/**`, `packages/contracts/src/banks.ts` | `API real-file corpus` |
 
+The staging copy filter `apps/api/wisp-staging-copy.sql` is part of the API: its E2E test runs in `API E2E tests`, and the API image ships it for the production server's nightly copy (`docs/staging-feed.md`).
+
 A change to `.github/workflows/ci.yml` or `.github/scripts/` sets every flag, and an area whose base commit is unknown (not in this history, or unreadable) runs. Other files (root docs, `AGENTS.md`, other workflows, Dependabot config) run only `Docs check`. Jobs are gated with `if:`, never with `on: paths:`: a skipped job reports success, while a skipped workflow leaves a required check pending forever.
 
 `CI` needs every job and fails if any of them failed or was cancelled; skipped jobs count as passing. It is the only required check, so job names can change without touching the ruleset.
