@@ -132,6 +132,7 @@ export class BankTransactionSummaryService {
 			daysInMonth: daysInMonth(month),
 			lastCoveredDay,
 			daily: pace.daily,
+			uncovered: pace.uncovered,
 			spending: pace.daily.at(-1)?.cumulative ?? formatCents(0n),
 			income: formatCents(income),
 			usual: pace.usual,

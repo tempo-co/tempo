@@ -216,6 +216,7 @@ export async function mockEmptyHome(page: Page) {
       daysInMonth: 30,
       lastCoveredDay: null,
       daily: [],
+      uncovered: [],
       spending: '0.00',
       income: '0.00',
       usual: null,

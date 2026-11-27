@@ -40,7 +40,7 @@ export function AccountsCard({
           <TextBone className='w-[5em]' />
         </p>
         <ul className='-mx-3 grid'>
-          <TileRowsSkeleton count={2} />
+          <TileRowsSkeleton count={2} tile={false} />
         </ul>
         <LoadingLabel>Loading accounts</LoadingLabel>
       </div>,

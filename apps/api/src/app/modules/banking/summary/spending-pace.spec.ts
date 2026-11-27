@@ -139,7 +139,7 @@ describe('usual pace', () => {
 		expect(pace('2026-08-01').usual).toMatchObject({months: ['2026-08', '2026-09'], byLastCoveredDay: '5.00'});
 	});
 
-	it('cuts this month at the last covered day, and covers none of it when that day is in an earlier month', () => {
+	it('cuts this month at the last covered day, marks the days before it nothing covers, and covers none of it when that day is in an earlier month', () => {
 		const spending = new Map([
 			['2026-08', cents({1: 1000})],
 			['2026-09', cents({1: 3000})],
@@ -155,8 +155,18 @@ describe('usual pace', () => {
 
 		expect(through('2026-10-15').daily).toHaveLength(15);
 		expect(through('2026-10-15').daily.at(-1)).toEqual({day: 15, spending: '4.00', cumulative: '9.00'});
+		expect(through('2026-10-15').uncovered).toEqual([]);
+		const gapped = buildHomePace({
+			month: '2026-10',
+			lastCoveredDay: '2026-10-15',
+			coveredDays: [...covered('2026-08-01', '2026-10-05'), ...covered('2026-10-09', '2026-10-15')],
+			spending,
+		});
+		expect(gapped.daily).toHaveLength(15);
+		expect(gapped.uncovered).toEqual([{from: 6, to: 8}]);
 		expect(through('2026-09-30')).toEqual({
 			daily: [],
+			uncovered: [],
 			usual: expect.objectContaining({byLastCoveredDay: '0.00', month: '20.00'}),
 		});
 		expect(through(null).daily).toEqual([]);

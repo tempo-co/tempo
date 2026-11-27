@@ -6,18 +6,21 @@ const HEIGHT = 160;
 
 /**
  * This month's spending added up day by day, as a line over its days so far, against the usual pace as a dashed line
- * over the whole month. The days after the last covered day are hatched: no data has come in for them, which is not
- * the same as no spending.
+ * over the whole month. The days after the last covered day, and the days before it no data covers, are hatched: no
+ * data has come in for them, which is not the same as no spending.
  */
 export function PaceChart({
   daysInMonth,
   spent,
+  uncovered,
   usual,
   label,
 }: {
   daysInMonth: number;
-  /** Cumulative cents for each covered day of the month, from the 1st. */
+  /** Cumulative cents for each day of the month through the last covered day, from the 1st. */
   spent: number[];
+  /** Runs of those days no data covers, as days of the month. */
+  uncovered: Array<{from: number; to: number}>;
   /** Cumulative usual cents for every day of the month; null without a usual pace. */
   usual: number[] | null;
   /** What the chart shows, for screen readers. */
@@ -72,9 +75,20 @@ export function PaceChart({
             width={WIDTH - gapFrom}
             height={HEIGHT}
             fill={`url(#${hatchId})`}
-            opacity='0.5'
           />
         )}
+        {uncovered.map(({from, to}) => (
+          // From the covered day before the run to the covered day after it, where the line runs on.
+          <rect
+            key={from}
+            data-testid='pace-not-covered'
+            x={x(Math.max(1, from - 1))}
+            y='0'
+            width={x(Math.min(covered, to + 1)) - x(Math.max(1, from - 1))}
+            height={HEIGHT}
+            fill={`url(#${hatchId})`}
+          />
+        ))}
         {usual && (
           <polyline
             data-testid='pace-usual'

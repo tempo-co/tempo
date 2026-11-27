@@ -91,6 +91,7 @@ export type HomePaceInput = {
  */
 export function buildHomePace({month, lastCoveredDay, coveredDays, spending}: HomePaceInput): {
 	daily: SpendingPaceDay[];
+	uncovered: Array<{from: number; to: number}>;
 	usual: UsualPace | null;
 } {
 	const monthDays = daysInMonth(month);
@@ -106,9 +107,11 @@ export function buildHomePace({month, lastCoveredDay, coveredDays, spending}: Ho
 				? []
 				: months.map((earlier) => ({days: daysInMonth(earlier), daily: spending.get(earlier) ?? new Map()})),
 	});
-	if (pace.baseline.length === 0) return {daily: pace.daily, usual: null};
+	const uncovered = uncoveredDays(month, throughDay, coveredDays);
+	if (pace.baseline.length === 0) return {daily: pace.daily, uncovered, usual: null};
 	return {
 		daily: pace.daily,
+		uncovered,
 		usual: {
 			months,
 			daily: pace.baseline,
@@ -116,6 +119,23 @@ export function buildHomePace({month, lastCoveredDay, coveredDays, spending}: Ho
 			month: pace.baseline[monthDays - 1].average,
 		},
 	};
+}
+
+/** The runs of days 1 to `throughDay` of `month` that no covered range holds, as days of the month. */
+function uncoveredDays(
+	month: string,
+	throughDay: number,
+	coveredDays: readonly DateRange[],
+): Array<{from: number; to: number}> {
+	const runs: Array<{from: number; to: number}> = [];
+	for (const day of days(throughDay)) {
+		const date = `${month}-${String(day).padStart(2, '0')}`;
+		if (coveredDays.some((range) => range.from <= date && date <= range.to)) continue;
+		const last = runs.at(-1);
+		if (last && last.to === day - 1) last.to = day;
+		else runs.push({from: day, to: day});
+	}
+	return runs;
 }
 
 function cumulativeSeries(daily: DailyCents, monthDays: number): bigint[] {

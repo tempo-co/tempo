@@ -255,6 +255,11 @@ export type SpendingPace = {
 	lastCoveredDay: string | null;
 	/** One entry per day of this month through the last covered day; empty when that day is before this month. */
 	daily: SpendingPaceDay[];
+	/**
+	 * The runs of `daily`'s days no data covers, as days of the month (both included), oldest first: their spending is
+	 * unknown, not zero.
+	 */
+	uncovered: Array<{from: number; to: number}>;
 	/** Spending and income this month through the last covered day. */
 	spending: string;
 	income: string;

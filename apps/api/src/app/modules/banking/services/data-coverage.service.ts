@@ -8,7 +8,7 @@ import {addDays} from '../banking.utils';
 import {BANK_CONNECTION_PROVIDERS, UNFINISHED_AUTHORIZATION_STATUSES} from './banking-sync.constants';
 import {ImportedRowRecordsRegistry} from './imported-row-records';
 
-export type CoverageOwner = Pick<Account, 'id' | 'timeZone'>;
+export type CoverageOwner = Pick<Account, 'id'>;
 
 type AccountCoverage = {bankAccountId: string; source: DataCoverageSource; ranges: DateRange[]};
 
@@ -59,6 +59,7 @@ export class DataCoverageService {
 					id: string;
 					provider: string;
 					syncCoveredFrom: string | null;
+					syncCoveredThrough: string | null;
 					fetchedThrough: string | null;
 					firstDate: string | null;
 					lastSyncedBeforeCoverage: string | null;
@@ -66,6 +67,7 @@ export class DataCoverageService {
 			>(
 				`SELECT bank_account."id", connection."provider",
 					to_char(bank_account."syncCoveredFrom", 'YYYY-MM-DD') AS "syncCoveredFrom",
+					to_char(bank_account."syncCoveredThrough", 'YYYY-MM-DD') AS "syncCoveredThrough",
 					to_char(bank_account."transactionsFetchedThrough", 'YYYY-MM-DD') AS "fetchedThrough",
 					(SELECT to_char(MIN(row."date"), 'YYYY-MM-DD') FROM "bank_transactions" row
 						WHERE row."bankAccountId" = bank_account."id") AS "firstDate",
@@ -87,14 +89,28 @@ export class DataCoverageService {
 			const through = newest([account.fetchedThrough, imported?.through ?? null]);
 			if (!through) return {bankAccountId: account.id, source, ranges: []};
 			const from = oldest([account.firstDate, account.syncCoveredFrom]) ?? through;
-			// A gap's end days are on the statements either side of it; the days between them are the missing ones.
-			const gaps = (imported?.gaps ?? []).map((gap) => ({from: addDays(gap.from, 1), to: addDays(gap.to, -1)}));
+			const sync =
+				account.syncCoveredFrom && account.syncCoveredThrough
+					? {
+							from: account.syncCoveredFrom,
+							to: account.syncCoveredThrough < through ? account.syncCoveredThrough : through,
+						}
+					: null;
+			const synced = (day: string) => !!sync && sync.from <= day && day <= sync.to;
+			// A gap ends on the statements either side of it, and the days between are the missing ones; an end the
+			// importer cut where sync coverage starts or stops is a missing day itself.
+			const gaps = (imported?.gaps ?? []).map((gap) => ({
+				from: synced(addDays(gap.from, -1)) ? gap.from : addDays(gap.from, 1),
+				to: synced(addDays(gap.to, 1)) ? gap.to : addDays(gap.to, -1),
+			}));
 			if (account.lastSyncedBeforeCoverage && account.syncCoveredFrom)
 				gaps.push({
 					from: addDays(account.lastSyncedBeforeCoverage, 1),
 					to: addDays(account.syncCoveredFrom, -1),
 				});
-			return {bankAccountId: account.id, source, ranges: withoutGaps({from, to: through}, gaps, asOf)};
+			// Days sync has since fetched completely are in, whatever an earlier statement left out.
+			const ranges = withoutGaps({from, to: through}, gaps, asOf);
+			return {bankAccountId: account.id, source, ranges: mergeRanges(sync ? [...ranges, sync] : ranges, asOf)};
 		});
 	}
 }

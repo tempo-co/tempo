@@ -98,6 +98,7 @@ export function PaceCard({
       <PaceChart
         daysInMonth={pace.daysInMonth}
         spent={pace.daily.map((day) => toCents(day.cumulative))}
+        uncovered={pace.uncovered}
         usual={pace.usual?.daily.map((day) => toCents(day.average)) ?? null}
         label={chartLabel}
       />

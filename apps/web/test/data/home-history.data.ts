@@ -415,6 +415,7 @@ export function homeHistory(options: HomeHistoryOptions = {}) {
         spending: money(cumulative - (spent[index - 1] ?? 0)),
         cumulative: money(cumulative),
       })),
+      uncovered: [],
       spending: money(spent[throughDay - 1] ?? 0),
       income: money(month === RUNNING ? 0 : sum(incomeOf(month))),
       usual:

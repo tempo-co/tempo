@@ -62,13 +62,15 @@ function worstCase() {
   for (let index = 1; index <= 39; index++)
     sourceLabels[`INCOME:example source ${index}`] = `Example Source ${index}`;
   const history = homeHistory({spending, income, sourceLabels, firstMonth: FIRST_MONTH});
-  // A refund bigger than the month's spending so far, booked on the 1st, keeps this month below zero.
+  // A refund bigger than the month's spending so far, booked on the 1st, keeps this month below zero, and no data
+  // covers the 2nd and 3rd.
   const paceOf = history.paceOf;
   history.paceOf = (asOf) => {
     const pace = paceOf(asOf);
     const refund = 1_500_000;
     return {
       ...pace,
+      uncovered: [{from: 2, to: 3}],
       daily: pace.daily.map((day) => ({
         ...day,
         spending: day.day === 1 ? (Number(day.spending) - refund).toFixed(2) : day.spending,
@@ -284,8 +286,11 @@ for (const [name, history, connections] of [
       const line = await boxOf(homePage.paceCard.getByTestId('pace-spent'));
       expect.soft(line.y).toBeGreaterThanOrEqual(chart.y);
       expect.soft(line.y + line.height).toBeLessThanOrEqual(chart.y + chart.height);
-      if (name === 'worst-case')
+      if (name === 'worst-case') {
         await expect(homePage.card('To do')).toContainText('Check 1,284 transactions');
+        // The days no data covers are hatched, inside the month as after its last covered day.
+        await expect(homePage.paceCard.getByTestId('pace-not-covered')).toHaveCount(2);
+      }
       // Every control is a full tap target on a phone.
       if (width < 640) expect.soft(await smallTargets(page, 'main')).toEqual([]);
       // Customizing puts move and hide buttons in every card's header without pushing anything out.

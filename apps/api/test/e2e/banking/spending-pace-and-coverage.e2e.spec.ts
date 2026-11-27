@@ -5,6 +5,7 @@ import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
+import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {type CamtEntry, EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053} from '../../fixtures/statement-file.fixture';
@@ -22,11 +23,13 @@ describe('Spending pace and data coverage', () => {
 	let app: INestApplication;
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
+	let imports: Repository<BankImport>;
 
 	beforeAll(() => {
 		app = getApp();
 		fixtures = new BankingFixtures(app);
 		accounts = app.get(getRepositoryToken(Account));
+		imports = app.get(getRepositoryToken(BankImport));
 	});
 
 	/**
@@ -138,6 +141,42 @@ describe('Spending pace and data coverage', () => {
 
 		expect(await months(reconnected)).toEqual(['2026-02', '2026-07', '2026-08', '2026-09']);
 		expect(await months(unrecorded)).toEqual(USUAL_MONTHS);
+	});
+
+	it('leaves out a statement gap’s missing days, including an end cut at sync coverage, until sync covers them', async () => {
+		const gapped = async (sync: {from: string; through: string}, gap: {from: string; to: string}) => {
+			const synced = await syncedOwner('2026-10-14');
+			await fixtures.bankAccounts.update(
+				{id: synced.bankAccount.id},
+				{syncCoveredFrom: sync.from, syncCoveredThrough: sync.through},
+			);
+			await fixtures.createTransactions(synced.bankAccount, [bookedRow(sync.from, '-10.00')]);
+			await imports.save({
+				accountId: synced.owner.id,
+				bankConnectionId: synced.connection.id,
+				fileHash: `pace-gap-${gap.from}-${sync.through}`,
+				format: 'camt053',
+				filesCount: 2,
+				rowsParsed: 2,
+				rowsAdded: 2,
+				rowsAlreadyPresent: 0,
+				dateFrom: '2026-08-20',
+				dateTo: '2026-09-30',
+				bankAccountIds: [synced.bankAccount.id],
+				createdBankAccountIds: [],
+				statementGaps: [{bankAccountId: synced.bankAccount.id, ...gap, amount: '-5.00', currency: 'EUR'}],
+			});
+			return ((await synced.agent.get(PACE).query({asOf: AS_OF}).expect(200)).body as SpendingPace).usual?.months;
+		};
+
+		// Sync covered June to August when the statements came in; the importer cut the gap to 1 and 2 September.
+		expect(
+			await gapped({from: '2026-06-01', through: '2026-08-31'}, {from: '2026-09-01', to: '2026-09-02'}),
+		).toEqual(['2026-06', '2026-07', '2026-08']);
+		// Sync has since fetched September completely, so the gap the statements left is in.
+		expect(
+			await gapped({from: '2026-06-01', through: '2026-10-14'}, {from: '2026-08-31', to: '2026-10-01'}),
+		).toEqual(['2026-06', '2026-07', '2026-08', '2026-09']);
 	});
 
 	it('leaves a hidden account out of the coverage and the pace', async () => {
@@ -314,7 +353,12 @@ describe('Spending pace and data coverage', () => {
 
 			const {body} = (await agent.get(PACE).query({asOf: AS_OF}).expect(200)) as {body: SpendingPace};
 
-			expect(body).toMatchObject({lastCoveredDay: '2026-10-11', spending: '10.00'});
+			// Nothing covers 1 October, before the statement's first booking: its spending is unknown, not zero.
+			expect(body).toMatchObject({
+				lastCoveredDay: '2026-10-11',
+				uncovered: [{from: 1, to: 1}],
+				spending: '10.00',
+			});
 			expect(body.daily).toHaveLength(11);
 		});
 	});
