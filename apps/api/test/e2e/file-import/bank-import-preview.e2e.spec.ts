@@ -24,10 +24,18 @@ const ORIGIN = 'http://localhost:5173';
 const FIXTURES = join(__dirname, '../../fixtures/file-import');
 // Seven rows of one account (EXAMPLE_IBAN) from 2 to 4 March 2026, as a CAMT.053 archive.
 const ARCHIVE = readFileSync(join(FIXTURES, 'camt053-synthetic.zip'));
+// Eight payments of one account from 2 to 5 March 2026, in ABN AMRO's CAMT.053, MT940 and TXT exports.
+const CAMT_FILES = ['020326', '030326', '040326', '050326'].map((day) =>
+	readFileSync(join(FIXTURES, `0417164300_99999999_${day}000000.xml`)),
+);
+const MT940_FILE = readFileSync(join(FIXTURES, 'MT940260305120000.STA'));
+const TXT_FILE = readFileSync(join(FIXTURES, 'TXT260305120000.TAB'));
 // One Revolut export with EUR and RON rows: two accounts of a file that names none.
 const REVOLUT_CSV = readFileSync(join(FIXTURES, 'account-statement_2026-03-01_2026-03-05_en-gb_a0b1c2.csv'));
 
 describe('Bank import preview', () => {
+	// Each drop is parsed in a child process, as the import spec's drops are.
+	jest.setTimeout(60_000);
 	let app: INestApplication;
 	let fixtures: BankingFixtures;
 	let accounts: Repository<Account>;
@@ -193,5 +201,17 @@ describe('Bank import preview', () => {
 		]).expect(415);
 		expect(refused.body).toMatchObject({code: 'unsupported_format', file: 2});
 		await send(agent, '/bank-imports/preview', []).expect(400);
+	});
+
+	it('counts a payment that several export formats state once, as the import adds it once', async () => {
+		const {agent} = await createOwner();
+		const drop = [TXT_FILE, MT940_FILE, ...CAMT_FILES];
+		const preview = (await send(agent, '/bank-imports/preview', drop).expect(200)).body as BankImportPreview;
+		expect(preview.rowCount).toBe(8);
+		expect(preview.accounts).toHaveLength(1);
+		expect(preview.accounts[0]).toMatchObject({id: null, rowCount: 8});
+
+		const summary = (await send(agent, '/bank-imports', drop).expect(201)).body as BankImportSummary;
+		expect(summary).toMatchObject({rowsParsed: 24, rowsAdded: 8});
 	});
 });

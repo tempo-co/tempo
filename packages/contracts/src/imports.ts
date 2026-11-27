@@ -230,7 +230,7 @@ export type BankImportPreviewAccount = {
 	bankName: string | null;
 	/** Whether the rows go to an imported-files account rather than one bank sync holds. */
 	imported: boolean;
-	/** The file's rows for this account, rows one statement repeats from another counted once. */
+	/** The drop's rows for this account, a payment that several statements or export formats state counted once. */
 	rowCount: number;
 	/** Earliest and latest day of those rows; null when it has none. */
 	dateFrom: string | null;

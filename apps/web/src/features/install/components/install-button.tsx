@@ -1,5 +1,5 @@
 import {Share, SquarePlus} from 'lucide-react';
-import {type ReactNode, useState} from 'react';
+import {type ReactNode, type RefObject, useRef, useState} from 'react';
 
 import {Button, type ButtonProps} from '@/components/ui/button';
 import {
@@ -25,13 +25,23 @@ export function InstallButton({
   ...props
 }: {way: InstallWay; children: ReactNode} & Omit<ButtonProps, 'onClick'>) {
   const [steps, setSteps] = useState(false);
+  const openerRef = useRef<HTMLElement | null>(null);
   if (way !== 'steps' && way !== 'prompt') return null;
   return (
     <>
-      <Button {...props} onClick={() => (way === 'steps' ? setSteps(true) : void promptInstall())}>
+      <Button
+        {...props}
+        onClick={(event) => {
+          if (way === 'prompt') return void promptInstall();
+          openerRef.current = event.currentTarget;
+          setSteps(true);
+        }}
+      >
         {children}
       </Button>
-      {way === 'steps' && <HomeScreenSteps open={steps} onOpenChange={setSteps} />}
+      {way === 'steps' && (
+        <HomeScreenSteps open={steps} onOpenChange={setSteps} openerRef={openerRef} />
+      )}
     </>
   );
 }
@@ -43,9 +53,11 @@ const SAFARI_CONTROL =
 function HomeScreenSteps({
   open,
   onOpenChange,
+  openerRef,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  openerRef: RefObject<HTMLElement | null>;
 }) {
   const steps: ReactNode[] = [
     <>
@@ -69,7 +81,13 @@ function HomeScreenSteps({
   ];
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
-      <ResponsiveDialogContent>
+      <ResponsiveDialogContent
+        onCloseAutoFocus={(event) => {
+          if (!openerRef.current?.isConnected) return;
+          event.preventDefault();
+          openerRef.current.focus();
+        }}
+      >
         <ResponsiveDialogHeader>
           <ResponsiveDialogTitle>Add Tempo to your Home Screen</ResponsiveDialogTitle>
           <ResponsiveDialogDescription>

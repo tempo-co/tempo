@@ -39,6 +39,7 @@ test.describe('Installing Tempo on an iPhone', () => {
     ]);
     await steps.getByRole('button', {name: 'Done'}).click();
     await expect(steps).toBeHidden();
+    await expect(card.getByRole('button', {name: 'Add'})).toBeFocused();
     await expect(card).toContainText('Add Tempo to your Home Screen');
 
     await card.getByRole('button', {name: 'Don’t show again'}).click();
@@ -50,6 +51,21 @@ test.describe('Installing Tempo on an iPhone', () => {
     await page.goto('/settings/appearance');
     await page.getByRole('button', {name: 'Install'}).click();
     await expect(page.getByRole('dialog', {name: 'Add Tempo to your Home Screen'})).toBeVisible();
+  });
+
+  test('× in another tab of the browser hides it here too', async ({page}) => {
+    await mockSyntheticHome(page);
+    await page.goto('/');
+    await expect(toDoRows(page).nth(1)).toContainText('Add Tempo to your Home Screen');
+
+    // What another tab's × does to this one: it saves the dismissal, and this tab hears of it.
+    await page.evaluate(() => {
+      localStorage.setItem('tempo.install-card-dismissed', '1');
+      window.dispatchEvent(
+        new StorageEvent('storage', {key: 'tempo.install-card-dismissed', newValue: '1'}),
+      );
+    });
+    await expect(page.getByText('Add Tempo to your Home Screen')).toHaveCount(0);
   });
 
   test('neither Home nor Appearance offers it when Tempo runs from the Home Screen', async ({

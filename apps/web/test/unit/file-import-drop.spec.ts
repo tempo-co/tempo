@@ -18,6 +18,8 @@ test('two drops before the page renders read one of them, the first', () => {
     },
     '../api/use-import-files': {
       useImportFiles: () => ({importFiles: () => new Promise(() => undefined)}),
+    },
+    '../api/use-preview-files': {
       usePreviewFiles: () => ({
         previewFiles: ({files}: {files: File[]}) => {
           reads.push(files.map(({name}) => name));

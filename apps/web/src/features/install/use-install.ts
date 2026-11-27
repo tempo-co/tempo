@@ -38,7 +38,17 @@ let dismissed: boolean | undefined;
 const dismissListeners = new Set<() => void>();
 const subscribeDismissed = (listener: () => void) => {
   dismissListeners.add(listener);
-  return () => dismissListeners.delete(listener);
+  // Another tab's dismissal arrives as a storage event.
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== DISMISSED_KEY) return;
+    dismissed = readDismissed();
+    listener();
+  };
+  window.addEventListener('storage', onStorage);
+  return () => {
+    dismissListeners.delete(listener);
+    window.removeEventListener('storage', onStorage);
+  };
 };
 const getDismissed = () => (dismissed ??= readDismissed());
 

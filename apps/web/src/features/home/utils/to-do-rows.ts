@@ -8,9 +8,11 @@ export type ToDoRow =
   | {kind: 'setup'; done: number; total: number; next: string};
 
 /** The steps of setting up whose features exist, in order. */
+export const IMPORT_STEP = 'Import a statement';
+
 export function setupSteps({hasData, toCheck}: {hasData: boolean; toCheck: number}) {
   return [
-    {label: 'Import a statement', done: hasData},
+    {label: IMPORT_STEP, done: hasData},
     {label: 'Check your categories', done: hasData && toCheck === 0},
   ];
 }

@@ -54,8 +54,9 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   and the footer holds one **Import N transactions**. A name changed there is saved as the
   account's own name once the import is in (the same write as Rename on Accounts; left empty or
   typed as it was, the account keeps its name), and a failed save says so in a toast. An import
-  refused as busy or failed for a lost connection stays on this step with the names typed and its
-  `Alert`, and Try again imports it as it is. The back
+  refused as busy or failed for a lost connection stays on this step with the names typed, its
+  `Alert` (none when the shared toast already said so), and Import or Try again imports it as it
+  is; Add data and the failure's toast reopen it there. The back
   arrow returns to the files. The account question's **Continue**, a page drop and Looks right
   after working out the columns all come back here.
 - **First run.** While the empty Home shows, Add data opens the same steps in a centred dialog

@@ -481,13 +481,18 @@ export class BankImportService {
 			})),
 		);
 
-		// Two statements reaching one account are one account of the import, as its summary lists them.
+		// Two statements reaching one account are one account of the import, as its summary lists them: an account it
+		// creates for a file that names none is its bank's, named ignoring case and spacing, as `findFileAccountIn` finds it.
 		const byAccount = new Map<string, BankImportPreviewAccount>();
 		for (const entry of found) {
 			const {account, rows} = entry;
-			const key = account?.id ?? `new:${entry.identity!.providerAccountId}`;
+			const key =
+				account?.id ??
+				(rows.bank
+					? `new-bank:${bankNameKey(rows.bank)}:${rows.currency}`
+					: `new:${entry.identity!.providerAccountId}`);
 			const days = rows.byFormat.flatMap((part) => part.rows.flatMap((row) => matchDay(row) ?? [])).sort();
-			const rowCount = sum(rows.byFormat.map((part) => part.rows.length));
+			const rowCount = distinctRowCount(rows);
 			const known = byAccount.get(key);
 			if (known) {
 				known.rowCount += rowCount;
@@ -1957,6 +1962,23 @@ function formatBank(
 		FORMAT_BANKS[format] ??
 		(layout ? (CSV_LAYOUTS.find(({id}) => id === layout)?.bank ?? learnedBanks.get(layout)) : undefined)
 	);
+}
+
+/**
+ * An account's rows across its formats, a payment that two formats both state counted once: each format is matched
+ * against the formats before it, as the import matches each against the rows the formats before it inserted. Formats
+ * number their references in schemes of their own, so references are left out of the comparison.
+ */
+function distinctRowCount(rows: AccountRows): number {
+	const earlier: MatchExistingRow[] = [];
+	for (const {rows: formatRows} of rows.byFormat) {
+		const incoming = formatRows.map((row) => ({...toMatchRow(row), reference: null}));
+		const outcomes = matchTransactions(incoming, earlier);
+		const added = incoming.filter((_, index) => outcomes[index].kind !== 'matched');
+		const createdAt = new Date(earlier.length);
+		earlier.push(...added.map((row, index) => ({...row, id: String(earlier.length + index), createdAt})));
+	}
+	return earlier.length;
 }
 
 /** The bank an account's files name it at: the bank of a file that names no account, else of its first format. */

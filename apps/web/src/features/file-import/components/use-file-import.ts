@@ -48,6 +48,8 @@ export type ImportStep =
       kind: 'found';
       files: File[];
       accountChoices?: Record<string, string>;
+      /** The bank picked when it was read, which its import sends. */
+      bankId: PickedBankId;
       preview: BankImportPreview;
       /** The names typed, kept when the import failed and can be tried again. */
       names?: readonly string[];
@@ -88,12 +90,14 @@ const FRESH: ImportStep = {kind: 'choose', files: [], failure: null};
 export const BUSY: readonly ImportStep['kind'][] = ['reading', 'importing', 'proposing'];
 
 /**
- * A step Import a file opens at again rather than starting fresh: an import still running, or a refusal that kept its
- * files to try again, such as after closing the sheet while columns were worked out.
+ * A step Import a file opens at again rather than starting fresh: an import still running, a refusal that kept its
+ * files to try again, such as after closing the sheet while columns were worked out, or Check what we found after its
+ * import failed.
  */
 export const isUnsettled = (step: ImportStep) =>
   BUSY.includes(step.kind) ||
-  (step.kind === 'choose' && step.failure !== null && step.files.length > 0);
+  (step.kind === 'choose' && step.failure !== null && step.files.length > 0) ||
+  (step.kind === 'found' && step.failure !== undefined);
 
 export const ACCOUNT_QUESTION_TITLE = 'Which account is this?';
 export const FOUND_TITLE = 'Check what we found';
@@ -234,6 +238,15 @@ export function useFileImport({
     [mapper, setBankId, setStep, show, showFailure],
   );
 
+  /** Check what we found again, under the bank it was read for. */
+  const showFound = useCallback(
+    (found: Extract<ImportStep, {kind: 'found'}>) => {
+      setBankId(found.bankId);
+      show(found);
+    },
+    [setBankId, show],
+  );
+
   /** Reads a drop without importing it, then shows what it found. */
   const run = useCallback(
     async (files: File[], accountChoices?: Record<string, string>) => {
@@ -249,18 +262,24 @@ export function useFileImport({
       setStep({kind: 'reading', files});
       try {
         const preview = await previewFiles({files, accountChoices, bankId: bankRef.current});
-        const found: ImportStep = {kind: 'found', files, accountChoices, preview};
+        const found = {
+          kind: 'found',
+          files,
+          accountChoices,
+          bankId: bankRef.current,
+          preview,
+        } satisfies ImportStep;
         setStep(found);
         if (!openRef.current)
           toast.info(FOUND_TITLE, {
             id: 'bank-import-found',
-            action: {label: 'Check', onClick: () => show(found)},
+            action: {label: 'Check', onClick: () => showFound(found)},
           });
       } catch (error) {
         showFailed(error, files);
       }
     },
-    [previewFiles, setStep, show, showFailed, showFailure],
+    [previewFiles, setStep, showFailed, showFailure, showFound],
   );
 
   /** The names typed in Check what we found, saved on the accounts the import wrote to; a failed one is told. */
@@ -303,10 +322,10 @@ export function useFileImport({
   /** Imports a drop as Check what we found showed it, naming its accounts as the owner typed. */
   const importFound = useCallback(
     async (found: Extract<ImportStep, {kind: 'found'}>, names: readonly string[]) => {
-      const {files, accountChoices, preview} = found;
+      const {files, accountChoices, bankId, preview} = found;
       setStep({kind: 'importing', files});
       try {
-        const summary = await importFiles({files, accountChoices, bankId: bankRef.current});
+        const summary = await importFiles({files, accountChoices, bankId});
         await nameAccounts(preview, names, summary);
         // A first run closes on Home once it has the accounts to show; its summary stays a toast away.
         const firstRun = firstRunRef.current;
@@ -324,17 +343,19 @@ export function useFileImport({
         const failure =
           error instanceof SessionChangedError ? null : toFailure(error, files, {mapper});
         if (failure?.kind === 'failed' || (failure?.kind === 'refused' && failure.retry)) {
-          setStep({...found, names, failure});
+          const kept = {...found, names, failure};
+          setStep(kept);
           if (!openRef.current && !(failure.kind === 'failed' && failure.toasted))
             toast.error(failure.kind === 'refused' ? failure.title : IMPORT_FAILED_TITLE, {
               id: 'bank-import-failed',
+              action: {label: 'Check', onClick: () => showFound(kept)},
             });
           return;
         }
         showFailed(error, files);
       }
     },
-    [importFiles, mapper, nameAccounts, queryClient, setOpen, setStep, show, showFailed],
+    [importFiles, mapper, nameAccounts, queryClient, setOpen, setStep, show, showFailed, showFound],
   );
 
   /** Works out the columns of the refused file `failure` offers, then previews them. */

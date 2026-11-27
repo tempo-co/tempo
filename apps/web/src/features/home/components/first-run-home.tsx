@@ -11,7 +11,7 @@ import {IMPORT_TILE} from '@/features/file-import/utils/import-tile';
 import {useIsWide} from '@/hooks/use-is-wide';
 import {cn} from '@/utils/cn';
 
-import {setupSteps} from '../utils/to-do-rows';
+import {IMPORT_STEP, setupSteps} from '../utils/to-do-rows';
 
 /**
  * Home before any data: one Add data panel and Getting started. While it is shown, Add data opens as the first run,
@@ -98,7 +98,10 @@ function AddDataPanel() {
 
 /** The setup steps whose features exist, none done yet before any data. */
 function GettingStarted() {
-  const steps = setupSteps({hasData: false, toCheck: 0});
+  const {importOn} = useAddData();
+  const steps = setupSteps({hasData: false, toCheck: 0}).filter(
+    ({label}) => importOn || label !== IMPORT_STEP,
+  );
   return (
     <Card role='region' aria-label='Getting started' className='grid gap-3 p-4'>
       <h2 className='text-card-title'>Getting started</h2>

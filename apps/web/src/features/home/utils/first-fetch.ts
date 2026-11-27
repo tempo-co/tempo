@@ -2,8 +2,8 @@ import type {BankConnection, BankSyncStatus} from '@tempo/contracts';
 
 import {isFileConnection} from '@/features/banking/utils/bank-sync-status';
 
-/** A first fetch that has not failed: waiting to start, queued or running. */
-const FETCHING: readonly BankSyncStatus[] = ['IDLE', 'QUEUED', 'RUNNING'];
+/** A first fetch that has not failed: waiting to start, queued, running, or waiting out the bank's rate limit. */
+const FETCHING: readonly BankSyncStatus[] = ['IDLE', 'QUEUED', 'RUNNING', 'RATE_LIMITED'];
 
 /**
  * Whether Home waits for its data instead of showing figures: every connection is a bank connected for the first

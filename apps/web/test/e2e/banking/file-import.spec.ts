@@ -2318,6 +2318,7 @@ test.describe('statement file import on Accounts', () => {
 
     const alert = dialog.getByRole('alert');
     await expect(alert.getByText("Couldn't import these files")).toBeVisible();
+    expect(await countAfterToasts(page, page.getByText("Couldn't import these files"))).toBe(1);
     await expect(alert).toContainText('The server ran into a problem.');
     await expect(alert).toContainText(/500 · \d{2}:\d{2}/);
     await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
@@ -2326,6 +2327,12 @@ test.describe('statement file import on Accounts', () => {
     expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
       (await boxOf(found)).y + (await boxOf(found)).height,
     );
+    // Closed and opened again, Import a file comes back to it as it was left.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await page.getByRole('button', {name: 'Import a file'}).first().click();
+    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
+    await expect(name).toHaveValue('Example everyday account');
 
     await alert.getByRole('button', {name: 'Try again'}).click();
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
@@ -2377,6 +2384,7 @@ test.describe('statement file import on Accounts', () => {
 
     // The api wrapper says the change was not confirmed; the dialog adds no second message.
     await expect(page.getByText(/Your change was not confirmed/)).toBeVisible();
+    expect(await countAfterToasts(page, page.getByText(/Your change was not confirmed/))).toBe(1);
     await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
     await expect(dialog.getByRole('alert')).toHaveCount(0);
     await expect(dialog.getByRole('button', {name: /^Import [\d,]+ transactions?$/})).toBeEnabled();

@@ -16,7 +16,7 @@ export const Route = createFileRoute('/settings/appearance/')({
 function SettingsAppearanceIndex() {
   const installWay = useInstallWay();
   return (
-    <div className='space-y-10'>
+    <div className='space-y-3'>
       <SettingsGroup
         id='theme-heading'
         title='Theme'

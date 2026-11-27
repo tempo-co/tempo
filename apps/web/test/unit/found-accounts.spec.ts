@@ -49,6 +49,10 @@ test('each previewed account maps to the account its import wrote to, same-named
     'second-new',
     null,
   ]);
+  // Imported again after a reply that was lost, the account the first try created is found, not created.
+  expect(importedAccountIds([found({})], {accounts: [summaryAccount('first-new', false)]})).toEqual(
+    ['first-new'],
+  );
   // A found account the import did not write to has nothing to rename either.
   expect(importedAccountIds([found({id: 'other-account'})], summary)).toEqual([null]);
 });

@@ -14,7 +14,7 @@ const connected = (fields: Partial<BankConnection>): BankConnection => ({
 });
 
 test('Home waits while every bank is on its first fetch, and shows itself once one has synced, failed or files are in', () => {
-  for (const syncStatus of ['IDLE', 'QUEUED', 'RUNNING'] as const)
+  for (const syncStatus of ['IDLE', 'QUEUED', 'RUNNING', 'RATE_LIMITED'] as const)
     expect(awaitingFirstFetch([connected({syncStatus})])).toBe(true);
   expect(
     awaitingFirstFetch([connected({}), connected({id: 'second', syncStatus: 'RUNNING'})]),
@@ -30,7 +30,7 @@ test('Home waits while every bank is on its first fetch, and shows itself once o
   expect(
     awaitingFirstFetch([connected({syncStatus: 'RUNNING', lastSyncedAt: '2026-11-12T09:00:00Z'})]),
   ).toBe(false);
-  for (const syncStatus of ['FAILED', 'PARTIAL', 'RATE_LIMITED', 'EXPIRED'] as const)
+  for (const syncStatus of ['FAILED', 'PARTIAL', 'EXPIRED'] as const)
     expect(awaitingFirstFetch([connected({syncStatus})])).toBe(false);
   expect(awaitingFirstFetch([connected({}), importedFiles(MOCK_CONNECTION.bankAccounts)])).toBe(
     false,
