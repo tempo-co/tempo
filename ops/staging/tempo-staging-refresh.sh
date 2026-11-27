@@ -21,8 +21,8 @@ FEED_GNUPG=$CONFIG_DIR/feed-gnupg
 unset DOCKER_CONTEXT TEMPO_API_IMAGE TEMPO_WEB_IMAGE STAGING_DB_NAME STAGING_DB_USERNAME STAGING_DB_PASSWORD
 export DOCKER_HOST=unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tempo-staging/docker.sock
 export DOCKER_CONFIG=$CONFIG_DIR/docker-config
-TEMP_DB=tempo_staging_refresh
-PREVIOUS_DB=tempo_staging_previous
+TEMP_DB=wisp_staging_refresh
+PREVIOUS_DB=wisp_staging_previous
 DUMP_PATH=/tmp/tempo-staging-refresh.dump
 HEALTH_URLS=(http://127.0.0.1:8119/api/health http://127.0.0.1:8119/)
 
@@ -41,7 +41,7 @@ case "${1:-} ${2:-}" in
         ;;
 esac
 
-compose() { docker compose -p tempo-staging -f "$CONFIG_DIR/staging.compose.yml" --env-file "$CONFIG_DIR/staging.env" "$@"; }
+compose() { docker compose -p wisp-staging -f "$CONFIG_DIR/staging.compose.yml" --env-file "$CONFIG_DIR/staging.env" "$@"; }
 psql_in() {
     local database=$1
     shift

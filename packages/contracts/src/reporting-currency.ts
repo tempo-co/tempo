@@ -9,12 +9,12 @@ export const REPORTING_CURRENCIES: readonly string[] = [
 	...Object.keys(ECB_CURRENCIES).filter((code) => ECB_CURRENCIES[code] === null),
 ].sort();
 
-/** `GET /reporting-currency` and `PUT /reporting-currency`: the currency Tempo adds amounts up in. */
+/** `GET /reporting-currency` and `PUT /reporting-currency`: the currency Wisp adds amounts up in. */
 export type ReportingCurrency = {
 	/** Null until one is chosen, or picked automatically while every account holds the same currency. */
 	currency: string | null;
 	/**
-	 * The owner chose this currency (or had it before choosing existed); Tempo asks again only once it is
+	 * The owner chose this currency (or had it before choosing existed); Wisp asks again only once it is
 	 * `currencyUnavailable`.
 	 */
 	confirmed: boolean;
@@ -24,7 +24,7 @@ export type ReportingCurrency = {
 	 */
 	setupRequired: boolean;
 	/**
-	 * Tempo can no longer convert amounts into `currency`: it left {@link REPORTING_CURRENCIES}. Totals stay in
+	 * Wisp can no longer convert amounts into `currency`: it left {@link REPORTING_CURRENCIES}. Totals stay in
 	 * it until the owner chooses another; it is left out of `options`.
 	 */
 	currencyUnavailable: boolean;

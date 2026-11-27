@@ -1,6 +1,6 @@
-## Tempo
+## Wisp
 
-Tempo API is a backend service built with [NestJS](https://nestjs.com) for personal finances. It synchronizes real bank data through [Enable Banking](https://enablebanking.com) and serves accounts, balances, and transactions to the [web client](../web/README.md).
+Wisp API is a backend service built with [NestJS](https://nestjs.com) for personal finances. It synchronizes real bank data through [Enable Banking](https://enablebanking.com) and serves accounts, balances, and transactions to the [web client](../web/README.md).
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ How statement files become transactions, the formats read, the limits and the co
 
 ## MCP
 
-The API serves sixteen read-only banking tools over a hosted [Streamable HTTP MCP endpoint](docs/mcp.md) at `/api/mcp`. Clients authenticate with a Tempo personal access token, not a browser session.
+The API serves sixteen read-only banking tools over a hosted [Streamable HTTP MCP endpoint](docs/mcp.md) at `/api/mcp`. Clients authenticate with a Wisp personal access token, not a browser session.
 
 ## Test
 

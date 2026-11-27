@@ -2,10 +2,10 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/tempo-web-security-headers.XXXXXX")
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/wisp-web-security-headers.XXXXXX")
 suffix=${tmp_dir##*/}
-image="tempo-web-security-headers:${suffix}"
-container="tempo-web-security-headers-${suffix}"
+image="wisp-web-security-headers:${suffix}"
+container="wisp-web-security-headers-${suffix}"
 mcp_upstream="${container}-mcp"
 neighbour="${container}-neighbour"
 
@@ -201,7 +201,7 @@ assert manifest['id'] == '/' and manifest['start_url'] == '/' and manifest['scop
 assert manifest['icons'], 'the manifest names no icons'
 for icon in manifest['icons']:
     served(icon['src'], icon['type'])
-print('tempo web title, link preview and manifest: PASS')
+print('wisp web title, link preview and manifest: PASS')
 PY
 
 # The first streamed event must arrive before a second request releases the final event.
@@ -253,7 +253,7 @@ except urllib.error.HTTPError as error:
     assert error.code == 413, f'expected request size cap HTTP 413, got {error.code}'
 else:
     raise AssertionError('MCP requests larger than 100 KiB must be refused')
-print('tempo MCP proxy streaming and request limit: PASS')
+print('wisp MCP proxy streaming and request limit: PASS')
 
 # A statement import, and the file sent to work out its columns, are larger than Nginx's default 1 MB request limit;
 # they must reach the API whole.
@@ -269,7 +269,7 @@ for path in ('/bank-imports', '/bank-imports/layout-proposals'):
         assert error.code == 413, f'expected {path} size cap HTTP 413, got {error.code}'
     else:
         raise AssertionError(f'{path} uploads larger than 26 MB must be refused')
-print('tempo statement import upload size: PASS')
+print('wisp statement import upload size: PASS')
 
 # Use the API's real URL builder, then verify Nginx preserves each name as one segment.
 base = url.removesuffix('/mcp')
@@ -281,7 +281,7 @@ for name in ('Example Bank', 'Example Bank A/S', 'Example Bank & Épargne', 'Exa
             forwarded = json.load(response)['path']
         assert forwarded == path, f'proxy changed logo path for {name!r}: {forwarded!r}'
         assert re.fullmatch(r'/bank-connections/aspsps/logos/XX/[^/]+(?:/colour-v2/[a-f0-9]{64})?', forwarded), forwarded
-print('tempo bank logo proxy paths: PASS')
+print('wisp bank logo proxy paths: PASS')
 PY
 
 # Waits for Nginx to log the request whose query is $1 and checks the client address it logged.
@@ -330,4 +330,4 @@ docker exec "$neighbour" curl -sS --max-time 5 -o /dev/null \
     -H 'X-Forwarded-For: 203.0.113.10' "http://$web_address:8080/?other-container"
 expect_client other-container "$neighbour_address"
 
-echo 'tempo web security headers: PASS'
+echo 'wisp web security headers: PASS'

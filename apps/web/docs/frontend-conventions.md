@@ -7,8 +7,8 @@ UI rules that the code follows but does not state. Anything visual (colours, typ
 Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 
 - Errors: an `Alert` when the surface the failure belongs to stays open and is where the retry happens (a dialog, form, page or import step). A toast when that surface has closed or never existed (inline edits, background saves, a dialog that closed while saving). A row that failed may carry its own short line instead of a toast when the line says which row failed.
-- Failures the `api` wrapper already toasted (offline writes, lost connections, expired sessions, rate limits, unverified email) get no `Alert` or toast at the call site: check `wasToasted(error)` (`src/utils/api.ts`) and leave the control ready to retry. With a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`. A write Tempo makes without a user action passes `quiet: true`, so being offline, a lost connection, an ended session or a rate limit throws without the wrapper's toast.
-- Warnings: an `Alert` for a lasting state that needs action (a bank needing attention). A toast only for a passing condition with no place on screen (offline storage unavailable, keep Tempo open until logout is confirmed).
+- Failures the `api` wrapper already toasted (offline writes, lost connections, expired sessions, rate limits, unverified email) get no `Alert` or toast at the call site: check `wasToasted(error)` (`src/utils/api.ts`) and leave the control ready to retry. With a loading toast, use `toastRequest` (`src/utils/toast-request.ts`) instead of `toast.promise`. A write Wisp makes without a user action passes `quiet: true`, so being offline, a lost connection, an ended session or a rate limit throws without the wrapper's toast.
+- Warnings: an `Alert` for a lasting state that needs action (a bank needing attention). A toast only for a passing condition with no place on screen (offline storage unavailable, keep Wisp open until logout is confirmed).
 - Info: neither by default. A toast only to explain a redirect (email already verified, log in to finish).
 - Success: neither when the screen shows the result where it was made. A toast for outcomes the screen does not show: email sent, session revoked, effects elsewhere, saves that can finish after a dialog closes.
 - Retry copy says what failed and "Try again", without "Please".
@@ -100,9 +100,9 @@ Pattern in `src/features/settings/components/access-tokens/create-token-dialog.t
 ## Copy
 
 - Name a feature by its use and an item by convention (tab `Integrations`, item `Access tokens`). Explain the use once on the page; keep dialogs about the item.
-- Never name the services Tempo is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Tempo itself in descriptions ("Bills and income found in your history"). The user's own banks and their export formats may be named, because that is how the user recognises them: account rows show bank names, and the bank picker names the file to pick ("CSV").
+- Never name the services Wisp is built on (its bank-data, AI or logo providers, for example) in UI copy, placeholders or hints, and do not name Wisp itself in descriptions ("Bills and income found in your history"). The user's own banks and their export formats may be named, because that is how the user recognises them: account rows show bank names, and the bank picker names the file to pick ("CSV").
 - Do not ship setup snippets that need a local checkout path; only developers could use them.
-- When something is briefly busy or failed for a moment, say what the user can do, not which internal process is busy ("Tempo is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
+- When something is briefly busy or failed for a moment, say what the user can do, not which internal process is busy ("Wisp is busy right now", not "Other files are being imported"). Say "Try again in a moment." for a short wait; name a duration only when the server gives a real one (`formatRetryAfter`).
 
 ## Routing and URL state
 

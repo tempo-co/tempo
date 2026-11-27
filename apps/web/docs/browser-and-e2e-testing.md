@@ -109,7 +109,7 @@ Every iPhone browser is WebKit, so `playwright.config.ts` runs every spec a seco
 To change the transaction search cap (`BANK_TRANSACTION_SEARCH_MAX_LENGTH`, see `docs/frontend-conventions.md`):
 
 1. Trace input → debounced `navigate` → route schema → request → API DTO. Raising one boundary alone leaves the router error or turns it into an API rejection; change the API validator in `apps/api` in the same PR.
-2. Percent-encoded three-byte characters cost nine request-line bytes each. `nginx/tempo.conf` sizes `large_client_header_buffers` for the current cap, and `scripts/tempo-web-security-headers-test.sh` sends 1000 `€` through both the SPA route and the API proxy. Update both with the cap.
+2. Percent-encoded three-byte characters cost nine request-line bytes each. `nginx/wisp.conf` sizes `large_client_header_buffers` for the current cap, and `scripts/wisp-web-security-headers-test.sh` sends 1000 `€` through both the SPA route and the API proxy. Update both with the cap.
 3. In the existing search journey, type exactly the maximum, check the full value in the request and URL, reload and check the restored input, then try one extra character and confirm the input stays bounded.
 
 ## Cash flow filters

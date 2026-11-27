@@ -1,5 +1,5 @@
 [Unit]
-Description=Tempo staging rootless Docker daemon
+Description=Wisp staging rootless Docker daemon
 
 [Service]
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin

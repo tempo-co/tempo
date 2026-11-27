@@ -8,7 +8,7 @@ import {offlineShellPlugin} from './config/offline-shell';
 
 function pwaManifestPlugin(basePath: string): Plugin {
   return {
-    name: 'tempo-pwa-manifest',
+    name: 'wisp-pwa-manifest',
     generateBundle() {
       const icon = (name: string) => `${basePath}${name}`;
       const manifest = {

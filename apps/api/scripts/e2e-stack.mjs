@@ -8,7 +8,7 @@ import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const apiDir = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
-const project = `tempo-api-test-${createHash('sha256').update(apiDir).digest('hex').slice(0, 8)}`;
+const project = `wisp-api-test-${createHash('sha256').update(apiDir).digest('hex').slice(0, 8)}`;
 const composeArgs = ['compose', '-p', project, '-f', 'docker-compose.test.yml', '--env-file', '.env.test'];
 
 function compose(args, {capture = false} = {}) {

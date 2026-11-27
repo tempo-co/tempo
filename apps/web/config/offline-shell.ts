@@ -22,7 +22,7 @@ export function offlineShellPlugin(base: string): Plugin {
     throw new Error('The offline shell requires a same-origin base path ending in /.');
   }
   return {
-    name: 'tempo-offline-shell',
+    name: 'wisp-offline-shell',
     enforce: 'post',
     apply: 'build',
     generateBundle(_options, bundle) {

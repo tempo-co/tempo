@@ -73,7 +73,7 @@ Object.assign(process.env, {
 	DB_PORT: '5432',
 	DB_USERNAME: 'synthetic',
 	DB_PASSWORD: 'synthetic',
-	DB_NAME: 'tempo',
+	DB_NAME: 'wisp',
 	DB_SYNCHRONIZE: 'false',
 	SESSION_SECRET: 'synthetic-only-session-secret-0032',
 	SESSION_EXPIRATION: '1d',

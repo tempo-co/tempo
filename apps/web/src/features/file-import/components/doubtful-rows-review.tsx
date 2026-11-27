@@ -251,12 +251,12 @@ function DoubtfulRowBlock({
 }) {
   const {row: fileRow} = row;
   // Already in Wisp from the file; the candidates are what bank sync brought since.
-  const inTempo = row.importedTransactionId !== null;
+  const inWisp = row.importedTransactionId !== null;
   const title = fileRow.description || fileRow.counterpartyName || 'Transaction';
   const fileDate = fileRow.bookingDate ?? fileRow.valueDate;
   const date = formatBankTransactionCompactDate(fileDate);
   const name = `bank-import-doubtful-${row.id}`;
-  const newLabel = !inTempo
+  const newLabel = !inWisp
     ? "It's a new transaction"
     : row.candidates.length > 0
       ? 'Different payments, keep both'
@@ -277,14 +277,14 @@ function DoubtfulRowBlock({
         </span>
         <Title
           title={title}
-          detail={`${date} · from the file${inTempo ? ', already in Wisp' : ''}`}
+          detail={`${date} · from the file${inWisp ? ', already in Wisp' : ''}`}
         />
         <Amount amount={fileRow.amount} currency={fileRow.currency} />
       </div>
       {saved ? (
         <p role='status' className='border-t px-3 py-2 text-body-small text-muted-foreground'>
           {saved.decision === 'new'
-            ? inTempo
+            ? inWisp
               ? 'Kept both'
               : 'Kept as new'
             : savedCandidate
@@ -296,10 +296,10 @@ function DoubtfulRowBlock({
           <legend className='sr-only'>What {title} is</legend>
           <p aria-hidden='true' className='px-3 pt-2 text-body-small text-muted-foreground'>
             {row.candidates.length > 0
-              ? inTempo
+              ? inWisp
                 ? 'Your bank also sent'
                 : 'Could be the same as'
-              : inTempo
+              : inWisp
                 ? 'Nothing from your bank matches it now'
                 : 'Nothing already in Wisp matches it now'}
           </p>
@@ -331,7 +331,7 @@ function DoubtfulRowBlock({
             divided={row.candidates.length > 0}
           >
             <span className='flex min-w-0 items-center gap-2 text-body'>
-              {inTempo ? (
+              {inWisp ? (
                 <Files aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
               ) : (
                 <FilePlus aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />

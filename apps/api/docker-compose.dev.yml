@@ -1,4 +1,4 @@
-name: tempo-api-development
+name: wisp-api-development
 
 services:
   mailpit:

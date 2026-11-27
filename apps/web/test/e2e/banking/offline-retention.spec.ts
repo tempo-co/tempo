@@ -117,7 +117,7 @@ test.describe('offline retention', () => {
         value: string,
       ) => void;
       Storage.prototype.setItem = function (name: string, value: string) {
-        if (name === key && (value.length > 1_600_000 || 'tempoStorageFull' in window))
+        if (name === key && (value.length > 1_600_000 || 'wispStorageFull' in window))
           throw new DOMException('Full', 'QuotaExceededError');
         setItem.call(this, name, value);
       };
@@ -133,14 +133,14 @@ test.describe('offline retention', () => {
     await expect(saveFailedToast(page)).not.toBeVisible();
 
     // Once nothing fits, the previous save stays and the user is told.
-    await page.evaluate(() => Object.assign(window, {tempoStorageFull: true}));
+    await page.evaluate(() => Object.assign(window, {wispStorageFull: true}));
     await search(page, 'Provider', 'Provider purchase');
     await expect(saveFailedToast(page)).toBeVisible();
     expect(await savedSearches(page)).toEqual(['Coffee', 'Salary']);
     await expect(new HomePage(page).accountName).toBeVisible();
     await expect(page).toHaveURL(/\/transactions/);
 
-    await page.evaluate(() => Reflect.deleteProperty(window, 'tempoStorageFull'));
+    await page.evaluate(() => Reflect.deleteProperty(window, 'wispStorageFull'));
     await search(page, 'Extra', 'Extra transaction 1');
     await expect(saveFailedToast(page)).not.toBeVisible();
     await expect.poll(() => savedSearches(page)).toEqual(['Extra', 'Provider']);
@@ -154,7 +154,7 @@ test.describe('offline retention', () => {
     });
 
     // The warning does not outlive the session: a logout in another tab removes it too.
-    await page.evaluate(() => Object.assign(window, {tempoStorageFull: true}));
+    await page.evaluate(() => Object.assign(window, {wispStorageFull: true}));
     await search(page, 'Coffee', 'Coffee shop');
     await expect(saveFailedToast(page)).toBeVisible();
     const other = await context.newPage();
