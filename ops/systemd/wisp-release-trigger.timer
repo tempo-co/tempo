@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly release at 02:23 UTC (catches up after downtime)
+
+[Timer]
+OnCalendar=*-*-* 02:23:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

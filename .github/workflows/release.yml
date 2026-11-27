@@ -1,10 +1,9 @@
 name: Release
 
 # Moves each app's `:release` tag, which production deploys, to the image its `:main` tag points
-# at: nightly, or at once from the Actions tab (Run workflow on main). See docs/ci-and-images.md.
+# at: nightly when the production server's wisp-release-trigger.timer starts it, or at once from the
+# Actions tab (Run workflow on main). See docs/ci-and-images.md.
 on:
-    schedule:
-        - cron: '23 2 * * *'
     workflow_dispatch:
 
 permissions:
