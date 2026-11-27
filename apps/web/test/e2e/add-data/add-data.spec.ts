@@ -1,6 +1,7 @@
 import type {Page} from '@playwright/test';
 
 import {expect, test} from '../../fixtures';
+import {importFound} from '../../utils/file-import';
 
 /** A synthetic CAMT.053 statement for a published example IBAN: three booked payments in March 2026. */
 const STATEMENT = [
@@ -77,6 +78,8 @@ test.describe('Add data', () => {
     } finally {
       release();
     }
+    // The drop is read first, then imported on the owner's word.
+    await importFound(sheet);
     await expect(sheet.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
     // A side sheet over the page, not a centred dialog: it runs the window's full height.
     const box = (await sheet.boundingBox())!;

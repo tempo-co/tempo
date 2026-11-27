@@ -61,8 +61,8 @@
       "reason": "every remaining line is a banking invariant that no test or other doc states"
     },
     "apps/api/docs/file-import.md": {
-      "words": 2800,
-      "reason": "the statement import and its column mapper end to end; each line is a current rule of that pipeline that no other doc states"
+      "words": 2900,
+      "reason": "the statement import, its preview and its column mapper end to end; each line is a current rule of that pipeline that no other doc states"
     }
   },
   "allowMissing": [

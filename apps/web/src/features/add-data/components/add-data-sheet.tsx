@@ -20,6 +20,7 @@ import {FileImportSteps} from '@/features/file-import/components/file-import-ste
 import {BUSY, isUnsettled, useFileImport} from '@/features/file-import/components/use-file-import';
 import {IMPORT_TILE} from '@/features/file-import/utils/import-tile';
 import {useIsMobile} from '@/hooks/use-is-mobile';
+import {cn} from '@/utils/cn';
 
 import type {AddDataAsk, SheetState} from '../use-add-data';
 
@@ -37,6 +38,7 @@ export type SheetHandle = {answer: (ask: AddDataAsk) => void};
 export function AddDataSheet({
   ref,
   openerRef,
+  firstRunRef,
   importOn,
   onConnect,
   isStarting,
@@ -45,6 +47,8 @@ export function AddDataSheet({
   ref: Ref<SheetHandle>;
   /** Where focus goes back to when the sheet closes; the shell sets it from the click that asked. */
   openerRef: RefObject<HTMLElement | null>;
+  /** Whether the empty Home is shown, read as the sheet opens: it then opens as the first run. */
+  firstRunRef: RefObject<boolean>;
   importOn: boolean;
   onConnect: (bank: Pick<BankConnectionAspsp, 'name' | 'country'>) => void | Promise<void>;
   isStarting: boolean;
@@ -63,8 +67,9 @@ export function AddDataSheet({
     openerRef.current = null;
     showImportSteps();
   }, [openerRef, showImportSteps]);
-  const fileImport = useFileImport({onShow});
-  const {open, setOpen, openNew, show, step, importDropped} = fileImport;
+  const startsFirstRun = useCallback(() => firstRunRef.current, [firstRunRef]);
+  const fileImport = useFileImport({onShow, startsFirstRun});
+  const {open, setOpen, openNew, show, step, importDropped, firstRun} = fileImport;
   const [connectStep, setConnectStep] = useState<ConnectStep>(BANK_LIST);
   // The country the owner chose stays while the sheet closes and opens again.
   const [countryCode, setCountryCode] = useState<string>();
@@ -120,10 +125,14 @@ export function AddDataSheet({
   };
 
   return (
-    <ResponsiveDialog side open={open} onOpenChange={setOpen}>
+    // The first run keeps a centred dialog over the empty Home; everywhere else it is a side sheet.
+    <ResponsiveDialog side={!firstRun} open={open} onOpenChange={setOpen}>
       <ResponsiveDialogContent
         data-testid='add-data-sheet'
-        className='flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 md:h-full md:max-h-none md:w-full md:max-w-lg [&>button:last-child]:hidden'
+        className={cn(
+          'flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 md:w-full md:max-w-lg [&>button:last-child]:hidden',
+          firstRun ? 'md:max-h-[min(90dvh,--spacing(180))]' : 'md:h-full md:max-h-none',
+        )}
         onCloseAutoFocus={(event) => {
           if (!openerRef.current?.isConnected) return;
           event.preventDefault();
@@ -145,6 +154,7 @@ export function AddDataSheet({
           <FileImportSteps
             controller={fileImport}
             onBack={fromMenu ? () => setView('menu') : undefined}
+            firstRun={firstRun}
           />
         ) : (
           <ConnectBankSteps

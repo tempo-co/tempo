@@ -7,6 +7,8 @@ import type {
 	BankImportLayoutPreview,
 	BankImportNeverSentKind,
 	BankImportNeverSentRow,
+	BankImportPreview,
+	BankImportPreviewAccount,
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
 } from '@tempo/contracts';
@@ -222,28 +224,14 @@ export class BankImportService {
 	async importFiles(
 		ownerId: Account['id'],
 		files: readonly Buffer[],
-		{bankAccountId = null, accountChoices = new Map(), bankId = null}: BankImportRequest = {},
+		request: BankImportRequest = {},
 	): Promise<BankImportSummary> {
-		const {statements, evidenceFiles, kinds, learnedBanks, headerlessLayouts} = await this.parseDrop(
-			ownerId,
-			files,
-			bankId,
-		);
-		const accountRows = groupByAccount(statements, learnedBanks, evidenceFiles);
+		const bankId = request.bankId ?? null;
+		const {statements, kinds, learnedBanks, headerlessLayouts, accountRows, targets, syncedConnectionIds} =
+			await this.planDrop(ownerId, files, request);
 		const allRows = statements.flatMap(({rows}) => rows);
 		const bookingDates = allRows.flatMap(({bookingDate}) => (bookingDate ? [bookingDate] : [])).sort();
 		const rowsParsed = allRows.length;
-		const targets = bankAccountId
-			? [await this.findNamedTarget(ownerId, bankAccountId, accountRows)]
-			: await this.findRoutedTargets(ownerId, accountRows, accountChoices, headerlessLayouts);
-
-		const syncedConnectionIds = [
-			...new Set(
-				targets.flatMap((target) => (target.kind === 'synced' ? [target.account.bankConnection.id] : [])),
-			),
-		];
-		// The record hangs on one connection and goes with it, so a drop may write to one synced connection at most.
-		if (syncedConnectionIds.length > 1) throw new BankImportRefusalException('multiple_bank_connections');
 
 		// A drop without a synced target (even one without accounts) is recorded under the imported-files connection.
 		const toFiles = targets.length === 0 || targets.some(({kind}) => kind === 'file');
@@ -258,7 +246,13 @@ export class BankImportService {
 					...imported,
 					rows: placedEvidence(accountRows[index], imported.account, headerlessLayouts),
 				}));
-				refuseBankConflicts(accountStatements);
+				refuseBankConflicts(
+					accountStatements.map(({account, connection, rows}) => ({
+						bankIdentity: account.bankIdentity,
+						fromFiles: connection.provider === BANK_CONNECTION_PROVIDERS.FILE,
+						rows,
+					})),
+				);
 				const syncedAccount = accounts.find(
 					({connection}) => connection.provider !== BANK_CONNECTION_PROVIDERS.FILE,
 				);
@@ -452,6 +446,108 @@ export class BankImportService {
 			result.record,
 			result.accounts.map(({account, connection}) => ({...account, bankConnection: connection})),
 		);
+	}
+
+	/**
+	 * What `importFiles` would do with the same drop and request, writing nothing: the accounts its statements go to,
+	 * found or to be created, each with its rows' count and days. Refuses as the import would, before its write.
+	 */
+	async previewFiles(
+		ownerId: Account['id'],
+		files: readonly Buffer[],
+		request: BankImportRequest = {},
+	): Promise<BankImportPreview> {
+		const {statements, learnedBanks, headerlessLayouts, accountRows, targets} = await this.planDrop(
+			ownerId,
+			files,
+			request,
+		);
+		const found = await Promise.all(
+			targets.map(async (target, index) => {
+				if (target.account) return {account: target.account, rows: accountRows[index]};
+				const rows =
+					target.kind === 'file' && target.bank
+						? withoutAccount(accountRows[index], target.bank)
+						: accountRows[index];
+				const {account, identity} = await findFileAccountIn(this.dataSource.manager, ownerId, null, rows);
+				return {account, identity, rows: accountRows[index]};
+			}),
+		);
+		refuseBankConflicts(
+			found.map(({account, rows}) => ({
+				bankIdentity: account?.bankIdentity ?? null,
+				fromFiles: !account || account.bankConnection.provider === BANK_CONNECTION_PROVIDERS.FILE,
+				rows: account ? placedEvidence(rows, account, headerlessLayouts) : rows,
+			})),
+		);
+
+		// Two statements reaching one account are one account of the import, as its summary lists them.
+		const byAccount = new Map<string, BankImportPreviewAccount>();
+		for (const entry of found) {
+			const {account, rows} = entry;
+			const key = account?.id ?? `new:${entry.identity!.providerAccountId}`;
+			const days = rows.byFormat.flatMap((part) => part.rows.flatMap((row) => matchDay(row) ?? [])).sort();
+			const rowCount = sum(rows.byFormat.map((part) => part.rows.length));
+			const known = byAccount.get(key);
+			if (known) {
+				known.rowCount += rowCount;
+				known.dateFrom = [known.dateFrom, days[0]].filter((day) => day != null).sort()[0] ?? null;
+				known.dateTo =
+					[known.dateTo, days.at(-1)]
+						.filter((day) => day != null)
+						.sort()
+						.at(-1) ?? null;
+				continue;
+			}
+			const synced = !!account && account.bankConnection.provider !== BANK_CONNECTION_PROVIDERS.FILE;
+			byAccount.set(key, {
+				id: account?.id ?? null,
+				name: account ? account.name : entry.identity!.name,
+				alias: account?.alias ?? null,
+				details: account?.details ?? null,
+				cashAccountType: account?.cashAccountType ?? null,
+				maskedIdentifier: account?.maskedIdentifier ?? null,
+				currency: rows.currency,
+				bankName: synced ? account.bankConnection.aspspName.trim() : fileBankName(rows, learnedBanks),
+				imported: !synced,
+				rowCount,
+				dateFrom: days[0] ?? null,
+				dateTo: days.at(-1) ?? null,
+			});
+		}
+		const days = statements.flatMap(({rows}) => rows.flatMap((row) => matchDay(row) ?? [])).sort();
+		const accounts = [...byAccount.values()];
+		return {
+			rowCount: sum(accounts.map(({rowCount}) => rowCount)),
+			dateFrom: days[0] ?? null,
+			dateTo: days.at(-1) ?? null,
+			accounts,
+		};
+	}
+
+	/**
+	 * A drop read and routed, before anything is written, as the import and its preview both take it: its statements
+	 * by account and each account's target. Refuses what parsing or routing refuses, and a drop reaching two synced
+	 * connections.
+	 */
+	private async planDrop(
+		ownerId: Account['id'],
+		files: readonly Buffer[],
+		{bankAccountId = null, accountChoices = new Map(), bankId = null}: BankImportRequest,
+	) {
+		const parsed = await this.parseDrop(ownerId, files, bankId);
+		const accountRows = groupByAccount(parsed.statements, parsed.learnedBanks, parsed.evidenceFiles);
+		const targets = bankAccountId
+			? [await this.findNamedTarget(ownerId, bankAccountId, accountRows)]
+			: await this.findRoutedTargets(ownerId, accountRows, accountChoices, parsed.headerlessLayouts);
+		const syncedConnectionIds = [
+			...new Set(
+				targets.flatMap((target) => (target.kind === 'synced' ? [target.account.bankConnection.id] : [])),
+			),
+		];
+		// The record hangs on one connection and goes with it, so a drop may write to one synced connection at most.
+		if (syncedConnectionIds.length > 1) throw new BankImportRefusalException('multiple_bank_connections');
+		return {...parsed, accountRows, targets, syncedConnectionIds};
 	}
 
 	async findAll(ownerId: Account['id']): Promise<BankImportSummary[]> {
@@ -1744,11 +1840,13 @@ type AccountStatements = ImportedAccount & {rows: AccountRows};
  * apart. A statement disagreeing with the bank the imported-files account records is named first, then a later
  * statement disagreeing with an earlier one of the drop.
  */
-function refuseBankConflicts(statementsByAccount: readonly AccountStatements[]): void {
+function refuseBankConflicts(
+	statementsByAccount: ReadonlyArray<{bankIdentity: BankIdentity | null; fromFiles: boolean; rows: AccountRows}>,
+): void {
 	const local = statementsByAccount.filter(({rows}) => !rows.iban && !rows.bank);
-	for (const {account, connection, rows} of local) {
-		if (connection.provider !== BANK_CONNECTION_PROVIDERS.FILE) continue;
-		const conflict = rows.bankEvidence.find(({identity}) => differentBanks(account.bankIdentity, identity));
+	for (const {bankIdentity, fromFiles, rows} of local) {
+		if (!fromFiles) continue;
+		const conflict = rows.bankEvidence.find(({identity}) => differentBanks(bankIdentity, identity));
 		if (conflict) throw new BankImportRefusalException('account_bank_conflict', conflict.file);
 	}
 	for (const {rows} of local) {
@@ -1844,11 +1942,31 @@ function statementBankIdentity(
 	{format, layout, servicerBic}: NormalizedStatement,
 	learnedBanks: ReadonlyMap<string, string>,
 ): BankIdentity | null {
-	const bank =
-		FORMAT_BANKS[format] ??
-		(layout ? (CSV_LAYOUTS.find(({id}) => id === layout)?.bank ?? learnedBanks.get(layout)) : undefined);
+	const bank = formatBank(format, layout, learnedBanks);
 	if (bank) return nameBankIdentity(bank);
 	return servicerBic ? bicBankIdentity(servicerBic) : null;
+}
+
+/** The bank a format or CSV layout belongs to (an owner's saved layout under the bank the owner named), if any. */
+function formatBank(
+	format: StatementFormat,
+	layout: string | null,
+	learnedBanks: ReadonlyMap<string, string>,
+): string | undefined {
+	return (
+		FORMAT_BANKS[format] ??
+		(layout ? (CSV_LAYOUTS.find(({id}) => id === layout)?.bank ?? learnedBanks.get(layout)) : undefined)
+	);
+}
+
+/** The bank an account's files name it at: the bank of a file that names no account, else of its first format. */
+function fileBankName(rows: AccountRows, learnedBanks: ReadonlyMap<string, string>): string | null {
+	if (rows.bank) return rows.bank;
+	for (const {format, layout} of rows.byFormat) {
+		const bank = formatBank(format, layout, learnedBanks);
+		if (bank) return bank;
+	}
+	return null;
 }
 
 /** The scheme a statement numbers its rows in: its format, and the layout of a CSV-style file. */

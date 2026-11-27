@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
 import type {BankImportSummary} from '@tempo/contracts';
-import {Columns3, FileX, RotateCw} from 'lucide-react';
+import {Check, Columns3, FileX, RotateCw} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
@@ -14,6 +14,7 @@ import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 
 import {useBankImportBanks} from '../api/use-bank-import-banks';
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
+import {foundAccountName} from '../utils/found-accounts';
 import {plural, summaryTitle} from '../utils/import-format';
 import {OTHER_BANK, guessedBankChoice} from '../utils/layout-mapping';
 import {PICKER_COUNTRY_OPTIONS, type PickedBankId} from '../utils/picked-bank';
@@ -22,11 +23,13 @@ import {AccountQuestions} from './account-questions';
 import {BankExportSteps, BankPicker} from './bank-picker';
 import {DoubtfulRowsReview} from './doubtful-rows-review';
 import {FileChoice, FileList} from './file-choice';
+import {FoundAccounts} from './found-accounts';
 import {ImportSummaryBody} from './import-summary';
 import {LayoutPreview} from './layout-preview';
 import {BankRequestSentStep, TellUsYourBankStep} from './tell-us-your-bank';
 import {
   ACCOUNT_QUESTION_TITLE,
+  FOUND_TITLE,
   type FileImportController,
   IMPORT_FAILED_TITLE,
   type ImportStep,
@@ -34,16 +37,18 @@ import {
 import {useUndoImport} from './use-undo-import';
 
 /**
- * Importing statement files, as steps of the Add data sheet: from picking the bank and choosing files to the summary,
- * the account question and the rows to check. `onBack` leads from the bank picker back to what the sheet offered
- * first.
+ * Importing statement files, as steps of the Add data sheet: from picking the bank and choosing files, through Check
+ * what we found, to the summary, the account question and the rows to check. `onBack` leads from the bank picker back
+ * to what the sheet offered first. A first run (`firstRun`) shows its import as Building your Home.
  */
 export function FileImportSteps({
   controller,
   onBack,
+  firstRun = false,
 }: {
   controller: FileImportController;
   onBack?: () => void;
+  firstRun?: boolean;
 }) {
   const {step, setStep, setOpen, run, propose, bankId, pickBank, pickerCountry, setPickerCountry} =
     controller;
@@ -114,6 +119,34 @@ export function FileImportSteps({
     />
   ) : step.kind === 'told' ? (
     <BankRequestSentStep onDone={() => setOpen(false)} />
+  ) : step.kind === 'reading' ? (
+    <Frame
+      title='Import a file'
+      body={
+        <div className='grid grid-cols-1 gap-4'>
+          <p role='status' className='flex items-center text-body-small text-muted-foreground'>
+            <PendingLabel>Finding accounts and dates…</PendingLabel>
+          </p>
+          <FileList files={step.files} />
+        </div>
+      }
+    />
+  ) : step.kind === 'found' ? (
+    <FoundStep
+      key={step.preview.accounts.map(({id, name}) => id ?? name).join('|')}
+      step={step}
+      onBack={() => setStep({kind: 'choose', files: step.files, failure: null})}
+      onImport={(names) => void controller.importFound(step, names)}
+    />
+  ) : step.kind === 'importing' && firstRun ? (
+    <Frame
+      title='Building your Home'
+      body={
+        <p role='status' className='flex items-center text-body-small text-muted-foreground'>
+          <PendingLabel>Saving your transactions and filling in Home…</PendingLabel>
+        </p>
+      }
+    />
   ) : step.kind === 'importing' ? (
     <Frame
       title='Import a file'
@@ -415,6 +448,42 @@ function PreviewStep({
   );
 }
 
+/** The accounts a drop goes to, renameable, and one Import for the whole drop. */
+function FoundStep({
+  step,
+  onBack,
+  onImport,
+}: {
+  step: Extract<ImportStep, {kind: 'found'}>;
+  onBack: () => void;
+  onImport: (names: string[]) => void;
+}) {
+  const {preview} = step;
+  const [names, setNames] = useState(() => preview.accounts.map(foundAccountName));
+  return (
+    <Frame
+      title={FOUND_TITLE}
+      onBack={onBack}
+      backLabel='Back to the files'
+      body={
+        <FoundAccounts
+          preview={preview}
+          names={names}
+          onName={(index, name) =>
+            setNames((current) => current.map((value, at) => (at === index ? name : value)))
+          }
+        />
+      }
+      footer={
+        <Button onClick={() => onImport(names)}>
+          <Check aria-hidden='true' />
+          Import {plural(preview.rowCount, 'transaction')}
+        </Button>
+      }
+    />
+  );
+}
+
 function QuestionStep({
   step,
   onCancel,
@@ -447,7 +516,7 @@ function QuestionStep({
             onClick={() => onImport(answers)}
             className='order-1 md:order-2'
           >
-            Import
+            Continue
           </Button>
         </>
       }

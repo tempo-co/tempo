@@ -1,0 +1,104 @@
+import {Share, SquarePlus} from 'lucide-react';
+import {type ReactNode, useState} from 'react';
+
+import {Button, type ButtonProps} from '@/components/ui/button';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogBody,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/ui/responsive-dialog';
+import {promptInstall} from '@/utils/installed-app';
+
+import type {InstallWay} from '../use-install';
+
+/**
+ * Installs Tempo the way this device allows: Chrome's own install dialog, or on iPhone and iPad the Share › Add to
+ * Home Screen steps. Renders nothing where neither applies.
+ */
+export function InstallButton({
+  way,
+  children,
+  ...props
+}: {way: InstallWay; children: ReactNode} & Omit<ButtonProps, 'onClick'>) {
+  const [steps, setSteps] = useState(false);
+  if (way !== 'steps' && way !== 'prompt') return null;
+  return (
+    <>
+      <Button {...props} onClick={() => (way === 'steps' ? setSteps(true) : void promptInstall())}>
+        {children}
+      </Button>
+      {way === 'steps' && <HomeScreenSteps open={steps} onOpenChange={setSteps} />}
+    </>
+  );
+}
+
+const KEY = 'inline-flex items-center gap-1 rounded-md border px-1.5 font-medium [&_svg]:size-3.5';
+
+/** Safari's steps to add Tempo to the Home Screen, which no page can do for the owner. */
+function HomeScreenSteps({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const steps: ReactNode[] = [
+    <>
+      Tap{' '}
+      <span className={KEY}>
+        <Share aria-hidden='true' />
+        Share
+      </span>{' '}
+      in Safari’s toolbar
+    </>,
+    <>
+      Scroll and tap{' '}
+      <span className={KEY}>
+        <SquarePlus aria-hidden='true' />
+        Add to Home Screen
+      </span>
+    </>,
+    <>
+      Tap <span className='font-medium'>Add</span>. Tempo then opens from its own icon.
+    </>,
+  ];
+  return (
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>Add Tempo to your Home Screen</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            It opens full screen, like an app.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <ResponsiveDialogBody className='grid gap-3'>
+          <ol className='grid gap-3'>
+            {steps.map((step, index) => (
+              <li key={index} className='flex items-center gap-3 text-body'>
+                <span
+                  aria-hidden='true'
+                  className='grid size-6 shrink-0 place-items-center rounded-full bg-muted text-label font-semibold'
+                >
+                  {index + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+          <p className='text-body-small text-muted-foreground'>
+            iPhone allows this from Safari. Using another browser? Open Tempo in Safari.
+          </p>
+        </ResponsiveDialogBody>
+        <ResponsiveDialogFooter>
+          <Button variant='outline' onClick={() => onOpenChange(false)}>
+            Done
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
+  );
+}

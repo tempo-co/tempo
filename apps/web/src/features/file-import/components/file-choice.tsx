@@ -1,4 +1,4 @@
-import {FileUp} from 'lucide-react';
+import {FileUp, Smartphone} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
@@ -12,8 +12,9 @@ import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {SupportedFiles} from './supported-files';
 
 /**
- * Choosing statement files: a drop area with a Choose files button on desktop, the button alone on phones and
- * touch screens. Any file can be chosen, since banks name their exports with odd extensions.
+ * Choosing statement files: a drop area with a Choose files button on desktop; on phones and touch screens Choose the
+ * file alone, under a note that the bank's website exports what its app cannot. Any file can be chosen, since banks
+ * name their exports with odd extensions.
  */
 export function FileChoice({
   onFiles,
@@ -49,7 +50,7 @@ export function FileChoice({
       onClick={() => input.current?.click()}
       className={cn(!canDrop && 'w-full')}
     >
-      Choose files
+      {canDrop ? 'Choose files' : 'Choose the file'}
     </Button>
   );
 
@@ -118,7 +119,16 @@ export function FileChoice({
           {chooseButton}
         </div>
       ) : (
-        chooseButton
+        <>
+          <p className='flex gap-2.5 rounded-md bg-muted px-3 py-2.5 text-body-small text-pretty text-muted-foreground'>
+            <Smartphone aria-hidden='true' className='mt-0.5 size-4 shrink-0' />
+            <span>
+              Banking apps usually can’t export a statement, but your bank’s website can. Open it in
+              your phone’s browser and download the file, then choose it here.
+            </span>
+          </p>
+          {chooseButton}
+        </>
       )}
       <div className='flex flex-wrap items-center justify-between gap-x-3'>
         <p className='text-body-small text-pretty text-muted-foreground'>

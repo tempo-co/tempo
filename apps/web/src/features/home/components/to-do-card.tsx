@@ -1,10 +1,13 @@
 import {Link} from '@tanstack/react-router';
-import {CircleCheck, CircleDashed, ListChecks, type LucideIcon} from 'lucide-react';
+import {CircleCheck, CircleDashed, ListChecks, type LucideIcon, Smartphone, X} from 'lucide-react';
 import type {ReactNode} from 'react';
+import {toast} from 'sonner';
 
 import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {LoadingLabel, TileRowsSkeleton} from '@/features/dashboard/components/loading';
+import {InstallButton} from '@/features/install/components/install-button';
+import {useInstallCardDismissed, useInstallWay} from '@/features/install/use-install';
 
 import type {ToDoRow} from '../utils/to-do-rows';
 import {type CardEditing, HomeCard} from './home-card';
@@ -23,6 +26,12 @@ const VIEWS: {[K in ToDoRow['kind']]: (row: Extract<ToDoRow, {kind: K}>) => RowV
         </Link>
       </Button>
     ),
+  }),
+  install: () => ({
+    icon: Smartphone,
+    title: 'Add Tempo to your Home Screen',
+    detail: 'Opens full screen, like an app',
+    action: <InstallActions />,
   }),
   setup: ({done, total, next}) => ({
     icon: CircleDashed,
@@ -74,6 +83,31 @@ export function ToDoCard({
         </ul>
       )}
     </HomeCard>
+  );
+}
+
+/** Add, and the × that hides the card for good on this device. */
+function InstallActions() {
+  const way = useInstallWay();
+  const {dismiss} = useInstallCardDismissed();
+  return (
+    <span className='flex items-center gap-1'>
+      <InstallButton way={way} size='sm'>
+        Add
+      </InstallButton>
+      <Button
+        variant='ghost'
+        size='icon'
+        aria-label='Don’t show again'
+        className='-mr-2 size-11'
+        onClick={() => {
+          dismiss();
+          toast('Hidden for good', {description: 'Install any time from Settings › Appearance.'});
+        }}
+      >
+        <X aria-hidden='true' />
+      </Button>
+    </span>
   );
 }
 

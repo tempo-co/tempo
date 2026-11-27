@@ -16,6 +16,13 @@ The icons are the logo masters' web set, copied unchanged (DESIGN.md, Logo): `ic
 
 A new file in `public/` that the app needs offline must be added to `config/app-icons.ts` or matched by the asset filter in `config/offline-shell.ts`.
 
+## Installing
+
+`src/utils/installed-app.ts` keeps Chrome's `beforeinstallprompt` event from start-up (`keepInstallPrompt` in `src/main.tsx`), so the browser shows no banner of its own and Tempo's Install buttons open its dialog; the event is spent once opened. On iPhone and iPad no page can install, so the buttons show Safari's Share › Add to Home Screen steps instead (`src/features/install/`). Neither shows while Tempo runs installed (`display-mode: standalone` or `navigator.standalone`).
+
+- Home's To do offers the install on phones once there is data, below the check row. Its × hides it for good on this device (`localStorage`, `tempo.install-card-dismissed`).
+- Settings › Appearance has an Install row wherever one of the two ways applies.
+
 ## Push alerts and the app badge
 
 `sw.js` also handles `push` and `notificationclick`. A push carries `{title, body, url, tag, badge}`: the worker shows the notification, sets or clears the app badge from `badge`, and a click navigates an open Tempo window to `url` (or opens one). Only URLs on this origin under the base path open; anything else opens the start page.

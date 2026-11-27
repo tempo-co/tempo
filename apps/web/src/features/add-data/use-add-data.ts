@@ -40,6 +40,11 @@ export type AddData = {
   dropEnabled: boolean;
   /** Files dropped on the page: the sheet opens at the import and imports them. */
   importDropped: (files: File[]) => void;
+  /**
+   * The empty Home says it is shown (`true`) and gone (`false`): while it is, Add data opens as the first run, a
+   * centred dialog whose import closes on the filled Home.
+   */
+  setFirstRun: (shown: boolean) => void;
 };
 
 export const AddDataContext = createContext<AddData | null>(null);

@@ -98,6 +98,7 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['patch', `/bank-connections/${RESOURCE_ID}/accounts/${RESOURCE_ID}`],
 	['delete', `/bank-connections/${RESOURCE_ID}/accounts/${RESOURCE_ID}`],
 	['post', '/bank-imports'],
+	['post', '/bank-imports/preview'],
 	['get', '/bank-imports'],
 	['delete', `/bank-imports/${RESOURCE_ID}`],
 	['get', `/bank-imports/${RESOURCE_ID}/doubtful-rows`],

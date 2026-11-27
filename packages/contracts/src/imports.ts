@@ -213,6 +213,43 @@ export type BankImportSummary = {
 	createdAt: string;
 };
 
+/** An account a previewed drop would write to: one it finds, or one the import would create (`id` null). */
+export type BankImportPreviewAccount = {
+	/** The account found; null for an imported-files account the import creates. */
+	id: string | null;
+	/** The account's name as stored, or the name a created account gets. */
+	name: string | null;
+	/** The owner's name for a found account (`UpdateBankAccountRequest`); null otherwise. */
+	alias: string | null;
+	/** A found account's fields the web names accounts by, as `BankAccount` has them; null for a created one. */
+	details: string | null;
+	cashAccountType: string | null;
+	maskedIdentifier: string | null;
+	currency: string;
+	/** The bank of a synced account's connection, else the bank the file's format or layout names; null when none does. */
+	bankName: string | null;
+	/** Whether the rows go to an imported-files account rather than one bank sync holds. */
+	imported: boolean;
+	/** The file's rows for this account, rows one statement repeats from another counted once. */
+	rowCount: number;
+	/** Earliest and latest day of those rows; null when it has none. */
+	dateFrom: string | null;
+	dateTo: string | null;
+};
+
+/**
+ * `POST /bank-imports/preview` (200): the drop of `POST /bank-imports`, with the same fields, limits and refusals
+ * (account questions included), read and routed without writing anything. A refused drop counts as a layout miss
+ * exactly as the upload's refusal would. Sending the same files and fields to `POST /bank-imports` imports them.
+ */
+export type BankImportPreview = {
+	rowCount: number;
+	dateFrom: string | null;
+	dateTo: string | null;
+	/** One per account, in the order the import's summary lists them. */
+	accounts: BankImportPreviewAccount[];
+};
+
 /** A row as the statement file states it. Amounts are signed decimal strings; dates are `YYYY-MM-DD`. */
 export type BankImportFileRow = {
 	bookingDate: string | null;
