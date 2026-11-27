@@ -156,7 +156,7 @@ export function TellUsYourBankStep({
                 <ToggleGroupItem
                   key={type}
                   value={type}
-                  className='data-[state=on]:bg-secondary max-sm:h-11 pointer-coarse:h-11'
+                  className='data-[state=on]:bg-secondary data-[state=on]:text-secondary-foreground max-sm:h-11 pointer-coarse:h-11'
                 >
                   {BANK_REQUEST_FILE_TYPE_LABELS[type]}
                 </ToggleGroupItem>

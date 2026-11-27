@@ -15,6 +15,11 @@ export function pickedBank(id: PickedBankId): Bank | null {
   return BANK_LIST.find((bank) => bank.id === id) ?? null;
 }
 
+/** A listed bank's name without the list's note in brackets ("ASN Bank" for "ASN Bank (also SNS and RegioBank)"). */
+export function bankShortName(bank: Pick<Bank, 'name'>) {
+  return bank.name.replace(/\s*\(.*\)$/, '');
+}
+
 /** Where a bank serves its customers, as its row's second line reads. */
 export function bankWhere(bank: Pick<Bank, 'country'>) {
   return bank.country ? countryName(bank.country) : 'Several countries';
@@ -98,6 +103,6 @@ export function catalogMatch<T extends CatalogBank>(
 ): T | undefined {
   const country = bank.country ?? bank.logoCountry;
   if (!country) return undefined;
-  const name = bankNameKey(bank.name.replace(/\s*\(.*\)$/, ''));
+  const name = bankNameKey(bankShortName(bank));
   return catalog.find((entry) => entry.country === country && bankNameKey(entry.name) === name);
 }
