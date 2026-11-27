@@ -354,10 +354,10 @@ for (const viewport of [
     await mockSignedIn(page);
     await mockHistoryEndpoints(page);
     const requests = await mockMerchants(page);
-    await page.goto('/?month=2026-10');
+    await page.goto('/insights/months/2026-10');
 
     const card = page
-      .getByRole('dialog', {name: 'October 2026'})
+      .getByRole('article', {name: 'October 2026'})
       .getByRole('region', {name: 'Biggest merchants'});
     const rows = card.getByRole('listitem');
     await expect(rows).toHaveCount(Math.min(8, ranking.merchants.length));
@@ -389,7 +389,7 @@ for (const viewport of [
     await expect(page).toHaveURL(`/insights?merchant=${BRAND}`);
     await expect(panel(page).getByRole('heading', {name: 'Example Burger'})).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL('/?month=2026-10');
+    await expect(page).toHaveURL('/insights/months/2026-10');
     await expect(card).toBeVisible();
   });
 }

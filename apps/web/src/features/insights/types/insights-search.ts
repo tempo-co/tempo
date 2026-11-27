@@ -22,3 +22,8 @@ export const insightsSearchSchema = z.object({
 });
 
 export type InsightsSearch = z.infer<typeof insightsSearchSchema>;
+
+/** The address of a category's or a month's page: Insights' period, kept for every figure and the way back. */
+export const insightsPeriodSearchSchema = insightsSearchSchema.pick({period: true});
+
+export type InsightsPeriodSearch = z.infer<typeof insightsPeriodSearchSchema>;

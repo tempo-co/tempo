@@ -1,4 +1,6 @@
 import {
+	BANK_TRANSACTION_CATEGORY_FILTER_VALUES,
+	type BankTransactionCategoryFilterValue,
 	CASH_FLOW_INTERVALS,
 	type CashFlowInterval,
 	MERCHANT_LIST_MAX_LIMIT,
@@ -26,6 +28,10 @@ export class MerchantGroupsQueryDto implements MerchantGroupsQuery {
 	@IsOptional()
 	@IsCalendarDate()
 	to?: string;
+
+	@IsOptional()
+	@IsIn(BANK_TRANSACTION_CATEGORY_FILTER_VALUES)
+	category?: BankTransactionCategoryFilterValue;
 
 	@IsOptional()
 	@Transform(transformStrictDecimalInteger)

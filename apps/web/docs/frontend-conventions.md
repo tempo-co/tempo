@@ -75,7 +75,7 @@ Value axes take their ticks from `axisTicks` (`src/features/dashboard/utils/char
 about 6% headroom, passed as explicit `ticks` rather than `tickCount`. A Recharts `Bar` has no default fill: a `Cell`
 without `fill` takes the bar's, and with neither the bar renders black.
 
-HTML bars (the Insights cash flow) use `axisTicks` too, and a pair is a link only while it is a 44px target.
+HTML bars (Insights) use `axisTicks` too, and a pair is a link only while it is a 44px target.
 
 ## Settings lists
 

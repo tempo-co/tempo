@@ -350,10 +350,10 @@ for (const width of [1440, 390]) {
         await page.clock.install({time: new Date('2026-10-01T12:00:00Z')});
         const state = await mockMerchantLogos(page);
 
-        await page.goto('/?month=2026-09');
+        await page.goto('/insights/months/2026-09');
         const homeUrl = page.url();
         await page
-          .getByRole('dialog', {name: 'September 2026'})
+          .getByRole('article', {name: 'September 2026'})
           .getByRole('region', {name: 'Transactions'})
           .getByRole('link', {name: 'Open in Transactions', exact: true})
           .click();
@@ -514,9 +514,9 @@ for (const width of [1440, 390]) {
         await page.goForward();
         await expect(page).toHaveURL(listUrl);
 
-        await page.goto('/?month=2026-09');
+        await page.goto('/insights/months/2026-09');
         const recent = page
-          .getByRole('dialog', {name: 'September 2026'})
+          .getByRole('article', {name: 'September 2026'})
           .getByRole('region', {name: 'Transactions'});
         const recentRow = (row: BankTransaction) =>
           recent.locator('li').filter({hasText: row.displayDescription});

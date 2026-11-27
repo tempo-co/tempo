@@ -157,9 +157,9 @@ for (const mobile of [false, true]) {
     page,
   }) => {
     await page.setViewportSize({width: mobile ? 390 : 1440, height: 900});
-    await page.goto('/?month=2026-08');
+    await page.goto('/insights/months/2026-08');
     await page
-      .getByRole('dialog', {name: 'August 2026'})
+      .getByRole('article', {name: 'August 2026'})
       .getByRole('region', {name: 'Where it went'})
       .getByRole('link')
       .first()

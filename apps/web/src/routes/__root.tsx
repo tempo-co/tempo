@@ -10,6 +10,7 @@ import {AppPhoneHeader, AppSidebar, AppTabBar} from '@/components/shared/layout/
 import {OfflineStatus} from '@/components/shared/offline-status';
 import {SidebarInset, SidebarProvider} from '@/components/ui/sidebar';
 import {AddDataDrop, AddDataProvider} from '@/features/add-data/components/add-data-provider';
+import {MONTH_PATTERN} from '@/features/dashboard/utils/month';
 import {DeviceAlerts} from '@/features/notifications/components/device-alerts';
 
 export const Route = createRootRouteWithContext<{
@@ -22,11 +23,18 @@ export const Route = createRootRouteWithContext<{
 
 /**
  * Links that open a merchant (`?merchants=open`, `?merchant=`) or a recurring series (`?recurring=open`, `?series=`)
- * over any page land on Insights or Recurring, with that merchant or series open.
+ * over any page land on Insights or Recurring, with that merchant or series open. A month opened over Home or
+ * Insights (`?month=YYYY-MM`) lands on its own page.
  */
 function openRetiredDialogLinks({pathname, search}: ParsedLocation) {
-  const {recurring, series, merchants, merchant} = search as Record<string, unknown>;
+  const {recurring, series, merchants, merchant, month} = search as Record<string, unknown>;
   const page = pathname.replace(/\/$/, '');
+  if (
+    (page === '' || page === '/insights') &&
+    typeof month === 'string' &&
+    MONTH_PATTERN.test(month)
+  )
+    throw redirect({to: '/insights/months/$month', params: {month}, replace: true});
   if (page !== '/recurring' && (recurring === 'open' || typeof series === 'string'))
     throw redirect({
       to: '/recurring',

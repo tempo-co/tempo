@@ -22,4 +22,7 @@ export const dashboardQueryKeys = {
   /** Pages of a month's transactions; kept apart from the Transactions page's lists. */
   monthTransactions: (from: string, to: string) =>
     ['bank-dashboard', 'month-transactions', from, to] as const,
+  /** Pages of a category's spending over a period, for its Insights page. */
+  categoryTransactions: (filters: BankTransactionFilterParams) =>
+    ['bank-dashboard', 'category-transactions', filters] as const,
 };

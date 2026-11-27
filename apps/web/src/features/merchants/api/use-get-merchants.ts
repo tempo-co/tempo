@@ -11,22 +11,24 @@ import {merchantQueryKeys} from './merchant-query-keys';
 
 /**
  * Every merchant group with rows between two local dates, most spent first, `limit` at a time; `search` narrows by
- * name. Waits while `range` is null.
+ * name and `category` counts only that category's rows. Waits while `range` is null.
  */
 export const useGetMerchants = (
   search: string,
   range: {from: string; to: string} | null,
   limit = MERCHANT_LIST_DEFAULT_LIMIT,
+  category?: MerchantGroupsQuery['category'],
 ) =>
   useInfiniteQuery({
     enabled: range !== null,
-    queryKey: merchantQueryKeys.list(search, range, limit),
+    queryKey: merchantQueryKeys.list(search, range, limit, category),
     queryFn: ({pageParam}) => {
       const params = new URLSearchParams({
         offset: String(pageParam),
         limit: String(limit),
       });
       if (search) params.set('search', search);
+      if (category) params.set('category', category);
       if (range) {
         const {from, to} = range satisfies Pick<MerchantGroupsQuery, 'from' | 'to'>;
         params.set('from', from);
