@@ -10,6 +10,7 @@ import {
   mockJson,
   routeBankConnectionsApi,
 } from '../../utils/api-mocks';
+import {expectBankConnectionLine} from '../../utils/bank-connections';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
 test.use({storageState: {cookies: [], origins: []}});
@@ -348,6 +349,8 @@ test.describe('Connect a bank', () => {
       await expect(country).toHaveText('FinlandChange');
       await picker.getByRole('button', {name: 'Esimerkki Pankki', exact: true}).click();
 
+      // Before leaving for the bank, the step says who makes the connection and links its register entry.
+      await expectBankConnectionLine(picker);
       const confirm = picker.getByTestId('bank-connection-confirm');
       await expect(confirm).toHaveText('Continue to Esimerkki Pankki');
       await confirm.click();

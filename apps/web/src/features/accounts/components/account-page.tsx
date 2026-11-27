@@ -4,6 +4,7 @@ import {addMonths, endOfMonth, format, isSameYear, parseISO} from 'date-fns';
 import {EyeOff, FileQuestion, FileUp, RefreshCw, Unlink} from 'lucide-react';
 import {type MouseEvent, type ReactNode, useState} from 'react';
 
+import {BankConnectionLine} from '@/components/shared/bank-connection-line';
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
 import {TextAction} from '@/components/shared/text-action';
 import {Button} from '@/components/ui/button';
@@ -343,6 +344,7 @@ function AboutCard({
     <Card className='grid grid-cols-1 gap-4 p-4' data-testid='account-about'>
       <h2 className='text-card-title'>About this account</h2>
       <Facts facts={facts} />
+      {!files && <BankConnectionLine />}
       {onImport && (
         <Button variant='outline' onClick={onImport}>
           <FileUp aria-hidden='true' />
