@@ -1,4 +1,4 @@
-import {Link, useLocation, useNavigate} from '@tanstack/react-router';
+import {Link, useLocation} from '@tanstack/react-router';
 import {
   ChartColumn,
   House,
@@ -22,6 +22,7 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import {useAddData} from '@/features/add-data/use-add-data';
 import {useGetAllBankConnections} from '@/features/banking/api/use-get-all-bank-connections';
 import {useGetBankTransactionReviewCounts} from '@/features/banking/api/use-get-bank-transaction-review-counts';
 import {
@@ -47,11 +48,6 @@ const navItems: NavItem[] = [
   {label: 'Accounts', to: '/accounts', icon: Landmark, tab: true},
 ];
 
-/** Add data is an action, not a place: for now it opens Accounts, where files are imported and banks connected. */
-function useAddData() {
-  const navigate = useNavigate();
-  return () => void navigate({to: '/accounts'});
-}
 const SETTINGS = '/settings';
 
 type NavBadge = {count: number | null; label: string};
@@ -135,7 +131,7 @@ const LABEL = 'min-w-0 truncate group-data-[collapsible=icon]:sr-only';
 
 /** Desktop navigation, from `md` up: Add data, the pages, Plan for later, and who is signed in with Settings. */
 export function AppSidebar() {
-  const addData = useAddData();
+  const {openMenu: addData} = useAddData();
   const isActive = useIsActive();
   const badgeOf = useNavBadges();
   const {currentAccount} = useCurrentAccount({skipFetch: true});
@@ -257,7 +253,7 @@ const HEADER_ACTION =
 
 /** The phone header: the logo, then Add data and Settings, which have no tab. */
 export function AppPhoneHeader() {
-  const addData = useAddData();
+  const {openMenu: addData} = useAddData();
   return (
     <header
       data-testid='app-phone-header'

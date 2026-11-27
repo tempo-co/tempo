@@ -80,7 +80,7 @@ export const test = base.extend<Fixtures>({
       if (typeof storageState === 'object' && storageState.cookies.length === 0) {
         await mockBankConnections(page, []);
         await mockEmptyHome(page);
-        // Connections asks whether file import is on; specs of import turn it on with their own route.
+        // The shell asks whether file import is on; specs of import turn it on with their own route.
         await mockFileImportOff(page, API_URL);
         // Account settings read alert choices; this server sends no push.
         await mockJson(page, `${API_URL}/notifications`, {

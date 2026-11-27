@@ -9,6 +9,7 @@ import {TanStackRouterDevtools} from '@tanstack/router-devtools';
 import {AppPhoneHeader, AppSidebar, AppTabBar} from '@/components/shared/layout/app-nav';
 import {OfflineStatus} from '@/components/shared/offline-status';
 import {SidebarInset, SidebarProvider} from '@/components/ui/sidebar';
+import {AddDataDrop, AddDataProvider} from '@/features/add-data/components/add-data-provider';
 import {DeviceAlerts} from '@/features/notifications/components/device-alerts';
 
 export const Route = createRootRouteWithContext<{
@@ -56,21 +57,25 @@ function Root() {
 
   return (
     <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <AppPhoneHeader />
-        {/* Desktop has no header, so the offline label sits above the column's top-right corner. */}
-        <div className='absolute top-2 right-4 z-10 max-md:hidden'>
-          <OfflineStatus />
-        </div>
-        {/* Reserves the tab bar's 3.5rem row plus its 1px top border. */}
-        <main className='min-w-0 max-md:pb-[calc(--spacing(14)+1px+env(safe-area-inset-bottom))]'>
-          <Outlet />
-        </main>
-      </SidebarInset>
-      <AppTabBar />
-      <DeviceAlerts />
-      {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
+      <AddDataProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <AppPhoneHeader />
+          {/* Desktop has no header, so the offline label sits above the column's top-right corner. */}
+          <div className='absolute top-2 right-4 z-10 max-md:hidden'>
+            <OfflineStatus />
+          </div>
+          {/* Reserves the tab bar's 3.5rem row plus its 1px top border. */}
+          {/* Relative for the overlay that files dragged over any page show. */}
+          <main className='relative min-w-0 max-md:pb-[calc(--spacing(14)+1px+env(safe-area-inset-bottom))]'>
+            <AddDataDrop />
+            <Outlet />
+          </main>
+        </SidebarInset>
+        <AppTabBar />
+        <DeviceAlerts />
+        {import.meta.env.DEV && <TanStackRouterDevtools position='bottom-right' />}
+      </AddDataProvider>
     </SidebarProvider>
   );
 }

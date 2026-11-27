@@ -1,23 +1,30 @@
 # File import screens
 
-The statement file import's screens on Accounts. The design rules they follow are in `DESIGN.md` (File import, Alerts); the API behind them is `apps/api/docs/file-import.md`.
+The statement file import's screens, in the Add data sheet. The design rules they follow are in `DESIGN.md` (File import, Alerts); the API behind them is `apps/api/docs/file-import.md`.
 
-Statement file import lives on Accounts, and only while the deployment has it on: the import
-list answering is the switch, and until it does the page shows nothing of it. Bank sync stays
-the page's primary action. **Import a file** is the outline button beside **Connect a bank**
-(the two share the row under the title on phones, equal width), and the empty page offers both.
-No copy calls import a fallback or assumes a bank is connected.
+Statement file import runs in the Add data sheet, on any signed-in page, and only while the
+deployment has it on: the import list answering is the switch, and until it does the app shows
+nothing of it (Add data then opens Connect a bank alone). Add data in the sidebar or the phone
+header opens the sheet on its ways in, **Import a statement file** and **Connect a bank**; the
+first step of each goes back to them. On Accounts, **Import a file** is the outline button beside
+**Connect a bank** (the two share the row under the title on phones, equal width), the empty page
+offers both, and each opens the sheet at its own first step; an account page's **Import a newer
+file** does too. No copy calls import a fallback or assumes a bank is connected.
 
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch
   screens get the button alone, full width. The picker accepts any extension, since banks name
-  their exports oddly. Files dragged anywhere over Accounts show a full-column overlay (dashed
-  2px ring rule, page-field wash, "Drop to import"); it is the only drop target outside the dialog.
-- **One dialog.** Choosing, importing, the summary, the account question, the rows to check and
-  the undo confirmation are steps of one `ResponsiveDialog`, with a scrolling body and a footer
-  that stays in reach. It never closes by itself. Closing it does not cancel an upload; the
-  outcome then arrives as a toast (View reopens the summary). Focus returns to Import a file.
+  their exports oddly. Files dragged over any signed-in page show a full-column overlay (dashed
+  2px ring rule, page-field wash, "Drop to import") while the sheet is closed and no import runs;
+  a drop opens the sheet and imports at once. It is the only drop target outside the sheet.
+- **One sheet.** Choosing, importing, working out and checking the columns, the account
+  question, the summary (with the rows the bank never sent and the balance), the rows to check
+  and the undo confirmation are steps of the Add data sheet (a side sheet on desktop, one bottom sheet on
+  phones), each with a scrolling body and a footer that stays in reach. It never closes by itself.
+  Closing it does not cancel an upload; the outcome then arrives as a toast (View reopens the
+  summary), and Add data reopens at a running import or a refusal that kept its files. Focus
+  returns to whatever opened it.
 - **Refusals.** A drop is all or nothing, so a refusal is a `destructive` `Alert` whose
   description ends with "Nothing was imported." It sits at the end of the choose step, under
   Supported files, and names the refused file when the drop held several. An offer to work out

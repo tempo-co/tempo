@@ -184,7 +184,8 @@ test.describe('Connect a bank', () => {
     test(`connects a bank: the likely country, search, another country, confirmation, then the bank at ${width}px`, async ({
       page,
     }) => {
-      await page.setViewportSize({width, height: 900});
+      // Short enough that the list starts with rows out of view, also in the full-height desktop sheet.
+      await page.setViewportSize({width, height: 700});
       const authorizations = await mockPickerPage(page);
       const metadataRequests: string[] = [];
       await page.route('**/bank-connections/aspsps/logos/NL/region-*', async (route) => {
@@ -212,7 +213,7 @@ test.describe('Connect a bank', () => {
       await trigger.hover();
       await expect.poll(() => bankRequests).toBe(1);
       await trigger.click();
-      const picker = page.getByTestId('bank-connection-picker');
+      const picker = page.getByTestId('add-data-sheet');
       await expect(picker.getByRole('heading', {name: 'Connect a bank'})).toBeVisible();
       // While the banks load, the sheet holds the bank step's shape and announces one status.
       const loading = picker.getByRole('status');
@@ -388,7 +389,7 @@ test.describe('Connect a bank', () => {
         await mockPickerPage(page, {connections});
         await page.goto('/accounts');
         await page.getByTestId('connect-bank-button').click();
-        const picker = page.getByTestId('bank-connection-picker');
+        const picker = page.getByTestId('add-data-sheet');
         await expect(picker.getByTestId('bank-connection-country')).toHaveText(`${expected}Change`);
         await expect(picker.getByRole('searchbox')).toHaveAttribute('placeholder', placeholder);
       });
@@ -410,7 +411,7 @@ test.describe('Connect a bank', () => {
       });
       await page.goto('/accounts');
       await page.getByTestId('connect-bank-button').click();
-      const picker = page.getByTestId('bank-connection-picker');
+      const picker = page.getByTestId('add-data-sheet');
       const country = picker.getByTestId('bank-connection-country');
       // Without connected banks yet, the browser's region is the guess.
       await expect(country).toHaveText('NetherlandsChange');
@@ -435,7 +436,7 @@ test.describe('Connect a bank', () => {
     await page.goto('/accounts');
     const trigger = page.getByTestId('connect-bank-button');
     await trigger.click();
-    const picker = page.getByTestId('bank-connection-picker');
+    const picker = page.getByTestId('add-data-sheet');
     await picker.getByTestId('bank-connection-country').click();
     await picker.getByRole('button', {name: /^Finland/}).click();
     await picker.getByRole('button', {name: 'Demo Pankki', exact: true}).click();
@@ -473,7 +474,7 @@ test.describe('Connect a bank', () => {
     });
     await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
-    const picker = page.getByTestId('bank-connection-picker');
+    const picker = page.getByTestId('add-data-sheet');
     await expect(picker.getByRole('alert')).toContainText('Supported banks are unavailable.');
     const height = await sheetHeight(picker);
 
@@ -487,7 +488,7 @@ test.describe('Connect a bank', () => {
     await mockPickerPage(page, {banks: [{name: 'Beispielbank', country: 'DE'}]});
     await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
-    const picker = page.getByTestId('bank-connection-picker');
+    const picker = page.getByTestId('add-data-sheet');
     await picker.getByTestId('bank-connection-country').click();
     await expect(picker.getByRole('searchbox', {name: 'Search countries'})).toHaveAttribute(
       'placeholder',
@@ -499,7 +500,7 @@ test.describe('Connect a bank', () => {
     await mockPickerPage(page, {banks: []});
     await page.goto('/accounts');
     await page.getByTestId('connect-bank-button').click();
-    const picker = page.getByTestId('bank-connection-picker');
+    const picker = page.getByTestId('add-data-sheet');
     await expect(picker.getByText('No banks are available to connect right now.')).toBeVisible();
     await expect(picker.getByRole('status')).toHaveCount(0);
   });
@@ -515,7 +516,7 @@ test.describe('Connect a bank', () => {
       await mockPickerPage(page, {banks: WORST_CASE_BANKS, connections: []});
       await page.goto('/accounts');
       await page.getByTestId('connect-bank-button').click();
-      const picker = page.getByTestId('bank-connection-picker');
+      const picker = page.getByTestId('add-data-sheet');
       await expect(picker.getByTestId('bank-connection-country')).toHaveText('GermanyChange');
       const viewport = picker.locator('[data-radix-scroll-area-viewport]');
       const [list, sheet] = await Promise.all([boxOf(viewport), boxOf(picker)]);
@@ -559,7 +560,7 @@ test.describe('Connect a bank', () => {
       await page.route('**/assets/nl-*.svg', (route) => route.fulfill({status: 404, body: ''}));
       await page.goto('/accounts');
       await page.getByTestId('connect-bank-button').click();
-      const picker = page.getByTestId('bank-connection-picker');
+      const picker = page.getByTestId('add-data-sheet');
       const country = picker.getByTestId('bank-connection-country');
       await expect(country).toHaveText('GermanyChange');
       const height = await sheetHeight(picker);

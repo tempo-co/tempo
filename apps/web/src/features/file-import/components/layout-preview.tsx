@@ -24,8 +24,8 @@ import {formatBankTransactionCompactDate} from '@/features/banking/utils/formatt
 import {getCurrencyFormatter} from '@/utils/format-currency';
 
 import {formatCount, formatDateRange, plural} from '../utils/import-format';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {OTHER_BANK, dateCheckCopy, mappingInWords, previewRowTitle} from '../utils/layout-mapping';
-import {IMPORT_TILE} from './file-choice';
 
 /** The shared 60px row shape, as a plain row: preview rows open nothing. */
 const ROW = 'grid min-h-15 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2';

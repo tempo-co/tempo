@@ -332,6 +332,16 @@ export async function expectCurrencyInside(field: Locator, currency: string) {
   expect(box.x + box.width - paddingRight).toBeLessThanOrEqual(suffixBox.x);
 }
 
+/** Add data in the sidebar, then Import a statement file: the import's first step, on any page. */
+export async function openImportFromAddData(page: Page) {
+  await page.getByTestId('app-sidebar').getByRole('button', {name: 'Add data'}).click();
+  const sheet = page.getByTestId('add-data-sheet');
+  await sheet.getByRole('button', {name: /^Import a statement file/}).click();
+  await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+  return sheet;
+}
+
+/** Accounts' Import a file: the import's first step. */
 export async function openImport(page: Page) {
   await page.getByRole('button', {name: 'Import a file'}).first().click();
   const dialog = page.getByRole('dialog');

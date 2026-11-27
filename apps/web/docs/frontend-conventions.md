@@ -17,7 +17,8 @@ Each outcome is reported once: an `Alert`, a toast, or neither. Never both.
 - A flow that can fail asserts its failure message appears exactly once.
 - A toast Undo is a shortcut only. Every reversible choice (hide, unlink, dismiss) also needs a persistent way back on the affected row.
 - Toast actions are outlined in the toast's own colour, never a primary fill (`actionButton` in `src/components/ui/sonner.tsx`).
-- Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks that land on `[data-sonner-toaster]`; keep both when touching either.
+- Toasts must stay clickable over modals. `src/components/ui/sonner.tsx` sets `pointer-events-auto` on the Toaster and `src/components/ui/responsive-dialog.tsx` ignores outside clicks on `[data-sonner-toaster]`; keep both. Side sheets move toasts left (`data-side-sheet`, `src/index.css`).
+- Stepped sheets use `StepFrame` (`src/components/shared/step-frame.tsx`). The entry holds only `AddDataProvider`; `src/features/add-data/components/add-data-sheet.tsx` loads on first use, then stays mounted.
 - When a hook changes which `sonner` methods it calls, update the `sonner` stub in hook-harness specs (see `docs/e2e-helpers.md`).
 
 ## Colour and theme

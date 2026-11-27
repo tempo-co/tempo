@@ -7,12 +7,9 @@ import {cn} from '@/utils/cn';
 
 import {droppedFiles, folderNotRead} from '../utils/dropped-files';
 import {fileNameTail, formatFileSize} from '../utils/import-format';
+import {IMPORT_TILE} from '../utils/import-tile';
 import {dragHasFiles, useCanDropFiles} from './drop-files';
 import {SupportedFiles} from './supported-files';
-
-/** The 36px leading tile the import surfaces lead with. */
-export const IMPORT_TILE =
-  'inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-transaction-tile-border bg-transaction-tile text-transaction-tile-foreground [&_svg]:size-4';
 
 /**
  * Choosing statement files: a drop area with a Choose files button on desktop, the button alone on phones and
