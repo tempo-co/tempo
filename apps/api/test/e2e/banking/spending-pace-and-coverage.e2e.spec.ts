@@ -5,6 +5,7 @@ import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
+import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
 import {type CamtEntry, camt053} from '../../fixtures/statement-file.fixture';
@@ -117,6 +118,32 @@ describe('Spending pace and data coverage', () => {
 		]);
 		const pace = (await unrecorded.agent.get(PACE).query({asOf: AS_OF}).expect(200)).body as SpendingPace;
 		expect(pace.usual).toBeNull();
+	});
+
+	it('counts a synced account from its first synced row, so a gap after its older imported rows stays uncovered', async () => {
+		const {agent, owner, connection, bankAccount} = await syncedOwner('2026-10-14T08:00:00.000Z');
+		const imported = await app.get<Repository<BankImport>>(getRepositoryToken(BankImport)).save({
+			accountId: owner.id,
+			bankConnectionId: connection.id,
+			fileHash: 'pace-gap-import',
+			format: 'camt053',
+			filesCount: 1,
+			rowsParsed: 1,
+			rowsAdded: 1,
+			rowsAlreadyPresent: 0,
+			dateFrom: '2026-01-05',
+			dateTo: '2026-03-20',
+			bankAccountIds: [bankAccount.id],
+			createdBankAccountIds: [],
+		});
+		await fixtures.createTransactions(bankAccount, [
+			bookedRow('2026-01-05', '-10.00', {importId: imported.id}),
+			bookedRow('2026-06-02', '-20.00'),
+		]);
+
+		const {body} = (await agent.get(PACE).query({asOf: AS_OF}).expect(200)) as {body: SpendingPace};
+
+		expect(body.usual?.months).toEqual(['2026-02', '2026-07', '2026-08', '2026-09']);
 	});
 
 	it('leaves a hidden account out of the coverage and the pace', async () => {

@@ -13,7 +13,7 @@ The bank an account is held at, as Tempo records it: the institution name of its
 _Avoid_: institution key, bank code
 
 **Data coverage**:
-The days an owner's data has come in for, per shown account (a hidden one covers nothing): a connected account from its first transaction (or earlier, where the sync recorded covering) through the day of its last successful sync, and any account over the date ranges of its imported statements that are not undone. The newest covered day across accounts is the **last covered day**; a day after it is not in yet, which is not the same as a day with no spending.
+The days an owner's data has come in for, per shown account (a hidden one covers nothing): a connected account from its first synced transaction (or earlier, where the sync recorded covering) through the day of its last successful sync, and any account over the date ranges of its imported statements that are not undone. The newest covered day across accounts is the **last covered day**; a day after it is not in yet, which is not the same as a day with no spending.
 _Avoid_: freshness, sync range, data gap
 
 **Derived-data refresh**:

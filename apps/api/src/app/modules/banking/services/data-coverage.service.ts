@@ -19,8 +19,8 @@ type AccountCoverage = {bankAccountId: string; source: DataCoverageSource; range
 
 /**
  * Which days an owner's data covers, per shown account (a hidden one counts in no total, so it covers nothing here). A
- * synced account covers its sync history, from its recorded sync coverage or its first transaction, whichever is
- * earlier, through the day of its connection's last successful sync in the owner's time zone; any account covers the
+ * synced account covers its sync history, from its recorded sync coverage or its first synced (not imported)
+ * transaction, whichever is earlier, through the day of its connection's last successful sync in the owner's time zone; any account covers the
  * date ranges of its imports that are not undone. No day after `asOf` counts.
  */
 @Injectable()
@@ -63,14 +63,14 @@ export class DataCoverageService {
 					id: string;
 					provider: string;
 					syncCoveredFrom: string | null;
-					firstTransactionDate: string | null;
+					firstSyncedDate: string | null;
 					lastSuccessfulSyncAt: Date | null;
 				}>
 			>(
 				`SELECT bank_account."id", connection."provider",
 					to_char(bank_account."syncCoveredFrom", 'YYYY-MM-DD') AS "syncCoveredFrom",
 					(SELECT to_char(MIN(row."date"), 'YYYY-MM-DD') FROM "bank_transactions" row
-						WHERE row."bankAccountId" = bank_account."id") AS "firstTransactionDate",
+						WHERE row."bankAccountId" = bank_account."id" AND row."importId" IS NULL) AS "firstSyncedDate",
 					(SELECT MAX(run."finishedAt") FROM "bank_sync_runs" run
 						WHERE run."bankConnectionId" = connection."id" AND run."status" = $2) AS "lastSuccessfulSyncAt"
 				FROM "bank_accounts" bank_account
@@ -89,7 +89,7 @@ export class DataCoverageService {
 			const file = account.provider === BANK_CONNECTION_PROVIDERS.FILE;
 			if (account.lastSuccessfulSyncAt) {
 				const to = dateInTimeZone(account.lastSuccessfulSyncAt, owner.timeZone);
-				ranges.push({from: oldest([account.syncCoveredFrom, account.firstTransactionDate]) ?? to, to});
+				ranges.push({from: oldest([account.syncCoveredFrom, account.firstSyncedDate]) ?? to, to});
 			}
 			return {bankAccountId: account.id, source: file ? 'file' : 'sync', ranges: mergeRanges(ranges, asOf)};
 		});
