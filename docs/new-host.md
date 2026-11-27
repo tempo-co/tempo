@@ -15,7 +15,7 @@ install -d -m 700 -o admin -g admin ~admin/.ssh
 install -m 600 -o admin -g admin ~/.ssh/authorized_keys ~admin/.ssh/
 ```
 
-As the admin user: `git clone https://github.com/tempo-co/tempo.git ~/tempo && ~/tempo/ops/wizard.sh setup`. The `Release` workflow must have run once, so `:release` exists. The admin user becomes the deploy user: the units run as it, it owns the env files, and it is uid 1000 (see Container privileges in the ops README).
+As the admin user: `git clone https://github.com/wispmoney/wisp.git ~/tempo && ~/tempo/ops/wizard.sh setup`. The `Release` workflow must have run once, so `:release` exists. The admin user becomes the deploy user: the units run as it, it owns the env files, and it is uid 1000 (see Container privileges in the ops README).
 
 ## Setup
 

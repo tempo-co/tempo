@@ -48,7 +48,7 @@ Rules:
 
 ## API image
 
-E2E runs the API image named in `docker-compose.e2e.yml`: `${TEMPO_API_E2E_IMAGE:-ghcr.io/tempo-co/api:main}`. A local run proves nothing about an unmerged API change unless `TEMPO_API_E2E_IMAGE` points at an image that contains it: build one from this checkout (`docker build -t tempo-api:local -f apps/api/Dockerfile .` at the repository root) or use a PR's `ghcr.io/tempo-co/api:pr-<n>`.
+E2E runs the API image named in `docker-compose.e2e.yml`: `${WISP_API_E2E_IMAGE:-ghcr.io/wispmoney/api:main}`. A local run proves nothing about an unmerged API change unless `WISP_API_E2E_IMAGE` points at an image that contains it: build one from this checkout (`docker build -t tempo-api:local -f apps/api/Dockerfile .` at the repository root) or use a PR's `ghcr.io/wispmoney/api:pr-<n>`.
 
 ## Seeded preview for manual review
 

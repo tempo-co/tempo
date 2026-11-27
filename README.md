@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://github.com/tempo-co/tempo/actions" target="_blank">
-    <img src="https://github.com/tempo-co/tempo/actions/workflows/ci.yml/badge.svg" alt="Build Status" />
+  <a href="https://github.com/wispmoney/wisp/actions" target="_blank">
+    <img src="https://github.com/wispmoney/wisp/actions/workflows/ci.yml/badge.svg" alt="Build Status" />
   </a>
   <a href="https://nodejs.org/" target="_blank">
     <img src="https://img.shields.io/badge/node.js-26%2B-brightgreen" alt="Node.js Version" />

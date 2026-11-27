@@ -14,8 +14,8 @@ failures=0
 SB=''
 
 digest() { printf 'sha256:%s' "$(printf '%s' "$1" | sha256sum | cut -c1-64)"; }
-api_ref() { echo "ghcr.io/tempo-co/api@$(digest "api-$1")"; }
-web_ref() { echo "ghcr.io/tempo-co/web@$(digest "web-$1")"; }
+api_ref() { echo "ghcr.io/wispmoney/api@$(digest "api-$1")"; }
+web_ref() { echo "ghcr.io/wispmoney/web@$(digest "web-$1")"; }
 postgres_pin() { echo "postgres:17.11@$(digest "postgres-$1")"; }
 redis_pin() { echo "redis:7.4.12@$(digest "redis-$1")"; }
 
@@ -56,11 +56,11 @@ services:
   redis:
     image: $(redis_pin 1)
   api:
-    image: \${TEMPO_API_IMAGE}
+    image: \${WISP_API_IMAGE:?}
   web:
-    image: \${TEMPO_WEB_IMAGE}
+    image: \${WISP_WEB_IMAGE:?}
 EOF
-    printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$(api_ref 1)" "$(web_ref 1)" >"$SB/state/deployed.env"
+    printf 'WISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s\n' "$(api_ref 1)" "$(web_ref 1)" >"$SB/state/deployed.env"
     api_ref 1 >"$SB/fake/containers/wisp-test-api-1"
     web_ref 1 >"$SB/fake/containers/wisp-test-web-1"
     postgres_pin 1 >"$SB/fake/containers/wisp-test-postgres-1"
@@ -95,7 +95,7 @@ case $1 in
         ;;
     image)
         case $2 in
-            prune) event "image prune" ;;
+            prune) event "image prune ${*: -1}" ;;
             inspect)
                 d=$(digest_of "$5") || exit 1
                 if [[ $4 == *revision* ]]; then echo "rev-${d:0:7}"; else echo "sha256:${d}"; fi
@@ -106,9 +106,9 @@ case $1 in
     pull)
         event "pull $2"
         if pull_fails; then echo "Error response from daemon: lookup failed" >&2; exit 1; fi
-        component=${2#ghcr.io/tempo-co/}
+        component=${2#ghcr.io/wispmoney/}
         [[ -f $FAKE/tags/${component%%:*}_${component#*:} ]] || { echo "manifest unknown" >&2; exit 1; }
-        echo "${component#*:}: Pulling from tempo-co/${component%%:*}"
+        echo "${component#*:}: Pulling from wispmoney/${component%%:*}"
         echo "Digest: $(cat "$FAKE/tags/${component%%:*}_${component#*:}")"
         echo "Status: Downloaded newer image for $2"
         ;;
@@ -135,6 +135,10 @@ case $1 in
             esac
             shift
         done
+        # Like Compose, every command fails while a required ${VAR:?} has no value in the env files.
+        for var in $(sed -nE 's/.*\$\{([A-Z_]+):\?.*/\1/p' "$file"); do
+            grep -qs "^$var=." "${envs[@]}" || { echo "required variable $var is missing a value" >&2; exit 1; }
+        done
         # No service named: every service in the Compose file, in file order.
         ((${#services[@]})) || mapfile -t services < <(sed -nE 's/^  ([a-z]+):$/\1/p' "$file")
         pinned() { sed -nE "/^  $1:\$/,/image:/ s/^ +image: (.*)\$/\1/p" "$file"; }
@@ -142,7 +146,7 @@ case $1 in
             local var
             case $1 in
                 api | web)
-                    var=TEMPO_${1^^}_IMAGE
+                    var=WISP_${1^^}_IMAGE
                     grep -h "^$var=" "${envs[@]}" | tail -1 | cut -d= -f2-
                     ;;
                 *) pinned "$1" ;;
@@ -228,7 +232,7 @@ expect_events_in_order() {
 }
 expect_equal() { [[ $1 == "$2" ]] || fail "$3: got '$1', expected '$2'"; }
 expect_deployed() {
-    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s' "$1" "$2")" 'deployed.env'
+    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'WISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s' "$1" "$2")" 'deployed.env'
     expect_equal "$(container api)" "$1" 'running api image'
     expect_equal "$(container web)" "$2" 'running web image'
 }
@@ -237,9 +241,11 @@ test_healthy_deploy() {
     publish api 2
     deploy
     expect_status 0
-    expect_events_in_order 'pull ghcr.io/tempo-co/api:release' 'pull ghcr.io/tempo-co/web:release'
+    expect_events_in_order 'pull ghcr.io/wispmoney/api:release' 'pull ghcr.io/wispmoney/web:release'
     expect_events_in_order backup "compose up api $(api_ref 2)" "compose up web $(web_ref 1)" \
-        'health http://wisp.example.test/api/health' 'health http://wisp.example.test/' 'image prune'
+        'health http://wisp.example.test/api/health' 'health http://wisp.example.test/' \
+        'image prune label=org.opencontainers.image.source=https://github.com/wispmoney/wisp' \
+        'image prune label=org.opencontainers.image.source=https://github.com/tempo-co/tempo'
     expect_output 'deployed and healthy'
     expect_deployed "$(api_ref 2)" "$(web_ref 1)"
     [[ ! -e $SB/state/failed-images ]] || fail 'failed-images exists after a healthy deploy'
@@ -302,8 +308,8 @@ test_failed_pull_is_retried_twice() {
     echo 2 >"$SB/fake/pull-failures"
     deploy
     expect_status 0
-    expect_events_in_order 'pull ghcr.io/tempo-co/api:release' 'sleep 15' 'pull ghcr.io/tempo-co/api:release' 'sleep 30' \
-        'pull ghcr.io/tempo-co/api:release' 'pull ghcr.io/tempo-co/web:release' "compose up web $(web_ref 2)"
+    expect_events_in_order 'pull ghcr.io/wispmoney/api:release' 'sleep 15' 'pull ghcr.io/wispmoney/api:release' 'sleep 30' \
+        'pull ghcr.io/wispmoney/api:release' 'pull ghcr.io/wispmoney/web:release' "compose up web $(web_ref 2)"
     expect_output 'pull failed (attempt 2 of 3); retrying in 30s'
     expect_deployed "$(api_ref 1)" "$(web_ref 2)"
 }
@@ -315,7 +321,7 @@ test_pull_failing_every_attempt_deploys_nothing() {
     expect_status 1
     expect_equal "$(grep -c '^pull ' "$SB/run.log")" 3 'pull attempts'
     expect_equal "$(grep '^sleep ' "$SB/run.log" | paste -sd ' ')" 'sleep 15 sleep 30' 'retry waits'
-    expect_output 'could not pull ghcr.io/tempo-co/api:release'
+    expect_output 'could not pull ghcr.io/wispmoney/api:release'
     expect_no_event '^(backup|compose up)'
     expect_deployed "$(api_ref 1)" "$(web_ref 1)"
 }
@@ -352,6 +358,33 @@ test_changed_pin_recreates_its_service() {
     expect_equal "$(container redis)" "$(redis_pin 2)" 'running redis image'
 }
 
+test_host_on_tempo_co_images_deploys_wispmoney_and_rolls_back_to_tempo_co() {
+    # Deployed before the move to ghcr.io/wispmoney: TEMPO_* image lines (staging keeps other settings beside them).
+    local old_api old_web
+    old_api=ghcr.io/tempo-co/api@$(digest api-1)
+    old_web=ghcr.io/tempo-co/web@$(digest web-1)
+    printf 'OTHER_SETTING=kept\nTEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$old_api" "$old_web" >"$SB/state/deployed.env"
+    echo "$old_api" >"$SB/fake/containers/wisp-test-api-1"
+    echo "$old_web" >"$SB/fake/containers/wisp-test-web-1"
+    publish api 2
+    api_ref 2 >"$SB/fake/unhealthy"
+    deploy
+    expect_status 1
+    expect_events_in_order 'pull ghcr.io/wispmoney/api:release' backup "compose up api $(api_ref 2)" \
+        "compose up api $old_api" "compose up web $old_web"
+    expect_output 'rolled back to the previous images'
+    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nWISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s' "$old_api" "$old_web")" 'deployed.env'
+    expect_equal "$(container api)" "$old_api" 'running api image'
+
+    publish api 3
+    deploy
+    expect_status 0
+    expect_events_in_order backup "compose up api $(api_ref 3)" "compose up web $old_web"
+    expect_output 'deployed and healthy'
+    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nWISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s' "$(api_ref 3)" "$old_web")" 'deployed.env'
+    expect_equal "$(container api)" "$(api_ref 3)" 'running api image'
+}
+
 # A new host: no deployed images yet and no containers.
 new_host() {
     rm -f -- "$SB/state/deployed.env" "$SB/fake/containers/"*
@@ -361,7 +394,7 @@ test_first_deploy_on_a_new_host_starts_the_whole_stack() {
     new_host
     deploy
     expect_status 0
-    expect_events_in_order 'pull ghcr.io/tempo-co/api:release' 'pull ghcr.io/tempo-co/web:release' \
+    expect_events_in_order 'pull ghcr.io/wispmoney/api:release' 'pull ghcr.io/wispmoney/web:release' \
         "compose up postgres $(postgres_pin 1)" "compose up redis $(redis_pin 1)" \
         "compose up api $(api_ref 1)" "compose up web $(web_ref 1)" \
         'health http://wisp.example.test/api/health' 'health http://wisp.example.test/'
@@ -390,7 +423,7 @@ test_failed_first_deploy_is_tried_again_from_scratch() {
     deploy
     expect_status 0
     expect_output 'first start: healthy'
-    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nTEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s' "$(api_ref 1)" "$(web_ref 1)")" 'deployed.env'
+    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nWISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s' "$(api_ref 1)" "$(web_ref 1)")" 'deployed.env'
     expect_equal "$(container api)" "$(api_ref 1)" 'running api image'
     expect_equal "$(container web)" "$(web_ref 1)" 'running web image'
 }

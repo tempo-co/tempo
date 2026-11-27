@@ -11,7 +11,7 @@
 set -Eeuo pipefail
 
 TOKEN=${RELEASE_TRIGGER_TOKEN:-}
-URL=https://api.github.com/repos/tempo-co/tempo/actions/workflows/release.yml/dispatches
+URL=https://api.github.com/repos/wispmoney/wisp/actions/workflows/release.yml/dispatches
 
 log() { echo "release-trigger: $*"; }
 

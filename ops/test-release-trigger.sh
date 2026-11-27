@@ -43,7 +43,7 @@ fail() {
 test_starts_the_release_workflow_on_main() {
     run 204
     ((status == 0)) || fail "exit $status"
-    grep -qx 'https://api.github.com/repos/tempo-co/tempo/actions/workflows/release.yml/dispatches' "$SB/args" || fail "wrong endpoint"
+    grep -qx 'https://api.github.com/repos/wispmoney/wisp/actions/workflows/release.yml/dispatches' "$SB/args" || fail "wrong endpoint"
     grep -q '"ref":"main"' "$SB/args" || fail "not dispatched on main"
     grep -q "Authorization: Bearer $TOKEN" "$SB/config" || fail "token not sent in the request config"
     ! grep -q "$TOKEN" "$SB/args" || fail "token appears in curl's arguments"
