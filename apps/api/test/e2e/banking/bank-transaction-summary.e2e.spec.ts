@@ -834,6 +834,45 @@ describe('BankTransactionSummary', () => {
 			}
 		});
 
+		it('takes the reported and added days in the owner time zone, and an imported balance on its stored day', async () => {
+			const {owner: westOwner, agent, connection: bank} = await createBankingOwner(app, {baseCurrency: 'EUR'});
+			await accounts.update({id: westOwner.id}, {timeZone: 'America/New_York'});
+			const files = await fixtures.createConnection(westOwner, {provider: 'file'});
+			// Reported at 23:30 on Sunday 1 March in New York, already Monday in UTC.
+			const reportedLate = await fixtures.createBankAccount(bank, {
+				currentBalanceAmount: '500.00',
+				balanceUpdatedAt: new Date('2020-03-02T04:30:00Z'),
+			});
+			// Added at 23:30 on Friday 28 February in New York, already Saturday in UTC.
+			const addedLate = await fixtures.createBankAccount(bank, {currentBalanceAmount: '100.00'});
+			await fixtures.bankAccounts.update(addedLate.id, {createdAt: new Date('2020-02-29T04:30:00Z')});
+			// An imported balance holds the rows booked by 1 March.
+			const imported = await fixtures.createBankAccount(files, {
+				currentBalanceAmount: '300.00',
+				balanceUpdatedAt: new Date('2020-03-01T00:00:00.000Z'),
+			});
+			await fixtures.createTransactions(reportedLate, [
+				bookedRow('2020-02-25', '-30.00'),
+				// Not in the balance: made and booked on Monday.
+				bookedRow('2020-03-02', '-40.00', {transactionDate: '2020-03-02'}),
+			]);
+			await fixtures.createTransactions(imported, [
+				bookedRow('2020-02-20', '-10.00'),
+				bookedRow('2020-03-01', '-50.00'),
+			]);
+			const {body} = await agent
+				.get(TREND)
+				.query({interval: 'day', from: '2020-02-28', to: '2020-03-02', asOf: '2026-10-18'})
+				.expect(200);
+			const balances = (id: string) =>
+				(body as BankBalanceTrend).periods.map(
+					({accounts: rows}) => rows.find((row) => row.id === id)?.balance,
+				);
+			expect(balances(reportedLate.id)).toEqual(['500.00', '500.00', '500.00', '500.00']);
+			expect(balances(addedLate.id)).toEqual(['100.00', '100.00', '100.00', '100.00']);
+			expect(balances(imported.id)).toEqual(['350.00', '350.00', '300.00', '300.00']);
+		});
+
 		it('accepts exactly 92 days', async () => {
 			await ownerAgent
 				.get(TREND)
