@@ -95,6 +95,8 @@ const VERIFIED_SESSION_ONLY_ROUTES: GuardedRoute[] = [
 	['delete', `/bank-connections/${RESOURCE_ID}`],
 	['get', `/bank-connections/${RESOURCE_ID}/transactions`],
 	['put', `/bank-connections/${RESOURCE_ID}/accounts/${RESOURCE_ID}/balance`],
+	['patch', `/bank-connections/${RESOURCE_ID}/accounts/${RESOURCE_ID}`],
+	['delete', `/bank-connections/${RESOURCE_ID}/accounts/${RESOURCE_ID}`],
 	['post', '/bank-imports'],
 	['get', '/bank-imports'],
 	['delete', `/bank-imports/${RESOURCE_ID}`],

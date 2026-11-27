@@ -20,6 +20,10 @@ _Avoid_: freshness, sync range, data gap
 Bringing the values Tempo computes from an owner's transaction history (reporting currency, currency exchanges, own transfers, categories, merchant logos) up to date after a write to that history.
 _Avoid_: post-sync hook, follow-up steps, after-write steps
 
+**Hidden account**:
+An account the owner hid: it leaves the account lists and the balance total, its transactions count in no total (as if each were left out of totals), and it shows under Hidden on Accounts, where it can be shown again. Its transactions stay in the list, marked, and its balance stays on the account. Removing an account deletes it instead, and only an imported-files account can be removed on its own.
+_Avoid_: archived, closed, inactive
+
 **Leave out of totals**:
 An owner's choice that one of their transactions counts in no total (spending, income, merchants, recurring payments, the AI assistant's reads), as own transfers and currency exchanges never do; the transaction stays in their list, marked as left out, and in their balances, because the money did move. Putting it back counts it again.
 _Avoid_: exclude, hide, ignore

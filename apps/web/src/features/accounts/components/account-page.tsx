@@ -1,7 +1,7 @@
 import {Link, useNavigate, useRouter} from '@tanstack/react-router';
 import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
 import {addMonths, endOfMonth, format, isSameYear, parseISO} from 'date-fns';
-import {FileQuestion, FileUp, RefreshCw, Trash2, Unlink} from 'lucide-react';
+import {EyeOff, FileQuestion, FileUp, RefreshCw, Unlink} from 'lucide-react';
 import {type MouseEvent, type ReactNode, useState} from 'react';
 
 import {LoadErrorState, StateMessage} from '@/components/shared/state-message';
@@ -28,6 +28,7 @@ import {accountFreshness} from '../utils/account-freshness';
 import {accountBalance} from '../utils/account-groups';
 import {accountSource, connectionName, headlineFigure} from '../utils/account-labels';
 import {AccountTile, FreshnessLine} from './account-parts';
+import {AccountSettingsCard} from './account-settings';
 import {RemoveConnectionDialog} from './remove-connection-dialog';
 
 /** Transactions the page lists before All in Transactions. */
@@ -37,7 +38,8 @@ const CHART_MONTHS = 12;
 
 /**
  * One account: its balance and how it moved, its latest transactions, the imports that wrote to it, where its data
- * comes from and which dates it covers, and its connection's Reconnect and Remove.
+ * comes from and which dates it covers, its own settings (Rename, Hide, and Remove for an imported-files account), and
+ * a synced account's connection with its Reconnect and Remove.
  */
 export function AccountPage({
   account,
@@ -70,6 +72,20 @@ export function AccountPage({
   const name = accountName(account);
   const freshness = accountFreshness({connection, accountId: account.id, imports, now});
   const [removing, setRemoving] = useState(false);
+  const transactions = useAccountTransactions(account.id);
+  const transactionCount = transactions.data?.pages[0]?.total;
+  const removalCounts =
+    transactionCount === undefined
+      ? null
+      : {
+          transactions: transactionCount,
+          // The imports that go with it: those that wrote to no other account still there.
+          imports:
+            imports?.filter(
+              (summary) =>
+                summary.accounts.length > 0 && summary.accounts.every(({id}) => id === account.id),
+            ).length ?? null,
+        };
 
   return (
     <div className='grid grid-cols-1 gap-5 max-md:gap-4'>
@@ -90,12 +106,21 @@ export function AccountPage({
             onReconnect={() => void reconnect(connection)}
             isStarting={isStarting}
           />
+          {account.isHidden && (
+            <p
+              className='mt-1 flex items-center gap-1.5 text-body-small text-muted-foreground'
+              data-testid='account-hidden-note'
+            >
+              <EyeOff aria-hidden='true' className='size-4 shrink-0' />
+              Hidden: not in your lists or totals
+            </p>
+          )}
         </div>
       </header>
       <div className='grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]'>
         <div className='grid min-w-0 grid-cols-1 gap-3'>
           <BalanceCard account={account} today={today} balanceAction={balanceAction} />
-          <RecentTransactions account={account} />
+          <RecentTransactions account={account} query={transactions} />
           {importsList && <Card className='p-4'>{importsList}</Card>}
         </div>
         <div className='grid min-w-0 grid-cols-1 gap-3'>
@@ -103,7 +128,6 @@ export function AccountPage({
             account={account}
             connection={connection}
             onImport={files ? onImport : undefined}
-            onRemove={files ? () => setRemoving(true) : undefined}
           />
           {!files && (
             <ConnectionCard
@@ -114,23 +138,30 @@ export function AccountPage({
               onRemove={() => setRemoving(true)}
             />
           )}
+          <AccountSettingsCard
+            account={account}
+            connection={connection}
+            removalCounts={removalCounts}
+          />
         </div>
       </div>
-      <RemoveConnectionDialog
-        connection={connection}
-        open={removing}
-        onOpenChange={setRemoving}
-        onRemoved={({kept}) => {
-          setRemoving(false);
-          // A kept account stays, now from statement files; a deleted one leaves nothing here. Once the owner has
-          // moved on to another page, the removal's end takes them nowhere.
-          const here = router.matchRoute({
-            to: '/accounts/$accountId',
-            params: {accountId: account.id},
-          });
-          if (!kept && here) void navigate({to: '/accounts', replace: true});
-        }}
-      />
+      {!files && (
+        <RemoveConnectionDialog
+          connection={connection}
+          open={removing}
+          onOpenChange={setRemoving}
+          onRemoved={({kept}) => {
+            setRemoving(false);
+            // A kept account stays, now from statement files; a deleted one leaves nothing here. Once the owner has
+            // moved on to another page, the removal's end takes them nowhere.
+            const here = router.matchRoute({
+              to: '/accounts/$accountId',
+              params: {accountId: account.id},
+            });
+            if (!kept && here) void navigate({to: '/accounts', replace: true});
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -221,12 +252,22 @@ function BalanceCard({
   );
 }
 
-function RecentTransactions({account}: {account: BankAccount}) {
-  const query = useTransactionPages(
-    [...dashboardQueryKeys.root, 'account-transactions', account.id],
-    {'filter[bankAccountIds][]': account.id},
+/** The account's newest transactions, a page of `RECENT`; its total counts them all. */
+function useAccountTransactions(accountId: string) {
+  return useTransactionPages(
+    [...dashboardQueryKeys.root, 'account-transactions', accountId],
+    {'filter[bankAccountIds][]': accountId},
     {pageSize: RECENT},
   );
+}
+
+function RecentTransactions({
+  account,
+  query,
+}: {
+  account: BankAccount;
+  query: ReturnType<typeof useAccountTransactions>;
+}) {
   const transactions = query.data?.pages[0]?.transactions;
 
   return (
@@ -282,12 +323,10 @@ function AboutCard({
   account,
   connection,
   onImport,
-  onRemove,
 }: {
   account: BankAccount;
   connection: BankConnection;
   onImport?: (event: MouseEvent<HTMLElement>) => void;
-  onRemove?: () => void;
 }) {
   const files = isFileConnection(connection);
   const covered = useCoveredDates(account.id);
@@ -304,25 +343,11 @@ function AboutCard({
     <Card className='grid grid-cols-1 gap-4 p-4' data-testid='account-about'>
       <h2 className='text-card-title'>About this account</h2>
       <Facts facts={facts} />
-      {(onImport || onRemove) && (
-        <div className='grid grid-cols-1 gap-2'>
-          {onImport && (
-            <Button variant='outline' onClick={onImport}>
-              <FileUp aria-hidden='true' />
-              Import a newer file
-            </Button>
-          )}
-          {onRemove && (
-            <Button
-              variant='ghost'
-              onClick={onRemove}
-              className='text-destructive hover:text-destructive'
-            >
-              <Trash2 aria-hidden='true' />
-              Remove imported files
-            </Button>
-          )}
-        </div>
+      {onImport && (
+        <Button variant='outline' onClick={onImport}>
+          <FileUp aria-hidden='true' />
+          Import a newer file
+        </Button>
       )}
     </Card>
   );

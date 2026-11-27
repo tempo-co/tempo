@@ -114,6 +114,8 @@ export type BankAccount = {
 	/** Null when `currentBalanceAmount` is. */
 	balanceSource: BankAccountBalanceSource | null;
 	isActive: boolean;
+	/** The owner hid the account: it leaves the account lists and the balance total, and its rows count in no total. */
+	isHidden: boolean;
 	/** The bank's latest reported balances; always empty for an imported-files account. */
 	latestBalances: BankAccountBalance[];
 };
@@ -123,6 +125,22 @@ export type BankAccount = {
  * answered with the account. A signed decimal with at most two decimals, such as `-12.50`.
  */
 export type SetBankAccountBalanceRequest = {amount: string};
+
+/** The longest name an owner can give an account. */
+export const BANK_ACCOUNT_ALIAS_MAX_LENGTH = 100;
+
+/**
+ * `PATCH /bank-connections/:connectionId/accounts/:accountId`: the owner's name for the account (null or blank goes back
+ * to the bank's name) and whether it is hidden, answered with the account. Each field left out stays as it is.
+ */
+export type UpdateBankAccountRequest = {alias?: string | null; isHidden?: boolean};
+
+/**
+ * `DELETE /bank-connections/:connectionId/accounts/:accountId` body: deletes an imported-files account with its rows and
+ * the imports that wrote only to it, for good, which the owner confirms with `confirmation: 'DELETE'`. A synced account
+ * goes with its connection's removal instead.
+ */
+export type BankAccountRemoveRequest = {confirmation: 'DELETE'};
 
 /** `GET /bank-connections`: one connected bank and its accounts. */
 export type BankConnection = {

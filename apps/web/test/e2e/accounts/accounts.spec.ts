@@ -1,9 +1,11 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {Page} from '@playwright/test';
+import type {BankConnection, UpdateBankAccountRequest} from '@tempo/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
 import {MOCK_CONNECTION, REFRESH_RESULT, TARGET_ASPSP} from '../../data/bank-connection.data';
-import {importedFiles} from '../../data/bank-import.data';
+import {bankImport, importedFiles} from '../../data/bank-import.data';
+import {createBankTransaction} from '../../data/bank-transaction.data';
 import {API_URL, expect, test} from '../../fixtures';
 import {mockAccountsApi} from '../../utils/accounts';
 import {
@@ -699,30 +701,135 @@ test.describe('mocked Enable Banking bank connection', () => {
     await expect(accountRow(page, CHECKING.id)).toContainText('statement files');
   });
 
-  test('removes imported files permanently, without a choice to keep them', async ({page}) => {
-    const imported = importedFiles(MOCK_CONNECTION.bankAccounts);
-    let removal: unknown = null;
-    await mockAccountsApi(page, () => ({connections: removal ? [] : [imported]}));
-    await page.route(`**/bank-connections/${imported.id}`, async (route) => {
-      if (route.request().method() !== 'DELETE') return route.continue();
-      removal = route.request().postDataJSON();
-      await route.fulfill({status: 204, body: ''});
-    });
+  test('renames an account, hides it under Hidden with the total dropping, and shows it again', async ({
+    page,
+  }) => {
+    const savingsId = MOCK_CONNECTION.bankAccounts[1].id;
+    const {connections, updates, failNext} = await mockAccountSettings(page, [MOCK_CONNECTION]);
+    await mockAccountsApi(page, () => ({connections: connections()}));
     await page.goto('/accounts');
+    await expect(page.getByTestId('accounts-total')).toContainText('1,335.00');
 
-    const dialog = await openRemoval(page, CHECKING.id);
+    await openAccount(page, savingsId);
+    const settings = page.getByTestId('account-settings');
+    // A synced account goes with its connection, on the connection card.
+    await expect(settings.getByRole('button', {name: 'Remove account'})).toHaveCount(0);
+    await settings.getByRole('button', {name: 'Rename'}).click();
+    const rename = page.getByRole('dialog', {name: 'Rename account'});
+    const field = rename.getByRole('textbox', {name: 'Name'});
+    await expect(field).toHaveValue('Mock ASPSP savings account');
+    await field.fill('  Holiday savings ');
+    // A failed save says so in the dialog, which keeps the edit for another try.
+    failNext.add('PATCH');
+    await rename.getByRole('button', {name: 'Save'}).click();
+    await expect(rename.getByRole('alert')).toContainText("Couldn't rename the account");
+    await expect(field).toHaveValue('  Holiday savings ');
+    await rename.getByRole('button', {name: 'Save'}).click();
+    await expect(rename).toHaveCount(0);
+    await expect(page.getByRole('heading', {level: 1})).toHaveText('Holiday savings');
+
+    await settings.getByRole('button', {name: 'Hide from lists and totals'}).click();
+    await expect(page.getByTestId('account-hidden-note')).toHaveText(
+      'Hidden: not in your lists or totals',
+    );
+    await expect(settings.getByRole('button', {name: 'Show in lists and totals'})).toBeVisible();
+    expect(updates).toEqual([
+      {alias: 'Holiday savings'},
+      {alias: 'Holiday savings'},
+      {isHidden: true},
+    ]);
+
+    await page.goto('/accounts');
+    await expect(page.getByTestId('accounts-total')).toContainText('1,234.56');
+    const hidden = page.getByTestId('accounts-hidden');
+    await expect(hidden.getByRole('heading', {name: 'Hidden'})).toBeVisible();
+    await expect(hidden.getByTestId(`account-row-${savingsId}`)).toContainText('Holiday savings');
     await expect(
-      dialog.getByText(
-        'This permanently deletes the connection and the 2 accounts and their transactions. This cannot be undone.',
-      ),
-    ).toBeVisible();
-    await expect(dialog.getByRole('radio')).toHaveCount(0);
-    await dialog.getByRole('button', {name: 'Remove permanently', exact: true}).click();
+      page.getByTestId('accounts-group-cash').getByTestId(`account-row-${savingsId}`),
+    ).toHaveCount(0);
 
-    await expect(page.getByText('Bank connection removed', {exact: true})).toBeVisible();
-    expect(removal).toEqual({confirmation: 'DELETE'});
+    await hidden.getByRole('button', {name: 'Show Holiday savings'}).click();
+    await expect(page.getByTestId('accounts-hidden')).toHaveCount(0);
+    await expect(
+      page.getByTestId('accounts-group-cash').getByTestId(`account-row-${savingsId}`),
+    ).toContainText('Holiday savings');
+    await expect(page.getByTestId('accounts-total')).toContainText('1,335.00');
+    expect(updates[updates.length - 1]).toEqual({isHidden: false});
+  });
+
+  test('removes an imported-files account after a plain confirmation of what goes, or hides it instead', async ({
+    page,
+  }) => {
+    const fileAccount = {
+      ...CHECKING,
+      id: '00000000-0000-4000-8000-000000000401',
+      details: 'Example Card',
+    };
+    const files = importedFiles([fileAccount]);
+    const {connections, updates, removals, failNext} = await mockAccountSettings(page, [
+      MOCK_CONNECTION,
+      files,
+    ]);
+    await mockAccountsApi(page, () => ({
+      connections: connections(),
+      // One import only it holds, and one shared with the bank's account, which stays.
+      imports: [
+        bankImport(fileAccount.id),
+        bankImport(fileAccount.id, {
+          accounts: [
+            {id: fileAccount.id, name: null, currency: 'EUR', created: false},
+            {id: CHECKING.id, name: null, currency: 'EUR', created: false},
+          ],
+        }),
+      ],
+      transactions: [1, 2, 3].map((day) =>
+        createBankTransaction({
+          id: `00000000-0000-4000-8000-00000000071${day}`,
+          bookingDate: `2026-11-0${day}`,
+          bankAccountId: fileAccount.id,
+        }),
+      ),
+    }));
+    await page.goto('/accounts');
+    await openAccount(page, fileAccount.id);
+
+    const settings = page.getByTestId('account-settings');
+    await settings.getByRole('button', {name: 'Remove account'}).click();
+    let dialog = page.getByRole('dialog', {name: 'Remove Example Card?'});
+    await expect(dialog.getByTestId('remove-account-summary')).toHaveText(
+      'The accountExample CardTransactions3Imports1',
+    );
+    await expect(dialog).toContainText('This cannot be undone.');
+    await dialog.getByRole('button', {name: 'Hide it instead'}).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId('account-hidden-note')).toBeVisible();
+    expect(updates).toEqual([{isHidden: true}]);
+    expect(removals).toEqual([]);
+
+    await settings.getByRole('button', {name: 'Remove account'}).click();
+    dialog = page.getByRole('dialog', {name: 'Remove Example Card?'});
+    await expect(dialog.getByRole('button', {name: 'Hide it instead'})).toBeDisabled();
+    // A failed removal says so in the dialog, where it is tried again.
+    failNext.add('DELETE');
+    await dialog.getByRole('button', {name: 'Remove account'}).click();
+    await expect(dialog.getByRole('alert')).toContainText("Couldn't remove Example Card");
+    await expect(page).toHaveURL(new RegExp(`/accounts/${fileAccount.id}$`));
+    await dialog.getByRole('button', {name: 'Remove account'}).click();
+
+    await expect(page.getByText('Example Card removed with its 3 transactions')).toBeVisible();
+    expect(removals).toEqual([
+      {
+        path: `/bank-connections/${files.id}/accounts/${fileAccount.id}`,
+        body: {confirmation: 'DELETE'},
+      },
+      {
+        path: `/bank-connections/${files.id}/accounts/${fileAccount.id}`,
+        body: {confirmation: 'DELETE'},
+      },
+    ]);
     await expect(page).toHaveURL(/\/accounts$/);
-    await expect(page.getByRole('heading', {name: 'No accounts yet'})).toBeVisible();
+    await expect(accountRow(page, fileAccount.id)).toHaveCount(0);
+    await expect(accountRow(page, CHECKING.id)).toBeVisible();
   });
 
   test('explains a synchronization conflict that arrives while the removal dialog is open', async ({
@@ -1131,3 +1238,56 @@ test.describe('accounts without any', () => {
     await expect(page.getByRole('button', {name: 'Connect a bank'}).first()).toBeVisible();
   });
 });
+
+/**
+ * Answers an account's rename, hide and removal against the given connections, as the API keeps them: each PATCH body
+ * and each DELETE is recorded, and `connections` reads the current state. A method put in `failNext` fails once with a
+ * server error, changing nothing.
+ */
+async function mockAccountSettings(page: Page, initial: BankConnection[]) {
+  let state = initial;
+  const updates: unknown[] = [];
+  const removals: {path: string; body: unknown}[] = [];
+  const failNext = new Set<string>();
+  await page.route(
+    (url) =>
+      url.origin === API_URL && /^\/bank-connections\/[^/]+\/accounts\/[^/]+$/.test(url.pathname),
+    async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const accountId = path.slice(path.lastIndexOf('/') + 1);
+      const failing = failNext.delete(request.method());
+      if (request.method() === 'DELETE') {
+        removals.push({path, body: request.postDataJSON()});
+        if (failing)
+          return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+        state = state.map((connection) => ({
+          ...connection,
+          bankAccounts: connection.bankAccounts.filter(({id}) => id !== accountId),
+        }));
+        return route.fulfill({status: 204, body: ''});
+      }
+      const body = request.postDataJSON() as UpdateBankAccountRequest;
+      updates.push(body);
+      if (failing)
+        return fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500);
+      state = state.map((connection) => ({
+        ...connection,
+        bankAccounts: connection.bankAccounts.map((account) =>
+          account.id === accountId
+            ? {
+                ...account,
+                ...(body.alias !== undefined && {alias: body.alias?.trim() || null}),
+                ...(body.isHidden !== undefined && {isHidden: body.isHidden}),
+              }
+            : account,
+        ),
+      }));
+      const account = state
+        .flatMap(({bankAccounts}) => bankAccounts)
+        .find(({id}) => id === accountId);
+      return fulfillJson(route, account);
+    },
+  );
+  return {connections: () => state, updates, removals, failNext};
+}

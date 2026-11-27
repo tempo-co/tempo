@@ -352,7 +352,9 @@ test.describe('imports on Accounts', () => {
     for (const label of ['Country', 'Access until', 'Updated'])
       await expect(page.getByText(label, {exact: true})).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Reconnect'})).toHaveCount(0);
-    await expect(about.getByRole('button', {name: 'Remove imported files'})).toBeVisible();
+    await expect(
+      page.getByTestId('account-settings').getByRole('button', {name: 'Remove account'}),
+    ).toBeVisible();
     expect(fileRefreshes).toBe(0);
   });
 });

@@ -35,6 +35,7 @@ export const MOCK_CONNECTION: BankConnection = {
       currentBalanceInBaseCurrency: null,
       baseCurrencyRateDate: null,
       isActive: true,
+      isHidden: false,
       latestBalances: [],
     },
     {
@@ -53,6 +54,7 @@ export const MOCK_CONNECTION: BankConnection = {
       currentBalanceInBaseCurrency: null,
       baseCurrencyRateDate: null,
       isActive: true,
+      isHidden: false,
       latestBalances: [],
     },
   ],
