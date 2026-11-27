@@ -21,7 +21,8 @@ type AccountCoverage = {bankAccountId: string; source: DataCoverageSource; range
  * Which days an owner's data covers, per shown account (a hidden one counts in no total, so it covers nothing here). A
  * synced account covers its sync history, from its recorded sync coverage or its first synced (not imported)
  * transaction, whichever is earlier, through the day of its connection's last successful sync in the owner's time zone; any account covers the
- * date ranges of its imports that are not undone. No day after `asOf` counts.
+ * date ranges of its imports that are not undone, and an account kept from a removed bank its synced rows' days. No day
+ * after `asOf` counts.
  */
 @Injectable()
 export class DataCoverageService {
@@ -64,6 +65,7 @@ export class DataCoverageService {
 					provider: string;
 					syncCoveredFrom: string | null;
 					firstSyncedDate: string | null;
+					lastSyncedDate: string | null;
 					lastSuccessfulSyncAt: Date | null;
 				}>
 			>(
@@ -71,6 +73,8 @@ export class DataCoverageService {
 					to_char(bank_account."syncCoveredFrom", 'YYYY-MM-DD') AS "syncCoveredFrom",
 					(SELECT to_char(MIN(row."date"), 'YYYY-MM-DD') FROM "bank_transactions" row
 						WHERE row."bankAccountId" = bank_account."id" AND row."importId" IS NULL) AS "firstSyncedDate",
+					(SELECT to_char(MAX(row."date"), 'YYYY-MM-DD') FROM "bank_transactions" row
+						WHERE row."bankAccountId" = bank_account."id" AND row."importId" IS NULL) AS "lastSyncedDate",
 					(SELECT MAX(run."finishedAt") FROM "bank_sync_runs" run
 						WHERE run."bankConnectionId" = connection."id" AND run."status" = $2) AS "lastSuccessfulSyncAt"
 				FROM "bank_accounts" bank_account
@@ -90,7 +94,12 @@ export class DataCoverageService {
 			if (account.lastSuccessfulSyncAt) {
 				const to = dateInTimeZone(account.lastSuccessfulSyncAt, owner.timeZone);
 				ranges.push({from: oldest([account.syncCoveredFrom, account.firstSyncedDate]) ?? to, to});
-			}
+			} else if (file && account.firstSyncedDate && account.lastSyncedDate)
+				// An account kept from a removed bank keeps its synced history, without the runs that synced it.
+				ranges.push({
+					from: oldest([account.syncCoveredFrom, account.firstSyncedDate])!,
+					to: account.lastSyncedDate,
+				});
 			return {bankAccountId: account.id, source: file ? 'file' : 'sync', ranges: mergeRanges(ranges, asOf)};
 		});
 	}

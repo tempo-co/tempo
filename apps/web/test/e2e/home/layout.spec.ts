@@ -61,7 +61,22 @@ function worstCase() {
   };
   for (let index = 1; index <= 39; index++)
     sourceLabels[`INCOME:example source ${index}`] = `Example Source ${index}`;
-  return homeHistory({spending, income, sourceLabels, firstMonth: FIRST_MONTH});
+  const history = homeHistory({spending, income, sourceLabels, firstMonth: FIRST_MONTH});
+  // A refund bigger than the month's spending so far, booked on the 1st, keeps this month below zero.
+  const paceOf = history.paceOf;
+  history.paceOf = (asOf) => {
+    const pace = paceOf(asOf);
+    const refund = 1_500_000;
+    return {
+      ...pace,
+      daily: pace.daily.map((day) => ({
+        ...day,
+        spending: day.day === 1 ? (Number(day.spending) - refund).toFixed(2) : day.spending,
+        cumulative: (Number(day.cumulative) - refund).toFixed(2),
+      })),
+    };
+  };
+  return history;
 }
 
 /** Six accounts at one bank, each with a long name and a balance in the tens of millions, all synthetic. */
@@ -82,11 +97,19 @@ const worstConnections = () => [
 const LONG_PAYEE = 'Example Municipal Water, Waste and Energy Services Cooperative Netherlands';
 
 /**
- * The rest of worst-case Home, all synthetic: six accounts' data running out on different days (one with none yet),
- * bills with long names and amounts in the tens of thousands, the newest transactions with long descriptions and
- * amounts in the millions, and more to check than fits a badge.
+ * The rest of worst-case Home, all synthetic: an owner with a long first name, six accounts' data running out on
+ * different days (one with none yet), bills with long names and amounts in the tens of thousands, the newest
+ * transactions with long descriptions and amounts in the millions, and more to check than fits a badge.
  */
 async function mockWorstHomeCards(page: Page) {
+  await mockJson(
+    page,
+    '**/accounts/me',
+    createAccount({
+      name: 'Maximiliaan-Bartholomeus Wiśniewska-Kowalczyk',
+      email: 'owner@example.com',
+    }),
+  );
   const accounts = worstConnections()[0].bankAccounts;
   await page.route('**/bank-connections/coverage?**', (route) =>
     fulfillJson(route, {
@@ -246,6 +269,13 @@ for (const [name, history, connections] of [
         .soft(await homeCards(page))
         .toEqual((width >= 1024 ? WIDE_ORDER : NARROW_ORDER).map(card));
       expect.soft(await brokenAmounts(page)).toEqual([]);
+      // The greeting stays on one line, however long the name.
+      expect.soft((await boxOf(page.getByRole('heading', {level: 1}))).height).toBeLessThan(30);
+      // The month's line stays inside the chart, below zero too.
+      const chart = await boxOf(homePage.paceCard.getByRole('img'));
+      const line = await boxOf(homePage.paceCard.getByTestId('pace-spent'));
+      expect.soft(line.y).toBeGreaterThanOrEqual(chart.y);
+      expect.soft(line.y + line.height).toBeLessThanOrEqual(chart.y + chart.height);
       if (name === 'worst-case')
         await expect(homePage.card('To do')).toContainText('Check 1,284 transactions');
       // Every control is a full tap target on a phone.

@@ -237,24 +237,40 @@ test('the running month asks for its transactions once, up to today, while the r
   expect(asked).toEqual(['2026-11-01..2026-11-05']);
 });
 
-test('when this month’s categories fail, the other cards stay and Try again fills the card in', async ({
-  page,
-  homePage,
-}) => {
-  await mockLoadingHome(page);
-  let failing = true;
-  await page.route('**/bank-transactions/breakdown?**', (route) =>
-    failing ? fulfillJson(route, {message: 'Too Many Requests'}, 429) : route.fallback(),
-  );
-  await page.goto('/');
+for (const {read, url, card, failed, loaded} of [
+  {
+    read: 'this month’s categories',
+    url: '**/bank-transactions/breakdown?**',
+    card: 'Top categories this month',
+    failed: "Couldn't load this month's categories",
+    loaded: 'Housing',
+  },
+  {
+    read: 'what needs checking',
+    url: '**/bank-transactions/review-counts',
+    card: 'To do',
+    failed: "Couldn't load what needs you",
+    loaded: 'Check 3 transactions',
+  },
+])
+  test(`when ${read} fails, the other cards stay and Try again fills its card in`, async ({
+    page,
+    homePage,
+  }) => {
+    await mockLoadingHome(page);
+    let failing = true;
+    await page.route(url, (route) =>
+      failing ? fulfillJson(route, {message: 'Too Many Requests'}, 429) : route.fallback(),
+    );
+    await page.goto('/');
 
-  const categories = homePage.card('Top categories this month');
-  await expect(categories).toContainText("Couldn't load this month's categories");
-  await expect(homePage.paceFigure).toHaveText('€1,200');
-  await expect(homePage.accountsTotal).toHaveText('€24,300.00');
+    const failedCard = homePage.card(card);
+    await expect(failedCard).toContainText(failed);
+    await expect(homePage.paceFigure).toHaveText('€1,200');
+    await expect(homePage.accountsTotal).toHaveText('€24,300.00');
 
-  failing = false;
-  await categories.getByRole('button', {name: 'Try again'}).click();
-  await expect(categories).toContainText('Housing');
-  await expect(categories).not.toContainText("Couldn't load");
-});
+    failing = false;
+    await failedCard.getByRole('button', {name: 'Try again'}).click();
+    await expect(failedCard).toContainText(loaded);
+    await expect(failedCard).not.toContainText("Couldn't load");
+  });

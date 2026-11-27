@@ -270,6 +270,36 @@ describe('Spending pace and data coverage', () => {
 			});
 		});
 
+		it('gives each account of one upload the days of its own rows, and a kept bank account its synced days', async () => {
+			const {agent, owner} = await syncedOwner(null);
+			const upload = Buffer.from(
+				camt053([
+					{iban: 'NL91ABNA0417164300', entries: ['2026-09-21', '2026-09-24'].map(debit)},
+					{iban: 'NL02ABNA0123456789', entries: ['2026-10-06', '2026-10-08'].map(debit)},
+				]),
+			);
+			const imported = (await importFile(agent, upload)).body as BankImportSummary;
+			// An account kept from a removed bank sits on the imported-files connection with its synced rows.
+			const files = await fixtures.connections.findOneByOrFail({accountId: owner.id, provider: 'file'});
+			const kept = await fixtures.createBankAccount(files, {
+				providerAccountId: 'kept-account',
+				identificationHash: 'kept-account-hash',
+			});
+			await fixtures.createTransactions(kept, [
+				bookedRow('2026-09-26', '-5.00'),
+				bookedRow('2026-10-03', '-5.00'),
+			]);
+
+			const {body} = (await agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)) as {body: DataCoverage};
+			const rangesOf = (id: string) => body.accounts.find(({bankAccountId}) => bankAccountId === id)?.ranges;
+
+			expect(imported.accounts.map(({id}) => rangesOf(id))).toEqual([
+				[{from: '2026-09-21', to: '2026-09-24'}],
+				[{from: '2026-10-06', to: '2026-10-08'}],
+			]);
+			expect(rangesOf(kept.id)).toEqual([{from: '2026-09-26', to: '2026-10-03'}]);
+		});
+
 		it('ends the pace at a file account’s newest import when no sync is newer', async () => {
 			const {agent} = await syncedOwner('2026-09-30T08:00:00.000Z');
 			await importFile(agent, statement(['2026-10-02', '2026-10-11']));

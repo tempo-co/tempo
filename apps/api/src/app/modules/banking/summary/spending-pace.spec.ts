@@ -84,6 +84,14 @@ describe('usual pace', () => {
 			],
 			['2026-02', '2026-07', '2026-08', '2026-09'],
 		],
+		[
+			'whole months long ago',
+			[
+				{from: '2024-01-01', to: '2024-06-30'},
+				{from: '2026-10-01', to: '2026-10-14'},
+			],
+			['2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06'],
+		],
 		['no data', [], []],
 	])('averages the months before this one that the data covers whole, six at most: %s', (_, days, expected) => {
 		expect(usualPaceMonths('2026-10', days)).toEqual(expected);

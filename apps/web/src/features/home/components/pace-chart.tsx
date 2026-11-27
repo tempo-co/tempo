@@ -24,9 +24,11 @@ export function PaceChart({
   label: string;
 }) {
   const hatchId = useId();
+  // Refunds can bring the month below zero, so the scale runs from the lowest point, never above zero.
   const top = Math.max(1, ...spent, ...(usual ?? [])) * 1.08;
+  const bottom = Math.min(0, ...spent, ...(usual ?? []));
   const x = (day: number) => ((day - 1) / Math.max(1, daysInMonth - 1)) * WIDTH;
-  const y = (cents: number) => HEIGHT - (cents / top) * (HEIGHT - 8) - 2;
+  const y = (cents: number) => HEIGHT - ((cents - bottom) / (top - bottom)) * (HEIGHT - 8) - 2;
   const points = (series: number[]) =>
     series.map((cents, index) => `${x(index + 1).toFixed(1)},${y(cents).toFixed(1)}`).join(' ');
   const covered = spent.length;

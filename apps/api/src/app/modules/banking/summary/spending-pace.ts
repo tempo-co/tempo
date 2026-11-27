@@ -54,21 +54,23 @@ export function summarizeBaseline(totals: readonly bigint[]): BaselineTotal {
 	};
 }
 
-/** How far back the usual pace looks for complete months when the data stopped coming in a while ago. */
-const USUAL_PACE_LOOKBACK_MONTHS = 24;
-
 /**
  * The complete months the usual pace of `month` averages, oldest first: the newest `USUAL_PACE_MONTHS` before it that
- * one run of covered days holds whole, from the 1st to the last day.
+ * one run of covered days holds whole, from the 1st to the last day, however long ago.
  */
 export function usualPaceMonths(month: string, coveredDays: readonly DateRange[]): string[] {
-	return previousMonths(month, USUAL_PACE_LOOKBACK_MONTHS)
-		.filter((earlier) => {
-			const first = `${earlier}-01`;
+	const complete: string[] = [];
+	const before = previousMonths(month, 1)[0];
+	for (const range of [...coveredDays].reverse()) {
+		const newest = range.to.slice(0, 7) < before ? range.to.slice(0, 7) : before;
+		for (let earlier = newest; earlier >= range.from.slice(0, 7);) {
 			const last = `${earlier}-${daysInMonth(earlier)}`;
-			return coveredDays.some((range) => range.from <= first && last <= range.to);
-		})
-		.slice(-USUAL_PACE_MONTHS);
+			if (range.from <= `${earlier}-01` && last <= range.to) complete.unshift(earlier);
+			if (complete.length === USUAL_PACE_MONTHS) return complete;
+			earlier = previousMonths(earlier, 1)[0];
+		}
+	}
+	return complete;
 }
 
 export type HomePaceInput = {

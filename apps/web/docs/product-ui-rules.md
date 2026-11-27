@@ -4,7 +4,7 @@ Standing rules for what Tempo's screens show and how they behave, for new and ch
 
 ## Pages
 
-- Each page answers one question. Home is for status: this month's spending against the usual pace, how far the imported data runs, and what to do next. Reports (cash flow, categories, year tables) belong in Insights, bills in Recurring, account management and imports in Accounts.
+- Each page answers one question. Home is for status: this month's spending against the usual pace, how far the synced and imported data runs, and what to do next. Reports (cash flow, categories, year tables) belong in Insights, bills in Recurring, account management and imports in Accounts.
 
 ## Density and copy
 

@@ -191,17 +191,30 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 	}
 
 	async findImportRanges(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportRange[]> {
-		// Joined through each account's own connection, so only the owner's accounts that still exist count.
+		// Joined through each account's own connection, so only the owner's accounts that still exist count. An import
+		// that wrote one account covers its whole date range there; one that wrote several covers, on each, the days
+		// from that account's first to its last row the import added.
 		return manager.query(
-			`SELECT bank_account."id" AS "bankAccountId",
-				to_char(bank_import."dateFrom", 'YYYY-MM-DD') AS "from", to_char(bank_import."dateTo", 'YYYY-MM-DD') AS "to"
-			FROM "bank_imports" bank_import
-			CROSS JOIN LATERAL unnest(bank_import."bankAccountIds") written("id")
-			JOIN "bank_accounts" bank_account ON bank_account."id" = written."id"
-			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-				AND connection."accountId" = $1
-			WHERE bank_import."accountId" = $1 AND bank_import."undoneAt" IS NULL
-				AND bank_import."dateFrom" IS NOT NULL AND bank_import."dateTo" IS NOT NULL`,
+			`SELECT range."bankAccountId", to_char(range."from", 'YYYY-MM-DD') AS "from",
+				to_char(range."to", 'YYYY-MM-DD') AS "to"
+			FROM (
+				SELECT bank_account."id" AS "bankAccountId",
+					CASE WHEN cardinality(bank_import."bankAccountIds") = 1 THEN bank_import."dateFrom" ELSE added."from" END
+						AS "from",
+					CASE WHEN cardinality(bank_import."bankAccountIds") = 1 THEN bank_import."dateTo" ELSE added."to" END
+						AS "to"
+				FROM "bank_imports" bank_import
+				CROSS JOIN LATERAL unnest(bank_import."bankAccountIds") written("id")
+				JOIN "bank_accounts" bank_account ON bank_account."id" = written."id"
+				JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+					AND connection."accountId" = $1
+				LEFT JOIN LATERAL (
+					SELECT MIN(added."date") AS "from", MAX(added."date") AS "to" FROM "bank_transactions" added
+					WHERE added."importId" = bank_import."id" AND added."bankAccountId" = written."id"
+				) added ON TRUE
+				WHERE bank_import."accountId" = $1 AND bank_import."undoneAt" IS NULL
+			) range
+			WHERE range."from" IS NOT NULL AND range."to" IS NOT NULL`,
 			[ownerId],
 		);
 	}

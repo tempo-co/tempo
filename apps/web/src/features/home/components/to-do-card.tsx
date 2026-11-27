@@ -2,6 +2,7 @@ import {Link} from '@tanstack/react-router';
 import {CircleCheck, CircleDashed, ListChecks, type LucideIcon} from 'lucide-react';
 import type {ReactNode} from 'react';
 
+import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
 import {LoadingLabel, TileRowsSkeleton} from '@/features/dashboard/components/loading';
 
@@ -31,12 +32,28 @@ const VIEWS: {[K in ToDoRow['kind']]: (row: Extract<ToDoRow, {kind: K}>) => RowV
 };
 
 /** One card for everything that needs the owner, each row typed by what it asks; hidden when nothing does. */
-export function ToDoCard({rows, editing}: {rows: ToDoRow[] | undefined; editing?: CardEditing}) {
+export function ToDoCard({
+  rows,
+  failure,
+  editing,
+}: {
+  rows: ToDoRow[] | undefined;
+  /** Set when what needs checking could not be read. */
+  failure?: {error: unknown; retry: () => unknown};
+  editing?: CardEditing;
+}) {
   // With nothing to act on the card stays out of the way, except while customizing.
   if (rows?.length === 0 && !editing) return null;
   return (
     <HomeCard name='To do' editing={editing}>
-      {!rows ? (
+      {!rows && failure ? (
+        <LoadErrorState
+          size='section'
+          title="Couldn't load what needs you"
+          error={failure.error}
+          onRetry={failure.retry}
+        />
+      ) : !rows ? (
         <div aria-busy='true'>
           {/* Shown with data, the card holds what to check and the setup still left: two rows. */}
           <ul className='-mx-3 grid'>

@@ -72,7 +72,7 @@ export function HomePage() {
 
   return (
     <AppBodyLayout>
-      <div className='grid gap-4'>
+      <div className='grid grid-cols-1 gap-4'>
         {title}
         {body}
       </div>
@@ -85,7 +85,7 @@ function HomeTitle({editing, onEdit}: {editing: boolean; onEdit: (editing: boole
   const name = useCurrentAccount({skipFetch: true}).currentAccount?.name.trim().split(/\s+/)[0];
   return (
     <header className='flex min-h-8 items-start justify-between gap-3'>
-      <h1 className='min-w-0 text-page-title'>
+      <h1 className='min-w-0 truncate text-page-title'>
         {name ? `${greeting(new Date())}, ${name}` : 'Home'}
       </h1>
       <Button
@@ -145,7 +145,8 @@ function HomeCards({
     today,
   );
   const recurring = useGetRecurringSummary(today);
-  const {reviewCounts} = useGetBankTransactionReviewCounts();
+  const review = useGetBankTransactionReviewCounts();
+  const {reviewCounts} = review;
 
   // Figures read on the other side of a currency change wait for their refetch.
   const paceShown = pace.pace && accepted(pace.pace.baseCurrency) ? pace.pace : undefined;
@@ -232,7 +233,7 @@ function HomeCards({
           />
         );
       case 'todo':
-        return <ToDoCard key={card} rows={rows} editing={edit} />;
+        return <ToDoCard key={card} rows={rows} failure={failure(review)} editing={edit} />;
       case 'coming':
         return (
           <ComingUpCard
