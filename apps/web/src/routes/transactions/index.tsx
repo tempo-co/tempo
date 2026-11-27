@@ -133,10 +133,12 @@ function TransactionsPage() {
     );
   };
   const {updateBulkLeftOutOfTotals, isPending: isSavingLeftOut} = useUpdateBulkLeftOutOfTotals();
-  // Every picked row is left out already: the list shows only those, or each picked one is marked.
+  // Every picked row is left out already, so the bar offers Count in totals. With every matching row
+  // picked, the loaded rows stand for the rest: the write sets the same value on every matching row,
+  // so the label always says what the write does.
   const leftOutIds = new Set(transactions.filter((row) => row.leftOutOfTotals).map(({id}) => id));
   const allLeftOut = selection.allMatching
-    ? filters.cashFlows?.length === 1 && filters.cashFlows[0] === 'LEFT_OUT'
+    ? transactions.length > 0 && transactions.every((row) => row.leftOutOfTotals)
     : picked > 0 && selection.selectedIds.every((id) => leftOutIds.has(id));
   const applyLeftOut = async (leftOutOfTotals: boolean) => {
     try {
