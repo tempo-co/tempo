@@ -77,7 +77,7 @@ export function AccountsCard({
                   <span className='block truncate text-body'>{accountName(account)}</span>
                   <span
                     data-tone={freshness.tone}
-                    className='block truncate text-body-small text-muted-foreground data-[tone=warning]:text-warning'
+                    className='block truncate text-body-small text-muted-foreground data-[tone=warning]:text-warning data-[tone=ok]:max-sm:hidden'
                   >
                     {freshness.label}
                   </span>

@@ -23,8 +23,8 @@ const GROCERIES = [
 const payee = (name: string, category: string | null) => ({counterpartyName: name, description: name, category});
 
 /**
- * Seeds the owner Home's flow reads, seen on 20 October 2026: a synced current account whose last successful sync was
- * on 14 October, with history from March, so April to September are six complete months; and an imported-files
+ * Seeds the owner Home's flow reads, seen on 20 October 2026: a synced current account whose transactions were last
+ * fetched on 14 October, with history from March, so April to September are six complete months; and an imported-files
  * savings account whose newest import runs to 2 October. October holds two rows to check. Nothing changes its data.
  */
 export async function seedHomeData(app: INestApplicationContext) {
@@ -56,6 +56,7 @@ export async function seedHomeData(app: INestApplicationContext) {
 		currentBalanceAmount: '2184.60',
 		currentBalanceType: 'AVAILABLE',
 		balanceUpdatedAt: new Date('2026-10-14T09:00:00.000Z'),
+		transactionsFetchedThrough: '2026-10-14',
 	});
 	await fixtures.createTransactions(current, [
 		bookedRow('2026-03-28', '-35.00', payee('Example Cafe', 'EATING_OUT')),

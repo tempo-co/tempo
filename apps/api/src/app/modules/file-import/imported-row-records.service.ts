@@ -7,7 +7,7 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray} from '@modules/banking/banking.utils';
 import {
-	AccountImportRange,
+	AccountImportCoverage,
 	ImportedRowQuestion,
 	ImportedRowRecords,
 	ImportedRowRecordsRegistry,
@@ -190,31 +190,23 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 		return statement ?? null;
 	}
 
-	async findImportRanges(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportRange[]> {
-		// Joined through each account's own connection, so only the owner's accounts that still exist count. An import
-		// that wrote one account covers its whole date range there; one that wrote several covers, on each, the days
-		// from that account's first to its last row the import added.
+	async findImportCoverage(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportCoverage[]> {
+		// Joined through each account's own connection, so only the owner's accounts that still exist count.
 		return manager.query(
-			`SELECT range."bankAccountId", to_char(range."from", 'YYYY-MM-DD') AS "from",
-				to_char(range."to", 'YYYY-MM-DD') AS "to"
-			FROM (
-				SELECT bank_account."id" AS "bankAccountId",
-					CASE WHEN cardinality(bank_import."bankAccountIds") = 1 THEN bank_import."dateFrom" ELSE added."from" END
-						AS "from",
-					CASE WHEN cardinality(bank_import."bankAccountIds") = 1 THEN bank_import."dateTo" ELSE added."to" END
-						AS "to"
-				FROM "bank_imports" bank_import
-				CROSS JOIN LATERAL unnest(bank_import."bankAccountIds") written("id")
-				JOIN "bank_accounts" bank_account ON bank_account."id" = written."id"
-				JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
-					AND connection."accountId" = $1
-				LEFT JOIN LATERAL (
-					SELECT MIN(added."date") AS "from", MAX(added."date") AS "to" FROM "bank_transactions" added
-					WHERE added."importId" = bank_import."id" AND added."bankAccountId" = written."id"
-				) added ON TRUE
-				WHERE bank_import."accountId" = $1 AND bank_import."undoneAt" IS NULL
-			) range
-			WHERE range."from" IS NOT NULL AND range."to" IS NOT NULL`,
+			`SELECT bank_account."id" AS "bankAccountId", to_char(MAX(bank_import."dateTo"), 'YYYY-MM-DD') AS "through",
+				COALESCE(
+					jsonb_agg(jsonb_build_object('from', gap->>'from', 'to', gap->>'to')) FILTER (WHERE gap IS NOT NULL),
+					'[]'::jsonb
+				) AS "gaps"
+			FROM "bank_imports" bank_import
+			CROSS JOIN LATERAL unnest(bank_import."bankAccountIds") written("id")
+			JOIN "bank_accounts" bank_account ON bank_account."id" = written."id"
+			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+				AND connection."accountId" = $1
+			LEFT JOIN LATERAL jsonb_array_elements(bank_import."statementGaps") gap
+				ON gap->>'bankAccountId' = written."id"::text
+			WHERE bank_import."accountId" = $1 AND bank_import."undoneAt" IS NULL
+			GROUP BY bank_account."id"`,
 			[ownerId],
 		);
 	}

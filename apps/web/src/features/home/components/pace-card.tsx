@@ -72,7 +72,7 @@ export function PaceCard({
     covered
       ? `Spent ${wholeCents(spent, currency)} in ${monthName} up to ${upTo}`
       : `No data for ${monthName} yet`,
-    usualBy !== null && `usually ${wholeCents(usualBy, currency)} by then`,
+    covered && usualBy !== null && `usually ${wholeCents(usualBy, currency)} by then`,
     pace.usual && `${wholeCents(toCents(pace.usual.month), currency)} in a usual month`,
   ]
     .filter(Boolean)
@@ -102,7 +102,7 @@ export function PaceCard({
         label={chartLabel}
       />
       <ChartKey upTo={covered ? upTo : null} usual={pace.usual !== null} />
-      <dl className='flex flex-wrap gap-x-5 gap-y-1 text-body-small text-muted-foreground'>
+      <dl className='flex flex-wrap gap-x-6 gap-y-2 text-body-small text-muted-foreground'>
         {/* Only for a day of this month: the usual by an earlier month's day would compare nothing. */}
         {pace.usual && covered && upTo && (
           <Fact label={`Usual by ${upTo}`} value={wholeCents(usualBy, currency)} />
@@ -185,7 +185,7 @@ function ChartKey({upTo, usual}: {upTo: string | null; usual: boolean}) {
       )}
       <li className='flex items-center gap-1.5'>
         <svg aria-hidden='true' viewBox='0 0 10 10' className='size-2.5'>
-          <path d='M0 10 10 0M-3 3 3 -3M7 13 13 7' stroke='var(--color-faint)' strokeWidth='1.5' />
+          <path d='M0 10 10 0M-3 3 3 -3M7 13 13 7' stroke='var(--color-input)' strokeWidth='1.5' />
         </svg>
         Not in yet
       </li>
@@ -195,7 +195,7 @@ function ChartKey({upTo, usual}: {upTo: string | null; usual: boolean}) {
 
 function Fact({label, value, className}: {label: string; value: string; className?: string}) {
   return (
-    <div className='flex gap-1.5'>
+    <div className='grid gap-0.5'>
       <dt>{label}</dt>
       <dd className={cn('numeric font-medium text-foreground', className)}>{value}</dd>
     </div>
@@ -228,7 +228,18 @@ function PaceSkeleton() {
       </div>
       <Bone className='h-40' />
       {line('text-label', ['w-[11em]', 'w-[9em]', 'w-[5em]'])}
-      {line('text-body-small gap-x-5', ['w-[10em]', 'w-[8.5em]', 'w-[5em]'])}
+      <div className='flex flex-wrap gap-x-6 gap-y-2 text-body-small'>
+        {['w-[6.5em]', 'w-[6em]', 'w-[3.5em]'].map((width) => (
+          <span key={width} className='grid gap-0.5'>
+            <span className='inline-flex h-[1lh] items-center'>
+              <TextBone className={width} />
+            </span>
+            <span className='inline-flex h-[1lh] items-center'>
+              <TextBone className='w-[3.5em]' />
+            </span>
+          </span>
+        ))}
+      </div>
       <LoadingLabel>Loading this month’s spending</LoadingLabel>
     </div>
   );

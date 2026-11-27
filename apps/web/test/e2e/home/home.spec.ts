@@ -276,7 +276,10 @@ test.describe('Home on a phone', () => {
     viewport: {width: 390, height: 844},
   });
 
-  test('fits the screen, and Accounts leaves a hidden account out', async ({page, homePage}) => {
+  test('fits the screen, and Accounts leaves out a hidden account and an all-clear sync line', async ({
+    page,
+    homePage,
+  }) => {
     const hidden = {
       ...HOME_CONNECTION.bankAccounts[0],
       id: '00000000-0000-4000-8000-0000000000a9',
@@ -293,7 +296,12 @@ test.describe('Home on a phone', () => {
     await expect(homePage.accountsTotal).toHaveText('€24,300.00');
     await expect(homePage.card('Accounts')).toContainText('1 account');
     await expect(homePage.card('Accounts')).not.toContainText('Example Hidden Account');
+    await expect(homePage.card('Accounts').getByText(/^Synced/)).toBeHidden();
     await expectLoaded(page.getByRole('main'));
     await expectNoHorizontalOverflow(page);
+
+    // Wider, the sync line has room again.
+    await page.setViewportSize({width: 768, height: 1024});
+    await expect(homePage.card('Accounts').getByText(/^Synced/)).toBeVisible();
   });
 });

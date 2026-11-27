@@ -269,6 +269,14 @@ for (const [name, history, connections] of [
         .soft(await homeCards(page))
         .toEqual((width >= 1024 ? WIDE_ORDER : NARROW_ORDER).map(card));
       expect.soft(await brokenAmounts(page)).toEqual([]);
+      // Each pace fact puts its label above its value.
+      for (const fact of await homePage.paceCard.locator('dl > div').all()) {
+        const [label, value] = await Promise.all([
+          boxOf(fact.locator('dt')),
+          boxOf(fact.locator('dd')),
+        ]);
+        expect.soft(label.y + label.height).toBeLessThanOrEqual(value.y);
+      }
       // The greeting stays on one line, however long the name.
       expect.soft((await boxOf(page.getByRole('heading', {level: 1}))).height).toBeLessThan(30);
       // The month's line stays inside the chart, below zero too.

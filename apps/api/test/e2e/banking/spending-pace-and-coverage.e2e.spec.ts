@@ -5,10 +5,9 @@ import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';
-import {BankImport} from '@modules/file-import/bank-import.entity';
 
 import {BankingFixtures, bookedRow} from '../../../scripts/seed-data/banking-fixtures';
-import {type CamtEntry, camt053} from '../../fixtures/statement-file.fixture';
+import {type CamtEntry, EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053} from '../../fixtures/statement-file.fixture';
 import {enableFileImportE2e, getApp} from '../../setup/e2e.setup';
 import {createBankingOwner} from '../../utils/banking-utils';
 
@@ -30,24 +29,24 @@ describe('Spending pace and data coverage', () => {
 		accounts = app.get(getRepositoryToken(Account));
 	});
 
-	/** A synced owner in Amsterdam whose connection last synced successfully at `syncedAt`, then failed once. */
-	async function syncedOwner(syncedAt: string | null) {
+	/**
+	 * A synced owner in Amsterdam whose account's transactions were last fetched completely through `fetchedThrough`.
+	 * A later run succeeded without fetching them, as a balance-only retry does.
+	 */
+	async function syncedOwner(fetchedThrough: string | null) {
 		const synced = await createBankingOwner(app, {baseCurrency: 'EUR'});
 		await accounts.update({id: synced.owner.id}, {timeZone: 'Europe/Amsterdam'});
-		if (syncedAt) {
-			await fixtures.createSyncRun(synced.connection, {status: 'SUCCEEDED', finishedAt: new Date(syncedAt)});
-			await fixtures.createSyncRun(synced.connection, {
-				status: 'PARTIAL',
-				finishedAt: new Date('2026-10-17T08:00:00.000Z'),
-			});
-		}
+		await fixtures.bankAccounts.update({id: synced.bankAccount.id}, {transactionsFetchedThrough: fetchedThrough});
+		await fixtures.createSyncRun(synced.connection, {
+			status: 'SUCCEEDED',
+			finishedAt: new Date('2026-10-17T08:00:00.000Z'),
+		});
 		return synced;
 	}
 
 	it('adds up this month through the last covered day against the newest six complete months', async () => {
-		// 22:30 UTC on 14 October is 15 October in Amsterdam.
-		const {agent, bankAccount} = await syncedOwner('2026-10-14T22:30:00.000Z');
-		const other = await syncedOwner('2026-10-17T10:00:00.000Z');
+		const {agent, bankAccount} = await syncedOwner('2026-10-15');
+		const other = await syncedOwner('2026-10-17');
 		await fixtures.createTransactions(bankAccount, [
 			// History starts mid-March, so March is no complete month.
 			bookedRow('2026-03-10', '-999.00'),
@@ -99,7 +98,7 @@ describe('Spending pace and data coverage', () => {
 	});
 
 	it('counts a month from the first day the sync recorded covering, though nothing was booked on it', async () => {
-		const {agent, bankAccount} = await syncedOwner('2026-10-14T08:00:00.000Z');
+		const {agent, bankAccount} = await syncedOwner('2026-10-14');
 		await fixtures.bankAccounts.update({id: bankAccount.id}, {syncCoveredFrom: '2026-08-01'});
 		await fixtures.createTransactions(bankAccount, [
 			bookedRow('2026-08-03', '-100.00'),
@@ -111,7 +110,7 @@ describe('Spending pace and data coverage', () => {
 		expect(body.usual).toMatchObject({months: ['2026-08', '2026-09'], month: '200.00'});
 
 		// Without recorded coverage the data starts at its first booking, so August is not whole.
-		const unrecorded = await syncedOwner('2026-10-14T08:00:00.000Z');
+		const unrecorded = await syncedOwner('2026-10-14');
 		await fixtures.createTransactions(unrecorded.bankAccount, [
 			bookedRow('2026-08-03', '-100.00'),
 			bookedRow('2026-09-05', '-300.00'),
@@ -120,34 +119,29 @@ describe('Spending pace and data coverage', () => {
 		expect(pace.usual).toBeNull();
 	});
 
-	it('counts a synced account from its first synced row, so a gap after its older imported rows stays uncovered', async () => {
-		const {agent, owner, connection, bankAccount} = await syncedOwner('2026-10-14T08:00:00.000Z');
-		const imported = await app.get<Repository<BankImport>>(getRepositoryToken(BankImport)).save({
-			accountId: owner.id,
-			bankConnectionId: connection.id,
-			fileHash: 'pace-gap-import',
-			format: 'camt053',
-			filesCount: 1,
-			rowsParsed: 1,
-			rowsAdded: 1,
-			rowsAlreadyPresent: 0,
-			dateFrom: '2026-01-05',
-			dateTo: '2026-03-20',
-			bankAccountIds: [bankAccount.id],
-			createdBankAccountIds: [],
-		});
-		await fixtures.createTransactions(bankAccount, [
-			bookedRow('2026-01-05', '-10.00', {importId: imported.id}),
-			bookedRow('2026-06-02', '-20.00'),
-		]);
+	it('leaves out the days before a reconnect’s sync coverage, and takes a gap nothing records as covered', async () => {
+		const history = [
+			bookedRow('2026-01-05', '-10.00'),
+			bookedRow('2026-03-20', '-20.00'),
+			bookedRow('2026-06-02', '-30.00'),
+		];
+		// The bank synced from January to 20 March; after reconnecting, sync recorded covering from 2 June.
+		const reconnected = await syncedOwner('2026-10-14');
+		await fixtures.bankAccounts.update({id: reconnected.bankAccount.id}, {syncCoveredFrom: '2026-06-02'});
+		await fixtures.createTransactions(reconnected.bankAccount, history);
+		// The same rows from a bank whose sync records no coverage.
+		const unrecorded = await syncedOwner('2026-10-14');
+		await fixtures.createTransactions(unrecorded.bankAccount, history);
 
-		const {body} = (await agent.get(PACE).query({asOf: AS_OF}).expect(200)) as {body: SpendingPace};
+		const months = async ({agent}: {agent: TestAgent}) =>
+			((await agent.get(PACE).query({asOf: AS_OF}).expect(200)).body as SpendingPace).usual?.months;
 
-		expect(body.usual?.months).toEqual(['2026-02', '2026-07', '2026-08', '2026-09']);
+		expect(await months(reconnected)).toEqual(['2026-02', '2026-07', '2026-08', '2026-09']);
+		expect(await months(unrecorded)).toEqual(USUAL_MONTHS);
 	});
 
 	it('leaves a hidden account out of the coverage and the pace', async () => {
-		const {agent, bankAccount} = await syncedOwner('2026-10-14T08:00:00.000Z');
+		const {agent, bankAccount} = await syncedOwner('2026-10-14');
 		await fixtures.createTransactions(bankAccount, [bookedRow('2026-10-02', '-40.00')]);
 		await fixtures.bankAccounts.update({id: bankAccount.id}, {isHidden: true});
 
@@ -176,10 +170,17 @@ describe('Spending pace and data coverage', () => {
 			return agent.post('/bank-imports').attach('files', file, 'upload-0.bin').expect(201);
 		}
 
-		it('lists each account’s covered days in the last 30, from its sync and its imports not undone', async () => {
-			const {agent, bankAccount: synced} = await syncedOwner('2026-10-14T22:30:00.000Z');
+		it('lists each account’s covered days in the last 30, from its first row through its last fetch or import', async () => {
+			const {agent, connection, bankAccount: synced} = await syncedOwner('2026-10-15');
 			await fixtures.bankAccounts.update({id: synced.id}, {syncCoveredFrom: '2026-10-05'});
-			const other = await syncedOwner('2026-10-17T10:00:00.000Z');
+			// The connection's newest sync skipped this account, so it stays at its earlier fetch.
+			const skipped = await fixtures.createBankAccount(connection, {
+				providerAccountId: 'skipped-account',
+				identificationHash: 'skipped-account-hash',
+				syncCoveredFrom: '2026-10-01',
+				transactionsFetchedThrough: '2026-10-10',
+			});
+			const other = await syncedOwner('2026-10-17');
 			const october = (await importFile(agent, statement(['2026-10-01', '2026-10-09'])))
 				.body as BankImportSummary;
 			const september = (await importFile(agent, statement(['2026-09-25', '2026-09-28'])))
@@ -201,30 +202,31 @@ describe('Spending pace and data coverage', () => {
 						ranges: [{from: '2026-10-05', to: '2026-10-15'}],
 					},
 					{
+						bankAccountId: skipped.id,
+						source: 'sync',
+						coveredThrough: '2026-10-10',
+						ranges: [{from: '2026-10-01', to: '2026-10-10'}],
+					},
+					{
+						// Nothing records missing days between the two files, so they count as covered.
 						bankAccountId: file,
 						source: 'file',
 						coveredThrough: '2026-10-09',
-						ranges: [
-							{from: '2026-09-25', to: '2026-09-28'},
-							{from: '2026-10-01', to: '2026-10-09'},
-						],
+						ranges: [{from: '2026-09-25', to: '2026-10-09'}],
 					},
 				]),
 			});
-			expect(body.accounts).toHaveLength(2);
+			expect(body.accounts).toHaveLength(3);
 
-			// A day before the last sync: nothing after it counts.
+			// A day before the last fetch: nothing after it counts.
 			const earlier = (await agent.get(COVERAGE).query({asOf: '2026-10-08'}).expect(200)).body as DataCoverage;
 			expect(earlier.lastCoveredDay).toBe('2026-10-08');
 			expect(earlier.accounts.find(({bankAccountId}) => bankAccountId === file)).toMatchObject({
 				coveredThrough: '2026-10-08',
-				ranges: [
-					{from: '2026-09-25', to: '2026-09-28'},
-					{from: '2026-10-01', to: '2026-10-08'},
-				],
+				ranges: [{from: '2026-09-25', to: '2026-10-08'}],
 			});
 
-			// Another owner sees only their own account, its sync history from its first transaction, cut to the window.
+			// Another owner sees only their own account, from its first transaction, cut to the window.
 			await fixtures.createTransactions(other.bankAccount, [bookedRow('2026-09-02', '-20.00')]);
 			const theirs = (await other.agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)).body as DataCoverage;
 			expect(theirs).toMatchObject({
@@ -240,69 +242,75 @@ describe('Spending pace and data coverage', () => {
 			expect(theirs.accounts).toHaveLength(1);
 		});
 
-		it('leaves out an undone import, and joins days that follow on from covered ones', async () => {
+		it('leaves out an undone import', async () => {
 			const {agent} = await syncedOwner(null);
 			const october = (await importFile(agent, statement(['2026-10-01', '2026-10-09'])))
 				.body as BankImportSummary;
 			await importFile(agent, statement(['2026-09-25', '2026-09-28']));
 			const file = october.accounts[0].id;
-			const coverage = async () =>
-				((await agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)).body as DataCoverage).accounts.find(
-					({bankAccountId}) => bankAccountId === file,
-				);
 
 			await agent.delete(`/bank-imports/${october.id}`).expect(204);
-			expect(await coverage()).toEqual({
+
+			const {body} = (await agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)) as {body: DataCoverage};
+			expect(body.accounts.find(({bankAccountId}) => bankAccountId === file)).toEqual({
 				bankAccountId: file,
 				source: 'file',
 				coveredThrough: '2026-09-28',
 				ranges: [{from: '2026-09-25', to: '2026-09-28'}],
 			});
-
-			await importFile(agent, statement(['2026-09-29', '2026-09-30']));
-			expect((await coverage())!.ranges).toEqual([{from: '2026-09-25', to: '2026-09-30'}]);
-
-			// Days before the window are no part of it.
-			await importFile(agent, statement(['2026-08-03', '2026-08-05']));
-			expect(await coverage()).toMatchObject({
-				coveredThrough: '2026-09-30',
-				ranges: [{from: '2026-09-25', to: '2026-09-30'}],
-			});
 		});
 
-		it('gives each account of one upload the days of its own rows, and a kept bank account its synced days', async () => {
+		it('leaves out the days between statements whose balances do not follow on, and covers each account of an upload through its end', async () => {
 			const {agent, owner} = await syncedOwner(null);
+			const balances = (opening: string, closing: string, openingDate: string, closingDate: string) => ({
+				servicerBic: 'EXAMPLEXX',
+				opening,
+				closing,
+				openingDate,
+				closingDate,
+			});
 			const upload = Buffer.from(
 				camt053([
-					{iban: 'NL91ABNA0417164300', entries: ['2026-09-21', '2026-09-24'].map(debit)},
-					{iban: 'NL02ABNA0123456789', entries: ['2026-10-06', '2026-10-08'].map(debit)},
+					// Closes at 95.00 on 24 September; the next statement opens at 80.00 on 6 October.
+					{entries: [debit('2026-09-21')], ...balances('100.00', '95.00', '2026-09-20', '2026-09-24')},
+					{entries: [debit('2026-10-06')], ...balances('80.00', '75.00', '2026-10-06', '2026-10-08')},
+					{iban: OTHER_EXAMPLE_IBAN, servicerBic: 'EXAMPLEXX', entries: [debit('2026-10-02')]},
 				]),
 			);
 			const imported = (await importFile(agent, upload)).body as BankImportSummary;
-			// An account kept from a removed bank sits on the imported-files connection with its synced rows.
+			expect(imported.statementGaps).toHaveLength(1);
+			// An account kept from a removed bank sits on the imported-files connection, fetched until the bank went.
 			const files = await fixtures.connections.findOneByOrFail({accountId: owner.id, provider: 'file'});
 			const kept = await fixtures.createBankAccount(files, {
 				providerAccountId: 'kept-account',
 				identificationHash: 'kept-account-hash',
+				transactionsFetchedThrough: '2026-10-03',
 			});
-			await fixtures.createTransactions(kept, [
-				bookedRow('2026-09-26', '-5.00'),
-				bookedRow('2026-10-03', '-5.00'),
-			]);
+			await fixtures.createTransactions(kept, [bookedRow('2026-09-26', '-5.00')]);
 
 			const {body} = (await agent.get(COVERAGE).query({asOf: AS_OF}).expect(200)) as {body: DataCoverage};
 			const rangesOf = (id: string) => body.accounts.find(({bankAccountId}) => bankAccountId === id)?.ranges;
+			const gapped = imported.statementGaps[0].bankAccountId;
+			const second = imported.accounts.find(({id}) => id !== gapped)!.id;
 
-			expect(imported.accounts.map(({id}) => rangesOf(id))).toEqual([
-				[{from: '2026-09-21', to: '2026-09-24'}],
-				[{from: '2026-10-06', to: '2026-10-08'}],
+			expect(rangesOf(gapped)).toEqual([
+				{from: '2026-09-21', to: '2026-09-24'},
+				{from: '2026-10-06', to: '2026-10-06'},
 			]);
+			// The upload ends on its last booking, 6 October: the date Accounts shows for each of its accounts.
+			expect(rangesOf(second)).toEqual([{from: '2026-10-02', to: '2026-10-06'}]);
 			expect(rangesOf(kept.id)).toEqual([{from: '2026-09-26', to: '2026-10-03'}]);
 		});
 
-		it('ends the pace at a file account’s newest import when no sync is newer', async () => {
-			const {agent} = await syncedOwner('2026-09-30T08:00:00.000Z');
-			await importFile(agent, statement(['2026-10-02', '2026-10-11']));
+		it('ends the pace at an import into a synced account that runs past its last fetch', async () => {
+			const {agent, connection} = await syncedOwner(null);
+			const synced = await fixtures.createBankAccount(connection, {
+				iban: EXAMPLE_IBAN,
+				transactionsFetchedThrough: '2026-10-04',
+			});
+			const imported = (await importFile(agent, statement(['2026-10-02', '2026-10-11'])))
+				.body as BankImportSummary;
+			expect(imported.accounts.map(({id}) => id)).toEqual([synced.id]);
 
 			const {body} = (await agent.get(PACE).query({asOf: AS_OF}).expect(200)) as {body: SpendingPace};
 

@@ -56,7 +56,7 @@ for (const width of [1440, 1280]) {
 
     // Home is longer than the window; Accounts, with one bank, is not.
     await page.goto('/');
-    await expect(page.getByText('Total balance')).toBeVisible();
+    await expect(page.getByTestId('pace-figure')).toBeVisible();
     expect(await scrolls(page)).toBe(true);
     const home = await column(page);
 
@@ -67,7 +67,7 @@ for (const width of [1440, 1280]) {
     await expect(page.getByRole('heading', {name: 'Accounts', exact: true})).toBeVisible();
     expect(await scrolls(page)).toBe(false);
     expect(await column(page)).toEqual(home);
-    // Home has no title, so its content starts where the title does; the Connect button overhangs the title's row.
+    // Every page's title starts where Home's does; the Connect button overhangs the title's row.
     const connections = await title(page);
     expect(connections).toMatchObject({x: home.contentX + 16, y: home.top});
 
@@ -77,11 +77,15 @@ for (const width of [1440, 1280]) {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
 
+    // Transactions puts its search beside the title once it lists rows; the title rows compare without one.
+    await mockJson(page, '**/bank-transactions?**', {transactions: [], total: 0});
     await page
       .getByRole('navigation', {name: 'Primary'})
       .getByRole('link', {name: /^Transactions/})
       .click();
-    await expect(page.getByRole('heading', {name: 'Transactions', exact: true, level: 1})).toBeVisible();
+    await expect(
+      page.getByRole('heading', {name: 'Transactions', exact: true, level: 1}),
+    ).toBeVisible();
     await expectLoaded(page);
     expect(await column(page)).toEqual(home);
     expect(await title(page)).toEqual(connections);
@@ -101,7 +105,7 @@ for (const width of [320, 390]) {
     await page.setViewportSize({width, height: 844});
     await mockPages(page);
     await page.goto('/');
-    await expect(page.getByText('Total balance')).toBeVisible();
+    await expect(page.getByTestId('pace-figure')).toBeVisible();
     const home = await column(page);
     for (const [path, name] of [
       ['/accounts', 'Accounts'],

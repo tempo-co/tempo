@@ -53,7 +53,7 @@ export function PaceChart({
             patternUnits='userSpaceOnUse'
             patternTransform='rotate(45)'
           >
-            <line x1='0' y1='0' x2='0' y2='6' stroke='var(--color-faint)' strokeWidth='1.5' />
+            <line x1='0' y1='0' x2='0' y2='6' stroke='var(--color-input)' strokeWidth='1.5' />
           </pattern>
         </defs>
         <line

@@ -249,8 +249,8 @@ export type SpendingPace = {
 	month: string;
 	daysInMonth: number;
 	/**
-	 * The newest day the owner's data covers, never after `asOf`: across their accounts, the day of the last successful
-	 * sync of a synced account and the end date of the newest import not undone of an account. Null without any.
+	 * The newest day the owner's data covers, never after `asOf`: across their accounts, the day each account's
+	 * transactions were last fetched completely and the end date of the newest import not undone. Null without any.
 	 */
 	lastCoveredDay: string | null;
 	/** One entry per day of this month through the last covered day; empty when that day is before this month. */
@@ -282,9 +282,9 @@ export type DataCoverageAccount = {
 export const DATA_COVERAGE_DAYS = 30;
 
 /**
- * `GET /bank-connections/coverage`: which of the last `DATA_COVERAGE_DAYS` days each account's data covers. A synced
- * account covers its sync history through the day of its last successful sync; any account covers the date ranges of
- * its imports that are not undone.
+ * `GET /bank-connections/coverage`: which of the last `DATA_COVERAGE_DAYS` days each account's data covers: from its
+ * first transaction through its last covered day, the newer of its last complete transaction fetch and its newest
+ * import not undone, without the gaps something recorded (between imported statements, before a reconnect).
  */
 export type DataCoverage = {
 	/** The window, both days included. */

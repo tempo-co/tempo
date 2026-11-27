@@ -17,8 +17,16 @@ export type RemovedImportedRow = {row: BankTransaction; ownerEdits: OwnerEdits |
 /** A closing balance a statement stated for an account: the signed decimal as of the end of `date`. */
 export type StatementClosingBalance = {date: string; amount: string};
 
-/** The days an import's rows span, for one account it wrote to (`YYYY-MM-DD`, both included). */
-export type AccountImportRange = {bankAccountId: BankAccount['id']; from: string; to: string};
+/**
+ * What an owner's imports that are not undone say about one account they wrote to: the newest import end date, and
+ * the stretches between two of its statements whose balances do not follow on (`YYYY-MM-DD`, the earlier statement's
+ * closing day and the later one's opening day).
+ */
+export type AccountImportCoverage = {
+	bankAccountId: BankAccount['id'];
+	through: string | null;
+	gaps: Array<{from: string; to: string}>;
+};
 
 /**
  * What file import records about the rows it added (its import records, doubtful and never-sent rows), kept true by
@@ -68,11 +76,8 @@ export interface ImportedRowRecords {
 		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 	): Promise<StatementClosingBalance | null>;
-	/**
-	 * The date range of each import of the owner that is not undone, once per account it wrote to (`from` and `to` as
-	 * the import's `dateFrom` and `dateTo`). Imports that held no entries have none.
-	 */
-	findImportRanges(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportRange[]>;
+	/** Per account the owner's imports not undone wrote to, their newest end date and their statement gaps there. */
+	findImportCoverage(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportCoverage[]>;
 	/** The accounts with a closing balance recorded by an import under the owner's connection. */
 	findAccountsWithClosingBalances(
 		manager: EntityManager,
