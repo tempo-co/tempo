@@ -217,3 +217,24 @@ test.describe('the bank picker in Add data', () => {
     await expect(sheet).toBeHidden();
   });
 });
+
+test.describe('the bank picker for a browser whose region it does not list', () => {
+  test.use({
+    storageState: {cookies: [], origins: []},
+    serviceWorkers: 'block',
+    timezoneId: 'America/New_York',
+    locale: 'en-US',
+  });
+
+  test("opens at the country of the account's time zone", async ({page, baseURL}) => {
+    await page.clock.setFixedTime(TODAY);
+    // The mocked account's time zone is Europe/Amsterdam.
+    await routeMockedBankApp(page, baseURL);
+    await mockBankConnections(page, [MOCK_CONNECTION]);
+    await mockFileImport(page);
+    const sheet = await openPicker(page);
+
+    await expect(sheet.getByTestId('bank-import-country')).toContainText('Netherlands');
+    await expect(sheet.getByRole('list').getByRole('button').first()).toContainText(DUTCH[0].name);
+  });
+});

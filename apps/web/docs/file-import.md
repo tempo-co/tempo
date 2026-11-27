@@ -15,8 +15,8 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   bank's picker parts: the country row (flag, name, **Change** to a country step that lists the
   EEA, Switzerland and the United Kingdom with their listed banks' counts), a search that is never
   focused for the owner, and one scrolling list of 56px rows. The country is the browser's region
-  when listed, else the first by name, and it stays while the sheet closes and opens. The list
-  holds that country's banks from the shared bank list (`BANK_LIST` in `@tempo/contracts`), then
+  when listed, else the country of the account's time zone when listed, else the first by name,
+  and it stays while the sheet closes and opens. The list holds that country's banks from the shared bank list (`BANK_LIST` in `@tempo/contracts`), then
   the banks that serve several countries from one app ("Several countries" under the name), then
   Another bank under a hairline. A search matches names and countries across every country and
   always keeps Another bank. Whether a bank is verified shows nowhere in the list. Each row leads

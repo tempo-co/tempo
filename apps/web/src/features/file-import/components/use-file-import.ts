@@ -9,6 +9,7 @@ import type {
 import {type SetStateAction, useCallback, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {HttpError, NetworkError, SessionChangedError} from '@/utils/api';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
@@ -114,7 +115,9 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
   const [bankId, setBankIdState] = useState<PickedBankId>(null);
   const bankRef = useRef<PickedBankId>(null);
   // The picker's country: the likely one until the owner chooses, which stays while the sheet closes and opens.
-  const [pickerCountry, setPickerCountry] = useState(likelyPickerCountry);
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
+  const [chosenCountry, setPickerCountry] = useState<string | null>(null);
+  const pickerCountry = chosenCountry ?? likelyPickerCountry(currentAccount?.timeZone);
   const setBankId = useCallback((next: PickedBankId) => {
     bankRef.current = next;
     setBankIdState(next);

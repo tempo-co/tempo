@@ -72,9 +72,59 @@ export const PICKER_COUNTRY_OPTIONS = PICKER_COUNTRIES.map((code) => ({
   bankCount: BANK_LIST.filter((bank) => bank.country === code).length,
 })).sort((left, right) => left.label.localeCompare(right.label));
 
-/** The country the picker opens at: the browser's region when the picker lists it, else the first by name. */
-export function likelyPickerCountry() {
-  return browserRegion(isPickerCountry) ?? PICKER_COUNTRY_OPTIONS[0].code;
+/** The picker's countries by the IANA time zones that lie in them. */
+const TIME_ZONE_COUNTRIES: Record<string, (typeof PICKER_COUNTRIES)[number]> = {
+  'Europe/Vienna': 'AT',
+  'Europe/Brussels': 'BE',
+  'Europe/Sofia': 'BG',
+  'Europe/Zurich': 'CH',
+  'Asia/Nicosia': 'CY',
+  'Asia/Famagusta': 'CY',
+  'Europe/Nicosia': 'CY',
+  'Europe/Prague': 'CZ',
+  'Europe/Berlin': 'DE',
+  'Europe/Busingen': 'DE',
+  'Europe/Copenhagen': 'DK',
+  'Europe/Tallinn': 'EE',
+  'Europe/Madrid': 'ES',
+  'Africa/Ceuta': 'ES',
+  'Atlantic/Canary': 'ES',
+  'Europe/Helsinki': 'FI',
+  'Europe/Paris': 'FR',
+  'Europe/London': 'GB',
+  'Europe/Athens': 'GR',
+  'Europe/Zagreb': 'HR',
+  'Europe/Budapest': 'HU',
+  'Europe/Dublin': 'IE',
+  'Atlantic/Reykjavik': 'IS',
+  'Europe/Rome': 'IT',
+  'Europe/Vaduz': 'LI',
+  'Europe/Vilnius': 'LT',
+  'Europe/Luxembourg': 'LU',
+  'Europe/Riga': 'LV',
+  'Europe/Malta': 'MT',
+  'Europe/Amsterdam': 'NL',
+  'Europe/Oslo': 'NO',
+  'Europe/Warsaw': 'PL',
+  'Europe/Lisbon': 'PT',
+  'Atlantic/Azores': 'PT',
+  'Atlantic/Madeira': 'PT',
+  'Europe/Bucharest': 'RO',
+  'Europe/Stockholm': 'SE',
+  'Europe/Ljubljana': 'SI',
+  'Europe/Bratislava': 'SK',
+};
+
+/**
+ * The country the picker opens at: the browser's region when the picker lists it, else the country of the account's
+ * time zone when the picker lists it, else the first by name.
+ */
+export function likelyPickerCountry(timeZone: string | undefined): string {
+  return (
+    browserRegion(isPickerCountry) ??
+    (timeZone ? TIME_ZONE_COUNTRIES[timeZone] : undefined) ??
+    PICKER_COUNTRY_OPTIONS[0].code
+  );
 }
 
 /**
