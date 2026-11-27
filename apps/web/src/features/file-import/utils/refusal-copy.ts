@@ -28,7 +28,7 @@ const REFUSAL_COPY: Record<
   unsupported_format: {
     title: "Tempo can't read this file",
     description:
-      "It isn't a statement format Tempo knows yet. Supported files lists the formats and bank exports it reads.",
+      "It isn't a statement format Tempo knows yet. Supported files lists the formats it reads.",
   },
   // A table in no layout Tempo knows, while its columns cannot be worked out here.
   layout_unknown: {

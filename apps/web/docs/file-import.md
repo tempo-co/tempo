@@ -11,6 +11,32 @@ first step of each goes back to them. On Accounts, **Import a file** is the outl
 offers both, and each opens the sheet at its own first step; an account page's **Import a newer
 file** does too. No copy calls import a fallback or assumes a bank is connected.
 
+- **Bank picker.** Import a file starts at "Which bank is the file from?", built from Connect a
+  bank's picker parts: the country row (flag, name, **Change** to a country step that lists the
+  EEA, Switzerland and the United Kingdom with their listed banks' counts), a search that is never
+  focused for the owner, and one scrolling list of 56px rows. The country is the browser's region
+  when listed, else the country of the account's time zone when listed, else the first by name,
+  and it stays while the sheet closes and opens. The list holds that country's banks from the shared bank list (`BANK_LIST` in `@tempo/contracts`), then
+  the banks that serve several countries from one app ("Several countries" under the name), then
+  Another bank under a hairline. A search matches names and countries across every country and
+  always keeps Another bank. Whether a bank is verified shows nowhere in the list. Each row leads
+  with the logo Connect a bank shows for the connectable bank of the same name (ignoring case,
+  spacing and a note in brackets) in the bank's country, or its `logoCountry` for a bank of
+  several countries; a bank without one, and Another bank, get the plain bank glyph on the same
+  plate. Picking a bank leads to the file choice, which opens with the bank's logo and name,
+  **Change** back to the picker while no files are kept, its numbered export steps and the file to
+  pick. For an unverified bank one muted line says no file of it has been seen yet and that its
+  columns may need checking once. Another bank shows one generic text instead. The picked bank's
+  id goes as `bankId` with the upload and with working out the columns. A page drop skips the
+  picker and sends no bank.
+- **Tell us your bank.** A file Tempo cannot read (its columns could not be worked out, the owner
+  said the worked-out ones were not right, or this deployment cannot work them out) offers an
+  outline **Tell us your bank** in the footer. Its step asks for the bank name (the picked bank's
+  when it is listed), the country (a `Select` of the EEA, Switzerland and the United Kingdom, the
+  picked bank's or the browser's region preselected) and the files the bank lets you download
+  (an outline toggle group, several at once). Send stays disabled until all three are given. It
+  posts JSON to `POST /bank-imports/bank-requests` with no file, and the form says the file isn't
+  sent and no reply comes. The sent state says so again, with Done.
 - **Drop area.** On fine pointers: a 160px area with a dashed 1px rule at control radius, the
   `FileUp` leading tile, "Drop statement files here", a muted "or" and an outline **Choose files**.
   Drag-over turns the rule to the ring token and the field to the accent wash. Phones and touch

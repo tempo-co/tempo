@@ -1,4 +1,5 @@
 import type {Locator, Page} from '@playwright/test';
+import {BANK_LIST} from '@tempo/contracts';
 
 import {expect, test} from '../../fixtures';
 import {mockAccountsApi} from '../../utils/accounts';
@@ -26,7 +27,10 @@ async function returnFromBank(page: Page, result: 'cancelled' | 'error') {
   return sheet;
 }
 
-/** Inside the window and the sheet, nothing scrolls sideways, and every button is whole and in reach. */
+/**
+ * Inside the window and the sheet, nothing scrolls sideways, and every button is whole and in reach: a button in a
+ * scrolling body counts once it is scrolled into its view, and the body itself ends inside the window.
+ */
 async function expectInside(page: Page, sheet: Locator) {
   await expectNoHorizontalOverflow(page);
   const viewport = page.viewportSize()!;
@@ -34,16 +38,34 @@ async function expectInside(page: Page, sheet: Locator) {
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(Math.round(box.x + box.width)).toBeLessThanOrEqual(viewport.width);
   expect(await sheet.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  for (const button of await sheet.getByRole('button').all()) {
-    if (!(await button.isVisible())) continue;
-    const own = await boxOf(button);
-    expect(own.x).toBeGreaterThanOrEqual(box.x);
-    expect(own.x + own.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+  for (const scroller of await sheet.locator('[data-radix-scroll-area-viewport]').all()) {
+    const own = await boxOf(scroller);
     expect(own.y + own.height).toBeLessThanOrEqual(viewport.height + 0.5);
-    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
-      true,
-    );
   }
+  // Read in one pass: a picker step holds dozens of rows.
+  const outside = await sheet.evaluate(
+    (element, {sheetBox, height}) =>
+      [...element.querySelectorAll<HTMLElement>('button, [role="button"]')]
+        .filter((button) => button.checkVisibility() && button.getBoundingClientRect().width > 0)
+        .filter((button) => {
+          const scroller = button.closest('[data-radix-scroll-area-viewport]');
+          if (!scroller) return true;
+          const [own, view] = [button.getBoundingClientRect(), scroller.getBoundingClientRect()];
+          return own.bottom <= view.bottom + 0.5 && own.top >= view.top - 0.5;
+        })
+        .filter((button) => {
+          const own = button.getBoundingClientRect();
+          return (
+            own.x < sheetBox.x ||
+            own.right > sheetBox.x + sheetBox.width + 0.5 ||
+            own.bottom > height + 0.5 ||
+            button.scrollWidth > button.clientWidth + 1
+          );
+        })
+        .map((button) => button.textContent ?? button.getAttribute('aria-label')),
+    {sheetBox: box, height: viewport.height},
+  );
+  expect(outside).toEqual([]);
   // A title wraps, or on the hand-off truncates with the name in full below; either way it ends inside the sheet.
   const title = await boxOf(sheet.getByRole('heading').first());
   expect(title.x + title.width).toBeLessThanOrEqual(box.x + box.width);
@@ -95,10 +117,30 @@ test.describe('Add data sheet layout', () => {
           expect(Math.round(box.height)).toBe(height);
         }
         await sheet.getByRole('button', {name: /^Import a statement file/}).click();
+        await expect(
+          sheet.getByRole('heading', {name: 'Which bank is the file from?'}),
+        ).toBeVisible();
+        await expectInside(page, sheet);
+        // The bank with the longest name and the most steps, then the file choice under its steps.
+        const longest = [...BANK_LIST].sort(
+          (left, right) =>
+            right.name.length - left.name.length ||
+            right.exportSteps.steps.join('').length - left.exportSteps.steps.join('').length,
+        )[0];
+        await sheet.getByTestId('bank-import-country').click();
+        await expect(sheet.getByRole('heading', {name: 'Choose a country'})).toBeVisible();
+        await expectInside(page, sheet);
+        await sheet.getByRole('button', {name: 'Back'}).click();
+        // A search finds it in any country; its row's name is the bank's name followed by its country.
+        await sheet
+          .getByRole('searchbox', {name: 'Search banks in every country'})
+          .fill(longest.name.slice(0, 12));
+        await sheet.getByRole('button', {name: longest.name}).click();
         await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
         await expectInside(page, sheet);
 
         // The hand-off to the long-named bank.
+        await sheet.getByRole('button', {name: 'Back to the banks'}).click();
         await sheet.getByRole('button', {name: 'Back to Add data'}).click();
         await sheet.getByRole('button', {name: /^Connect a bank/}).click();
         await sheet.getByRole('button', {name: LONG_BANK.name, exact: true}).click();

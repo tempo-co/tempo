@@ -8,13 +8,26 @@ import {StepFrame} from '@/components/shared/step-frame';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
-import {ScrollArea} from '@/components/ui/scroll-area';
 import {Skeleton} from '@/components/ui/skeleton';
 import {cn} from '@/utils/cn';
+import {browserRegion, countryName} from '@/utils/countries';
+import {matchesSearch} from '@/utils/text-search';
 
 import {bankConnectionsQueryOptions} from '../api/use-get-all-bank-connections';
 import {supportedBanksQueryOptions, useGetSupportedBanks} from '../api/use-get-supported-banks';
 import {BankWordmark} from './bank-wordmark';
+import {
+  COUNTRY_SHAPE,
+  COUNTRY_TILE,
+  CountryButton,
+  type CountryOption,
+  CountryStep,
+  List,
+  ROW,
+  ROW_SHAPE,
+  SearchField,
+  countOf,
+} from './picker-parts';
 
 /** A bank as the hand-off to it remembers it, enough to try it again. */
 export type ConnectingBank = Pick<BankConnectionAspsp, 'name' | 'country'>;
@@ -26,19 +39,6 @@ export type ConnectStep =
   | {kind: 'confirm'; bank: BankConnectionAspsp}
   /** Back from the bank without a connection; `bank` is the one left for, when this tab remembers it. */
   | {kind: 'returned'; result: 'cancelled' | 'error'; bank: ConnectingBank | null};
-
-type CountryOption = {code: string; label: string; bankCount: number};
-
-/** Shared row shape: 56px, full width. */
-const ROW_SHAPE =
-  'grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-2 text-left';
-/** A list row whose whole width is the target. */
-const ROW = cn(
-  ROW_SHAPE,
-  'hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
-);
-const COUNTRY_SHAPE =
-  'mb-3 flex min-h-11 w-full items-center gap-3 rounded-md border px-3 text-left text-body';
 
 /**
  * Connecting a bank, one step at a time in the Add data sheet: pick a bank in the likely country (changing it is a
@@ -282,22 +282,15 @@ function BankStep({
   onSelect: (bank: BankConnectionAspsp) => void;
 }) {
   const [query, setQuery] = useState('');
-  const shown = banks.filter((bank) => matches(bank.name, query));
+  const shown = banks.filter((bank) => matchesSearch(bank.name, query));
   return (
     <>
-      <button
-        type='button'
+      <CountryButton
+        code={country.code}
+        label={country.label}
         onClick={onChangeCountry}
-        data-testid='bank-connection-country'
-        className={cn(
-          COUNTRY_SHAPE,
-          'hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-        )}
-      >
-        <CountryTile code={country.code} />
-        <span className='min-w-0 flex-1 truncate'>{country.label}</span>
-        <span className='text-primary'>Change</span>
-      </button>
+        testId='bank-connection-country'
+      />
       <SearchField
         value={query}
         onChange={(value) => {
@@ -335,7 +328,7 @@ function BankStepSkeleton() {
         data-testid='bank-step-skeleton'
       >
         <div className={COUNTRY_SHAPE}>
-          <Skeleton className={TILE} />
+          <Skeleton className={COUNTRY_TILE} />
           <Skeleton className='h-4 w-24' />
           <span className='ml-auto text-muted-foreground'>Change</span>
         </div>
@@ -356,47 +349,6 @@ function BankStepSkeleton() {
         </div>
       </div>
     </div>
-  );
-}
-
-function CountryStep({
-  countries,
-  selected,
-  onSelect,
-}: {
-  countries: CountryOption[];
-  selected: string;
-  onSelect: (code: string) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const shown = countries.filter((country) => matches(`${country.label} ${country.code}`, query));
-  return (
-    <>
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        label='Search countries'
-        placeholder={`Search ${countOf(countries.length, 'country', 'countries')}`}
-      />
-      <List empty={shown.length === 0 ? `No country called “${query}”` : null}>
-        {shown.map((country) => (
-          <li key={country.code}>
-            <button
-              type='button'
-              className={cn(ROW, country.code === selected && 'bg-accent/60')}
-              aria-current={country.code === selected || undefined}
-              onClick={() => onSelect(country.code)}
-            >
-              <CountryTile code={country.code} />
-              <span className='min-w-0 truncate text-body'>{country.label}</span>
-              <span className='numeric text-body-small text-muted-foreground'>
-                {countOf(country.bankCount, 'bank', 'banks')}
-              </span>
-            </button>
-          </li>
-        ))}
-      </List>
-    </>
   );
 }
 
@@ -438,141 +390,22 @@ function ConfirmStep({
   );
 }
 
-const countOf = (count: number, one: string, many: string) =>
-  `${count} ${count === 1 ? one : many}`;
-
-function SearchField({
-  value,
-  onChange,
-  label,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-  placeholder: string;
-}) {
-  // Never focused for the user: opening the sheet or changing step leaves the field alone, so no ring shows and
-  // phones keep the keyboard closed until it is tapped. Typing starts with a tap, or Tab from the header.
-  return (
-    <label className='relative mb-2 block'>
-      <span className='sr-only'>{label}</span>
-      <Search
-        aria-hidden='true'
-        className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground'
-      />
-      <Input
-        type='search'
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        autoComplete='off'
-        enterKeyHint='search'
-        className='h-11 pl-9'
-      />
-    </label>
-  );
-}
-
-function List({children, empty}: {children: React.ReactNode; empty: string | null}) {
-  return (
-    <ScrollArea type='auto' className='-mx-2 min-h-0 flex-1'>
-      {empty ? (
-        <p className='px-4 py-8 text-center text-body-small text-muted-foreground'>{empty}</p>
-      ) : (
-        // Clear of the scrollbar on the right, so it never touches a row.
-        <ul className='grid pr-5 pl-2'>{children}</ul>
-      )}
-    </ScrollArea>
-  );
-}
-
-// Every flat 4:3 flag in flag-icons (MIT), by lowercase country code, so any country the provider adds gets its
-// flag and none depends on the OS's emoji font. Only the URLs are bundled: a flag downloads when a tile shows it,
-// never inlined (`no-inline`), and the offline shell leaves these files out.
-const FLAGS = import.meta.glob<string>('./*.svg', {
-  base: '/node_modules/flag-icons/flags/4x3/',
-  eager: true,
-  query: '?url&no-inline',
-  import: 'default',
-});
-
-const TILE = 'inline-flex aspect-4/3 w-7 shrink-0 rounded-sm';
-
-/**
- * A country's flag: flat, 28×21, the small corner radius, and a hairline edge so white and pale flags keep their
- * outline on either theme. A code without a flag, or a flag that fails to load, shows the code in the same box.
- */
-function CountryTile({code}: {code: string}) {
-  const src = FLAGS[`./${code.toLowerCase()}.svg`];
-  const [failedSrc, setFailedSrc] = useState<string>();
-  if (!src || failedSrc === src)
-    return (
-      <span
-        aria-hidden='true'
-        className={cn(
-          TILE,
-          'items-center justify-center border border-border text-caption font-medium text-muted-foreground',
-        )}
-      >
-        {code.toUpperCase()}
-      </span>
-    );
-  return (
-    <span
-      aria-hidden='true'
-      className={cn(
-        TILE,
-        'relative overflow-hidden after:absolute after:inset-0 after:rounded-sm after:ring-1 after:ring-foreground/15 after:ring-inset',
-      )}
-    >
-      <img src={src} alt='' className='size-full object-cover' onError={() => setFailedSrc(src)} />
-    </span>
-  );
-}
-
 /** Where the owner most likely banks: the country of most existing connections, else the browser's region. */
 function likelyCountry(countries: CountryOption[], connected: string[]) {
   const counts = new Map<string, number>();
   for (const code of connected) counts.set(code, (counts.get(code) ?? 0) + 1);
   const fromConnections = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const fromBrowser = navigator.languages
-    .map((tag) => {
-      try {
-        return new Intl.Locale(tag).maximize().region;
-      } catch {
-        return undefined;
-      }
-    })
-    .find((region) => region && countries.some((country) => country.code === region));
+  const fromBrowser = browserRegion((region) =>
+    countries.some((country) => country.code === region),
+  );
   const code = fromConnections ?? fromBrowser;
   return countries.find((country) => country.code === code) ?? countries[0];
-}
-
-function matches(text: string, query: string) {
-  const fold = (value: string) =>
-    value
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .toLowerCase();
-  return fold(text).includes(fold(query.trim()));
 }
 
 function getCountryOptions(banks: BankConnectionAspsp[]): CountryOption[] {
   const counts = new Map<string, number>();
   for (const bank of banks) counts.set(bank.country, (counts.get(bank.country) ?? 0) + 1);
   return [...counts]
-    .map(([code, bankCount]) => ({code, label: formatCountry(code), bankCount}))
+    .map(([code, bankCount]) => ({code, label: countryName(code), bankCount}))
     .sort((left, right) => left.label.localeCompare(right.label));
-}
-
-let regionNames: Intl.DisplayNames | undefined;
-
-function formatCountry(country: string) {
-  try {
-    regionNames ??= new Intl.DisplayNames(undefined, {type: 'region'});
-    return regionNames.of(country) ?? country;
-  } catch {
-    return country;
-  }
 }

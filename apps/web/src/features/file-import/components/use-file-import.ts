@@ -9,12 +9,14 @@ import type {
 import {type SetStateAction, useCallback, useRef, useState} from 'react';
 import {toast} from 'sonner';
 
+import {useCurrentAccount} from '@/hooks/use-current-account';
 import {HttpError, NetworkError, SessionChangedError} from '@/utils/api';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
 import {useImportFiles} from '../api/use-import-files';
 import {useConfirmLayout, useProposeLayout, useRejectLayout} from '../api/use-layout-proposals';
 import {summaryTitle} from '../utils/import-format';
+import {type PickedBankId, likelyPickerCountry} from '../utils/picked-bank';
 import {
   type ImportFailure,
   LAYOUT_DISCARDED_COPY,
@@ -27,6 +29,10 @@ type Refused = Extract<ImportFailure, {kind: 'refused'}>;
 
 /** Where the import dialog is. The files stay in memory until a drop is imported or other files are chosen. */
 export type ImportStep =
+  /** Which bank the file is from, before choosing it. */
+  | {kind: 'bank'}
+  /** Another country for the bank picker. */
+  | {kind: 'bankCountry'}
   | {kind: 'choose'; files: File[]; failure: ImportFailure | null}
   | {kind: 'importing'; files: File[]}
   | {
@@ -48,8 +54,14 @@ export type ImportStep =
   | {kind: 'summary'; summary: BankImportSummary}
   /** `count` is how many rows there were to check when the review opened; answered rows stay listed. */
   | {kind: 'review'; summary: BankImportSummary; count: number}
-  | {kind: 'undo'; summary: BankImportSummary};
+  | {kind: 'undo'; summary: BankImportSummary}
+  /** "Tell us your bank" after a file Tempo cannot read; `back` is the refusal it came from. */
+  | {kind: 'tell'; back: Extract<ImportStep, {kind: 'choose'}>}
+  | {kind: 'told'};
 
+/** A fresh start: the bank picker. */
+const START: ImportStep = {kind: 'bank'};
+/** Choosing files again, for the bank already picked. */
 const FRESH: ImportStep = {kind: 'choose', files: [], failure: null};
 
 /** Steps a drop on the page does not interrupt. */
@@ -91,14 +103,25 @@ function toFailure(
  */
 export function useFileImport({onShow}: {onShow?: () => void} = {}) {
   const [open, setOpenState] = useState(false);
-  const [step, setStepState] = useState<ImportStep>(FRESH);
+  const [step, setStepState] = useState<ImportStep>(START);
   // The step as last set, before React renders it, so a drop sees an import that has only just started.
-  const stepRef = useRef<ImportStep>(FRESH);
+  const stepRef = useRef<ImportStep>(START);
   const setStep = useCallback((next: SetStateAction<ImportStep>) => {
     stepRef.current = typeof next === 'function' ? next(stepRef.current) : next;
     setStepState(stepRef.current);
   }, []);
   const openRef = useRef(false);
+  // The picked bank goes with every upload and proposal of the drop; the ref is what a request in flight reads.
+  const [bankId, setBankIdState] = useState<PickedBankId>(null);
+  const bankRef = useRef<PickedBankId>(null);
+  // The picker's country: the likely one until the owner chooses, which stays while the sheet closes and opens.
+  const {currentAccount} = useCurrentAccount({skipFetch: true});
+  const [chosenCountry, setPickerCountry] = useState<string | null>(null);
+  const pickerCountry = chosenCountry ?? likelyPickerCountry(currentAccount?.timeZone);
+  const setBankId = useCallback((next: PickedBankId) => {
+    bankRef.current = next;
+    setBankIdState(next);
+  }, []);
   const {importFiles} = useImportFiles();
   const {proposeLayout} = useProposeLayout();
   const {confirmLayout} = useConfirmLayout();
@@ -161,7 +184,7 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
       }
       setStep({kind: 'importing', files});
       try {
-        const summary = await importFiles({files, accountChoices});
+        const summary = await importFiles({files, accountChoices, bankId: bankRef.current});
         setStep({kind: 'summary', summary});
         if (!openRef.current)
           toast.success(summaryTitle(summary), {
@@ -170,7 +193,10 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
           });
       } catch (error) {
         // A reply for a session this tab has left belongs to no one here.
-        if (error instanceof SessionChangedError) return setStep(FRESH);
+        if (error instanceof SessionChangedError) {
+          setBankId(null);
+          return setStep(START);
+        }
         const failure = toFailure(error, files, {mapper});
         if (failure.kind === 'question') {
           const question: ImportStep = {...failure, files};
@@ -185,7 +211,7 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
         showFailure(failure);
       }
     },
-    [importFiles, mapper, setStep, show],
+    [importFiles, mapper, setBankId, setStep, show],
   );
 
   /** Works out the columns of the refused file `failure` offers, then previews them. */
@@ -197,7 +223,11 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
       proposing.current = controller;
       setStep({kind: 'proposing', files, file, failure});
       try {
-        const proposal = await proposeLayout({file: files[file - 1], signal: controller.signal});
+        const proposal = await proposeLayout({
+          file: files[file - 1],
+          bankId: bankRef.current,
+          signal: controller.signal,
+        });
         if (controller.signal.aborted) return;
         setStep({kind: 'preview', files, file, failure, proposal});
       } catch (error) {
@@ -267,20 +297,34 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
     [rejectLayout, setStep],
   );
 
-  /** The Import a file button: a fresh start, unless the import is unsettled. */
-  const openNew = useCallback(() => {
-    setStep((current) => (isUnsettled(current) ? current : FRESH));
-    setOpen(true);
-  }, [setOpen, setStep]);
+  /** The bank the file is from: its export steps and the file choice follow. */
+  const pickBank = useCallback(
+    (id: string) => {
+      setBankId(id);
+      setStep(FRESH);
+    },
+    [setBankId, setStep],
+  );
 
-  /** Files dropped on the page start importing at once, unless an import is still running. */
+  /** The Import a file button: a fresh start at the bank picker, unless the import is unsettled. */
+  const openNew = useCallback(() => {
+    if (!isUnsettled(stepRef.current)) {
+      setBankId(null);
+      setStep(START);
+    }
+    setOpen(true);
+  }, [setBankId, setOpen, setStep]);
+
+  /** Files dropped on the page start importing at once, unless an import is still running; no bank was picked. */
   const importDropped = useCallback(
     (files: File[]) => {
       onShow?.();
       setOpen(true);
-      if (!BUSY.includes(stepRef.current.kind)) void run(files);
+      if (BUSY.includes(stepRef.current.kind)) return;
+      setBankId(null);
+      void run(files);
     },
-    [onShow, run, setOpen],
+    [onShow, run, setBankId, setOpen],
   );
 
   return {
@@ -288,6 +332,10 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
     setOpen,
     step,
     setStep,
+    bankId,
+    pickBank,
+    pickerCountry,
+    setPickerCountry,
     show,
     run,
     openNew,

@@ -7,6 +7,7 @@ import type {
 
 import {api} from '@/utils/api';
 
+import type {PickedBankId} from '../utils/picked-bank';
 import {bankImportQueryKeys} from './use-bank-imports';
 
 /**
@@ -15,9 +16,19 @@ import {bankImportQueryKeys} from './use-bank-imports';
  */
 export function useProposeLayout() {
   const {mutateAsync} = useMutation({
-    mutationFn: ({file, signal}: {file: File; signal: AbortSignal}) => {
+    mutationFn: ({
+      file,
+      bankId,
+      signal,
+    }: {
+      file: File;
+      /** The bank the owner picked for the drop (`BankImportPickedBank`), when they picked one. */
+      bankId: PickedBankId;
+      signal: AbortSignal;
+    }) => {
       const form = new FormData();
       form.append('files', file);
+      if (bankId) form.append('bankId', bankId);
       return api.post<BankImportLayoutProposal>('/bank-imports/layout-proposals', form, {signal});
     },
   });
