@@ -10,7 +10,7 @@ set -Eeuo pipefail
 OPS_DIR=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
 ROOT=$(mktemp -d "${TMPDIR:-/tmp}/wisp-test-sync-pins.XXXXXX")
 trap 'rm -rf -- "$ROOT"' EXIT
-SOURCE=https://raw.example.test/tempo-co/tempo/0123456789abcdef0123456789abcdef01234567
+SOURCE=https://raw.example.test/wispmoney/wisp/0123456789abcdef0123456789abcdef01234567
 
 failures=0
 SB=''

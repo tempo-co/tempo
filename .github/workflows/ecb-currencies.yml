@@ -3,7 +3,7 @@ name: ECB currencies
 # Monthly comparison of the currencies the ECB publishes euro reference rates for with
 # packages/contracts/src/ecb-currencies.ts (see .github/scripts/ecb-currencies.mjs). When they differ, it opens a
 # pull request with the new table, or updates the one already open. Not part of CI: an ECB outage fails only this run.
-# It pushes and opens the PR as the tempo-co ECB currencies GitHub App (repository variable ECB_APP_CLIENT_ID, secret
+# It pushes and opens the PR as the Wisp ECB currencies GitHub App (repository variable ECB_APP_CLIENT_ID, secret
 # ECB_APP_PRIVATE_KEY), because changes made with the workflow's own token start no CI.
 on:
     schedule:

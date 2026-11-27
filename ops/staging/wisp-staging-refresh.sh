@@ -18,7 +18,7 @@ FEED_ENV=$CONFIG_DIR/feed.env
 FEED_SSH_DIR=$CONFIG_DIR/feed-ssh
 FEED_GNUPG=$CONFIG_DIR/feed-gnupg
 # Always the staging daemon, whatever the caller's environment points at.
-unset DOCKER_CONTEXT TEMPO_API_IMAGE TEMPO_WEB_IMAGE STAGING_DB_NAME STAGING_DB_USERNAME STAGING_DB_PASSWORD
+unset DOCKER_CONTEXT WISP_API_IMAGE WISP_WEB_IMAGE STAGING_DB_NAME STAGING_DB_USERNAME STAGING_DB_PASSWORD
 export DOCKER_HOST=unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wisp-staging/docker.sock
 export DOCKER_CONFIG=$CONFIG_DIR/docker-config
 TEMP_DB=wisp_staging_refresh

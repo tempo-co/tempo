@@ -80,7 +80,7 @@ services:
         logging: *default-logging
 
     api:
-        image: ${TEMPO_API_IMAGE:?TEMPO_API_IMAGE must be set to an immutable digest}
+        image: ${WISP_API_IMAGE:?WISP_API_IMAGE must be set to an immutable digest}
         restart: unless-stopped
         environment:
             NODE_ENV: production
@@ -152,7 +152,7 @@ services:
         logging: *default-logging
 
     web:
-        image: ${TEMPO_WEB_IMAGE:?TEMPO_WEB_IMAGE must be set to an immutable digest}
+        image: ${WISP_WEB_IMAGE:?WISP_WEB_IMAGE must be set to an immutable digest}
         restart: unless-stopped
         ports:
             - '127.0.0.1:8119:8080'

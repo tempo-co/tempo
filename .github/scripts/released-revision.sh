@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Print the commit (org.opencontainers.image.revision label) a public GHCR image tag was built from.
 #
-#   released-revision.sh tempo-co/api main
+#   released-revision.sh wispmoney/api main
 #
 # Exits 3 when the tag does not exist.
 set -euo pipefail

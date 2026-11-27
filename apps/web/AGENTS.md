@@ -19,7 +19,7 @@ Paths are relative to `apps/web` unless they start at the repository root.
 - `.env.*` is ignored, so a fresh worktree has no `VITE_*` values. Pass them inline for the process (`docs/env-boundaries.md`); do not create or edit env files for a run.
 - Leave `NODE_ENV` unset for builds and Playwright. Gate dev-only code on `import.meta.env.MODE === 'development'` or an explicit `VITE_*` flag, never on `import.meta.env.DEV`.
 - Playwright reuses any server already on `VITE_APP_URL` (`reuseExistingServer`). Another worktree's preview on port 5173 means you are testing the wrong build; check the listener first.
-- A web change that needs an API change is tested against it only in the same PR, or locally with `TEMPO_API_E2E_IMAGE` pointing at an image built from `apps/api`. Never weaken assertions to match an older API.
+- A web change that needs an API change is tested against it only in the same PR, or locally with `WISP_API_E2E_IMAGE` pointing at an image built from `apps/api`. Never weaken assertions to match an older API.
 - `scripts/wisp-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
 
 ## Code conventions not enforced by tooling

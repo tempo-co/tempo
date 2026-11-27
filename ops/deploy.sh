@@ -48,7 +48,7 @@ source "$SCRIPT_DIR/targets/$TARGET.env"
 WAIT_TIMEOUT=${WAIT_TIMEOUT:-120}
 
 export DOCKER_HOST DOCKER_CONFIG
-unset DOCKER_CONTEXT TEMPO_API_IMAGE TEMPO_WEB_IMAGE
+unset DOCKER_CONTEXT WISP_API_IMAGE WISP_WEB_IMAGE
 
 mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/deploy.lock"
@@ -63,7 +63,7 @@ compose() {
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --env-file "$IMAGES_FILE" "$@"
 }
 
-repository() { echo "ghcr.io/tempo-co/$1"; }
+repository() { echo "ghcr.io/wispmoney/$1"; }
 
 # Retry a registry pull so a short DNS or network blip does not fail the whole run.
 retry_pull() {
@@ -79,8 +79,7 @@ retry_pull() {
 running_image() {
     local ref
     ref=$(docker inspect --format '{{.Config.Image}}' "$COMPOSE_PROJECT-$1-1") || die "no running $1 container"
-    # Also accepts the pre-rename ghcr.io/tempo-co/tempo-<component> images.
-    [[ $ref == ghcr.io/tempo-co/?(tempo-)"$1"@sha256:* ]] || die "running $1 image is not a pinned digest: $ref"
+    [[ $ref == ghcr.io/wispmoney/"$1"@sha256:* ]] || die "running $1 image is not a pinned digest: $ref"
     echo "$ref"
 }
 
@@ -102,8 +101,8 @@ write_images() {
     local tmp
     tmp=$(mktemp "$IMAGES_FILE.XXXXXX") || return 1
     if {
-        if [[ -f $IMAGES_FILE ]]; then grep -vE '^TEMPO_(API|WEB)_IMAGE=' "$IMAGES_FILE" || (($? == 1)); fi
-        (($# == 0)) || printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$1" "$2"
+        if [[ -f $IMAGES_FILE ]]; then grep -vE '^WISP_(API|WEB)_IMAGE=' "$IMAGES_FILE" || (($? == 1)); fi
+        (($# == 0)) || printf 'WISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s\n' "$1" "$2"
     } >"$tmp" && chmod 600 "$tmp" && mv -- "$tmp" "$IMAGES_FILE"; then
         return 0
     fi
@@ -170,7 +169,7 @@ update_pinned() {
 
 # A new host has no deployed images yet: start the whole stack from the tags. There is nothing
 # to back up or roll back to; a failed start removes the image lines, so the next run starts over.
-if ! grep -qs '^TEMPO_API_IMAGE=' "$IMAGES_FILE"; then
+if ! grep -qs '^WISP_API_IMAGE=' "$IMAGES_FILE"; then
     first_api=$(resolve api "${REQUESTED[api]:-$DEFAULT_TAG}")
     first_web=$(resolve web "${REQUESTED[web]:-$DEFAULT_TAG}")
     log "first start: API $(revision "$first_api") (${first_api#*@}), web $(revision "$first_web") (${first_web#*@})"
@@ -231,7 +230,7 @@ rm -f -- "$FAILED_FILE"
 log 'deployed and healthy'
 
 # Remove this repository's images that no container (running or stopped) uses.
-docker image prune --all --force --filter 'label=org.opencontainers.image.source=https://github.com/tempo-co/tempo' >/dev/null || true
+docker image prune --all --force --filter 'label=org.opencontainers.image.source=https://github.com/wispmoney/wisp' >/dev/null || true
 
 if [[ -n ${AFTER_DEPLOY:-} ]]; then
     log "running post-deploy step: $AFTER_DEPLOY"

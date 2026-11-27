@@ -110,7 +110,7 @@ jobs:
             - name: Check deploy scripts and Compose files
               run: |
                   shellcheck -x ops/deploy.sh ops/install.sh ops/backup.sh ops/targets/*.env ops/staging/wisp-staging-refresh.sh ops/ghcr-retention.sh ops/sync-pins.sh ops/wisp-api-egress.sh ops/restore-drill.sh ops/failure-email.sh ops/wisp-staging-copy.sh ops/wisp-staging-copy-serve.sh ops/wizard.sh ops/release-trigger.sh ops/test-deploy.sh ops/test-sync-pins.sh ops/test-backup.sh ops/test-release-trigger.sh .github/scripts/move-tag.sh .github/scripts/move-tag.test.sh .github/scripts/released-revision.sh
-                  export TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d WISP_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
+                  export WISP_API_IMAGE=api WISP_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d WISP_PRODUCTION_ENV_FILE=/dev/null ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null
                   docker compose -f ops/production.compose.yml config -q
                   docker run --rm -v "$PWD/ops/Caddyfile:/etc/caddy/Caddyfile:ro" "$(docker compose -f ops/production.compose.yml config --images caddy)" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
                   docker compose -f ops/staging/docker-compose.yml --env-file ops/staging/staging.env.example config -q
@@ -494,11 +494,11 @@ jobs:
                           ref=$API_IMAGE
                           source='this run'
                       else
-                          ref=ghcr.io/tempo-co/api:main
+                          ref=ghcr.io/wispmoney/api:main
                           source='main'
                       fi
                       docker pull "$ref"
-                      image=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -m1 '^ghcr.io/tempo-co/api@sha256:')
+                      image=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" | grep -m1 '^ghcr.io/wispmoney/api@sha256:')
                   fi
                   revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
                   echo "image=$image" >> "$GITHUB_OUTPUT"
@@ -507,7 +507,7 @@ jobs:
             # Start the services now and wait for them later, so they boot while dependencies install.
             - name: Start Docker E2E environment
               env:
-                  TEMPO_API_E2E_IMAGE: ${{ steps.api-image.outputs.image }}
+                  WISP_API_E2E_IMAGE: ${{ steps.api-image.outputs.image }}
               run: docker compose -f docker-compose.e2e.yml up -d
 
             - name: Setup Node.js 26.x
@@ -533,7 +533,7 @@ jobs:
 
             - name: Wait for and seed Docker E2E environment
               env:
-                  TEMPO_API_E2E_IMAGE: ${{ steps.api-image.outputs.image }}
+                  WISP_API_E2E_IMAGE: ${{ steps.api-image.outputs.image }}
               run: |
                   docker compose -f docker-compose.e2e.yml up -d --wait
                   npm run db:seed:e2e

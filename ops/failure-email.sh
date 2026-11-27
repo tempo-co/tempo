@@ -15,7 +15,7 @@ source "$SCRIPT_DIR/targets/production.env"
 export DOCKER_CONFIG
 
 # The image variables are required by the Compose file but play no part in the API's environment.
-API_CONFIG=$(TEMPO_API_IMAGE=unused TEMPO_WEB_IMAGE=unused \
+API_CONFIG=$(WISP_API_IMAGE=unused WISP_WEB_IMAGE=unused \
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config --format json api)
 UNIT_LOG=$(journalctl -u "$UNIT" -n 40 --no-pager -o short-iso 2>&1) || UNIT_LOG="(no journal: $UNIT_LOG)"
 export API_CONFIG UNIT_LOG

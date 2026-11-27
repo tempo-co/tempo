@@ -14,7 +14,7 @@ umask 022
 # The PIN pattern is the security boundary; keep its character ranges ASCII-only.
 export LC_ALL=C
 
-REPO_URL=https://github.com/tempo-co/tempo
+REPO_URL=https://github.com/wispmoney/wisp
 # Fetched by commit, not branch: the raw CDN caches branch files and could serve an older pin.
 SOURCE=${SYNC_PINS_SOURCE:-}
 STATE=${STATE_DIRECTORY:-/var/lib/wisp-sync-pins}
@@ -81,7 +81,7 @@ fetch() {
         local sha
         sha=$(timeout 20 git ls-remote "$REPO_URL" refs/heads/main | cut -f1) || return 1
         [[ $sha =~ ^[0-9a-f]{40}$ ]] || return 1
-        SOURCE=https://raw.githubusercontent.com/tempo-co/tempo/$sha
+        SOURCE=https://raw.githubusercontent.com/wispmoney/wisp/$sha
     fi
     local path
     for path in "${!FILES[@]}"; do

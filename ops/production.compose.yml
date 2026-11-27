@@ -55,7 +55,7 @@ services:
       retries: 12
 
   api:
-    image: ${TEMPO_API_IMAGE:?TEMPO_API_IMAGE must be set}
+    image: ${WISP_API_IMAGE:?WISP_API_IMAGE must be set}
     restart: unless-stopped
     # A uid of its own, set here by number so an image cannot choose root or the host user's uid (1000).
     # The banking key grants it access; see "Container privileges" in ops/README.md.
@@ -98,7 +98,7 @@ services:
       start_period: 15s
 
   web:
-    image: ${TEMPO_WEB_IMAGE:?TEMPO_WEB_IMAGE must be set}
+    image: ${WISP_WEB_IMAGE:?WISP_WEB_IMAGE must be set}
     restart: unless-stopped
     <<: *no-new-privileges
     cap_drop: [ALL]

@@ -300,7 +300,7 @@ expect_client() {
 }
 
 # Production's HTTPS proxy is Caddy, at its fixed address on web's proxy network.
-trusted_proxy=$(TEMPO_API_IMAGE=api TEMPO_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d \
+trusted_proxy=$(WISP_API_IMAGE=api WISP_WEB_IMAGE=web DB_USERNAME=u DB_PASSWORD=p DB_NAME=d \
     ENABLE_BANKING_PRIVATE_KEY_HOST_PATH=/dev/null WISP_PRODUCTION_ENV_FILE=/dev/null docker compose -f "$repo_root/../../ops/production.compose.yml" config --format json |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["services"]["caddy"]["networks"]["proxy"]["ipv4_address"])')
 

@@ -49,7 +49,7 @@ When the server is lost, a new one is rebuilt from the newest snapshot, losing a
 4. Start PostgreSQL alone, create the read-only role (Read-only database access in `ops/README.md`; the dump's grants name it), and restore the newest snapshot into it:
 
    ```bash
-   compose() { TEMPO_API_IMAGE=unused TEMPO_WEB_IMAGE=unused docker compose -p wisp-production -f /etc/wisp/compose/production.compose.yml --env-file /etc/wisp/production.env "$@"; }
+   compose() { WISP_API_IMAGE=unused WISP_WEB_IMAGE=unused docker compose -p wisp-production -f /etc/wisp/compose/production.compose.yml --env-file /etc/wisp/production.env "$@"; }
    compose up -d --wait postgres
    docker exec -i wisp-production-postgres-1 psql -U wisp -d wisp -v ON_ERROR_STOP=1 <<'SQL'
    CREATE ROLE wisp_readonly LOGIN;
@@ -71,9 +71,9 @@ When the server is lost, a new one is rebuilt from the newest snapshot, losing a
 
    ```bash
    sudo mkdir -p /var/lib/wisp-deploy && sudo chown "$USER" /var/lib/wisp-deploy
-   docker pull ghcr.io/tempo-co/api:release && docker pull ghcr.io/tempo-co/web:release
-   printf 'TEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$(docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tempo-co/api:release)" \
-       "$(docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/tempo-co/web:release)" >/var/lib/wisp-deploy/deployed.env
+   docker pull ghcr.io/wispmoney/api:release && docker pull ghcr.io/wispmoney/web:release
+   printf 'WISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s\n' "$(docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/wispmoney/api:release)" \
+       "$(docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/wispmoney/web:release)" >/var/lib/wisp-deploy/deployed.env
    docker compose -p wisp-production -f /etc/wisp/compose/production.compose.yml --env-file /etc/wisp/production.env --env-file /var/lib/wisp-deploy/deployed.env up -d --wait
    sudo systemctl enable --now wisp-api-egress wisp-deploy-production.timer wisp-release-trigger.timer wisp-backup.timer wisp-restore-drill.timer
    ```

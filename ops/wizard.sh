@@ -496,7 +496,7 @@ ENV_FILE=$SERVER_RELEASE_ENV
 say "Each night at 02:23 UTC the server starts the Release workflow on GitHub; it needs a token that can only start workflows."
 if [[ -z $(_existing RELEASE_TRIGGER_TOKEN || true) ]]; then
   open_url "https://github.com/settings/personal-access-tokens/new"
-  step "Fine-grained token: owner tempo-co, only the tempo repository, permission Actions: read and write, nothing else, expiry one year."
+  step "Fine-grained token: owner wispmoney, only the wisp repository, permission Actions: read and write, nothing else, expiry one year."
   ask_secret RELEASE_TRIGGER_TOKEN "The token:"
   [[ $RELEASE_TRIGGER_TOKEN =~ ^[A-Za-z0-9_]+$ ]] || fail_stop "that does not look like a GitHub token"
   write_env RELEASE_TRIGGER_TOKEN "$RELEASE_TRIGGER_TOKEN"
@@ -514,7 +514,7 @@ root "$REPO/ops/install.sh" production
 pause
 
 stage "First deploy"
-docker manifest inspect ghcr.io/tempo-co/api:release >/dev/null 2>&1 ||
+docker manifest inspect ghcr.io/wispmoney/api:release >/dev/null 2>&1 ||
   fail_stop "no :release image yet: run the Release workflow once (gh workflow run release.yml --ref main), then run setup again"
 root systemctl enable --now wisp-deploy-production.timer wisp-release-trigger.timer
 say "The first deploy pulls the images and starts the stack (a few minutes):"
@@ -648,7 +648,7 @@ if [[ -n $(_existing WEB_PUSH_VAPID_PRIVATE_KEY || true) ]]; then
 else
   say "A new VAPID key pair for $APP_ORIGIN, made with the API image's web-push and never shown."
   note "Devices allowed notifications with the old key pair; each turns them on again."
-  if pair=$(docker run --rm --network none --entrypoint node ghcr.io/tempo-co/api:release \
+  if pair=$(docker run --rm --network none --entrypoint node ghcr.io/wispmoney/api:release \
     -e 'const k = require("web-push").generateVAPIDKeys(); console.log(k.publicKey + " " + k.privateKey)' 2>/dev/null) &&
     read -r vapid_public vapid_private <<<"$pair" && [[ -n ${vapid_private:-} ]]; then
     write_env WEB_PUSH_VAPID_PUBLIC_KEY "$vapid_public"
