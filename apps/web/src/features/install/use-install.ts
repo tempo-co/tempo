@@ -33,16 +33,14 @@ function readDismissed() {
   }
 }
 
-// Read once per page: the card hides at once wherever it shows, and stays hidden after a reload.
-let dismissed: boolean | undefined;
+// Dismissed on this page, for a browser without storage; otherwise storage says, as any tab of this browser left it.
+let dismissedHere = false;
 const dismissListeners = new Set<() => void>();
 const subscribeDismissed = (listener: () => void) => {
   dismissListeners.add(listener);
   // Another tab's dismissal arrives as a storage event.
   const onStorage = (event: StorageEvent) => {
-    if (event.key !== DISMISSED_KEY) return;
-    dismissed = readDismissed();
-    listener();
+    if (event.key === DISMISSED_KEY) listener();
   };
   window.addEventListener('storage', onStorage);
   return () => {
@@ -50,7 +48,7 @@ const subscribeDismissed = (listener: () => void) => {
     window.removeEventListener('storage', onStorage);
   };
 };
-const getDismissed = () => (dismissed ??= readDismissed());
+const getDismissed = () => dismissedHere || readDismissed();
 
 function dismiss() {
   try {
@@ -58,7 +56,7 @@ function dismiss() {
   } catch {
     // Without storage the card stays hidden until the page reloads.
   }
-  dismissed = true;
+  dismissedHere = true;
   dismissListeners.forEach((listener) => listener());
 }
 

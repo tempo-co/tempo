@@ -49,7 +49,13 @@ export const useGetAllBankConnections = () => {
   } = useQuery({
     ...bankConnectionsQueryOptions,
     refetchInterval: (query) =>
-      query.state.data?.some(isSyncInProgress) ? AUTOMATIC_SYNC_POLL_INTERVAL_MS : false,
+      query.state.data?.some(
+        (connection) =>
+          isSyncInProgress(connection) ||
+          (connection.syncStatus === 'RATE_LIMITED' && connection.lastSyncedAt === null),
+      )
+        ? AUTOMATIC_SYNC_POLL_INTERVAL_MS
+        : false,
   });
 
   return {bankConnections, isPending, isError, error, fetchStatus, refetch};

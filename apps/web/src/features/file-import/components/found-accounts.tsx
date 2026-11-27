@@ -50,7 +50,6 @@ export function FoundAccounts({
                 value={names[index] ?? ''}
                 aria-describedby={`${field}-detail`}
                 onChange={(event) => onName(index, event.target.value)}
-                className='max-sm:h-12'
               />
               <Badge variant='secondary'>{created ? 'New' : 'Matched'}</Badge>
               <p

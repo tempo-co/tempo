@@ -53,9 +53,22 @@ test.describe('Installing Tempo on an iPhone', () => {
     await expect(page.getByRole('dialog', {name: 'Add Tempo to your Home Screen'})).toBeVisible();
   });
 
-  test('× in another tab of the browser hides it here too', async ({page}) => {
+  test('× in another tab of the browser hides it here too, also while this tab was on another page', async ({
+    page,
+  }) => {
     await mockSyntheticHome(page);
     await page.goto('/');
+    await expect(toDoRows(page).nth(1)).toContainText('Add Tempo to your Home Screen');
+
+    // Another tab closes it while this one is on Settings: back on Home, it stays closed.
+    await page.getByTestId('app-phone-header').getByRole('link', {name: 'Settings'}).click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await page.evaluate(() => localStorage.setItem('tempo.install-card-dismissed', '1'));
+    await page.getByTestId('app-tab-bar').getByRole('link', {name: 'Home'}).click();
+    await expect(toDoRows(page).first()).toContainText('Check 3 transactions');
+    await expect(page.getByText('Add Tempo to your Home Screen')).toHaveCount(0);
+    await page.evaluate(() => localStorage.removeItem('tempo.install-card-dismissed'));
+    await page.reload();
     await expect(toDoRows(page).nth(1)).toContainText('Add Tempo to your Home Screen');
 
     // What another tab's × does to this one: it saves the dismissal, and this tab hears of it.

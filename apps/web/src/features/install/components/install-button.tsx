@@ -109,7 +109,7 @@ function HomeScreenSteps({
             ))}
           </ol>
           <p className='text-body-small text-muted-foreground'>
-            iPhone allows this from Safari. Using another browser? Open Tempo in Safari.
+            iPhone allows this from Safari. Using another browser? Open this page in Safari.
           </p>
         </ResponsiveDialogBody>
         <ResponsiveDialogFooter>

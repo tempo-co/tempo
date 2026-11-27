@@ -200,6 +200,13 @@ export function useFileImport({
     [onShow, setOpen, setStep],
   );
 
+  /** A toast's action: its step, unless another drop is being read or imported, which the sheet then shows. */
+  const reopen = useCallback(
+    (next: ImportStep) =>
+      BUSY.includes(stepRef.current.kind) ? show(stepRef.current) : show(next),
+    [show],
+  );
+
   const showFailure = useCallback(
     (failure: Exclude<ImportFailure, {kind: 'question'}>, files: File[]) => {
       // Files worth sending again, or whose columns can be worked out, stay chosen; for any other refused file
@@ -229,18 +236,19 @@ export function useFileImport({
         if (!openRef.current)
           toast.error(ACCOUNT_QUESTION_TITLE, {
             id: 'bank-import-question',
-            action: {label: 'Choose', onClick: () => show(question)},
+            action: {label: 'Choose', onClick: () => reopen(question)},
           });
         return;
       }
       showFailure(failure, files);
     },
-    [mapper, setBankId, setStep, show, showFailure],
+    [mapper, reopen, setBankId, setStep, showFailure],
   );
 
   /** Check what we found again, under the bank it was read for. */
   const showFound = useCallback(
     (found: Extract<ImportStep, {kind: 'found'}>) => {
+      if (BUSY.includes(stepRef.current.kind)) return show(stepRef.current);
       setBankId(found.bankId);
       show(found);
     },
@@ -307,7 +315,7 @@ export function useFileImport({
             if (!connection) throw new Error('The account is not listed yet');
             await updateBankAccount({connectionId: connection.id, accountId, alias});
           } catch (error) {
-            if (wasToasted(error)) return;
+            if (error instanceof SessionChangedError || wasToasted(error)) return;
             toast.error(`Couldn't rename ${accountName(account)}`, {
               description: 'The import is done. Rename the account on Accounts.',
               id: `bank-import-rename-${accountId}`,
@@ -336,7 +344,7 @@ export function useFileImport({
         if (!openRef.current)
           toast.success(summaryTitle(summary), {
             id: `bank-import-${summary.id}`,
-            action: {label: 'View', onClick: () => show({kind: 'summary', summary})},
+            action: {label: 'View', onClick: () => reopen({kind: 'summary', summary})},
           });
       } catch (error) {
         // A busy bank or a lost connection keeps Check what we found as the owner left it, to try again.
@@ -355,7 +363,17 @@ export function useFileImport({
         showFailed(error, files);
       }
     },
-    [importFiles, mapper, nameAccounts, queryClient, setOpen, setStep, show, showFailed, showFound],
+    [
+      importFiles,
+      mapper,
+      nameAccounts,
+      queryClient,
+      reopen,
+      setOpen,
+      setStep,
+      showFailed,
+      showFound,
+    ],
   );
 
   /** Works out the columns of the refused file `failure` offers, then previews them. */

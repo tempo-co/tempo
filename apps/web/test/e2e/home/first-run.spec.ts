@@ -232,7 +232,8 @@ test.describe('Home while a new bank fetches', () => {
       ...HOME_CONNECTION,
       lastSyncedAt: null,
       lastSuccessfulSyncAt: null,
-      syncStatus: 'RUNNING',
+      // The first fetch waits out the bank's rate limit; the list is read again until it has fetched.
+      syncStatus: 'RATE_LIMITED',
     };
     await mockSyntheticHome(page, {connections: () => [connection], clock: 'installed'});
     await mockJson(page, '**/accounts/me', createAccount({email: 'owner@example.com', name: ''}));

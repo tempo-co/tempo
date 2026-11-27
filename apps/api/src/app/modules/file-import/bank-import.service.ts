@@ -484,6 +484,7 @@ export class BankImportService {
 		// Two statements reaching one account are one account of the import, as its summary lists them: an account it
 		// creates for a file that names none is its bank's, named ignoring case and spacing, as `findFileAccountIn` finds it.
 		const byAccount = new Map<string, BankImportPreviewAccount>();
+		const partsOf = new Map<string, AccountRows['byFormat']>();
 		for (const entry of found) {
 			const {account, rows} = entry;
 			const key =
@@ -492,10 +493,9 @@ export class BankImportService {
 					? `new-bank:${bankNameKey(rows.bank)}:${rows.currency}`
 					: `new:${entry.identity!.providerAccountId}`);
 			const days = rows.byFormat.flatMap((part) => part.rows.flatMap((row) => matchDay(row) ?? [])).sort();
-			const rowCount = distinctRowCount(rows);
+			partsOf.set(key, [...(partsOf.get(key) ?? []), ...rows.byFormat]);
 			const known = byAccount.get(key);
 			if (known) {
-				known.rowCount += rowCount;
 				known.dateFrom = [known.dateFrom, days[0]].filter((day) => day != null).sort()[0] ?? null;
 				known.dateTo =
 					[known.dateTo, days.at(-1)]
@@ -515,11 +515,12 @@ export class BankImportService {
 				currency: rows.currency,
 				bankName: synced ? account.bankConnection.aspspName.trim() : fileBankName(rows, learnedBanks),
 				imported: !synced,
-				rowCount,
+				rowCount: 0,
 				dateFrom: days[0] ?? null,
 				dateTo: days.at(-1) ?? null,
 			});
 		}
+		for (const [key, account] of byAccount) account.rowCount = distinctRowCount(partsOf.get(key)!);
 		const days = statements.flatMap(({rows}) => rows.flatMap((row) => matchDay(row) ?? [])).sort();
 		const accounts = [...byAccount.values()];
 		return {
@@ -1965,14 +1966,13 @@ function formatBank(
 }
 
 /**
- * An account's rows across its formats, a payment that two formats both state counted once: each format is matched
- * against the formats before it, as the import matches each against the rows the formats before it inserted. Formats
- * number their references in schemes of their own, so references are left out of the comparison.
+ * An account's rows across the parts of a drop that reach it, a payment two of them state counted once: each part is
+ * matched against the parts before it, as the import matches each against the rows the parts before it inserted.
  */
-function distinctRowCount(rows: AccountRows): number {
+function distinctRowCount(parts: AccountRows['byFormat']): number {
 	const earlier: MatchExistingRow[] = [];
-	for (const {rows: formatRows} of rows.byFormat) {
-		const incoming = formatRows.map((row) => ({...toMatchRow(row), reference: null}));
+	for (const {rows: formatRows} of parts) {
+		const incoming = formatRows.map(toMatchRow);
 		const outcomes = matchTransactions(incoming, earlier);
 		const added = incoming.filter((_, index) => outcomes[index].kind !== 'matched');
 		const createdAt = new Date(earlier.length);
