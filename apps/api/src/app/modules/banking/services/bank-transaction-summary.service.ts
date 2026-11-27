@@ -61,7 +61,7 @@ import {
 	createOwnerScopedQuery,
 	findFirstTransactionDate,
 } from './bank-transaction-filters';
-import {BANK_CONNECTION_STATUSES} from './banking-sync.constants';
+import {BANK_CONNECTION_PROVIDERS, BANK_CONNECTION_STATUSES} from './banking-sync.constants';
 import {type CoverageOwner, DataCoverageService} from './data-coverage.service';
 
 const BASELINE_MONTHS = 3;
@@ -295,7 +295,8 @@ export class BankTransactionSummaryService {
 	 * account that has history by then cannot be converted, so a missing rate never reads as a drop.
 	 * Only rows the reported balance holds are subtracted: those booked by the day it was reported, and booked
 	 * rows made by that day however late the bank books them (a weekend card payment booked on Monday is in
-	 * Sunday's balance). A day from the reported one on is that balance. A hidden account is listed with its balance
+	 * Sunday's balance). The reported and added days are the owner's, in their time zone; an imported balance keeps
+	 * the day it stores. A day from the reported one on is that balance. A hidden account is listed with its balance
 	 * but counts in no total; a period only hidden accounts have history by has a null total.
 	 */
 	async getBalanceTrend(
@@ -316,15 +317,18 @@ export class BankTransactionSummaryService {
 				`
 			WITH accounts AS (
 				SELECT a."id", a."currency", a."isHidden" AS "hidden", a."currentBalanceAmount" AS "current",
-					(a."balanceUpdatedAt" AT TIME ZONE 'UTC')::date AS "reported",
+					-- A bank reports an instant, taken on the owner's day; an imported balance stores its day at midnight UTC.
+					(a."balanceUpdatedAt" AT TIME ZONE CASE WHEN c."provider" = $6 THEN 'UTC' ELSE o."timeZone" END)::date
+						AS "reported",
 					-- Capped at the owner's today, so an account added late in their day counts today.
 					LEAST(
 						$5::date,
-						(a."createdAt" AT TIME ZONE 'UTC')::date,
+						(a."createdAt" AT TIME ZONE o."timeZone")::date,
 						(SELECT MIN(t."bookingDate") FROM "bank_transactions" t WHERE t."bankAccountId" = a."id")
 					) AS "first"
 				FROM "bank_accounts" a
 				JOIN "bank_connections" c ON c."id" = a."bankConnectionId"
+				JOIN "accounts" o ON o."id" = c."accountId"
 				WHERE c."accountId" = $1 AND c."status" = ANY($2::varchar[]) AND a."isActive"
 					AND a."currentBalanceAmount" IS NOT NULL
 			), native AS (
@@ -355,6 +359,7 @@ export class BankTransactionSummaryService {
 					windows.map(({end}) => end),
 					baseCurrency,
 					asOf,
+					BANK_CONNECTION_PROVIDERS.FILE,
 				],
 			);
 

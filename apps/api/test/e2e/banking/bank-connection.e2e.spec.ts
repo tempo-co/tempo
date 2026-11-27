@@ -15,7 +15,7 @@ import {
 	SYNC_BANK_CONNECTION_JOB,
 } from '@core/queue/queue.constants';
 import {REDIS} from '@core/redis/redis.constants';
-import {dateInAppTimeZone} from '@core/time/app-time-zone';
+import {dateInAppTimeZone, dateInTimeZone} from '@core/time/app-time-zone';
 import {AccountDeletionService} from '@modules/account/account-deletion.service';
 import {Account} from '@modules/account/account.entity';
 import {AccountService} from '@modules/account/account.service';
@@ -911,8 +911,13 @@ describe('BankConnectionController', () => {
 	])(
 		'keeps a removed bank’s accounts and history as imported files, and connecting the bank again with %s syncs into them',
 		async (_, reconnectedAccount) => {
-			// The flow's own user: its dollar statement changes the owner's reporting currency.
+			// The flow's own user: its dollar statement changes the owner's reporting currency. West of UTC, an imported
+			// balance's stored day is the day before in the owner's time zone.
 			const owner = await createVerifiedAccount(httpServer, MAILPIT_API_URL);
+			const timeZone = 'America/New_York';
+			await app
+				.get(DataSource)
+				.query('UPDATE "accounts" SET "timeZone" = $2 WHERE "id" = $1', [owner.id, timeZone]);
 			const iban = 'NL91ABNA0417164300';
 			const [booked, other, , , later] = makeTransactions('kept').map((row) => ({
 				...row,
@@ -1113,6 +1118,9 @@ describe('BankConnectionController', () => {
 
 			// A statement of the account goes to it.
 			const dropped = await dropStatement('7.00', '2026-09-01');
+			const keptBalanceDay = (await bankAccountRepository.findOneByOrFail({id: synced.id}))
+				.balanceUpdatedAt!.toISOString()
+				.slice(0, 10);
 			expect((dropped.body as {accounts: Array<{id: string}>}).accounts.map(({id}) => id)).toEqual([synced.id]);
 			const importedRow = await bankTransactionRepository.findOneByOrFail({
 				bankAccountId: synced.id,
@@ -1141,6 +1149,9 @@ describe('BankConnectionController', () => {
 				await callback({state: secondState, code: 'kept-again-code'}, 'connected');
 				// Back on its connection, the bank's half is apart from the file's again.
 				expect(await exchangeLabels()).toEqual([unpaired, unpaired]);
+				// Until the bank reports a balance, the imported one keeps its day, now in the owner's time zone.
+				const {balanceUpdatedAt} = await bankAccountRepository.findOneByOrFail({id: synced.id});
+				expect(dateInTimeZone(balanceUpdatedAt!, timeZone)).toBe(keptBalanceDay);
 			} finally {
 				releaseSync();
 			}

@@ -374,6 +374,7 @@ export class BankAuthorizationService {
 		for (const account of accounts) {
 			if (!account.uid) continue;
 
+			let takenBack = false;
 			const values = {...this.toBankAccountValues(account), bankIdentity};
 			let bankAccount = await bankAccountRepository.findOne({
 				where: {bankConnection: {id: connectionId, accountId: ownerId}, providerAccountId: account.uid},
@@ -412,6 +413,7 @@ export class BankAuthorizationService {
 							: null));
 				if (kept) {
 					bankAccount = Object.assign(kept, {bankConnection: {id: connectionId} as BankConnection});
+					takenBack = true;
 				}
 			}
 
@@ -425,6 +427,19 @@ export class BankAuthorizationService {
 			}
 
 			await bankAccountRepository.save(bankAccount);
+			if (takenBack) {
+				// An imported balance stores its day as midnight UTC, but a bank's balance time is read on the owner's day:
+				// until the bank reports one, it becomes the start of that day in the owner's time zone.
+				await manager.query(
+					`UPDATE "bank_accounts" a
+					SET "balanceUpdatedAt" = ((a."balanceUpdatedAt" AT TIME ZONE 'UTC')::date::timestamp AT TIME ZONE o."timeZone")
+					FROM "bank_connections" c
+					JOIN "accounts" o ON o."id" = c."accountId"
+					WHERE a."id" = $1 AND c."id" = a."bankConnectionId" AND c."accountId" = $2
+						AND a."balanceUpdatedAt" IS NOT NULL`,
+					[bankAccount.id, ownerId],
+				);
+			}
 		}
 	}
 
