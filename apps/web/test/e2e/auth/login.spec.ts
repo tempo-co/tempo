@@ -7,6 +7,7 @@ import {
 import {createVerifiedAccount, expect, test} from '../../fixtures';
 import {LoginPage} from '../../pages/login.page';
 import {fulfillJson} from '../../utils/api-mocks';
+import {expectBankConnectionLine} from '../../utils/bank-connections';
 
 test.describe('Login', () => {
   test.describe('Opening Wisp signed out', () => {
@@ -37,14 +38,7 @@ test.describe('Login', () => {
       await expect(official).toContainText(
         "We never ask for your bank password; you log in to your bank only on your bank's own site.",
       );
-      await expect(official).toContainText(
-        "Bank connection by Enable Banking Oy, an account information service provider registered with the Finnish Financial Supervisory Authority. Wisp can only read your accounts; it can't move money.",
-      );
-      // The provider's name links its entry in the EBA payments register.
-      await expect(official.getByRole('link', {name: 'Enable Banking Oy'})).toHaveAttribute(
-        'href',
-        /^https:\/\/euclid\.eba\.europa\.eu\/register\/pir\//,
-      );
+      await expectBankConnectionLine(official);
     });
 
     test('shows the login form while the requested page is still loading', async ({

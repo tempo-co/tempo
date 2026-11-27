@@ -10,6 +10,19 @@ import {
   fulfillJson,
 } from './api-mocks';
 
+/** Who makes the bank connection: the one line every bank-connection surface shows. */
+export const BANK_CONNECTION_LINE =
+  "Bank connection by Enable Banking Oy, an account information service provider registered with the Finnish Financial Supervisory Authority. Wisp can only read your accounts; it can't move money.";
+
+/** The bank-connection line, with the provider's name linking its entry in the EBA payments register. */
+export async function expectBankConnectionLine(scope: Locator) {
+  await expect(scope).toContainText(BANK_CONNECTION_LINE);
+  await expect(scope.getByRole('link', {name: 'Enable Banking Oy'})).toHaveAttribute(
+    'href',
+    /^https:\/\/euclid\.eba\.europa\.eu\/register\/pir\//,
+  );
+}
+
 /** An account's row on Accounts. */
 export const accountRow = (page: Page, accountId: string) =>
   page.getByTestId(`account-row-${accountId}`);

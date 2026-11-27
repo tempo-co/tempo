@@ -18,9 +18,11 @@ import {
   transformBankConnections,
 } from '../../utils/api-mocks';
 import {
+  BANK_CONNECTION_LINE,
   accountRow,
   attentionLines,
   chooseDeleteEverything,
+  expectBankConnectionLine,
   openAccount,
   openRemoval,
   routeMockedBankApp,
@@ -680,7 +682,12 @@ test.describe('mocked Enable Banking bank connection', () => {
     });
     await page.goto('/accounts');
 
-    const dialog = await openRemoval(page, CHECKING.id);
+    // A bank-connected account's About says who makes the connection.
+    await openAccount(page, CHECKING.id);
+    const about = page.getByTestId('account-about');
+    await expectBankConnectionLine(about);
+    await page.getByRole('button', {name: 'Remove connection', exact: true}).click();
+    const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('radio', {name: /^Keep accounts and history/})).toBeChecked();
     await expect(
       dialog.getByText(
@@ -695,7 +702,9 @@ test.describe('mocked Enable Banking bank connection', () => {
     expect(removal).toEqual({keepAccounts: true});
     // The account stays, now from statement files, so its page stays open.
     await expect(page).toHaveURL(new RegExp(`/accounts/${CHECKING.id}$`));
-    await expect(page.getByTestId('account-about')).toContainText('Statement files');
+    await expect(about).toContainText('Statement files');
+    // A file-only account has no bank connection to describe.
+    await expect(about).not.toContainText(BANK_CONNECTION_LINE);
     await expect(page.getByTestId('account-connection')).toHaveCount(0);
     await page.goto('/accounts');
     await expect(accountRow(page, CHECKING.id)).toContainText('statement files');

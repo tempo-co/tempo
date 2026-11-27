@@ -3,6 +3,7 @@ import type {BankConnectionAspsp} from '@tempo/contracts';
 import {ChevronRight, CircleAlert, CircleX, Loader, Plus, Search} from 'lucide-react';
 import {type MouseEvent, useMemo, useState} from 'react';
 
+import {BankConnectionLine} from '@/components/shared/bank-connection-line';
 import {PendingLabel} from '@/components/shared/pending-label';
 import {StepFrame} from '@/components/shared/step-frame';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
@@ -385,6 +386,7 @@ function ConfirmStep({
         <p className='text-center text-body-small wrap-anywhere text-muted-foreground'>
           You approve access at {bank.name}, then come back here.
         </p>
+        <BankConnectionLine className='text-center' />
       </div>
     </div>
   );
