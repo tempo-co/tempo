@@ -244,8 +244,7 @@ test_healthy_deploy() {
     expect_events_in_order 'pull ghcr.io/wispmoney/api:release' 'pull ghcr.io/wispmoney/web:release'
     expect_events_in_order backup "compose up api $(api_ref 2)" "compose up web $(web_ref 1)" \
         'health http://wisp.example.test/api/health' 'health http://wisp.example.test/' \
-        'image prune label=org.opencontainers.image.source=https://github.com/wispmoney/wisp' \
-        'image prune label=org.opencontainers.image.source=https://github.com/tempo-co/tempo'
+        'image prune label=org.opencontainers.image.source=https://github.com/wispmoney/wisp'
     expect_output 'deployed and healthy'
     expect_deployed "$(api_ref 2)" "$(web_ref 1)"
     [[ ! -e $SB/state/failed-images ]] || fail 'failed-images exists after a healthy deploy'
@@ -356,33 +355,6 @@ test_changed_pin_recreates_its_service() {
     expect_no_event '^backup$'
     expect_no_event '^compose (pull|up) postgres'
     expect_equal "$(container redis)" "$(redis_pin 2)" 'running redis image'
-}
-
-test_host_on_tempo_co_images_deploys_wispmoney_and_rolls_back_to_tempo_co() {
-    # Deployed before the move to ghcr.io/wispmoney: TEMPO_* image lines (staging keeps other settings beside them).
-    local old_api old_web
-    old_api=ghcr.io/tempo-co/api@$(digest api-1)
-    old_web=ghcr.io/tempo-co/web@$(digest web-1)
-    printf 'OTHER_SETTING=kept\nTEMPO_API_IMAGE=%s\nTEMPO_WEB_IMAGE=%s\n' "$old_api" "$old_web" >"$SB/state/deployed.env"
-    echo "$old_api" >"$SB/fake/containers/wisp-test-api-1"
-    echo "$old_web" >"$SB/fake/containers/wisp-test-web-1"
-    publish api 2
-    api_ref 2 >"$SB/fake/unhealthy"
-    deploy
-    expect_status 1
-    expect_events_in_order 'pull ghcr.io/wispmoney/api:release' backup "compose up api $(api_ref 2)" \
-        "compose up api $old_api" "compose up web $old_web"
-    expect_output 'rolled back to the previous images'
-    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nWISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s' "$old_api" "$old_web")" 'deployed.env'
-    expect_equal "$(container api)" "$old_api" 'running api image'
-
-    publish api 3
-    deploy
-    expect_status 0
-    expect_events_in_order backup "compose up api $(api_ref 3)" "compose up web $old_web"
-    expect_output 'deployed and healthy'
-    expect_equal "$(cat "$SB/state/deployed.env")" "$(printf 'OTHER_SETTING=kept\nWISP_API_IMAGE=%s\nWISP_WEB_IMAGE=%s' "$(api_ref 3)" "$old_web")" 'deployed.env'
-    expect_equal "$(container api)" "$(api_ref 3)" 'running api image'
 }
 
 # A new host: no deployed images yet and no containers.
