@@ -184,7 +184,10 @@ test.describe('Insights over the seeded history', () => {
         0,
       );
     await expect(page.getByTestId('category-figure').first()).toHaveText(`Spent${whole(spent)}`);
-    await expect(page.getByRole('list', {name: /^Spent per month, January 2026 to/})).toBeVisible();
+    // One bar a month of 2026 that has history, through the running October.
+    await expect(
+      page.getByRole('list', {name: /^Spent per month, .+ 2026 to October 2026$/}),
+    ).toBeVisible();
     // Its top merchants are the API's ranking of that category's rows over the period.
     const listed = `${key} ${range('2026-01')}`;
     await expect.poll(() => categoryLists.has(listed)).toBe(true);
