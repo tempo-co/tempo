@@ -2,7 +2,7 @@
 import {expect, test} from '@playwright/test';
 import type {BankConnection} from '@tempo/contracts';
 
-import {awaitingFirstFetch} from '../../src/features/home/utils/first-fetch';
+import {awaitingFirstFetch, withData} from '../../src/features/home/utils/first-fetch';
 import {MOCK_CONNECTION} from '../data/bank-connection.data';
 import {importedFiles} from '../data/bank-import.data';
 
@@ -32,5 +32,13 @@ test('Home waits while every bank is on its first fetch, and shows itself once o
   ).toBe(false);
   for (const syncStatus of ['FAILED', 'PARTIAL', 'RATE_LIMITED', 'EXPIRED'] as const)
     expect(awaitingFirstFetch([connected({syncStatus})])).toBe(false);
-  expect(awaitingFirstFetch([connected({}), importedFiles([])])).toBe(false);
+  expect(awaitingFirstFetch([connected({}), importedFiles(MOCK_CONNECTION.bankAccounts)])).toBe(
+    false,
+  );
+});
+
+test('imported files whose imports were all undone hold nothing: Home waits for the bank, or is empty without one', () => {
+  expect(awaitingFirstFetch([connected({}), importedFiles([])])).toBe(true);
+  expect(withData([importedFiles([])])).toEqual([]);
+  expect(withData([importedFiles(MOCK_CONNECTION.bankAccounts)])).toHaveLength(1);
 });

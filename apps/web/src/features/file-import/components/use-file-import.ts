@@ -13,13 +13,15 @@ import {toast} from 'sonner';
 
 import {useUpdateBankAccount} from '@/features/accounts/api/use-bank-account-settings';
 import {bankConnectionsQueryOptions} from '@/features/banking/api/use-get-all-bank-connections';
+import {accountName} from '@/features/banking/utils/bank-account-name';
 import {useCurrentAccount} from '@/hooks/use-current-account';
 import {HttpError, NetworkError, SessionChangedError, wasToasted} from '@/utils/api';
 
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
-import {useImportFiles, usePreviewFiles} from '../api/use-import-files';
+import {useImportFiles} from '../api/use-import-files';
 import {useConfirmLayout, useProposeLayout, useRejectLayout} from '../api/use-layout-proposals';
-import {foundAccountName, importedAccountId, typedAlias} from '../utils/found-accounts';
+import {usePreviewFiles} from '../api/use-preview-files';
+import {importedAccountIds, typedAlias} from '../utils/found-accounts';
 import {summaryTitle} from '../utils/import-format';
 import {type PickedBankId, likelyPickerCountry} from '../utils/picked-bank';
 import {
@@ -47,6 +49,10 @@ export type ImportStep =
       files: File[];
       accountChoices?: Record<string, string>;
       preview: BankImportPreview;
+      /** The names typed, kept when the import failed and can be tried again. */
+      names?: readonly string[];
+      /** Why the last try at importing it failed, when it can be tried again as it is. */
+      failure?: ImportFailure;
     }
   | {kind: 'importing'; files: File[]}
   | {
@@ -260,9 +266,10 @@ export function useFileImport({
   /** The names typed in Check what we found, saved on the accounts the import wrote to; a failed one is told. */
   const nameAccounts = useCallback(
     async (found: BankImportPreview, names: readonly string[], summary: BankImportSummary) => {
+      const accountIds = importedAccountIds(found.accounts, summary);
       const renames = found.accounts.flatMap((account, index) => {
         const alias = typedAlias(account, names[index] ?? '');
-        const accountId = importedAccountId(account, summary);
+        const accountId = accountIds[index];
         return alias === undefined || !accountId ? [] : [{account, accountId, alias}];
       });
       if (renames.length === 0) return;
@@ -282,7 +289,7 @@ export function useFileImport({
             await updateBankAccount({connectionId: connection.id, accountId, alias});
           } catch (error) {
             if (wasToasted(error)) return;
-            toast.error(`Couldn't rename ${foundAccountName(account)}`, {
+            toast.error(`Couldn't rename ${accountName(account)}`, {
               description: 'The import is done. Rename the account on Accounts.',
               id: `bank-import-rename-${accountId}`,
             });
@@ -313,10 +320,21 @@ export function useFileImport({
             action: {label: 'View', onClick: () => show({kind: 'summary', summary})},
           });
       } catch (error) {
+        // A busy bank or a lost connection keeps Check what we found as the owner left it, to try again.
+        const failure =
+          error instanceof SessionChangedError ? null : toFailure(error, files, {mapper});
+        if (failure?.kind === 'failed' || (failure?.kind === 'refused' && failure.retry)) {
+          setStep({...found, names, failure});
+          if (!openRef.current && !(failure.kind === 'failed' && failure.toasted))
+            toast.error(failure.kind === 'refused' ? failure.title : IMPORT_FAILED_TITLE, {
+              id: 'bank-import-failed',
+            });
+          return;
+        }
         showFailed(error, files);
       }
     },
-    [importFiles, nameAccounts, queryClient, setOpen, setStep, show, showFailed],
+    [importFiles, mapper, nameAccounts, queryClient, setOpen, setStep, show, showFailed],
   );
 
   /** Works out the columns of the refused file `failure` offers, then previews them. */

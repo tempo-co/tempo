@@ -1,5 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {BankImportPreview, BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@tempo/contracts';
 
 import {api} from '@/utils/api';
 
@@ -15,21 +15,12 @@ export type ImportFilesRequest = {
 };
 
 /** A drop as the import and its preview both take it. */
-function dropForm({files, accountChoices, bankId}: ImportFilesRequest) {
+export function dropForm({files, accountChoices, bankId}: ImportFilesRequest) {
   const form = new FormData();
   for (const file of files) form.append('files', file);
   if (accountChoices) form.append('accountChoices', JSON.stringify(accountChoices));
   if (bankId) form.append('bankId', bankId);
   return form;
-}
-
-/** Reads one drop without importing it: the accounts it would go to, with their rows' count and days. */
-export function usePreviewFiles() {
-  const {mutateAsync} = useMutation({
-    mutationFn: (request: ImportFilesRequest) =>
-      api.post<BankImportPreview>('/bank-imports/preview', dropForm(request)),
-  });
-  return {previewFiles: mutateAsync};
 }
 
 /** Sends one drop. It is all or nothing: a refusal writes nothing. */

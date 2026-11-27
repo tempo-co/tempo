@@ -49,11 +49,13 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   accounts and dates…") and imported only from this step: a line with the drop's transactions and
   days ("Rename an account if you like"), then one bordered block per account it goes to, in the
   summary's order: a name field (labelled "Name of account N", the account's name as Accounts
-  shows it), a muted `New` or `Matched` tag, and a muted line with the bank, the account's details,
+  shows it), a `secondary` `New` or `Matched` badge, and a muted line with the bank, the account's details,
   currency, its transactions and days. A muted line says the import can be undone from Accounts,
   and the footer holds one **Import N transactions**. A name changed there is saved as the
   account's own name once the import is in (the same write as Rename on Accounts; left empty or
-  typed as it was, the account keeps its name), and a failed save says so in a toast. The back
+  typed as it was, the account keeps its name), and a failed save says so in a toast. An import
+  refused as busy or failed for a lost connection stays on this step with the names typed and its
+  `Alert`, and Try again imports it as it is. The back
   arrow returns to the files. The account question's **Continue**, a page drop and Looks right
   after working out the columns all come back here.
 - **First run.** While the empty Home shows, Add data opens the same steps in a centred dialog

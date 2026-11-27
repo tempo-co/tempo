@@ -2281,13 +2281,28 @@ test.describe('statement file import on Accounts', () => {
     expect(api.uploads).toHaveLength(0);
   });
 
-  test('a server failure says so at the end of the dialog, and Try again sends the same files', async ({
+  test('a server failure says so under Check what we found, and Try again imports the same files under the name typed', async ({
     page,
   }) => {
+    const summary = importSummary({filesCount: 2});
+    await mockBankConnections(page, () => [{...MOCK_CONNECTION, bankAccounts: [CHECKING]}]);
+    const renames: unknown[] = [];
+    await page.route(
+      `${API_URL}/bank-connections/${MOCK_CONNECTION.id}/accounts/${CHECKING.id}`,
+      async (route) => {
+        renames.push(route.request().postDataJSON());
+        await fulfillJson(route, {...CHECKING, alias: 'Example everyday account'});
+      },
+    );
     const api = await mockFileImport(page, {
       uploads: [
-        (route) => fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
-        created(importSummary({filesCount: 2})),
+        // The read goes through; the import after it fails on the server.
+        Object.assign(
+          (route: Route) =>
+            fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+          {summary},
+        ),
+        created(summary),
       ],
     });
     await page.goto('/accounts');
@@ -2295,27 +2310,63 @@ test.describe('statement file import on Accounts', () => {
     await dialog
       .getByTestId('bank-import-file-input')
       .setInputFiles([statement('statement-a.xml'), statement('statement-b.xml')]);
+    const name = dialog
+      .getByTestId('bank-import-found-account')
+      .getByRole('textbox', {name: 'Name of account 1'});
+    await name.fill('Example everyday account');
     await importFound(dialog);
 
     const alert = dialog.getByRole('alert');
     await expect(alert.getByText("Couldn't import these files")).toBeVisible();
     await expect(alert).toContainText('The server ran into a problem.');
     await expect(alert).toContainText(/500 · \d{2}:\d{2}/);
-    const supportedFiles = dialog.getByRole('button', {name: 'Supported files'});
+    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
+    await expect(name).toHaveValue('Example everyday account');
+    const found = dialog.getByTestId('bank-import-found-account');
     expect((await boxOf(alert)).y).toBeGreaterThanOrEqual(
-      (await boxOf(supportedFiles)).y + (await boxOf(supportedFiles)).height,
+      (await boxOf(found)).y + (await boxOf(found)).height,
     );
 
     await alert.getByRole('button', {name: 'Try again'}).click();
-    await importFound(dialog);
     await expect(dialog.getByRole('heading', {name: 'Imported 2 files'})).toBeVisible();
     expect(api.uploads.map((upload) => sentForm(upload).files)).toEqual([
       ['statement-a.xml', 'statement-b.xml'],
       ['statement-a.xml', 'statement-b.xml'],
     ]);
+    expect(api.previews).toHaveLength(1);
+    expect(renames).toEqual([{alias: 'Example everyday account'}]);
   });
 
-  test('a lost connection keeps the chosen files for another try', async ({page}) => {
+  test('a rename that fails after the import says so once, and the import stands', async ({
+    page,
+  }) => {
+    await mockBankConnections(page, () => [{...MOCK_CONNECTION, bankAccounts: [CHECKING]}]);
+    await page.route(
+      `${API_URL}/bank-connections/${MOCK_CONNECTION.id}/accounts/${CHECKING.id}`,
+      (route) => fulfillJson(route, {statusCode: 500, message: 'Internal server error'}, 500),
+    );
+    await mockFileImport(page, {uploads: [created(importSummary({filesCount: 1}))]});
+    await page.goto('/accounts');
+    const dialog = await openImport(page);
+    await dialog
+      .getByTestId('bank-import-file-input')
+      .setInputFiles([statement('statement-a.xml')]);
+    await dialog
+      .getByTestId('bank-import-found-account')
+      .getByRole('textbox', {name: 'Name of account 1'})
+      .fill('Example everyday account');
+    await importFound(dialog);
+
+    await expect(dialog.getByRole('heading', {name: 'Imported 1 file'})).toBeVisible();
+    expect(
+      await countAfterToasts(page, page.getByText("Couldn't rename Mock ASPSP checking account")),
+    ).toBe(1);
+    await expect(
+      page.getByText('The import is done. Rename the account on Accounts.'),
+    ).toBeVisible();
+  });
+
+  test('a lost connection keeps Check what we found for another try', async ({page}) => {
     await mockFileImport(page, {uploads: [(route) => route.abort('failed')]});
     await page.goto('/accounts');
     const dialog = await openImport(page);
@@ -2326,12 +2377,9 @@ test.describe('statement file import on Accounts', () => {
 
     // The api wrapper says the change was not confirmed; the dialog adds no second message.
     await expect(page.getByText(/Your change was not confirmed/)).toBeVisible();
-    await expect(dialog.getByRole('heading', {name: 'Import a file'})).toBeVisible();
+    await expect(dialog.getByRole('heading', {name: 'Check what we found'})).toBeVisible();
     await expect(dialog.getByRole('alert')).toHaveCount(0);
-    await expect(
-      dialog.getByRole('list', {name: 'Chosen files'}).getByRole('listitem'),
-    ).toHaveCount(2);
-    await expect(dialog.getByRole('button', {name: 'Import', exact: true})).toBeEnabled();
+    await expect(dialog.getByRole('button', {name: /^Import [\d,]+ transactions?$/})).toBeEnabled();
   });
 
   test('keeps the column preview and Your layouts inside 390px and 320px with long names and amounts', async ({

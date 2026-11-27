@@ -1,6 +1,7 @@
 import {BANK_ACCOUNT_ALIAS_MAX_LENGTH, type BankImportPreview} from '@tempo/contracts';
 import {useId} from 'react';
 
+import {Badge} from '@/components/ui/badge';
 import {Input} from '@/components/ui/input';
 import {accountSubline} from '@/features/banking/utils/bank-account-name';
 
@@ -14,13 +15,11 @@ export function FoundAccounts({
   preview,
   names,
   onName,
-  disabled,
 }: {
   preview: BankImportPreview;
   /** What each account's field holds, in the preview's order. */
   names: readonly string[];
   onName: (index: number, name: string) => void;
-  disabled?: boolean;
 }) {
   const id = useId();
   const range = formatDateRange(preview.dateFrom, preview.dateTo);
@@ -49,14 +48,11 @@ export function FoundAccounts({
                 autoComplete='off'
                 maxLength={BANK_ACCOUNT_ALIAS_MAX_LENGTH}
                 value={names[index] ?? ''}
-                disabled={disabled}
                 aria-describedby={`${field}-detail`}
                 onChange={(event) => onName(index, event.target.value)}
                 className='max-sm:h-12'
               />
-              <span className='rounded-full bg-muted px-2 py-0.5 text-label font-semibold text-muted-foreground'>
-                {created ? 'New' : 'Matched'}
-              </span>
+              <Badge variant='secondary'>{created ? 'New' : 'Matched'}</Badge>
               <p
                 id={`${field}-detail`}
                 className='col-span-2 text-body-small wrap-anywhere text-muted-foreground'

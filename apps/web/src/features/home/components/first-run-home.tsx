@@ -54,8 +54,8 @@ function AddDataPanel() {
           See where your money goes, from one bank statement
         </h2>
         <p className='max-w-[60ch] text-body text-pretty text-muted-foreground'>
-          Download a statement file from your bank’s website and add it here. Tempo sorts it into
-          categories and fills in your Home.
+          Download a statement file from your bank’s website and add it here. Its transactions are
+          sorted into categories and fill in your Home.
         </p>
       </div>
       {importOn ? (
@@ -110,9 +110,6 @@ function GettingStarted() {
           </li>
         ))}
       </ol>
-      <p className='text-body-small text-muted-foreground'>
-        Home fills in as soon as your first file is in.
-      </p>
     </Card>
   );
 }

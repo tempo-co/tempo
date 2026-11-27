@@ -34,6 +34,9 @@ const FILE = {
   buffer: Buffer.from(STATEMENT),
 };
 
+const IPHONE_SAFARI =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
+
 /** Opens Home and waits for the import list, which says file import is on. */
 async function openHome(page: Page) {
   const importList = page.waitForResponse(
@@ -156,10 +159,13 @@ test.describe('First run', () => {
     expect(1440 - box.x - box.width).toBeGreaterThan(400);
     expect(box.height).toBeLessThan(900);
 
-    await dropOn(page, sheet.getByTestId('bank-import-drop-area'));
-    await checkAndImport(sheet);
-    await expect(sheet.getByRole('heading', {name: 'Building your Home'})).toBeVisible();
-    release();
+    try {
+      await dropOn(page, sheet.getByTestId('bank-import-drop-area'));
+      await checkAndImport(sheet);
+      await expect(sheet.getByRole('heading', {name: 'Building your Home'})).toBeVisible();
+    } finally {
+      release();
+    }
 
     // Only Check what we found stood between the drop and the filled Home.
     await expect(sheet).toBeHidden();
@@ -173,8 +179,12 @@ test.describe('First run', () => {
       page.getByRole('main').getByRole('region', {name: 'Accounts', exact: true}),
     ).toContainText('Example current account');
   });
+});
 
-  test('on a phone, the first run chooses the file from the bank’s website and fills Home the same way', async ({
+test.describe('First run on an iPhone', () => {
+  test.use({timezoneId: 'Europe/Amsterdam', serviceWorkers: 'block', userAgent: IPHONE_SAFARI});
+
+  test('chooses the file from the bank’s website, fills Home the same way, then offers to install below the check row', async ({
     page,
     homePage,
     freshAccount: _account,
@@ -201,6 +211,13 @@ test.describe('First run', () => {
     await expect(sheet).toBeHidden();
     await expectFilledHome(page);
     expect(sentForm(imports[0]).fields).toEqual({bankId: 'abn-amro'});
+    await expect(
+      page
+        .getByRole('main')
+        .getByRole('region', {name: 'To do', exact: true})
+        .getByRole('listitem')
+        .nth(1),
+    ).toContainText('Add Tempo to your Home Screen');
   });
 });
 

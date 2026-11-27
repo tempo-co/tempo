@@ -36,7 +36,8 @@ export function InstallButton({
   );
 }
 
-const KEY = 'inline-flex items-center gap-1 rounded-md border px-1.5 font-medium [&_svg]:size-3.5';
+const SAFARI_CONTROL =
+  'inline-flex items-center gap-1 rounded-md border px-1.5 font-medium [&_svg]:size-3.5';
 
 /** Safari's steps to add Tempo to the Home Screen, which no page can do for the owner. */
 function HomeScreenSteps({
@@ -49,7 +50,7 @@ function HomeScreenSteps({
   const steps: ReactNode[] = [
     <>
       Tap{' '}
-      <span className={KEY}>
+      <span className={SAFARI_CONTROL}>
         <Share aria-hidden='true' />
         Share
       </span>{' '}
@@ -57,7 +58,7 @@ function HomeScreenSteps({
     </>,
     <>
       Scroll and tap{' '}
-      <span className={KEY}>
+      <span className={SAFARI_CONTROL}>
         <SquarePlus aria-hidden='true' />
         Add to Home Screen
       </span>

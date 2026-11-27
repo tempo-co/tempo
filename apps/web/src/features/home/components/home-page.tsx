@@ -29,7 +29,7 @@ import {useNow} from '@/hooks/use-now';
 
 import {useDataCoverage, useRecentTransactions, useSpendingPace} from '../api/use-home-reads';
 import {useHomeLayout} from '../use-home-layout';
-import {awaitingFirstFetch} from '../utils/first-fetch';
+import {awaitingFirstFetch, withData} from '../utils/first-fetch';
 import {greeting} from '../utils/greeting';
 import {
   HOME_CARDS,
@@ -68,7 +68,7 @@ export function HomePage() {
   if (!reportingCurrencyKnown(reporting)) body = null;
   else if (isError && !bankConnections)
     body = <LoadErrorState title="Couldn't load your banks" error={error} onRetry={refetch} />;
-  else if (connections?.length === 0) body = <EmptyHome />;
+  else if (connections && withData(connections).length === 0) body = <EmptyHome />;
   else if (connections && awaitingFirstFetch(connections))
     body = <DataOnItsWay connections={connections} />;
   else if (reporting.data?.setupRequired && reporting.data.currency === null)

@@ -42,7 +42,6 @@ test.describe('Installing Tempo on an iPhone', () => {
     await expect(card).toContainText('Add Tempo to your Home Screen');
 
     await card.getByRole('button', {name: 'Don’t show again'}).click();
-    await expect(page.getByText('Install any time from Settings › Appearance.')).toBeVisible();
     await expect(page.getByText('Add Tempo to your Home Screen')).toHaveCount(0);
     await page.reload();
     await expect(rows.first()).toContainText('Check 3 transactions');
@@ -66,6 +65,7 @@ test.describe('Installing Tempo on an iPhone', () => {
 
     await page.goto('/settings/appearance');
     await expect(page.getByRole('heading', {name: 'Theme'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'App', exact: true})).toHaveCount(0);
     await expect(page.getByRole('button', {name: 'Install'})).toHaveCount(0);
   });
 });

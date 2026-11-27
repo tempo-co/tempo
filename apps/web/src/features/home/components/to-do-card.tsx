@@ -1,7 +1,6 @@
 import {Link} from '@tanstack/react-router';
 import {CircleCheck, CircleDashed, ListChecks, type LucideIcon, Smartphone, X} from 'lucide-react';
 import type {ReactNode} from 'react';
-import {toast} from 'sonner';
 
 import {LoadErrorState} from '@/components/shared/state-message';
 import {Button} from '@/components/ui/button';
@@ -100,10 +99,7 @@ function InstallActions() {
         size='icon'
         aria-label='Don’t show again'
         className='-mr-2 size-11'
-        onClick={() => {
-          dismiss();
-          toast('Hidden for good', {description: 'Install any time from Settings › Appearance.'});
-        }}
+        onClick={dismiss}
       >
         <X aria-hidden='true' />
       </Button>
