@@ -22,6 +22,11 @@ export type Bank = {
 	name: string;
 	/** ISO 3166-1 alpha-2; `null` for a bank that serves customers across countries from one app. */
 	country: string | null;
+	/**
+	 * For a bank with no `country`: its home country, whose catalog of connectable banks the picker reads its logo
+	 * from. A bank with a `country` uses that.
+	 */
+	logoCountry?: string;
 	status: BankStatus;
 	/** The ids of the built-in layouts that read this bank's files; empty for an unverified bank. */
 	layouts: readonly string[];
@@ -173,6 +178,7 @@ export const BANK_LIST: readonly Bank[] = [
 		id: 'revolut',
 		name: 'Revolut',
 		country: null,
+		logoCountry: 'LT',
 		status: 'verified',
 		layouts: [],
 		formats: ['revolutCsv', 'revolutXlsx'],
@@ -407,6 +413,7 @@ export const BANK_LIST: readonly Bank[] = [
 		id: 'n26',
 		name: 'N26',
 		country: null,
+		logoCountry: 'DE',
 		status: 'verified',
 		layouts: ['n26-de', 'n26-en'],
 		formats: [],
@@ -466,6 +473,7 @@ export const BANK_LIST: readonly Bank[] = [
 		id: 'vivid-money',
 		name: 'Vivid Money',
 		country: null,
+		logoCountry: 'DE',
 		status: 'verified',
 		layouts: ['vivid'],
 		formats: [],

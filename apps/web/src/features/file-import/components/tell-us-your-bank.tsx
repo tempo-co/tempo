@@ -23,18 +23,18 @@ import {
 } from '@/components/ui/select';
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 import {wasToasted} from '@/utils/api';
-import {browserRegion, countryName} from '@/utils/countries';
+import {browserRegion} from '@/utils/countries';
 
 import {useBankRequest} from '../api/use-bank-request';
-import {BANK_REQUEST_COUNTRIES, BANK_REQUEST_FILE_TYPE_LABELS} from '../utils/bank-request';
-import {type PickedBankId, pickedBank} from '../utils/picked-bank';
+import {BANK_REQUEST_FILE_TYPE_LABELS} from '../utils/bank-request';
+import {
+  PICKER_COUNTRY_OPTIONS,
+  type PickedBankId,
+  isPickerCountry,
+  pickedBank,
+} from '../utils/picked-bank';
 
 export const TELL_US_TITLE = 'Tell us your bank';
-
-const COUNTRIES = BANK_REQUEST_COUNTRIES.map((code) => ({code, name: countryName(code)})).sort(
-  (left, right) => left.name.localeCompare(right.name),
-);
-const isListedCountry = (code: string) => COUNTRIES.some((country) => country.code === code);
 
 /**
  * The form's first values: the picked bank's name and country when the owner picked a listed bank, else no name and
@@ -43,7 +43,7 @@ const isListedCountry = (code: string) => COUNTRIES.some((country) => country.co
 function firstDraft(bankId: PickedBankId) {
   const bank = pickedBank(bankId);
   const country =
-    bank?.country && isListedCountry(bank.country) ? bank.country : browserRegion(isListedCountry);
+    bank?.country && isPickerCountry(bank.country) ? bank.country : browserRegion(isPickerCountry);
   return {
     bankName: bank?.name ?? '',
     country: country ?? '',
@@ -123,9 +123,9 @@ export function TellUsYourBankStep({
                 <SelectValue placeholder='Choose a country' />
               </SelectTrigger>
               <SelectContent>
-                {COUNTRIES.map((country) => (
+                {PICKER_COUNTRY_OPTIONS.map((country) => (
                   <SelectItem key={country.code} value={country.code}>
-                    {country.name}
+                    {country.label}
                   </SelectItem>
                 ))}
               </SelectContent>

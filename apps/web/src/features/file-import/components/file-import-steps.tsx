@@ -9,13 +9,14 @@ import {PendingLabel} from '@/components/shared/pending-label';
 import {StepFrame} from '@/components/shared/step-frame';
 import {Alert, AlertAction, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Button} from '@/components/ui/button';
+import {CountryStep} from '@/features/banking/components/picker-parts';
 import {HttpError, NetworkError, wasToasted} from '@/utils/api';
 
 import {useBankImportBanks} from '../api/use-bank-import-banks';
 import {bankImportsQueryOptions} from '../api/use-bank-imports';
 import {plural, summaryTitle} from '../utils/import-format';
 import {OTHER_BANK, guessedBankChoice} from '../utils/layout-mapping';
-import type {PickedBankId} from '../utils/picked-bank';
+import {PICKER_COUNTRY_OPTIONS, type PickedBankId} from '../utils/picked-bank';
 import {type ImportFailure, accountQuestionKey} from '../utils/refusal-copy';
 import {AccountQuestions} from './account-questions';
 import {BankExportSteps, BankPicker} from './bank-picker';
@@ -44,7 +45,8 @@ export function FileImportSteps({
   controller: FileImportController;
   onBack?: () => void;
 }) {
-  const {step, setStep, setOpen, run, propose, bankId, pickBank} = controller;
+  const {step, setStep, setOpen, run, propose, bankId, pickBank, pickerCountry, setPickerCountry} =
+    controller;
   // The list holds the latest of a shown import, such as its counts after rows were checked elsewhere.
   const {data: imports} = useQuery({
     ...bankImportsQueryOptions,
@@ -68,7 +70,31 @@ export function FileImportSteps({
       onBack={onBack}
       backLabel='Back to Add data'
       scroll={false}
-      body={<BankPicker onPick={pickBank} />}
+      body={
+        <BankPicker
+          country={pickerCountry}
+          onChangeCountry={() => setStep({kind: 'bankCountry'})}
+          onPick={pickBank}
+        />
+      }
+    />
+  ) : step.kind === 'bankCountry' ? (
+    <Frame
+      title='Choose a country'
+      onBack={toPicker}
+      scroll={false}
+      body={
+        <div className='flex min-h-0 flex-col max-md:h-[min(68dvh,--spacing(128))] md:flex-1'>
+          <CountryStep
+            countries={PICKER_COUNTRY_OPTIONS}
+            selected={pickerCountry}
+            onSelect={(code) => {
+              setPickerCountry(code);
+              toPicker();
+            }}
+          />
+        </div>
+      }
     />
   ) : step.kind === 'choose' ? (
     <ChooseStep

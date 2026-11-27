@@ -15,7 +15,7 @@ import {bankImportsQueryOptions} from '../api/use-bank-imports';
 import {useImportFiles} from '../api/use-import-files';
 import {useConfirmLayout, useProposeLayout, useRejectLayout} from '../api/use-layout-proposals';
 import {summaryTitle} from '../utils/import-format';
-import type {PickedBankId} from '../utils/picked-bank';
+import {type PickedBankId, likelyPickerCountry} from '../utils/picked-bank';
 import {
   type ImportFailure,
   LAYOUT_DISCARDED_COPY,
@@ -30,6 +30,8 @@ type Refused = Extract<ImportFailure, {kind: 'refused'}>;
 export type ImportStep =
   /** Which bank the file is from, before choosing it. */
   | {kind: 'bank'}
+  /** Another country for the bank picker. */
+  | {kind: 'bankCountry'}
   | {kind: 'choose'; files: File[]; failure: ImportFailure | null}
   | {kind: 'importing'; files: File[]}
   | {
@@ -111,6 +113,8 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
   // The picked bank goes with every upload and proposal of the drop; the ref is what a request in flight reads.
   const [bankId, setBankIdState] = useState<PickedBankId>(null);
   const bankRef = useRef<PickedBankId>(null);
+  // The picker's country: the likely one until the owner chooses, which stays while the sheet closes and opens.
+  const [pickerCountry, setPickerCountry] = useState(likelyPickerCountry);
   const setBankId = useCallback((next: PickedBankId) => {
     bankRef.current = next;
     setBankIdState(next);
@@ -327,6 +331,8 @@ export function useFileImport({onShow}: {onShow?: () => void} = {}) {
     setStep,
     bankId,
     pickBank,
+    pickerCountry,
+    setPickerCountry,
     show,
     run,
     openNew,

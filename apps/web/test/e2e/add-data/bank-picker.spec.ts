@@ -3,7 +3,7 @@ import {BANK_LIST, type CreateBankRequest, OTHER_BANK_EXPORT_TEXT} from '@tempo/
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';
-import {mockBankConnections} from '../../utils/api-mocks';
+import {mockBankConnections, mockJson} from '../../utils/api-mocks';
 import {routeMockedBankApp} from '../../utils/bank-connections';
 import {
   TODAY,
@@ -17,10 +17,16 @@ import {
 import {animationsSettled, boxOf} from '../../utils/layout';
 import {countAfterToasts} from '../../utils/toasts';
 
-const VERIFIED = BANK_LIST.filter((bank) => bank.status === 'verified');
-const UNVERIFIED = BANK_LIST.filter((bank) => bank.status === 'unverified');
 const RABOBANK = BANK_LIST.find((bank) => bank.id === 'rabobank')!;
 const BOURSOBANK = BANK_LIST.find((bank) => bank.id === 'boursobank')!;
+const DUTCH = BANK_LIST.filter((bank) => bank.country === 'NL');
+const FRENCH = BANK_LIST.filter((bank) => bank.country === 'FR');
+const SEVERAL_COUNTRIES = BANK_LIST.filter((bank) => bank.country === null);
+const UNTESTED =
+  "We haven't seen a file from this bank yet. If we can't read it straight away, we'll ask you to check its columns once.";
+/** A 1×1 PNG, as a connectable bank's logo. */
+const LOGO =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==';
 
 /** Add data, then Import a statement file: the bank picker. */
 async function openPicker(page: Page) {
@@ -38,6 +44,7 @@ test.describe('the bank picker in Add data', () => {
     storageState: {cookies: [], origins: []},
     serviceWorkers: 'block',
     timezoneId: 'Europe/Amsterdam',
+    locale: 'en-NL',
   });
 
   test.beforeEach(async ({page, baseURL}) => {
@@ -46,59 +53,76 @@ test.describe('the bank picker in Add data', () => {
     await mockBankConnections(page, [MOCK_CONNECTION]);
   });
 
-  test("lists verified banks, then not yet verified ones, then Another bank, and imports with the picked bank's id", async ({
+  test("lists the likely country's banks, then the banks of several countries, then Another bank, and imports with the picked bank's id", async ({
     page,
   }) => {
     await page.setViewportSize({width: 390, height: 844});
+    // The logos Connect a bank shows: a Dutch bank's under its name in any case, an app bank's under its home country.
+    await mockJson(page, '**/bank-connections/aspsps', [
+      {name: 'RABOBANK', country: 'NL', logoUrl: LOGO},
+      {name: 'Revolut', country: 'LT', logoUrl: LOGO},
+      {name: 'Knab', country: 'DE', logoUrl: LOGO},
+    ]);
     const api = await mockFileImport(page, {
       uploads: [created(importSummary({bankId: RABOBANK.id}))],
     });
     const sheet = await openPicker(page);
 
     // Search waits for a tap: nothing is focused for the owner.
-    const search = sheet.getByRole('searchbox', {name: 'Search banks'});
+    const search = sheet.getByRole('searchbox', {name: 'Search banks in every country'});
     await expect(search).not.toBeFocused();
 
-    const groups = sheet.getByRole('list');
-    await expect(groups).toHaveCount(3);
-    await expect(groups.nth(0)).toHaveAccessibleName('Verified');
-    await expect(groups.nth(1)).toHaveAccessibleName('Not yet verified');
-    await expect(groups.nth(2)).toHaveAccessibleName('Other banks');
-    await expect(groups.nth(0).getByRole('button')).toHaveCount(VERIFIED.length);
-    await expect(groups.nth(1).getByRole('button')).toHaveCount(UNVERIFIED.length);
-    await expect(groups.nth(0).getByRole('button').first()).toContainText(VERIFIED[0].name);
-    await expect(groups.nth(1).getByRole('button').first()).toContainText(UNVERIFIED[0].name);
-    await expect(groups.nth(2).getByRole('button')).toHaveText(/^Another bank/);
+    // The browser's region is the country the picker opens at.
+    const country = sheet.getByTestId('bank-import-country');
+    await expect(country).toContainText('Netherlands');
+    const rows = sheet.getByRole('list').getByRole('button');
+    await expect(rows).toHaveCount(DUTCH.length + SEVERAL_COUNTRIES.length + 1);
+    for (const [index, bank] of [...DUTCH, ...SEVERAL_COUNTRIES].entries())
+      await expect(rows.nth(index)).toContainText(bank.name);
+    await expect(rows.nth(DUTCH.length)).toContainText('Several countries');
+    await expect(rows.last()).toHaveText(/^Another bank/);
     // Rows a thumb can hit: 56px on phones.
-    expect((await boxOf(groups.nth(0).getByRole('button').first())).height).toBeGreaterThanOrEqual(
-      56,
-    );
+    expect((await boxOf(rows.first())).height).toBeGreaterThanOrEqual(56);
+    // A bank Connect a bank has a logo for shows it; any other gets the plain bank glyph.
+    const logo = (name: string) =>
+      sheet.getByRole('button', {name}).getByTestId('bank-wordmark').locator('img');
+    await expect(logo(RABOBANK.name)).toHaveAttribute('src', LOGO);
+    await expect(logo('Revolut')).toHaveAttribute('src', LOGO);
+    await expect(logo('Knab')).toHaveCount(0);
+    await expect(logo('Another bank')).toHaveCount(0);
 
-    // A search keeps the groups' order and always leaves Another bank.
+    // Another country lists its own banks.
+    await country.click();
+    await expect(sheet.getByRole('heading', {name: 'Choose a country'})).toBeVisible();
+    await sheet.getByRole('button', {name: /^France/}).click();
+    await expect(country).toContainText('France');
+    await expect(rows).toHaveCount(FRENCH.length + SEVERAL_COUNTRIES.length + 1);
+    await expect(rows.first()).toContainText(FRENCH[0].name);
+
+    // A search covers every country and always leaves Another bank.
+    await search.fill('sparkasse');
+    await expect(rows).toHaveText([/^Sparkasse\s*Germany$/, /^Another bank/]);
     await search.fill('bourso');
-    await expect(groups).toHaveCount(2);
-    await expect(groups.nth(0)).toHaveAccessibleName('Not yet verified');
-    await expect(groups.nth(0).getByRole('button')).toHaveText([/^BoursoBank/]);
-    await expect(groups.nth(1).getByRole('button')).toHaveText(/^Another bank/);
 
-    // A bank not yet verified shows its researched steps, and says no file of it was tested.
-    await groups.nth(0).getByRole('button').click();
+    // A bank no file of which has been read yet shows its researched steps and says what happens if it can't be read.
+    await sheet.getByRole('button', {name: BOURSOBANK.name}).click();
     await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
-    await expect(sheet.getByText('Not yet verified')).toBeVisible();
     const steps = sheet.getByRole('list', {name: `How to get the file from ${BOURSOBANK.name}`});
     await expect(steps.getByRole('listitem')).toHaveText([...BOURSOBANK.exportSteps.steps]);
-    await expect(sheet.getByText(`No ${BOURSOBANK.name} file has been tested yet.`)).toBeVisible();
+    await expect(sheet.getByText(UNTESTED)).toBeVisible();
 
     // Changing the bank goes back to the picker, where a verified bank's steps follow the same way.
     await sheet.getByRole('button', {name: 'Change bank'}).click();
     await expect(sheet.getByRole('heading', {name: 'Which bank is the file from?'})).toBeVisible();
+    await expect(country).toContainText('France');
+    await search.fill('rabo');
     await sheet.getByRole('button', {name: RABOBANK.name}).click();
     await expect(
       sheet
         .getByRole('list', {name: `How to get the file from ${RABOBANK.name}`})
         .getByRole('listitem'),
     ).toHaveText([...RABOBANK.exportSteps.steps]);
-    await expect(sheet.getByText('Not yet verified')).toHaveCount(0);
+    await expect(sheet.getByText(UNTESTED)).toHaveCount(0);
 
     await sheet.getByTestId('bank-import-file-input').setInputFiles([statement('rabobank.csv')]);
     await expect(sheet.getByRole('heading', {name: /^Imported/})).toBeVisible();

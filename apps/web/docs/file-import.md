@@ -11,16 +11,24 @@ first step of each goes back to them. On Accounts, **Import a file** is the outl
 offers both, and each opens the sheet at its own first step; an account page's **Import a newer
 file** does too. No copy calls import a fallback or assumes a bank is connected.
 
-- **Bank picker.** Import a file starts at "Which bank is the file from?": the shared bank list
-  (`BANK_LIST` in `@tempo/contracts`) in three groups, each under a small muted heading: Verified,
-  then Not yet verified (researched banks, in the list's order), then Another bank under a
-  hairline, which every search keeps. Rows are 56px, the bank's name over its country. The search
-  above the list is never focused for the owner; it matches names and countries. Picking a bank
-  leads to the file choice, which opens with the bank (a `secondary` "Not yet verified" badge when
-  it is one, and **Change** back to the picker while no files are kept), its numbered export steps,
-  the file to pick, and for a bank not yet verified that no file of it has been tested. Another
-  bank shows one generic text instead. The picked bank's id goes as `bankId` with the upload and
-  with working out the columns. A page drop skips the picker and sends no bank.
+- **Bank picker.** Import a file starts at "Which bank is the file from?", built from Connect a
+  bank's picker parts: the country row (flag, name, **Change** to a country step that lists the
+  EEA, Switzerland and the United Kingdom with their listed banks' counts), a search that is never
+  focused for the owner, and one scrolling list of 56px rows. The country is the browser's region
+  when listed, else the first by name, and it stays while the sheet closes and opens. The list
+  holds that country's banks from the shared bank list (`BANK_LIST` in `@tempo/contracts`), then
+  the banks that serve several countries from one app ("Several countries" under the name), then
+  Another bank under a hairline. A search matches names and countries across every country and
+  always keeps Another bank. Whether a bank is verified shows nowhere in the list. Each row leads
+  with the logo Connect a bank shows for the connectable bank of the same name (ignoring case,
+  spacing and a note in brackets) in the bank's country, or its `logoCountry` for a bank of
+  several countries; a bank without one, and Another bank, get the plain bank glyph on the same
+  plate. Picking a bank leads to the file choice, which opens with the bank's logo and name,
+  **Change** back to the picker while no files are kept, its numbered export steps and the file to
+  pick. For an unverified bank one muted line says no file of it has been seen yet and that its
+  columns may need checking once. Another bank shows one generic text instead. The picked bank's
+  id goes as `bankId` with the upload and with working out the columns. A page drop skips the
+  picker and sends no bank.
 - **Tell us your bank.** A file Tempo cannot read (its columns could not be worked out, the owner
   said the worked-out ones were not right, or this deployment cannot work them out) offers an
   outline **Tell us your bank** in the footer. Its step asks for the bank name (the picked bank's

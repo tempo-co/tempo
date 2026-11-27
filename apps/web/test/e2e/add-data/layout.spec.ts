@@ -42,23 +42,30 @@ async function expectInside(page: Page, sheet: Locator) {
     const own = await boxOf(scroller);
     expect(own.y + own.height).toBeLessThanOrEqual(viewport.height + 0.5);
   }
-  for (const button of await sheet.getByRole('button').all()) {
-    if (!(await button.isVisible())) continue;
-    const scrolledAway = await button.evaluate((element) => {
-      const scroller = element.closest('[data-radix-scroll-area-viewport]');
-      if (!scroller) return false;
-      const [own, view] = [element.getBoundingClientRect(), scroller.getBoundingClientRect()];
-      return own.bottom > view.bottom + 0.5 || own.top < view.top - 0.5;
-    });
-    if (scrolledAway) continue;
-    const own = await boxOf(button);
-    expect(own.x).toBeGreaterThanOrEqual(box.x);
-    expect(own.x + own.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
-    expect(own.y + own.height).toBeLessThanOrEqual(viewport.height + 0.5);
-    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
-      true,
-    );
-  }
+  // Read in one pass: a picker step holds dozens of rows.
+  const outside = await sheet.evaluate(
+    (element, {sheetBox, height}) =>
+      [...element.querySelectorAll<HTMLElement>('button, [role="button"]')]
+        .filter((button) => button.checkVisibility() && button.getBoundingClientRect().width > 0)
+        .filter((button) => {
+          const scroller = button.closest('[data-radix-scroll-area-viewport]');
+          if (!scroller) return true;
+          const [own, view] = [button.getBoundingClientRect(), scroller.getBoundingClientRect()];
+          return own.bottom <= view.bottom + 0.5 && own.top >= view.top - 0.5;
+        })
+        .filter((button) => {
+          const own = button.getBoundingClientRect();
+          return (
+            own.x < sheetBox.x ||
+            own.right > sheetBox.x + sheetBox.width + 0.5 ||
+            own.bottom > height + 0.5 ||
+            button.scrollWidth > button.clientWidth + 1
+          );
+        })
+        .map((button) => button.textContent ?? button.getAttribute('aria-label')),
+    {sheetBox: box, height: viewport.height},
+  );
+  expect(outside).toEqual([]);
   // A title wraps, or on the hand-off truncates with the name in full below; either way it ends inside the sheet.
   const title = await boxOf(sheet.getByRole('heading').first());
   expect(title.x + title.width).toBeLessThanOrEqual(box.x + box.width);
@@ -120,7 +127,14 @@ test.describe('Add data sheet layout', () => {
             right.name.length - left.name.length ||
             right.exportSteps.steps.join('').length - left.exportSteps.steps.join('').length,
         )[0];
-        // Its row's name is the bank's name followed by its country.
+        await sheet.getByTestId('bank-import-country').click();
+        await expect(sheet.getByRole('heading', {name: 'Choose a country'})).toBeVisible();
+        await expectInside(page, sheet);
+        await sheet.getByRole('button', {name: 'Back'}).click();
+        // A search finds it in any country; its row's name is the bank's name followed by its country.
+        await sheet
+          .getByRole('searchbox', {name: 'Search banks in every country'})
+          .fill(longest.name.slice(0, 12));
         await sheet.getByRole('button', {name: longest.name}).click();
         await expect(sheet.getByRole('heading', {name: 'Import a file'})).toBeVisible();
         await expectInside(page, sheet);
