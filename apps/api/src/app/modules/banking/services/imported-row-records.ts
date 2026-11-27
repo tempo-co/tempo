@@ -17,6 +17,9 @@ export type RemovedImportedRow = {row: BankTransaction; ownerEdits: OwnerEdits |
 /** A closing balance a statement stated for an account: the signed decimal as of the end of `date`. */
 export type StatementClosingBalance = {date: string; amount: string};
 
+/** The days an import's rows span, for one account it wrote to (`YYYY-MM-DD`, both included). */
+export type AccountImportRange = {bankAccountId: BankAccount['id']; from: string; to: string};
+
 /**
  * What file import records about the rows it added (its import records, doubtful and never-sent rows), kept true by
  * banking's writes. File import implements it and registers it (`ImportedRowRecordsRegistry`); every call runs in the
@@ -65,6 +68,11 @@ export interface ImportedRowRecords {
 		ownerId: Account['id'],
 		bankAccountId: BankAccount['id'],
 	): Promise<StatementClosingBalance | null>;
+	/**
+	 * The date range of each import of the owner that is not undone, once per account it wrote to (`from` and `to` as
+	 * the import's `dateFrom` and `dateTo`). Imports that held no entries have none.
+	 */
+	findImportRanges(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportRange[]>;
 	/** The accounts with a closing balance recorded by an import under the owner's connection. */
 	findAccountsWithClosingBalances(
 		manager: EntityManager,

@@ -56,6 +56,7 @@ import {BankingSyncQueueService} from './services/banking-sync-queue.service';
 import {BankingSyncProcessor} from './services/banking-sync.processor';
 import {BankingSyncService} from './services/banking-sync.service';
 import {BulkCategoryService} from './services/bulk-category.service';
+import {DataCoverageService} from './services/data-coverage.service';
 import {DerivedDataRefreshService} from './services/derived-data-refresh.service';
 import {FileAccountBalanceService} from './services/file-account-balance.service';
 import {FxRateService} from './services/fx-rate.service';
@@ -110,6 +111,7 @@ import {ReportingCurrencyService} from './services/reporting-currency.service';
 		BankTransactionService,
 		BulkCategoryService,
 		BankTransactionSummaryService,
+		DataCoverageService,
 		BankTransactionHistoryService,
 		MerchantSpendingService,
 		BankTransactionAmountConversionService,

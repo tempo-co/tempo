@@ -22,6 +22,7 @@ import type {
 	BankConnectionAuthorizationResponse,
 	BankConnectionTransactionsResponse,
 	BankSyncRun,
+	DataCoverage,
 } from '@tempo/contracts';
 import {Request, Response} from 'express';
 
@@ -39,12 +40,15 @@ import {BankConnectionQueryService} from '../services/bank-connection-query.serv
 import {BankConnectionRemovalService} from '../services/bank-connection-removal.service';
 import {BankTransactionService} from '../services/bank-transaction.service';
 import {BankingSyncService} from '../services/banking-sync.service';
+import {DataCoverageService} from '../services/data-coverage.service';
 import {FileAccountBalanceService} from '../services/file-account-balance.service';
 import {BANKING_ACCOUNT_NOT_FOUND} from './constants/banking-messages.constants';
+import {BROWSING_THROTTLE} from './constants/throttle.constants';
 import {BankConnectionAuthorizeDto} from './dtos/bank-connection-authorize.dto';
 import {BankConnectionCallbackDto} from './dtos/bank-connection-callback.dto';
 import {BankConnectionRemoveDto} from './dtos/bank-connection-remove.dto';
 import {BankConnectionTransactionsQueryDto} from './dtos/bank-connection-transactions-query.dto';
+import {HomeReadQueryDto} from './dtos/home-read-query.dto';
 import {SetBankAccountBalanceDto} from './dtos/set-bank-account-balance.dto';
 import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
@@ -60,6 +64,7 @@ export class BankConnectionController {
 		private readonly bankingSyncService: BankingSyncService,
 		private readonly configurationService: ConfigurationService,
 		private readonly fileAccountBalanceService: FileAccountBalanceService,
+		private readonly dataCoverageService: DataCoverageService,
 	) {}
 
 	@Post('authorize')
@@ -81,6 +86,13 @@ export class BankConnectionController {
 	@TokenReadable()
 	async getConnections(@CurrentAccount() account: Account): Promise<BankConnection[]> {
 		return this.bankConnectionQueryService.findAll(account);
+	}
+
+	@Get('coverage')
+	@TokenReadable()
+	@Throttle(BROWSING_THROTTLE)
+	getCoverage(@CurrentAccount() account: Account, @Query() query: HomeReadQueryDto): Promise<DataCoverage> {
+		return this.dataCoverageService.getCoverage(account, query.asOf);
 	}
 
 	@Post(':connectionId/refresh')

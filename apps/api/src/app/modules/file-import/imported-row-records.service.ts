@@ -7,6 +7,7 @@ import {BankConnection} from '@modules/banking/bank-connection.entity';
 import {BankTransaction} from '@modules/banking/bank-transaction.entity';
 import {BATCH_WRITE_CHUNK_SIZE, chunkArray} from '@modules/banking/banking.utils';
 import {
+	AccountImportRange,
 	ImportedRowQuestion,
 	ImportedRowRecords,
 	ImportedRowRecordsRegistry,
@@ -187,6 +188,22 @@ export class ImportedRowRecordsService implements ImportedRowRecords {
 			[bankAccountId, ownerId],
 		);
 		return statement ?? null;
+	}
+
+	async findImportRanges(manager: EntityManager, ownerId: Account['id']): Promise<AccountImportRange[]> {
+		// Joined through each account's own connection, so only the owner's accounts that still exist count.
+		return manager.query(
+			`SELECT bank_account."id" AS "bankAccountId",
+				to_char(bank_import."dateFrom", 'YYYY-MM-DD') AS "from", to_char(bank_import."dateTo", 'YYYY-MM-DD') AS "to"
+			FROM "bank_imports" bank_import
+			CROSS JOIN LATERAL unnest(bank_import."bankAccountIds") written("id")
+			JOIN "bank_accounts" bank_account ON bank_account."id" = written."id"
+			JOIN "bank_connections" connection ON connection."id" = bank_account."bankConnectionId"
+				AND connection."accountId" = $1
+			WHERE bank_import."accountId" = $1 AND bank_import."undoneAt" IS NULL
+				AND bank_import."dateFrom" IS NOT NULL AND bank_import."dateTo" IS NOT NULL`,
+			[ownerId],
+		);
 	}
 
 	async findAccountsWithClosingBalances(

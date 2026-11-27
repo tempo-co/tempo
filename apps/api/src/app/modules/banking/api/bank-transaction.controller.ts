@@ -27,6 +27,7 @@ import type {
 	BankTransactionSummary,
 	BankTransactionTotals,
 	BankTransactionsResponse,
+	SpendingPace,
 } from '@tempo/contracts';
 import {Response} from 'express';
 
@@ -55,6 +56,7 @@ import {
 import {BankTransactionOwnTransferUpdateDto} from './dtos/bank-transaction-own-transfer-update.dto';
 import {BankTransactionQueryDto, BankTransactionTotalsQueryDto} from './dtos/bank-transaction-query.dto';
 import {BankTransactionSummaryQueryDto} from './dtos/bank-transaction-summary-query.dto';
+import {HomeReadQueryDto} from './dtos/home-read-query.dto';
 import {RecurringSeriesQueryDto} from './dtos/recurring-series.dto';
 import {TotalsCurrencyInterceptor} from './totals-currency.interceptor';
 
@@ -107,6 +109,13 @@ export class BankTransactionController {
 		@Query() query: BankTransactionSummaryQueryDto,
 	): Promise<BankTransactionSummary> {
 		return this.bankTransactionSummaryService.getSummary(account, query);
+	}
+
+	@Get('spending-pace')
+	@TokenReadable()
+	@Throttle(BROWSING_THROTTLE)
+	getSpendingPace(@CurrentAccount() account: Account, @Query() query: HomeReadQueryDto): Promise<SpendingPace> {
+		return this.bankTransactionSummaryService.getSpendingPace(account, query);
 	}
 
 	@Get('cash-flow')
