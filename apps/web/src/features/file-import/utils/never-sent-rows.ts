@@ -2,7 +2,7 @@ import type {
   BankImportNeverSentKind,
   BankImportNeverSentRow,
   BankImportSummary,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {plural} from './import-format';
 

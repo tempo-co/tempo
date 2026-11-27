@@ -1,7 +1,7 @@
 import {getQueueToken} from '@nestjs/bullmq';
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@wisp/contracts';
 import {JobType, Queue} from 'bullmq';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';

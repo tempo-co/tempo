@@ -1,5 +1,5 @@
 import {getRepositoryToken} from '@nestjs/typeorm';
-import {type ReportingCurrency} from '@tempo/contracts';
+import {type ReportingCurrency} from '@wisp/contracts';
 import {DataSource, Repository} from 'typeorm';
 
 import {ConfirmPresetReportingCurrencies20261119150000} from '@core/database/migrations/20261119150000-confirm-preset-reporting-currencies';

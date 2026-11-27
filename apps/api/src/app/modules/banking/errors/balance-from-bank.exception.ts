@@ -1,5 +1,5 @@
 import {ConflictException} from '@nestjs/common';
-import type {BankConnectionErrorCode} from '@tempo/contracts';
+import type {BankConnectionErrorCode} from '@wisp/contracts';
 
 import {BANKING_BALANCE_FROM_BANK} from '../api/constants/banking-messages.constants';
 

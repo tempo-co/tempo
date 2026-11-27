@@ -1,7 +1,7 @@
 import {InjectQueue} from '@nestjs/bullmq';
 import {Inject, Injectable, Logger, OnModuleInit} from '@nestjs/common';
 import {InjectDataSource} from '@nestjs/typeorm';
-import {BANK_LIST, bankNameKey, bankNameSpelling} from '@tempo/contracts';
+import {BANK_LIST, bankNameKey, bankNameSpelling} from '@wisp/contracts';
 import {Queue} from 'bullmq';
 import Redis from 'ioredis';
 import {DataSource} from 'typeorm';

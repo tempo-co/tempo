@@ -1,4 +1,4 @@
-import type {ReportingCurrency} from '@tempo/contracts';
+import type {ReportingCurrency} from '@wisp/contracts';
 import {useState} from 'react';
 
 import {PendingLabel} from '@/components/shared/pending-label';

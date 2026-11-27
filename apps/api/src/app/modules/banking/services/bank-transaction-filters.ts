@@ -5,7 +5,7 @@ import {
 	type BankTransactionCategorizationStatus,
 	type BankTransactionCategory,
 	type BankTransactionCategoryStatusFilterValue,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Brackets, type Repository, SelectQueryBuilder} from 'typeorm';
 
 import type {BankTransactionFilterQueryDto} from '../api/dtos/bank-transaction-query.dto';

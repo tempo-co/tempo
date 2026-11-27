@@ -1,5 +1,5 @@
 import {HttpException, HttpStatus} from '@nestjs/common';
-import type {BankImportAccountQuestion, BankImportError, BankImportErrorCode} from '@tempo/contracts';
+import type {BankImportAccountQuestion, BankImportError, BankImportErrorCode} from '@wisp/contracts';
 
 const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string}> = {
 	unsupported_format: {

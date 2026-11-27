@@ -1,6 +1,6 @@
 import {BadRequestException, ConflictException, Injectable, Logger, NotFoundException} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankConnectionRemoveRequest} from '@tempo/contracts';
+import type {BankConnectionRemoveRequest} from '@wisp/contracts';
 import {DataSource, EntityManager, In, Repository} from 'typeorm';
 
 import {dateInTimeZone} from '@core/time/app-time-zone';

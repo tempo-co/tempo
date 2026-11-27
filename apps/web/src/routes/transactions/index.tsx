@@ -5,7 +5,7 @@ import {
   BANK_TRANSACTION_SEARCH_MAX_LENGTH,
   type BankTransactionBulkSelection,
   BankTransactionCategory,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {CircleCheck, Layers, ListChecks} from 'lucide-react';
 import {useEffect, useState} from 'react';
 import {toast} from 'sonner';

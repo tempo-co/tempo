@@ -21,7 +21,7 @@ import {
 	MERCHANT_GROUP_ID_PATTERN,
 	SORT_ORDERS,
 	type SortOrder,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Transform, Type} from 'class-transformer';
 import {
 	IsArray,

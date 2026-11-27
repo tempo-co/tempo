@@ -5,7 +5,7 @@ import type {
   BankImportLayoutProposal,
   BankImportSummary,
   ConfirmBankImportLayoutProposalRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {type SetStateAction, useCallback, useRef, useState} from 'react';
 import {toast} from 'sonner';
 

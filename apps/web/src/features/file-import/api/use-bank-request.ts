@@ -1,5 +1,5 @@
 import {useMutation} from '@tanstack/react-query';
-import type {CreateBankRequest} from '@tempo/contracts';
+import type {CreateBankRequest} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

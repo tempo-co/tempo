@@ -4,7 +4,7 @@ import {
   BANK_IMPORT_MAX_ROWS_PER_ADD,
   type BankImportNeverSentRow,
   type BankImportSummary,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

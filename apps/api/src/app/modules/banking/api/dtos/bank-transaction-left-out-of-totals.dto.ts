@@ -1,4 +1,4 @@
-import type {BankTransactionBulkLeftOutOfTotalsUpdate, BankTransactionLeftOutOfTotalsUpdate} from '@tempo/contracts';
+import type {BankTransactionBulkLeftOutOfTotalsUpdate, BankTransactionLeftOutOfTotalsUpdate} from '@wisp/contracts';
 import {IsBoolean} from 'class-validator';
 
 import {BankTransactionBulkSelectionDto} from './bank-transaction-bulk-selection.dto';

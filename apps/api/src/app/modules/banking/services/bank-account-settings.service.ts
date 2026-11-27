@@ -1,5 +1,5 @@
 import {ConflictException, Injectable, NotFoundException} from '@nestjs/common';
-import type {UpdateBankAccountRequest} from '@tempo/contracts';
+import type {UpdateBankAccountRequest} from '@wisp/contracts';
 import {DataSource} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

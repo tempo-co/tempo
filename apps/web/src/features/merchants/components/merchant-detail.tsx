@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {CashFlowInterval, MerchantGroup, MerchantGroupPeriod} from '@tempo/contracts';
+import type {CashFlowInterval, MerchantGroup, MerchantGroupPeriod} from '@wisp/contracts';
 import {format} from 'date-fns';
 import {ArrowLeft, X} from 'lucide-react';
 import {useState} from 'react';

@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportLayoutProposal as ProposalResponse} from '@tempo/contracts';
+import type {BankImportLayoutProposal as ProposalResponse} from '@wisp/contracts';
 import {readFileSync} from 'node:fs';
 import {Server} from 'node:net';
 import {join} from 'node:path';

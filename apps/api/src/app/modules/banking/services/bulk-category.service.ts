@@ -5,7 +5,7 @@ import type {
 	BankTransactionBulkCategoryResult,
 	BankTransactionBulkCategoryScope,
 	BankTransactionCategory,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {EntityManager, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

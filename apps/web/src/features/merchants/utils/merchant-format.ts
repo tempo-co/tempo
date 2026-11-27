@@ -1,4 +1,4 @@
-import type {MerchantGroup, MerchantRankingItem} from '@tempo/contracts';
+import type {MerchantGroup, MerchantRankingItem} from '@wisp/contracts';
 
 import {formatMoney, toCents} from '@/features/dashboard/utils/money';
 

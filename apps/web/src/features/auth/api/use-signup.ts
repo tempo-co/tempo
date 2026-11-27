@@ -1,6 +1,6 @@
 import {useMutation} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
-import type {Account, SignUpRequest} from '@tempo/contracts';
+import type {Account, SignUpRequest} from '@wisp/contracts';
 
 import {browserTimeZone} from '@/features/settings/utils/time-zones';
 import {signIn} from '@/query-client';

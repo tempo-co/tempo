@@ -6,7 +6,7 @@ import {
   type BankImportDoubtfulRow,
   type BankImportLayoutProposal,
   type BankImportNeverSentRow,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';

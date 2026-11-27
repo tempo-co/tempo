@@ -7,8 +7,8 @@ import type {
 	BankImportList,
 	BankImportNeverSentRow,
 	BankImportSummary,
-} from '@tempo/contracts';
-import {BANK_REQUEST_MAX_PER_DAY, OTHER_BANK_ID} from '@tempo/contracts';
+} from '@wisp/contracts';
+import {BANK_REQUEST_MAX_PER_DAY, OTHER_BANK_ID} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {type Server as HttpServer, request as httpRequest} from 'node:http';

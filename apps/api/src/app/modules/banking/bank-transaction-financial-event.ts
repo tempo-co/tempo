@@ -3,7 +3,7 @@ import type {
 	BankTransactionDirection,
 	BankTransactionFinancialEventSource,
 	BankTransactionFinancialEventType,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {normalizeBankTransactionText} from './bank-transaction-display';
 import {normalizeCurrency} from './services/bank-transaction-amount-conversion.utils';

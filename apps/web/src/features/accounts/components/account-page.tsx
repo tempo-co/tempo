@@ -1,5 +1,5 @@
 import {Link, useNavigate, useRouter} from '@tanstack/react-router';
-import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
+import type {BankAccount, BankConnection, BankImportSummary} from '@wisp/contracts';
 import {addMonths, endOfMonth, format, isSameYear, parseISO} from 'date-fns';
 import {EyeOff, FileQuestion, FileUp, RefreshCw, Unlink} from 'lucide-react';
 import {type MouseEvent, type ReactNode, useState} from 'react';

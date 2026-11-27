@@ -1,6 +1,6 @@
 import {zodResolver} from '@hookform/resolvers/zod';
 import {Link} from '@tanstack/react-router';
-import type {Account, PasswordResetErrorCode} from '@tempo/contracts';
+import type {Account, PasswordResetErrorCode} from '@wisp/contracts';
 import {Loader} from 'lucide-react';
 import {useForm} from 'react-hook-form';
 

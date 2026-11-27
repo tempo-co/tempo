@@ -1,6 +1,6 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {useNavigate, useRouter} from '@tanstack/react-router';
-import type {EmailVerifyRequest, MessageResponse} from '@tempo/contracts';
+import type {EmailVerifyRequest, MessageResponse} from '@wisp/contracts';
 import {useCallback} from 'react';
 import {toast} from 'sonner';
 

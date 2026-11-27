@@ -3,7 +3,7 @@ import {
   type BankImportLayoutMapping,
   type BankImportLayoutPreviewRow,
   bankNameKey,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 const FIELD_NAMES: Record<BankImportLayoutField, string> = {
   date: 'Date',

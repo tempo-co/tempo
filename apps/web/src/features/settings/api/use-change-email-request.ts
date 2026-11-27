@@ -1,5 +1,5 @@
 import {useMutation} from '@tanstack/react-query';
-import type {EmailChangeRequest} from '@tempo/contracts';
+import type {EmailChangeRequest} from '@wisp/contracts';
 
 import {HttpError, INVALID_PASSWORD_MESSAGE, api} from '@/utils/api';
 

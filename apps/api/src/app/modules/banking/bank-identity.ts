@@ -1,4 +1,4 @@
-import {bankNameKey} from '@tempo/contracts';
+import {bankNameKey} from '@wisp/contracts';
 import {FindOperator, Like} from 'typeorm';
 
 /**

@@ -3,7 +3,7 @@ import type {
   BankImportLayout,
   BankImportLayoutProposal,
   ConfirmBankImportLayoutProposalRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

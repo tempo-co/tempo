@@ -1,5 +1,5 @@
 import {INestApplication} from '@nestjs/common';
-import type {BankTransactionsResponse} from '@tempo/contracts';
+import type {BankTransactionsResponse} from '@wisp/contracts';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';
 

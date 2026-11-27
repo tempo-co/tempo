@@ -6,7 +6,7 @@ import type {
 	Tool,
 } from '@anthropic-ai/sdk/resources/messages';
 import {Injectable, Logger, Optional} from '@nestjs/common';
-import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategoryDefinition} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategoryDefinition} from '@wisp/contracts';
 import {z} from 'zod';
 
 import {formatClaudeUsage} from '@core/anthropic/claude-usage';

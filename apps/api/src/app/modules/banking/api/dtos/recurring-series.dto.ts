@@ -1,4 +1,4 @@
-import type {RecurringContinuationUpdate, RecurringSeriesHiddenUpdate, RecurringSeriesQuery} from '@tempo/contracts';
+import type {RecurringContinuationUpdate, RecurringSeriesHiddenUpdate, RecurringSeriesQuery} from '@wisp/contracts';
 import {IsBoolean} from 'class-validator';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';

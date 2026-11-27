@@ -3,7 +3,7 @@ import {
   BANK_REQUEST_MAX_NAME_LENGTH,
   type BankRequestFileType,
   bankNameSpelling,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {CircleCheck, CloudOff} from 'lucide-react';
 import {useId, useState} from 'react';
 

@@ -1,4 +1,4 @@
-import type {BankConnectionStatus, BankSyncStatus} from '@tempo/contracts';
+import type {BankConnectionStatus, BankSyncStatus} from '@wisp/contracts';
 import ms from 'ms';
 
 export const BANK_CONNECTION_STATUSES = {

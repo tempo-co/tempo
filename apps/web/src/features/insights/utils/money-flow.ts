@@ -1,4 +1,4 @@
-import type {BankTransactionBreakdownPart} from '@tempo/contracts';
+import type {BankTransactionBreakdownPart} from '@wisp/contracts';
 
 import {categoryLabel} from '@/features/dashboard/utils/format';
 import {toCents} from '@/features/dashboard/utils/money';

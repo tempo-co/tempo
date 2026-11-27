@@ -1,4 +1,4 @@
-import type {BankConnection, DataCoverage} from '@tempo/contracts';
+import type {BankConnection, DataCoverage} from '@wisp/contracts';
 import {format} from 'date-fns';
 import {FileUp} from 'lucide-react';
 import type {MouseEvent, ReactNode} from 'react';

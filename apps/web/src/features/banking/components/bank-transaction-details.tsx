@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import {BankTransaction, BankTransactionCounterpart} from '@tempo/contracts';
+import {BankTransaction, BankTransactionCounterpart} from '@wisp/contracts';
 import {ArrowDown, ArrowRight, Check, ChevronRight, EyeOff, Landmark} from 'lucide-react';
 import {useState} from 'react';
 

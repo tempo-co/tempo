@@ -1,5 +1,5 @@
 {
-	"name": "tempo-api",
+	"name": "wisp-api",
 	"version": "0.0.1",
 	"description": "",
 	"author": "",
@@ -58,7 +58,7 @@
 		"@nestjs/terminus": "^11.1.1",
 		"@nestjs/throttler": "^6.8.0",
 		"@nestjs/typeorm": "^11.0.3",
-		"@tempo/contracts": "file:../../packages/contracts",
+		"@wisp/contracts": "file:../../packages/contracts",
 		"@xmldom/xmldom": "0.9.12",
 		"argon2": "^0.45.2",
 		"bullmq": "^6.7.7",
@@ -123,7 +123,7 @@
 		"moduleNameMapper": {
 			"^@core/(.*)$": "<rootDir>/src/app/core/$1",
 			"^@modules/(.*)$": "<rootDir>/src/app/modules/$1",
-			"^@tempo/contracts$": "<rootDir>/../../packages/contracts/src",
+			"^@wisp/contracts$": "<rootDir>/../../packages/contracts/src",
 			"^(\\.{1,2}/.*)\\.js$": "$1"
 		},
 		"moduleFileExtensions": [

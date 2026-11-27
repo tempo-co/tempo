@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankTransactionTotals, ReportingCurrency} from '@tempo/contracts';
+import type {BankTransactionTotals, ReportingCurrency} from '@wisp/contracts';
 import TestAgent from 'supertest/lib/agent';
 import {DeepPartial, In, Repository} from 'typeorm';
 

@@ -3,7 +3,7 @@ import {
   BankTransaction,
   BankTransactionCategory,
   BankTransactionCategoryImpact,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

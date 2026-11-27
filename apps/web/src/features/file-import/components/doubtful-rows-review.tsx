@@ -3,7 +3,7 @@ import type {
   BankImportDoubtfulRow,
   BankImportSummary,
   ResolveBankImportDoubtfulRowRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {differenceInCalendarDays, parseISO} from 'date-fns';
 import {CheckCheck, CircleAlert, FilePlus, FileQuestion, Files} from 'lucide-react';
 import {type ReactNode, useEffect, useRef, useState} from 'react';

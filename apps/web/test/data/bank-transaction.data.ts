@@ -1,4 +1,4 @@
-import type {BankTransaction} from '@tempo/contracts';
+import type {BankTransaction} from '@wisp/contracts';
 
 /** Synthetic HTTP transaction response, not an API entity or persisted banking fixture. */
 export function createBankTransaction(overrides: Partial<BankTransaction> = {}): BankTransaction {

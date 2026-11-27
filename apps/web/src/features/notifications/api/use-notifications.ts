@@ -4,7 +4,7 @@ import type {
   NotificationSettings,
   PushSubscriptionRegistration,
   PushSubscriptionRemoval,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {

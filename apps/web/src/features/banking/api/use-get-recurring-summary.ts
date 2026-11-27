@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {RecurringSeriesQuery, RecurringSummary} from '@tempo/contracts';
+import type {RecurringSeriesQuery, RecurringSummary} from '@wisp/contracts';
 
 import {HOME_REFRESH_INTERVAL_MS} from '@/features/dashboard/api/refresh-interval';
 import {api} from '@/utils/api';

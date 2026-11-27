@@ -2,7 +2,7 @@ import {
 	BANK_ACCOUNT_ALIAS_MAX_LENGTH,
 	type BankAccountRemoveRequest,
 	type UpdateBankAccountRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Equals, IsBoolean, IsOptional, IsString, MaxLength, ValidateIf} from 'class-validator';
 
 import {BANKING_ACCOUNT_REMOVAL_CONFIRMATION_REQUIRED} from '../constants/banking-messages.constants';

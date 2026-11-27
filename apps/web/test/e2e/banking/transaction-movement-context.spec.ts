@@ -1,4 +1,4 @@
-import type {BankTransaction, BankTransactionCounterpart} from '@tempo/contracts';
+import type {BankTransaction, BankTransactionCounterpart} from '@wisp/contracts';
 
 import {formatBankTransactionExchangeRate} from '../../../src/features/banking/utils/formatters';
 import {createAccount} from '../../data/account.data';

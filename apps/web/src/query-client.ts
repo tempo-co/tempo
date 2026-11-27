@@ -5,7 +5,7 @@ import {
   QueryClient,
   type QueryKey,
 } from '@tanstack/react-query';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 
 import {
   CURRENT_ACCOUNT_KEY,

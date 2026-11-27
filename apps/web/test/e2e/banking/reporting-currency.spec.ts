@@ -1,5 +1,5 @@
 import type {Page, Route} from '@playwright/test';
-import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
+import {REPORTING_CURRENCIES, type ReportingCurrency} from '@wisp/contracts';
 
 import {
   HOME_CONNECTION,

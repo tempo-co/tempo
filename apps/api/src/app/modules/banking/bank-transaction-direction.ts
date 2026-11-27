@@ -1,4 +1,4 @@
-import {type BankTransactionDirection, CREDIT_DEBIT_INDICATORS, type CreditDebitIndicator} from '@tempo/contracts';
+import {type BankTransactionDirection, CREDIT_DEBIT_INDICATORS, type CreditDebitIndicator} from '@wisp/contracts';
 
 export type {BankTransactionDirection, CreditDebitIndicator};
 export {CREDIT_DEBIT_INDICATORS};

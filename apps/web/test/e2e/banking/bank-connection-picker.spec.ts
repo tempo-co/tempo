@@ -1,5 +1,5 @@
 import type {Locator, Page} from '@playwright/test';
-import type {BankConnection, BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnection, BankConnectionAspsp} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {HOME_CONNECTION} from '../../data/home-history.data';

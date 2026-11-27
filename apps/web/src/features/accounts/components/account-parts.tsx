@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 import {RefreshCw} from 'lucide-react';
 import type {MouseEvent} from 'react';
 

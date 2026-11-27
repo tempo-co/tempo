@@ -1,4 +1,4 @@
-import type {PasswordResetVerifyRequest} from '@tempo/contracts';
+import type {PasswordResetVerifyRequest} from '@wisp/contracts';
 import {IsNotEmpty, IsString, IsUUID, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';

@@ -1,4 +1,4 @@
-import type {BankTransactionOwnTransferUpdate} from '@tempo/contracts';
+import type {BankTransactionOwnTransferUpdate} from '@wisp/contracts';
 import {IsIn} from 'class-validator';
 
 import {OWN_TRANSFER_OVERRIDES, type OwnTransferOverride} from '../../own-transfer/own-transfer-detection';

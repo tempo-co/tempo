@@ -1,5 +1,5 @@
 import {Link, type LinkProps} from '@tanstack/react-router';
-import type {BankTransaction} from '@tempo/contracts';
+import type {BankTransaction} from '@wisp/contracts';
 
 import {CurrencyAmount} from '@/components/shared/currency-amount';
 

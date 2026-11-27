@@ -1,4 +1,4 @@
-import {isBankTransactionCategory} from '@tempo/contracts';
+import {isBankTransactionCategory} from '@wisp/contracts';
 import type {CSSProperties} from 'react';
 
 import {BANK_TRANSACTION_CATEGORY_META} from '@/features/banking/utils/bank-transaction-category-meta';

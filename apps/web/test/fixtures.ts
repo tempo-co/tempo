@@ -1,6 +1,6 @@
 import {faker} from '@faker-js/faker';
 import {APIRequestContext, test as base, expect} from '@playwright/test';
-import type {NotificationSettings} from '@tempo/contracts';
+import type {NotificationSettings} from '@wisp/contracts';
 import {loadEnv} from 'vite';
 
 import {AccountSettingsPage} from './pages/account-settings.page';

@@ -1,4 +1,4 @@
-import {BANK_LIST, type Bank, bankNameKey} from '@tempo/contracts';
+import {BANK_LIST, type Bank, bankNameKey} from '@wisp/contracts';
 
 import {browserRegion, countryName} from '@/utils/countries';
 import {matchesSearch} from '@/utils/text-search';

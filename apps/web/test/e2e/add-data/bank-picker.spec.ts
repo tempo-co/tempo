@@ -1,5 +1,5 @@
 import type {Page, Route} from '@playwright/test';
-import {BANK_LIST, type CreateBankRequest, OTHER_BANK_EXPORT_TEXT} from '@tempo/contracts';
+import {BANK_LIST, type CreateBankRequest, OTHER_BANK_EXPORT_TEXT} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';

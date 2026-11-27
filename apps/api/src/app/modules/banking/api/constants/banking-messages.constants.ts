@@ -4,7 +4,7 @@ import {
 	type BalanceTrendInterval,
 	CASH_FLOW_INTERVALS,
 	MAX_RANGE_PERIODS,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 const RANGE_UNITS: Record<BalanceTrendInterval, string> = {day: 'days', week: 'weeks', month: 'months', year: 'years'};
 

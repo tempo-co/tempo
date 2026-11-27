@@ -1,6 +1,6 @@
 import {Controller, Get, Param, Query, UseInterceptors} from '@nestjs/common';
 import {Throttle} from '@nestjs/throttler';
-import type {MerchantGroup, MerchantGroupPeriods, MerchantGroupsResponse, MerchantRanking} from '@tempo/contracts';
+import type {MerchantGroup, MerchantGroupPeriods, MerchantGroupsResponse, MerchantRanking} from '@wisp/contracts';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';

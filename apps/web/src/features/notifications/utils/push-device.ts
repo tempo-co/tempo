@@ -1,4 +1,4 @@
-import type {PushSubscriptionRegistration} from '@tempo/contracts';
+import type {PushSubscriptionRegistration} from '@wisp/contracts';
 
 /**
  * Whether this browser can get Wisp's alerts, and if not, what would change that. iPhone and iPad deliver web push

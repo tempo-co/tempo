@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import {BankTransaction, BankTransactionCategoryImpact} from '@tempo/contracts';
+import {BankTransaction, BankTransactionCategoryImpact} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {createBankTransaction} from '../../data/bank-transaction.data';

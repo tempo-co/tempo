@@ -8,13 +8,13 @@ import type {
 	BankImportLayoutProposal as BankImportLayoutProposalResponse,
 	BankImportLayout as BankImportLayoutResponse,
 	ConfirmBankImportLayoutProposalRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {
 	BANK_IMPORT_CURRENCIES,
 	BANK_IMPORT_MAX_LAYOUT_PROPOSALS_PER_DAY,
 	bankNameKey,
 	bankNameSpelling,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {createHash, randomUUID} from 'node:crypto';
 import {DataSource, EntityManager, In, MoreThan, Not} from 'typeorm';
 

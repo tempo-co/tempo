@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import type {BankConnection, UpdateBankAccountRequest} from '@tempo/contracts';
+import type {BankConnection, UpdateBankAccountRequest} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';

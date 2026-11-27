@@ -2,7 +2,7 @@ import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 import {Logger} from '@nestjs/common';
-import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@wisp/contracts';
 
 import {ToolReadError} from './errors';
 import {filtersSchema} from './inputs';

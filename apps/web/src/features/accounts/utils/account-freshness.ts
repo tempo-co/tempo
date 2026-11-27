@@ -1,4 +1,4 @@
-import type {BankConnection, BankImportSummary} from '@tempo/contracts';
+import type {BankConnection, BankImportSummary} from '@wisp/contracts';
 import {differenceInCalendarDays, format, isSameYear, parseISO} from 'date-fns';
 
 import {

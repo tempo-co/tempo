@@ -3,7 +3,7 @@ import type {
   RecurringSeriesDirection,
   RecurringSeriesList,
   RecurringSeriesLists,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {format} from 'date-fns';
 import {
   CalendarClock,

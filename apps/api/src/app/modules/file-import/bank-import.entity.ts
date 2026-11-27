@@ -1,4 +1,4 @@
-import type {BankImportFormat, BankImportStatementGap} from '@tempo/contracts';
+import type {BankImportFormat, BankImportStatementGap} from '@wisp/contracts';
 import {Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

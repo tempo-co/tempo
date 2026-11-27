@@ -1,4 +1,4 @@
-import {BANK_LIST} from '@tempo/contracts';
+import {BANK_LIST} from '@wisp/contracts';
 
 import {
 	CORPUS_ENV,

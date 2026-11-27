@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransaction, RecurringSeries} from '@tempo/contracts';
+import type {BankTransaction, RecurringSeries} from '@wisp/contracts';
 import {differenceInCalendarMonths, format} from 'date-fns';
 import {Eye, EyeOff, Link2, Link2Off, X} from 'lucide-react';
 import {Bar, BarChart, Cell, XAxis} from 'recharts';

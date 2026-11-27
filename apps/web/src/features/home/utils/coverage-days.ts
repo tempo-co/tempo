@@ -1,4 +1,4 @@
-import type {DataCoverage} from '@tempo/contracts';
+import type {DataCoverage} from '@wisp/contracts';
 import {addDays, format} from 'date-fns';
 
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';

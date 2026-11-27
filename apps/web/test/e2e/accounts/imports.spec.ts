@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {API_URL, expect, test} from '../../fixtures';

@@ -1,4 +1,4 @@
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 
 /** Synthetic HTTP account response; each call returns a fresh object. */
 export function createAccount(overrides: Partial<Account> = {}): Account {

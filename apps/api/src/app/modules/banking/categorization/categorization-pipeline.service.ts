@@ -1,5 +1,5 @@
 import {Inject, Injectable} from '@nestjs/common';
-import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@wisp/contracts';
 
 import {ConfigurationService} from '@core/config/config.service';
 import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';

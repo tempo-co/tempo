@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
+import type {BankAccount, BankConnection, BankImportSummary} from '@wisp/contracts';
 import {useMemo} from 'react';
 
 import {bankConnectionsQueryOptions} from '@/features/banking/api/use-get-all-bank-connections';

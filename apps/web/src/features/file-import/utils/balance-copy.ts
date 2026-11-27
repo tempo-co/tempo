@@ -1,4 +1,4 @@
-import type {BankAccount} from '@tempo/contracts';
+import type {BankAccount} from '@wisp/contracts';
 
 import {HttpError} from '@/utils/api';
 

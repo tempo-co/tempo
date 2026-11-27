@@ -33,7 +33,7 @@ import {
 	type RecurringSeriesLists,
 	type RecurringSeriesQuery,
 	type RecurringSummary,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import validator from 'validator';
 import {z} from 'zod';
 

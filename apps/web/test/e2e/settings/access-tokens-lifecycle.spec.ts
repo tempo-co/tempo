@@ -1,4 +1,4 @@
-import type {CreatedPersonalAccessToken} from '@tempo/contracts';
+import type {CreatedPersonalAccessToken} from '@wisp/contracts';
 
 import {API_URL, expect, test} from '../../fixtures';
 

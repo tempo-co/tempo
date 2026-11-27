@@ -1,4 +1,4 @@
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 
 import {formatCurrency} from '@/utils/format-currency';

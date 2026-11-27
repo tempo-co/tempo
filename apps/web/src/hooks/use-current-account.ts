@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 
 import {HttpError, api} from '@/utils/api';
 

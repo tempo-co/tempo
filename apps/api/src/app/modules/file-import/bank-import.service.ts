@@ -9,8 +9,8 @@ import type {
 	BankImportNeverSentRow,
 	BankImportSummary,
 	ResolveBankImportDoubtfulRowRequest,
-} from '@tempo/contracts';
-import {bankNameKey} from '@tempo/contracts';
+} from '@wisp/contracts';
+import {bankNameKey} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
 import {DataSource, EntityManager, In, IsNull, Not, Raw} from 'typeorm';
 

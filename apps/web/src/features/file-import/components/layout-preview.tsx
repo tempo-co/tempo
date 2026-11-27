@@ -3,7 +3,7 @@ import {
   type BankImportLayoutPreview,
   type BankImportLayoutPreviewRow,
   type BankImportLayoutProposal,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {CalendarCheck, FileText} from 'lucide-react';
 import {useId} from 'react';
 

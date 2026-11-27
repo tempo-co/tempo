@@ -1,5 +1,5 @@
-import {BANK_LIST, BankImportErrorCode} from '@tempo/contracts';
-import type {Bank} from '@tempo/contracts';
+import {BANK_LIST, BankImportErrorCode} from '@wisp/contracts';
+import type {Bank} from '@wisp/contracts';
 import {EntityManager} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

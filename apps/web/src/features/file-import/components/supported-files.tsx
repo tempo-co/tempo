@@ -1,4 +1,4 @@
-import type {BankImportLayout} from '@tempo/contracts';
+import type {BankImportLayout} from '@wisp/contracts';
 import {useState} from 'react';
 import {toast} from 'sonner';
 

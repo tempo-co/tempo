@@ -1,5 +1,5 @@
 import type {Locator} from '@playwright/test';
-import type {BankTransactionBreakdown, BankTransactionReviewCounts} from '@tempo/contracts';
+import type {BankTransactionBreakdown, BankTransactionReviewCounts} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';

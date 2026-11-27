@@ -1,4 +1,4 @@
-import type {BankTransaction, BankTransactionDayTotal} from '@tempo/contracts';
+import type {BankTransaction, BankTransactionDayTotal} from '@wisp/contracts';
 import {format, isThisYear, isToday, isYesterday, parseISO} from 'date-fns';
 import {EyeOff} from 'lucide-react';
 import type {ReactNode} from 'react';

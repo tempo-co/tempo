@@ -1,4 +1,4 @@
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
 import {type ElementType, type ReactNode, useState} from 'react';
 

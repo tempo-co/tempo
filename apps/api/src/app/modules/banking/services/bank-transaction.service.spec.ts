@@ -1,4 +1,4 @@
-import type {BankTransaction as BankTransactionResponse} from '@tempo/contracts';
+import type {BankTransaction as BankTransactionResponse} from '@wisp/contracts';
 import {ObjectLiteral, Repository, SelectQueryBuilder} from 'typeorm';
 
 import {BankConnection} from '../bank-connection.entity';

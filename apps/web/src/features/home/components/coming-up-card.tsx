@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {RecurringSummary} from '@tempo/contracts';
+import type {RecurringSummary} from '@wisp/contracts';
 import {format} from 'date-fns';
 import type {ReactNode} from 'react';
 

@@ -1,6 +1,6 @@
 import {useMutation} from '@tanstack/react-query';
 import {useNavigate} from '@tanstack/react-router';
-import type {Account, LogInRequest} from '@tempo/contracts';
+import type {Account, LogInRequest} from '@wisp/contracts';
 
 import {signIn} from '@/query-client';
 import {HttpError, api} from '@/utils/api';

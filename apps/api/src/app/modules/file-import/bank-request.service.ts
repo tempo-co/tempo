@@ -1,5 +1,5 @@
 import {HttpException, HttpStatus, Injectable} from '@nestjs/common';
-import {BANK_REQUEST_MAX_PER_DAY, CreateBankRequest} from '@tempo/contracts';
+import {BANK_REQUEST_MAX_PER_DAY, CreateBankRequest} from '@wisp/contracts';
 import {DataSource, MoreThan} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

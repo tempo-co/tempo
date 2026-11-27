@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankConnection, BankImportSummary} from '@tempo/contracts';
+import type {BankConnection, BankImportSummary} from '@wisp/contracts';
 import type {ReactNode} from 'react';
 
 import {accountFreshness} from '@/features/accounts/utils/account-freshness';

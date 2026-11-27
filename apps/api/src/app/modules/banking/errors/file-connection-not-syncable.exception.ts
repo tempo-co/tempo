@@ -1,5 +1,5 @@
 import {ConflictException} from '@nestjs/common';
-import type {BankConnectionErrorCode} from '@tempo/contracts';
+import type {BankConnectionErrorCode} from '@wisp/contracts';
 
 import {BANKING_FILE_CONNECTION_NOT_SYNCABLE} from '../api/constants/banking-messages.constants';
 

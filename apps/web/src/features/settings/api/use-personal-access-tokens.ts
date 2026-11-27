@@ -3,7 +3,7 @@ import type {
   CreatedPersonalAccessToken,
   PersonalAccessToken,
   PersonalAccessTokenCreateRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api} from '@/utils/api';

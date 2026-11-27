@@ -1,4 +1,4 @@
-import type {Account, BankConnection} from '@tempo/contracts';
+import type {Account, BankConnection} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, expect, test} from '../../fixtures';

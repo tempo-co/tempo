@@ -1,4 +1,4 @@
-import type {BankConnectionAuthorizationRequest} from '@tempo/contracts';
+import type {BankConnectionAuthorizationRequest} from '@wisp/contracts';
 import {Transform} from 'class-transformer';
 import {IsNotEmpty, IsString, Length, Matches, MaxLength} from 'class-validator';
 

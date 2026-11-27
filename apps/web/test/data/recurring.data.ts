@@ -4,7 +4,7 @@ import type {
   RecurringSeries,
   RecurringSeriesList,
   RecurringSeriesLists,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {fulfillJson, mockBankConnections, mockJson} from '../utils/api-mocks';
 import {createAccount} from './account.data';

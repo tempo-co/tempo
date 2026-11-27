@@ -24,7 +24,7 @@ import type {
 	BankConnectionTransactionsResponse,
 	BankSyncRun,
 	DataCoverage,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Request, Response} from 'express';
 
 import {ConfigurationService} from '@core/config/config.service';

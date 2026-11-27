@@ -3,7 +3,7 @@ import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/st
 import {CallToolResultSchema} from '@modelcontextprotocol/sdk/types.js';
 import {Logger} from '@nestjs/common';
 import {Throttle, seconds} from '@nestjs/throttler';
-import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@tempo/contracts';
+import type {BankConnection as BankConnectionResponse, BankTransactionsResponse} from '@wisp/contracts';
 import Redis from 'ioredis';
 import {createHash, randomUUID} from 'node:crypto';
 import {AddressInfo, createConnection} from 'node:net';

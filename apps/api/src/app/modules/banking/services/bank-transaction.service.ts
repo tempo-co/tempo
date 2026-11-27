@@ -13,7 +13,7 @@ import type {
 	BankTransactionRecurring,
 	BankTransaction as BankTransactionResponse,
 	BankTransactionsResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {EntityManager, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

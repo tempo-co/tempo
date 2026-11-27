@@ -1,5 +1,5 @@
 import type {Page} from '@playwright/test';
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {

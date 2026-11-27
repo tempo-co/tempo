@@ -1,4 +1,4 @@
-import type {BankTransaction} from '@tempo/contracts';
+import type {BankTransaction} from '@wisp/contracts';
 
 import {
   HOME_REVIEW_COUNTS,

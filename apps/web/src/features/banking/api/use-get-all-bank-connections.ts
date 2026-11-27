@@ -1,5 +1,5 @@
 import {queryOptions, useQuery} from '@tanstack/react-query';
-import {BankConnection} from '@tempo/contracts';
+import {BankConnection} from '@wisp/contracts';
 
 import {isSyncInProgress} from '@/features/banking/utils/bank-sync-status';
 import {api} from '@/utils/api';

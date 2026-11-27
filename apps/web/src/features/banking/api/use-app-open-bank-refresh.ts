@@ -1,5 +1,5 @@
 import {onlineManager, useQueryClient} from '@tanstack/react-query';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 import {useEffect} from 'react';
 
 import {CURRENT_ACCOUNT_KEY, PAGE_LOADED_AT} from '@/hooks/use-current-account';

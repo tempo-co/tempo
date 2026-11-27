@@ -1,6 +1,6 @@
 import {Injectable} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankTransactionCategorizationSource} from '@tempo/contracts';
+import type {BankTransactionCategorizationSource} from '@wisp/contracts';
 import {In, IsNull, Repository} from 'typeorm';
 
 import {BankTransaction} from '../bank-transaction.entity';

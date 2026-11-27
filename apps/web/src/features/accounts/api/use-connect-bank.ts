@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {useStartBankConnection} from '@/features/banking/api/use-start-bank-connection';

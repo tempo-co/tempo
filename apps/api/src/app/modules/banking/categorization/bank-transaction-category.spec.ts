@@ -3,7 +3,7 @@ import {
 	BANK_TRANSACTION_CATEGORIZATION_SOURCES,
 	BANK_TRANSACTION_CATEGORIZATION_STATUSES,
 	BANK_TRANSACTION_CATEGORY_DEFINITIONS,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 describe('bank transaction categorization contract', () => {
 	it('defines the stable category values and complete definitions', () => {

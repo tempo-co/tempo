@@ -1,5 +1,5 @@
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import type {BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnectionAspsp} from '@wisp/contracts';
 import {ChevronRight, CircleAlert, CircleX, Loader, Plus, Search} from 'lucide-react';
 import {type MouseEvent, useMemo, useState} from 'react';
 

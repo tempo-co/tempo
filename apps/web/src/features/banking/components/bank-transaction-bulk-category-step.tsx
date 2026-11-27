@@ -3,7 +3,7 @@ import type {
   BankTransactionBulkCategoryScope,
   BankTransactionBulkSelection,
   BankTransactionCategory,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {CircleAlert} from 'lucide-react';
 import {useEffect, useId, useRef, useState} from 'react';
 import {toast} from 'sonner';

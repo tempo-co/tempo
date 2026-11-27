@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankAccount, BankConnection, BankImportSummary} from '@tempo/contracts';
+import type {BankAccount, BankConnection, BankImportSummary} from '@wisp/contracts';
 import {ChevronRight, Eye, Landmark, Trash2} from 'lucide-react';
 import {type MouseEvent, type ReactNode, useState} from 'react';
 import {toast} from 'sonner';

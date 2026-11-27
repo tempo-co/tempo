@@ -1,4 +1,4 @@
-import {BANK_IMPORT_FORMATS, BANK_LIST, OTHER_BANK_EXPORT_TEXT} from '@tempo/contracts';
+import {BANK_IMPORT_FORMATS, BANK_LIST, OTHER_BANK_EXPORT_TEXT} from '@wisp/contracts';
 
 import {CSV_LAYOUTS} from './csv-layouts';
 

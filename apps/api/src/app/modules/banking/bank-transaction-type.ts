@@ -1,4 +1,4 @@
-import type {BankTransactionType} from '@tempo/contracts';
+import type {BankTransactionType} from '@wisp/contracts';
 
 export type {BankTransactionType};
 

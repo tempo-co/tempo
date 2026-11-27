@@ -1,5 +1,5 @@
 import {type QueryClient, queryOptions, useQuery} from '@tanstack/react-query';
-import type {BankImportList, BankImportSummary} from '@tempo/contracts';
+import type {BankImportList, BankImportSummary} from '@wisp/contracts';
 
 import {invalidateBankDerivedData} from '@/features/banking/api/invalidate-bank-derived-data';
 import {bankQueryKeys} from '@/features/banking/api/query-keys';

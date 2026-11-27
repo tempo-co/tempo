@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {Columns3, FileX, RotateCw} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';

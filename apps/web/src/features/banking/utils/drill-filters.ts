@@ -1,7 +1,7 @@
 import {
   type BankTransactionCashFlowFilterValue,
   type BankTransactionCategoryStatusFilterValue,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {
   BANK_TRANSACTION_FILTER_KEYS,

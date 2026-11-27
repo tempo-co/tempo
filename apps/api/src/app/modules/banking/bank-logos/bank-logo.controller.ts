@@ -1,6 +1,6 @@
 import {Controller, Get, Param, Res, StreamableFile} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
-import type {BankLogo} from '@tempo/contracts';
+import type {BankLogo} from '@wisp/contracts';
 import {Response} from 'express';
 
 import {BankLogoService} from './bank-logo.service';

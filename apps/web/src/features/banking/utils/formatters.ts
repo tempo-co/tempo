@@ -7,7 +7,7 @@ import {
   BankTransactionCategory,
   BankTransactionFinancialEventType,
   OwnTransferEvidence,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {format, isThisYear, parseISO} from 'date-fns';
 
 import {

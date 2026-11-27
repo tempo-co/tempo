@@ -6,7 +6,7 @@ import type {
 	NotificationPreferencesUpdate,
 	NotificationSettings,
 	PushSubscriptionRegistration,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Queue} from 'bullmq';
 import {In, Repository} from 'typeorm';
 import {WebPushError} from 'web-push';

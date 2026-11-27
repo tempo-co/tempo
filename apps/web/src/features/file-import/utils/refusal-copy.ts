@@ -5,7 +5,7 @@ import {
   type BankImportAccountQuestion,
   type BankImportError,
   type BankImportErrorCode,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {layoutBank} from './supported-files';
 

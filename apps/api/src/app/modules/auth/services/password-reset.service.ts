@@ -1,5 +1,5 @@
 import {BadRequestException, Inject, Injectable} from '@nestjs/common';
-import type {CodedErrorResponse, PasswordResetErrorCode} from '@tempo/contracts';
+import type {CodedErrorResponse, PasswordResetErrorCode} from '@wisp/contracts';
 import Redis from 'ioredis';
 import ms from 'ms';
 import crypto from 'node:crypto';

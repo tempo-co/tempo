@@ -1,4 +1,4 @@
-import type {MerchantGroupListItem} from '@tempo/contracts';
+import type {MerchantGroupListItem} from '@wisp/contracts';
 
 import {cn} from '@/utils/cn';
 

@@ -1,4 +1,4 @@
-import type {ReportingCurrency} from '@tempo/contracts';
+import type {ReportingCurrency} from '@wisp/contracts';
 import {ChevronDown, RefreshCw} from 'lucide-react';
 import {useId, useState} from 'react';
 

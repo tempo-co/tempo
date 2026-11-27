@@ -1,7 +1,7 @@
 import {
   BANK_TRANSACTION_CASH_FLOW_FILTER_VALUES,
   BankTransactionCashFlowFilterValue,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import * as React from 'react';
 
 import {Command, CommandGroup, CommandItem, CommandList} from '@/components/ui/command';

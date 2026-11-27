@@ -14,7 +14,7 @@ import {
   type BankTransactionSortField,
   MERCHANT_GROUP_ID_PATTERN,
   SORT_ORDERS,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {z} from 'zod';
 
 /** The activity part of the cash-flow filter, in picker order. */

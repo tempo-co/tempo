@@ -4,7 +4,7 @@ import type {
 	CreatedPersonalAccessToken,
 	PersonalAccessToken as PersonalAccessTokenResponse,
 	PersonalAccessTokenScope,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {createHash, randomBytes} from 'node:crypto';
 import {IsNull, Repository} from 'typeorm';
 

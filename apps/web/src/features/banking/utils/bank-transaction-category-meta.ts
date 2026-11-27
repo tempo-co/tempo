@@ -1,4 +1,4 @@
-import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, BankTransactionCategory} from '@wisp/contracts';
 import {
   ArrowDownLeft,
   ArrowUpRight,

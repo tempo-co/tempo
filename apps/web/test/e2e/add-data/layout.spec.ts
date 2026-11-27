@@ -1,5 +1,5 @@
 import type {Locator, Page} from '@playwright/test';
-import {BANK_LIST} from '@tempo/contracts';
+import {BANK_LIST} from '@wisp/contracts';
 
 import {expect, test} from '../../fixtures';
 import {mockAccountsApi} from '../../utils/accounts';

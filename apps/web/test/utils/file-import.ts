@@ -11,7 +11,7 @@ import type {
   ConfirmBankImportLayoutProposalRequest,
   ResolveBankImportDoubtfulRowRequest,
   SetBankAccountBalanceRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../data/bank-connection.data';
 import {API_URL} from '../fixtures';

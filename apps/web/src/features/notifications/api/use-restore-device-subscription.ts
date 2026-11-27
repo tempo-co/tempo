@@ -1,5 +1,5 @@
 import {useQueryClient} from '@tanstack/react-query';
-import type {PushSubscriptionRegistration} from '@tempo/contracts';
+import type {PushSubscriptionRegistration} from '@wisp/contracts';
 import {useEffect} from 'react';
 
 import {

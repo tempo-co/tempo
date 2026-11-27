@@ -1,5 +1,5 @@
 import type {Page, Request, Route} from '@playwright/test';
-import type {NotificationSettings} from '@tempo/contracts';
+import type {NotificationSettings} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {API_URL, expect, test} from '../../fixtures';

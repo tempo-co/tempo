@@ -1,4 +1,4 @@
-import {type BankConnection, CONSENT_ENDING_SOON_MS, SYNC_BROKEN_AFTER_MS} from '@tempo/contracts';
+import {type BankConnection, CONSENT_ENDING_SOON_MS, SYNC_BROKEN_AFTER_MS} from '@wisp/contracts';
 
 /** True when the ISO timestamp parses to a real moment that is not in the future. */
 function isPastTimestamp(value: string | null | undefined, now = Date.now()): boolean {

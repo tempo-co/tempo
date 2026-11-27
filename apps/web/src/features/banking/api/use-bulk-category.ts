@@ -4,7 +4,7 @@ import type {
   BankTransactionBulkCategoryPreviewRequest,
   BankTransactionBulkCategoryResult,
   BankTransactionBulkCategoryUpdate,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {HttpError, api} from '@/utils/api';
 

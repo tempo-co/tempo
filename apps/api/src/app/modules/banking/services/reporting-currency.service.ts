@@ -1,5 +1,5 @@
 import {BadRequestException, Injectable, Logger} from '@nestjs/common';
-import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
+import {REPORTING_CURRENCIES, type ReportingCurrency} from '@wisp/contracts';
 import {DataSource, EntityManager} from 'typeorm';
 
 import {dateInAppTimeZone} from '@core/time/app-time-zone';

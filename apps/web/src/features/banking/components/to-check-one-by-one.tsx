@@ -4,7 +4,7 @@ import type {
   BankTransactionCategory,
   BankTransactionCategoryImpact,
   BankTransactionsResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {ChevronRight, CircleCheck, X} from 'lucide-react';
 import {useEffect, useRef, useState} from 'react';
 import {toast} from 'sonner';

@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import {HOME_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {HOME_CONNECTION, HOME_NOW, mockSyntheticHome} from '../../data/home-history.data';

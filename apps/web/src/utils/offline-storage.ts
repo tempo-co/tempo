@@ -5,7 +5,7 @@ import {
   type PersistRetryer,
   type PersistedClient,
 } from '@tanstack/react-query-persist-client';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';

@@ -9,7 +9,7 @@ import {
 	ServiceUnavailableException,
 } from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import type {BankSyncRun as BankSyncRunResponse, BankSyncStatus} from '@tempo/contracts';
+import type {BankSyncRun as BankSyncRunResponse, BankSyncStatus} from '@wisp/contracts';
 import {isIP} from 'node:net';
 import {DataSource, Repository} from 'typeorm';
 

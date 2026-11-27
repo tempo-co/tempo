@@ -1,4 +1,4 @@
-import type {ConfirmBankImportLayoutProposalRequest} from '@tempo/contracts';
+import type {ConfirmBankImportLayoutProposalRequest} from '@wisp/contracts';
 import {IsOptional, IsString, Length, Matches} from 'class-validator';
 
 export class ConfirmBankImportLayoutProposalDto implements ConfirmBankImportLayoutProposalRequest {

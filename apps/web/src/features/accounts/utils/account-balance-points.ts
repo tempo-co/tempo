@@ -1,4 +1,4 @@
-import type {BankBalanceTrend} from '@tempo/contracts';
+import type {BankBalanceTrend} from '@wisp/contracts';
 
 import type {BalancePoint} from '@/features/dashboard/utils/overview';
 

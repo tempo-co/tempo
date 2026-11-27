@@ -15,7 +15,7 @@ import {
   type RecurringSummary,
   type ReportingCurrency,
   type SpendingPace,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {successfulBankRefresh} from '../data/bank-sync-run.data';
 

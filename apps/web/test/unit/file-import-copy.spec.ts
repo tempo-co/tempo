@@ -1,6 +1,6 @@
 // Pure modules' contracts: no page, so this uses Playwright's own `test` rather than the app fixtures.
 import {expect, test} from '@playwright/test';
-import type {BankImportError} from '@tempo/contracts';
+import type {BankImportError} from '@wisp/contracts';
 
 import {isApiServerError} from '../../src/features/file-import/utils/import-availability';
 import {

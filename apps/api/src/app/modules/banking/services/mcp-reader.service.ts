@@ -44,7 +44,7 @@ export class McpReaderService {
 			this.validation.transform(value, {type: 'query', metatype});
 		const read = async <T>(operation: () => Promise<T>): Promise<T> => {
 			try {
-				// These services explicitly map entities to the same @tempo/contracts shapes REST returns.
+				// These services explicitly map entities to the same @wisp/contracts shapes REST returns.
 				// Apply the global REST ClassSerializerInterceptor's class-transformer boundary too; it keeps the shape.
 				// Like REST's TotalsCurrencyInterceptor: no currency name for amounts read across a currency change.
 				return (await settleTotalsCurrency(

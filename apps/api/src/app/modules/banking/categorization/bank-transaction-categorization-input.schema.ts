@@ -1,4 +1,4 @@
-import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES} from '@wisp/contracts';
 import {z} from 'zod';
 
 import {BANK_TRANSACTION_CATEGORIZATION_BATCH_SIZE} from '@core/queue/queue.constants';
