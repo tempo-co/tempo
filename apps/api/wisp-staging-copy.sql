@@ -81,7 +81,7 @@ BEGIN
         RAISE EXCEPTION 'owner account % not found', owner_id;
     END IF;
 
-    -- A rule may name a table the restored schema does not have yet (the server's ops copy can run ahead of release).
+    -- A rule may name a table the restored schema does not have yet (the backup can predate the running API's migrations).
     FOR rule IN
         SELECT r.* FROM staging_copy_rules r
         WHERE r.kind <> 'global' AND to_regclass(format('public.%I', r.table_name)) IS NOT NULL

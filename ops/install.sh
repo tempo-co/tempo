@@ -104,7 +104,6 @@ case ${1:-} in
         copy 755 "$REPO/ops/restore-drill.sh" /usr/local/lib/wisp-deploy/restore-drill.sh
         copy 755 "$REPO/ops/failure-email.sh" /usr/local/lib/wisp-deploy/failure-email.sh
         copy 755 "$REPO/ops/wisp-staging-copy.sh" /usr/local/lib/wisp-deploy/wisp-staging-copy.sh
-        copy 644 "$REPO/ops/wisp-staging-copy.sql" /usr/local/lib/wisp-deploy/wisp-staging-copy.sql
         copy 755 "$REPO/ops/wisp-staging-copy-serve.sh" /usr/local/lib/wisp-deploy/wisp-staging-copy-serve.sh
         copy 644 "$REPO/ops/production.compose.yml" /etc/wisp/compose/production.compose.yml
         copy 644 "$REPO/ops/Caddyfile" /etc/wisp/compose/caddy/Caddyfile

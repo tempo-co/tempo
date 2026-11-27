@@ -44,6 +44,8 @@ WORKDIR /usr/src/app
 COPY --from=runtime-dependencies --chown=node:node /usr/src/app/ ./
 COPY --from=runtime-dependencies --chown=node:node /usr/packages/ /usr/packages/
 COPY --from=runtime-dependencies /tmp/dev-dependencies.json /tmp/dev-dependencies.json
+# The production server's staging-copy job reads this from the running API, so the rules match the released schema.
+COPY apps/api/wisp-staging-copy.sql ./wisp-staging-copy.sql
 COPY apps/api/scripts/runtime-image-smoke.js /tmp/runtime-image-smoke.js
 RUN node /tmp/runtime-image-smoke.js \
     && rm /tmp/dev-dependencies.json /tmp/runtime-image-smoke.js
