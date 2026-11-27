@@ -1,5 +1,5 @@
 import type {Page, Request, Route} from '@playwright/test';
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {API_URL, createVerifiedAccount, expect, test} from '../../fixtures';
@@ -33,7 +33,7 @@ const readCache = (page: Page) =>
     CACHE_KEY,
   );
 const savedStatus = (page: Page) => page.getByRole('status').filter({hasText: /^Offline/});
-const unreachableHeading = (page: Page) => page.getByRole('heading', {name: "Can't reach Tempo"});
+const unreachableHeading = (page: Page) => page.getByRole('heading', {name: "Can't reach Wisp"});
 const serverSessionStatus = async (page: Page) =>
   (await page.request.get(`${API_URL}/accounts/me`)).status();
 // Route components load as separate chunks; offline, only the service worker can serve them.
@@ -208,7 +208,7 @@ test.describe('saved app', () => {
     await expect(page.getByText("Couldn't load accounts")).not.toBeVisible();
   });
 
-  test('reports a failed refresh when Tempo answers with an error', async ({page}) => {
+  test('reports a failed refresh when Wisp answers with an error', async ({page}) => {
     let requests = 0;
     await routeBankConnectionsApi(page, async (route) => {
       if (requests++ > 0) return fulfillJson(route, {message: 'Unavailable'}, 503);
@@ -222,7 +222,7 @@ test.describe('saved app', () => {
     await expect(savedStatus(page)).not.toBeVisible();
   });
 
-  test.describe('when Tempo stops answering', () => {
+  test.describe('when Wisp stops answering', () => {
     let failedRequests: string[] = [];
     const apiRequests = `${API_URL}/**`;
     const failRequest = (route: Route) => {
@@ -288,7 +288,7 @@ test.describe('saved app', () => {
       await expect(pane.getByRole('option')).toHaveCount(0);
     });
 
-    test('says the loaded bank accounts are unavailable when Tempo answers with an error', async ({
+    test('says the loaded bank accounts are unavailable when Wisp answers with an error', async ({
       page,
     }) => {
       let failing = false;
@@ -397,7 +397,7 @@ test.describe('saved app', () => {
   });
 });
 
-test('logging out while Tempo is unreachable clears saved data', async ({
+test('logging out while Wisp is unreachable clears saved data', async ({
   page,
   context,
   freshAccount,
@@ -440,7 +440,7 @@ test('asks for a secure connection where the browser has no Web Locks', async ({
     if (request.url().startsWith(API_URL)) apiRequests.push(request.url());
   });
   await page.reload();
-  await expect(page.getByRole('heading', {name: 'Tempo needs a secure connection'})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Wisp needs a secure connection'})).toBeVisible();
   await expect(homePage.accountName).not.toBeVisible();
   await expect(page.getByText(freshAccount.name)).not.toBeVisible();
   expect(apiRequests).toEqual([]);
@@ -473,7 +473,7 @@ test('a signed-out tab does not sign out a tab that logs in', async ({
   await expect(homePage.accountName).toHaveText(freshAccount.name);
 });
 
-test('a logout that could not reach Tempo is completed once it is reachable again', async ({
+test('a logout that could not reach Wisp is completed once it is reachable again', async ({
   page,
   context,
   freshAccount,
@@ -725,7 +725,7 @@ test('a session check answered after a logout in another tab does not sign that 
   let checks = 0;
   await other.route('**/accounts/me', async (route) => {
     if (route.request().method() !== 'GET' || checks++ > 0) return route.fallback();
-    // The check reaches Tempo while the session is valid; its reply arrives after the logout.
+    // The check reaches Wisp while the session is valid; its reply arrives after the logout.
     const response = await route.fetch();
     heldCheck = route.request();
     await checkReleased;
@@ -773,7 +773,7 @@ test('does not queue an offline account change for replay after reconnect', asyn
   await name.fill('Offline example');
   await page.getByTestId('save-name-button').click();
   await expect(
-    page.getByText('Changes cannot be saved while Tempo is unreachable.', {exact: true}),
+    page.getByText('Changes cannot be saved while Wisp is unreachable.', {exact: true}),
   ).toBeVisible();
   expect(writes).toBe(0);
   await page.keyboard.press('Escape');
@@ -856,7 +856,7 @@ test('confirms a saved session before routing on an online reload', async ({
   await expect.poll(() => readCache(page)).toBe(null);
 });
 
-for (const outage of ['browser offline', 'Tempo unreachable'] as const) {
+for (const outage of ['browser offline', 'Wisp unreachable'] as const) {
   test(`a saved session revoked while ${outage} redirects to login on reconnect`, async ({
     page,
     context,

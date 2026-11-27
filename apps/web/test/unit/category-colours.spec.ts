@@ -1,6 +1,6 @@
 // A pure module's contract: no page, so this uses Playwright's own `test` rather than the app fixtures.
 import {expect, test} from '@playwright/test';
-import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES} from '@wisp/contracts';
 
 import {BANK_TRANSACTION_CATEGORY_META} from '../../src/features/banking/utils/bank-transaction-category-meta';
 import {resolve} from '../utils/theme-css';

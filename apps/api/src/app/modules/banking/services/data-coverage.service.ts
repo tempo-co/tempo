@@ -1,5 +1,5 @@
 import {Injectable} from '@nestjs/common';
-import {DATA_COVERAGE_DAYS, type DataCoverage, type DataCoverageSource, type DateRange} from '@tempo/contracts';
+import {DATA_COVERAGE_DAYS, type DataCoverage, type DataCoverageSource, type DateRange} from '@wisp/contracts';
 import {DataSource} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

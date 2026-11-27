@@ -1,5 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import type {ReportingCurrency, ReportingCurrencyUpdateRequest} from '@tempo/contracts';
+import type {ReportingCurrency, ReportingCurrencyUpdateRequest} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {CURRENT_ACCOUNT_KEY} from '@/hooks/use-current-account';

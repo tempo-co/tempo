@@ -42,7 +42,7 @@ describe('Currency exchange recompute', () => {
 	type Leg = DeepPartial<BankTransaction>;
 	const categorized = {category: 'SHOPPING', categoryStatus: 'COMPLETED', categorySource: 'AI'} as const;
 
-	/** A EUR and a USD account at a bank Tempo knows nothing special about, with one leg on each. */
+	/** A EUR and a USD account at a bank Wisp knows nothing special about, with one leg on each. */
 	async function createLegs(account: Account, debit: Leg, credit: Leg) {
 		const connection = await fixtures.createConnection(account, {aspspName: 'Synthetic Bank'});
 		const [eurAccount, usdAccount] = await fixtures.createBankAccounts(connection, [

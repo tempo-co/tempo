@@ -1,4 +1,4 @@
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 
 import type {BankSyncRun} from '../../src/features/banking/types/bank-sync-run';
 import {successfulBankRefresh} from './bank-sync-run.data';

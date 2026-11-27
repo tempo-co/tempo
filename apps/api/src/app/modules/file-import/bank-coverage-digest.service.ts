@@ -1,7 +1,7 @@
 import {InjectQueue} from '@nestjs/bullmq';
 import {Inject, Injectable, Logger, OnModuleInit} from '@nestjs/common';
 import {InjectDataSource} from '@nestjs/typeorm';
-import {BANK_LIST, bankNameKey, bankNameSpelling} from '@tempo/contracts';
+import {BANK_LIST, bankNameKey, bankNameSpelling} from '@wisp/contracts';
 import {Queue} from 'bullmq';
 import Redis from 'ioredis';
 import {DataSource} from 'typeorm';
@@ -86,7 +86,7 @@ export class BankCoverageDigestService implements OnModuleInit {
 		if (newBanks.length === 0 && missedBanks.length === 0) return;
 
 		const queued = await this.operatorAlertService.send(
-			{kind: 'bank-coverage', subject: 'Tempo: banks to add', text: digestText(newBanks, missedBanks)},
+			{kind: 'bank-coverage', subject: 'Wisp: banks to add', text: digestText(newBanks, missedBanks)},
 			now,
 		);
 		if (!queued) return;

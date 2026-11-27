@@ -2,7 +2,7 @@ import {
 	BANK_TRANSACTION_CATEGORIES,
 	BankTransactionCategory,
 	type BankTransactionCategoryUpdate,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {ArrayMaxSize, IsArray, IsEnum, IsOptional, IsUUID} from 'class-validator';
 
 import {MAX_MANUAL_CATEGORY_FOLLOW_UP_TRANSACTIONS} from '../../categorization/manual-category-follow-up';

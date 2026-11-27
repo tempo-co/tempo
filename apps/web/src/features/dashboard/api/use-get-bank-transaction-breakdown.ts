@@ -4,7 +4,7 @@ import type {
   BankTransactionBreakdownQuery,
   BreakdownDimension,
   BreakdownInterval,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {api} from '@/utils/api';

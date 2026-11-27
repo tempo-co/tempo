@@ -35,7 +35,7 @@ export function parseFile(bytes: Uint8Array, owned: readonly CsvLayout[] = []): 
 	if (!isZip(bytes)) return collect([bytes], (document) => parseDocument(document, owned));
 	const documents = readZipEntries(bytes).map(({content}) => content);
 	if (documents.length === 0) throw new ParseRefusal('unsupported_format');
-	// The columns of a table inside an archive are not worked out: it is a format Tempo does not read.
+	// The columns of a table inside an archive are not worked out: it is a format Wisp does not read.
 	return collect(documents, (document) => {
 		try {
 			return parseDocument(document, owned);

@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransaction} from '@tempo/contracts';
+import type {BankTransaction} from '@wisp/contracts';
 import {ChevronRight} from 'lucide-react';
 
 /** Opens the transaction's merchant or person in the Insights rail; nothing for rows without one. */

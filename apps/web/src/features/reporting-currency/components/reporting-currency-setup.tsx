@@ -1,4 +1,4 @@
-import type {ReportingCurrency} from '@tempo/contracts';
+import type {ReportingCurrency} from '@wisp/contracts';
 import {ChevronDown, RefreshCw} from 'lucide-react';
 import {useId, useState} from 'react';
 
@@ -28,7 +28,7 @@ const codeList = (codes: string[]) =>
 
 /**
  * The question which currency totals use: once, while the owner's accounts hold several and none is chosen, and again
- * when Tempo can no longer convert into the chosen one.
+ * when Wisp can no longer convert into the chosen one.
  */
 export function ReportingCurrencySetup({className}: {className?: string}) {
   const {data: settings} = useReportingCurrency();
@@ -43,7 +43,7 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
   const [picked, setPicked] = useState<{value: string | null} | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const {choose, isPending} = useChooseReportingCurrency();
-  // A currency Tempo can't convert into any more is never offered, so it isn't preselected either.
+  // A currency Wisp can't convert into any more is never offered, so it isn't preselected either.
   const current = settings.currencyUnavailable ? null : settings.currency;
   const selected = picked ? picked.value : (current ?? settings.suggestion);
   const suggested = selected !== null && current === null && selected === settings.suggestion;
@@ -80,11 +80,11 @@ function SetupCard({settings, className}: {settings: ReportingCurrency; classNam
     >
       <div className='grid gap-1'>
         <h2 id={headingId} className='text-card-title text-balance'>
-          Which currency should Tempo use for totals?
+          Which currency should Wisp use for totals?
         </h2>
         <p className='text-body-small text-muted-foreground'>
           {settings.currencyUnavailable && settings.currency
-            ? `Tempo can't convert amounts into ${settings.currency}, because the European Central Bank doesn't publish its exchange rates. Choose another currency for totals; each account and transaction keeps its own.`
+            ? `Wisp can't convert amounts into ${settings.currency}, because the European Central Bank doesn't publish its exchange rates. Choose another currency for totals; each account and transaction keeps its own.`
             : `Your accounts are in ${codeList(settings.connectedCurrencies)}. Totals and charts add them up in one currency; each account and transaction keeps its own.`}
         </p>
       </div>

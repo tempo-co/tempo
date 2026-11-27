@@ -1,4 +1,4 @@
-import type {BankTransactionSummaryQuery} from '@tempo/contracts';
+import type {BankTransactionSummaryQuery} from '@wisp/contracts';
 import {Matches} from 'class-validator';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';

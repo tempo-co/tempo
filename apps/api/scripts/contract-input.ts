@@ -2,7 +2,7 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {format, resolveConfig} from 'prettier';
 
-import {BANK_TRANSACTION_CATEGORIES} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES} from '@wisp/contracts';
 
 import {toInputContract} from '../src/app/modules/banking/categorization/bank-transaction-categorization-input.schema';
 

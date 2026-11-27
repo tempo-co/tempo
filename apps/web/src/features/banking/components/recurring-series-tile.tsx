@@ -1,4 +1,4 @@
-import type {RecurringSeries} from '@tempo/contracts';
+import type {RecurringSeries} from '@wisp/contracts';
 
 import {MerchantLogoTile} from './merchant-logo-tile';
 

@@ -8,6 +8,12 @@ The icons are the logo masters' web set, copied unchanged (DESIGN.md, Logo): `ic
 
 `index.html` links icons and the manifest with `%BASE_URL%`, so they follow `base`. `id` is set explicitly: without it the browser derives the app identity from `start_url`, and two apps on one origin would share an identity.
 
+## Page titles and link previews
+
+Each signed-in route sets its tab title with TanStack Router's `head` (`pageHead('Transactions')` from `src/utils/page-title.ts` reads "Transactions · Wisp"), and the root route renders them with `HeadContent`. Routes that set none, such as Home and sign-in, read "Wisp", as does the static `<title>` in `index.html` for the first paint.
+
+`index.html` also carries the description, `og:` and `twitter:` tags for pasted links. `og:image` points at `public/social-preview.png` (1200×630, the lockup on white, rendered from the logo masters' `wisp-lockup.svg`) at an absolute address built from `VITE_APP_URL` (`docs/env-boundaries.md`). Nginx gives the manifest its own content type, which its type list lacks.
+
 ## Offline shell
 
 `config/offline-shell.ts` emits `sw.js` at build time only (`apply: 'build'`). It caches `index.html`, the manifest, the hashed assets and every icon in `config/app-icons.ts`, under a cache name hashed from those files and the base path. It requires a base path that starts and ends with `/`. The bank picker's country flags (the `flag-icons` package, about 270 SVGs) are hashed assets left out of the cache: the browser downloads only the flags the picker shows, and connecting a bank needs the network anyway.
@@ -18,12 +24,12 @@ A new file in `public/` that the app needs offline must be added to `config/app-
 
 ## Push alerts and the app badge
 
-`sw.js` also handles `push` and `notificationclick`. A push carries `{title, body, url, tag, badge}`: the worker shows the notification, sets or clears the app badge from `badge`, and a click navigates an open Tempo window to `url` (or opens one). Only URLs on this origin under the base path open; anything else opens the start page.
+`sw.js` also handles `push` and `notificationclick`. A push carries `{title, body, url, tag, badge}`: the worker shows the notification, sets or clears the app badge from `badge`, and a click navigates an open Wisp window to `url` (or opens one). Only URLs on this origin under the base path open; anything else opens the start page.
 
 - Settings → Account → Notifications asks for permission only from its Allow notifications button; browsers refuse a prompt that no click started. `src/features/notifications/utils/push-device.ts` decides what the device supports: iPhone and iPad need a Home Screen app on iOS 16.4 or later, and Android asks for the installed app.
-- While Tempo is open, the badge is the review-counts `needsAttention` (the Transactions tab's count) and clears at sign-out. The Badging API exists in installed desktop Chrome and Edge and in iOS Home Screen apps with notification permission; Android Chrome has none.
-- Logging out unsubscribes the browser; the API also removes that session's subscriptions. A browser that is still subscribed registers itself with the session again when Tempo opens, so a session that expired does not end its alerts.
-- A browser that lost its subscription while notifications stay allowed (clearing site data on Android does that) subscribes again without a prompt once a signed-in Tempo has loaded the alert settings, and when bank alerts are turned back on. It needs the server's push key, bank alerts on and a device that can get alerts (`getPushSupport`). Turn off in Settings stores a flag in `localStorage` that stops this until Allow notifications is tapped; logging out does not, so signing back in resumes alerts. A failed attempt stays silent and leaves the device off (iPhone and iPad may refuse outside a click), and an attempt that logout interrupts registers nothing.
+- While Wisp is open, the badge is the review-counts `needsAttention` (the Transactions tab's count) and clears at sign-out. The Badging API exists in installed desktop Chrome and Edge and in iOS Home Screen apps with notification permission; Android Chrome has none.
+- Logging out unsubscribes the browser; the API also removes that session's subscriptions. A browser that is still subscribed registers itself with the session again when Wisp opens, so a session that expired does not end its alerts.
+- A browser that lost its subscription while notifications stay allowed (clearing site data on Android does that) subscribes again without a prompt once a signed-in Wisp has loaded the alert settings, and when bank alerts are turned back on. It needs the server's push key, bank alerts on and a device that can get alerts (`getPushSupport`). Turn off in Settings stores a flag in `localStorage` that stops this until Allow notifications is tapped; logging out does not, so signing back in resumes alerts. A failed attempt stays silent and leaves the device off (iPhone and iPad may refuse outside a click), and an attempt that logout interrupts registers nothing.
 - `test/e2e/settings/notification-alerts.spec.ts` drives the worker through Chromium DevTools in full Chromium (the headless shell denies notifications); WebKit skips it.
 
 ## Verifying a served build
@@ -32,7 +38,7 @@ Check the served URLs, not the source:
 
 1. The document's `link[rel=manifest]` points at the manifest under the served base path.
 2. The manifest parses and its `id`, `start_url` and `scope` match the served base path.
-3. Every icon URL returns an image with the declared size. A wrong path returns the SPA's `index.html` with 200 (`try_files` in `nginx/tempo.conf`), which Chrome reports as `no-acceptable-icon`.
+3. Every icon URL returns an image with the declared size. A wrong path returns the SPA's `index.html` with 200 (`try_files` in `nginx/wisp.conf`), which Chrome reports as `no-acceptable-icon`.
 4. In Chromium, CDP `Page.getAppId` shows the resolved identity and `Page.getInstallabilityErrors` lists manifest and icon problems.
 
 An installed shortcut keeps the old manifest's identity; remove it and install again after changing `id` or `start_url`.

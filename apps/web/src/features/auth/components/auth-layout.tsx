@@ -1,3 +1,4 @@
+import {Link} from '@tanstack/react-router';
 import {motion} from 'framer-motion';
 
 import {LogoLink} from '@/components/shared/layout/logo-link';
@@ -8,9 +9,16 @@ type AuthLayoutProps = {
   title: string;
   children: React.ReactNode;
   disabledLogoLink?: boolean;
+  /** A footer link to the official-addresses page, under the card. */
+  officialLink?: boolean;
 };
 
-export function AuthLayout({title, children, disabledLogoLink = false}: AuthLayoutProps) {
+export function AuthLayout({
+  title,
+  children,
+  disabledLogoLink = false,
+  officialLink = false,
+}: AuthLayoutProps) {
   return (
     <div
       data-testid='auth-page'
@@ -46,6 +54,16 @@ export function AuthLayout({title, children, disabledLogoLink = false}: AuthLayo
         >
           {children}
         </motion.section>
+        {officialLink && (
+          <footer className='mt-4 text-center text-body-small'>
+            <Link
+              to='/official'
+              className='inline-flex min-h-11 items-center px-2 text-muted-foreground underline decoration-muted underline-offset-4 hover:text-foreground hover:decoration-foreground'
+            >
+              Official addresses
+            </Link>
+          </footer>
+        )}
       </div>
     </div>
   );

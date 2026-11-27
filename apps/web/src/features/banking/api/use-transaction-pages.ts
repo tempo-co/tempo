@@ -1,5 +1,5 @@
 import {type QueryKey, keepPreviousData, useInfiniteQuery} from '@tanstack/react-query';
-import type {BankTransactionsResponse} from '@tempo/contracts';
+import type {BankTransactionsResponse} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

@@ -1,4 +1,4 @@
-import type {BankConnectionTransactionsQuery} from '@tempo/contracts';
+import type {BankConnectionTransactionsQuery} from '@wisp/contracts';
 import {Transform} from 'class-transformer';
 import {IsInt, IsOptional, Max, Min} from 'class-validator';
 

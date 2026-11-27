@@ -1,5 +1,5 @@
 import {Injectable, NotFoundException} from '@nestjs/common';
-import type {BankAccountBalanceSource} from '@tempo/contracts';
+import type {BankAccountBalanceSource} from '@wisp/contracts';
 import {DataSource, EntityManager} from 'typeorm';
 
 import {dateInTimeZone} from '@core/time/app-time-zone';

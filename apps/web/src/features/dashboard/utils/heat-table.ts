@@ -1,4 +1,4 @@
-import type {BankTransactionBreakdownPart, BankTransactionBreakdownPeriod} from '@tempo/contracts';
+import type {BankTransactionBreakdownPart, BankTransactionBreakdownPeriod} from '@wisp/contracts';
 import {format} from 'date-fns';
 
 import {

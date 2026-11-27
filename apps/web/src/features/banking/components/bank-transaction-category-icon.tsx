@@ -1,4 +1,4 @@
-import {BankTransactionCategory} from '@tempo/contracts';
+import {BankTransactionCategory} from '@wisp/contracts';
 import {RefreshCw, Tags} from 'lucide-react';
 
 import {cn} from '@/utils/cn';

@@ -5,7 +5,7 @@ import type {
   MerchantGroupPeriods,
   MerchantGroupsResponse,
   MerchantRanking,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {createBankTransaction} from '../../data/bank-transaction.data';

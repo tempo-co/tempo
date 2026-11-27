@@ -2,7 +2,7 @@ import type {
   BankImportNeverSentKind,
   BankImportNeverSentRow,
   BankImportSummary,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {ChevronRight, FileX} from 'lucide-react';
 import {useId, useState} from 'react';
 import {toast} from 'sonner';

@@ -1,5 +1,5 @@
 import {Inject, Injectable, NotFoundException} from '@nestjs/common';
-import type {BankLogo} from '@tempo/contracts';
+import type {BankLogo} from '@wisp/contracts';
 import Redis from 'ioredis';
 import {createHash} from 'node:crypto';
 

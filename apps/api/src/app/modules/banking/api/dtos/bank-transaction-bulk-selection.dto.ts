@@ -1,5 +1,5 @@
 import {BadRequestException} from '@nestjs/common';
-import {BANK_TRANSACTION_BULK_MAX_IDS, type BankTransactionBulkSelection} from '@tempo/contracts';
+import {BANK_TRANSACTION_BULK_MAX_IDS, type BankTransactionBulkSelection} from '@wisp/contracts';
 import {Type} from 'class-transformer';
 import {ArrayMaxSize, ArrayMinSize, IsArray, IsObject, IsOptional, IsUUID, ValidateNested} from 'class-validator';
 

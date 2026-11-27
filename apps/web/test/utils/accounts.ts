@@ -4,7 +4,7 @@ import type {
   BankConnection,
   BankImportSummary,
   BankTransaction,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {API_URL} from '../fixtures';
 import {fulfillJson, mockBankConnections} from './api-mocks';

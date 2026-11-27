@@ -1,5 +1,5 @@
 import type {Locator, Page} from '@playwright/test';
-import type {BankTransactionBreakdown, BankTransactionBreakdownPart} from '@tempo/contracts';
+import type {BankTransactionBreakdown, BankTransactionBreakdownPart} from '@wisp/contracts';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 

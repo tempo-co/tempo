@@ -1,5 +1,5 @@
-import {BANK_REQUEST_FILE_TYPES, BANK_REQUEST_MAX_NAME_LENGTH, bankNameSpelling} from '@tempo/contracts';
-import type {BankRequestFileType, CreateBankRequest} from '@tempo/contracts';
+import {BANK_REQUEST_FILE_TYPES, BANK_REQUEST_MAX_NAME_LENGTH, bankNameSpelling} from '@wisp/contracts';
+import type {BankRequestFileType, CreateBankRequest} from '@wisp/contracts';
 import {Transform} from 'class-transformer';
 import {ArrayMinSize, ArrayUnique, IsArray, IsISO31661Alpha2, IsIn, IsString, Length, Matches} from 'class-validator';
 

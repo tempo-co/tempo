@@ -1,4 +1,4 @@
-# Tempo Web Agent Instructions
+# Wisp Web Agent Instructions
 
 Paths are relative to `apps/web` unless they start at the repository root.
 
@@ -20,12 +20,12 @@ Paths are relative to `apps/web` unless they start at the repository root.
 - Leave `NODE_ENV` unset for builds and Playwright. Gate dev-only code on `import.meta.env.MODE === 'development'` or an explicit `VITE_*` flag, never on `import.meta.env.DEV`.
 - Playwright reuses any server already on `VITE_APP_URL` (`reuseExistingServer`). Another worktree's preview on port 5173 means you are testing the wrong build; check the listener first.
 - A web change that needs an API change is tested against it only in the same PR, or locally with `TEMPO_API_E2E_IMAGE` pointing at an image built from `apps/api`. Never weaken assertions to match an older API.
-- `scripts/tempo-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
+- `scripts/wisp-web-security-headers-test.sh` builds the production image and probes the SPA and the API proxy (needs Docker). Update it with any change to `nginx/`.
 
 ## Code conventions not enforced by tooling
 
 - Specs that open a page import `test` and `expect` from `test/fixtures.ts`; pure-module specs in `test/unit` use `@playwright/test`. Tests that change account data use `freshAccount`, not a seeded account, unless the flow needs stored bank data the API cannot create; then it signs in as an owner seeded for it alone and puts back what it changes.
 - Filenames are kebab-case; hooks export `useX` from `use-x.ts`. DTO files in feature `types` directories define a Zod schema and infer the exported type from it.
-- API request and response types and the fixed value lists they use come from `@tempo/contracts` (root `packages/contracts`); pass them to `api.get<T>()` and check request bodies with `satisfies`. Labels and other UI copy for those values stay in the feature's `types` or `utils`.
+- API request and response types and the fixed value lists they use come from `@wisp/contracts` (root `packages/contracts`); pass them to `api.get<T>()` and check request bodies with `satisfies`. Labels and other UI copy for those values stay in the feature's `types` or `utils`.
 - JSON API hooks use the `api` wrapper in `src/utils/api.ts` with TanStack Query; it owns the shared auth/network toasts and redirects. Mutations never retry or queue for replay (`src/query-client.ts`).
 - Prettier covers `src/**/*.{js,jsx,ts,tsx}` only; edit `src/index.css` and Markdown by hand. `npx prettier --write src` touches CSS too, so run it on changed paths and check `git status` for collateral files. `prettier-plugin-tailwindcss` stays last in `plugins`.

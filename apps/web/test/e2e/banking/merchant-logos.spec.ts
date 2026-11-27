@@ -1,5 +1,5 @@
 import type {Locator, Page} from '@playwright/test';
-import {type BankConnection, BankTransaction} from '@tempo/contracts';
+import {type BankConnection, BankTransaction} from '@wisp/contracts';
 import {type Server, createServer} from 'node:http';
 import type {AddressInfo} from 'node:net';
 

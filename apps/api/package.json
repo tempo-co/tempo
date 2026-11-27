@@ -1,5 +1,5 @@
 {
-	"name": "tempo-api",
+	"name": "wisp-api",
 	"version": "0.0.1",
 	"description": "",
 	"author": "",
@@ -13,9 +13,9 @@
 		"build": "rimraf dist && nest build",
 		"format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"../../packages/contracts/{src/**/*.ts,*.json}\"",
 		"format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"../../packages/contracts/{src/**/*.ts,*.json}\"",
-		"start": "docker compose -p tempo-api-development -f docker-compose.dev.yml --env-file .env.development up -d && nest start",
-		"start:dev": "docker compose -p tempo-api-development -f docker-compose.dev.yml --env-file .env.development up -d && rimraf dist && nest start --watch",
-		"start:debug": "docker compose -p tempo-api-development -f docker-compose.dev.yml --env-file .env.development up -d && rimraf dist && nest start --debug --watch",
+		"start": "docker compose -p wisp-api-development -f docker-compose.dev.yml --env-file .env.development up -d && nest start",
+		"start:dev": "docker compose -p wisp-api-development -f docker-compose.dev.yml --env-file .env.development up -d && rimraf dist && nest start --watch",
+		"start:debug": "docker compose -p wisp-api-development -f docker-compose.dev.yml --env-file .env.development up -d && rimraf dist && nest start --debug --watch",
 		"lint": "eslint \"{src,test}/**/*.ts\" --fix",
 		"lint:check": "eslint \"{src,test}/**/*.ts\"",
 		"test": "jest --passWithNoTests",
@@ -58,7 +58,7 @@
 		"@nestjs/terminus": "^11.1.1",
 		"@nestjs/throttler": "^6.8.0",
 		"@nestjs/typeorm": "^11.0.3",
-		"@tempo/contracts": "file:../../packages/contracts",
+		"@wisp/contracts": "file:../../packages/contracts",
 		"@xmldom/xmldom": "0.9.12",
 		"argon2": "^0.45.2",
 		"bullmq": "^6.7.7",
@@ -123,7 +123,7 @@
 		"moduleNameMapper": {
 			"^@core/(.*)$": "<rootDir>/src/app/core/$1",
 			"^@modules/(.*)$": "<rootDir>/src/app/modules/$1",
-			"^@tempo/contracts$": "<rootDir>/../../packages/contracts/src",
+			"^@wisp/contracts$": "<rootDir>/../../packages/contracts/src",
 			"^(\\.{1,2}/.*)\\.js$": "$1"
 		},
 		"moduleFileExtensions": [

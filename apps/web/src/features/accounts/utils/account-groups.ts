@@ -1,4 +1,4 @@
-import type {BankAccount, BankConnection} from '@tempo/contracts';
+import type {BankAccount, BankConnection} from '@wisp/contracts';
 
 import {isFileConnection} from '@/features/banking/utils/bank-sync-status';
 

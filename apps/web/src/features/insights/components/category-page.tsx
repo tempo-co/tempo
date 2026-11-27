@@ -1,5 +1,5 @@
 import {Link, useNavigate, useRouter} from '@tanstack/react-router';
-import type {BankTransactionCategoryFilterValue} from '@tempo/contracts';
+import type {BankTransactionCategoryFilterValue} from '@wisp/contracts';
 import {FileQuestion} from 'lucide-react';
 import type {ReactNode} from 'react';
 

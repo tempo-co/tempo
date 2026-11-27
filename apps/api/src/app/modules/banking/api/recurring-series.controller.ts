@@ -1,5 +1,5 @@
 import {Body, Controller, Get, HttpCode, Param, Patch, Query, UseInterceptors} from '@nestjs/common';
-import type {RecurringSeriesLists, RecurringSummary} from '@tempo/contracts';
+import type {RecurringSeriesLists, RecurringSummary} from '@wisp/contracts';
 
 import {Account} from '@modules/account/account.entity';
 import {CurrentAccount} from '@modules/auth/decorators/current-user.decorator';

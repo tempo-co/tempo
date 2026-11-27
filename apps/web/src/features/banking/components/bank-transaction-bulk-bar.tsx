@@ -1,4 +1,4 @@
-import {BANK_TRANSACTION_BULK_MAX_IDS, type BankTransactionCategory} from '@tempo/contracts';
+import {BANK_TRANSACTION_BULK_MAX_IDS, type BankTransactionCategory} from '@wisp/contracts';
 import {Eye, EyeOff, Tag, X} from 'lucide-react';
 import {type ReactNode, useState} from 'react';
 

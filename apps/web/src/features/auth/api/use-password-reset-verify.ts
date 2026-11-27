@@ -1,5 +1,5 @@
 import {useMutation} from '@tanstack/react-query';
-import type {MessageResponse, PasswordResetVerifyRequest} from '@tempo/contracts';
+import type {MessageResponse, PasswordResetVerifyRequest} from '@wisp/contracts';
 
 import {HttpError, api} from '@/utils/api';
 

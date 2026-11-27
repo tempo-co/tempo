@@ -1,5 +1,5 @@
 import {BadRequestException, Injectable, PipeTransform} from '@nestjs/common';
-import {MERCHANT_GROUP_ID_PATTERN} from '@tempo/contracts';
+import {MERCHANT_GROUP_ID_PATTERN} from '@wisp/contracts';
 
 import {MERCHANT_GROUP_ID_INVALID} from '../constants/banking-messages.constants';
 

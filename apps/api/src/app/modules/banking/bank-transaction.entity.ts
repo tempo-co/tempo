@@ -1,4 +1,4 @@
-import type {BankTransactionBaseAmountMethod} from '@tempo/contracts';
+import type {BankTransactionBaseAmountMethod} from '@wisp/contracts';
 import {
 	Check,
 	Column,

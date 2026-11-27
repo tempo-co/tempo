@@ -15,7 +15,7 @@ const ECB_DATA_API_URL = 'https://data-api.ecb.europa.eu/service/data/EXR';
 const ECB_PROVIDER = 'ECB';
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/** An ECB reply Tempo could not use; its message is Tempo's own text, so it is safe to log. */
+/** An ECB reply Wisp could not use; its message is Wisp's own text, so it is safe to log. */
 class EcbResponseError extends Error {
 	constructor(message: string) {
 		super(message);

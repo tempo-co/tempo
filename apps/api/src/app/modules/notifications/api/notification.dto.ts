@@ -2,7 +2,7 @@ import type {
 	NotificationPreferencesUpdate,
 	PushSubscriptionRegistration,
 	PushSubscriptionRemoval,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Type} from 'class-transformer';
 import {IsBoolean, IsObject, Matches, MaxLength, ValidateIf, ValidateNested} from 'class-validator';
 

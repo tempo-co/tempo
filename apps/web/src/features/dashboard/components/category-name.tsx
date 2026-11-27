@@ -1,4 +1,4 @@
-import {type BankTransactionBreakdownPart, isBankTransactionCategory} from '@tempo/contracts';
+import {type BankTransactionBreakdownPart, isBankTransactionCategory} from '@wisp/contracts';
 
 import {BankTransactionCategoryIcon} from '@/features/banking/components/bank-transaction-category-icon';
 import {MerchantLogoTile} from '@/features/banking/components/merchant-logo-tile';

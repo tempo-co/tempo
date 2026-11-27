@@ -6,12 +6,16 @@ import {type HtmlToTextOptions, convert} from 'html-to-text';
 import {join} from 'path';
 
 import {ConfigurationService} from '@core/config/config.service';
+import {createWebUrl} from '@core/config/web-url';
 import {EMAIL_QUEUE} from '@core/queue/queue.constants';
 
 import {EmailProcessor} from './email.processor';
 import {EmailService} from './email.service';
 
-const DEFAULT_EMAIL_FROM = '"Tempo" <no-reply@localhost>';
+const DEFAULT_EMAIL_FROM = '"Wisp" <no-reply@localhost>';
+/** The header lockup in the web app's static files (`apps/web/public`). */
+const EMAIL_HEADER_IMAGE_PATH = '/email-header.png';
+const OFFICIAL_ADDRESSES_PATH = '/official';
 
 const PLAIN_TEXT_OPTIONS: HtmlToTextOptions = {
 	wordwrap: false,
@@ -25,6 +29,7 @@ const PLAIN_TEXT_OPTIONS: HtmlToTextOptions = {
 		{selector: 'td', format: 'block'},
 		{selector: '.email-preheader', format: 'skip'},
 		{selector: '.email-fallback', format: 'skip'},
+		{selector: 'img', format: 'skip'},
 	],
 };
 
@@ -58,6 +63,8 @@ export const createMailerOptions = (config: ConfigurationService) => {
 	const password = config.get('EMAIL_PASSWORD');
 	// The schema accepts both or neither; Mailpit and other unauthenticated relays configure neither.
 	const auth = username && password ? {user: username, pass: password} : undefined;
+	const replyTo = config.get('EMAIL_REPLY_TO');
+	const webBaseUrl = config.get('WEB_BASE_URL');
 
 	return {
 		transport: {
@@ -67,7 +74,7 @@ export const createMailerOptions = (config: ConfigurationService) => {
 			requireTLS: config.get('EMAIL_REQUIRE_TLS'),
 			...(auth ? {auth} : {}),
 		},
-		defaults: {from: config.get('EMAIL_FROM') ?? DEFAULT_EMAIL_FROM},
+		defaults: {from: config.get('EMAIL_FROM') ?? DEFAULT_EMAIL_FROM, ...(replyTo ? {replyTo} : {})},
 		template: {
 			dir: join(__dirname, 'templates'),
 			// Keep the <style> block after inlining so the dark-theme media query reaches the inbox.
@@ -78,6 +85,11 @@ export const createMailerOptions = (config: ConfigurationService) => {
 			partials: {
 				dir: join(__dirname, 'templates/partials'),
 				options: {strict: true},
+			},
+			// Handlebars `@data` for every template: the layout's header image and official-addresses link.
+			data: {
+				headerImageUrl: createWebUrl(EMAIL_HEADER_IMAGE_PATH, webBaseUrl),
+				officialAddressesUrl: createWebUrl(OFFICIAL_ADDRESSES_PATH, webBaseUrl),
 			},
 		},
 	};

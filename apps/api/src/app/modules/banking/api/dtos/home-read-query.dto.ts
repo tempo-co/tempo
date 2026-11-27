@@ -1,4 +1,4 @@
-import type {HomeReadQuery} from '@tempo/contracts';
+import type {HomeReadQuery} from '@wisp/contracts';
 
 import {IsCalendarDate} from '@core/validation/is-calendar-date';
 

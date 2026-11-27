@@ -6,8 +6,10 @@ import {SettingsSectionNav} from '@/features/settings/components/settings-nav';
 import {settingsSectionAt} from '@/features/settings/sections';
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 
 export const Route = createFileRoute('/settings')({
+  head: pageHead('Settings'),
   component: SettingsLayout,
   beforeLoad: ({context}) => {
     handleAuthenticatedRedirect(context);

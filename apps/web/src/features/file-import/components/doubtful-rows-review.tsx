@@ -3,7 +3,7 @@ import type {
   BankImportDoubtfulRow,
   BankImportSummary,
   ResolveBankImportDoubtfulRowRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {differenceInCalendarDays, parseISO} from 'date-fns';
 import {CheckCheck, CircleAlert, FilePlus, FileQuestion, Files} from 'lucide-react';
 import {type ReactNode, useEffect, useRef, useState} from 'react';
@@ -56,7 +56,7 @@ function dayGap(date: string | null, fileDate: string | null) {
 
 /**
  * The import's rows held for the owner: each next to the stored transactions it could be, as one choice between
- * them and a new transaction. A row a bank sync later doubled is already in Tempo; its choice is between one of the
+ * them and a new transaction. A row a bank sync later doubled is already in Wisp; its choice is between one of the
  * bank's rows (the file's copy goes) and keeping both. Choices change freely until Save sends them, one row at a time. A saved answer is
  * final (the API cannot change it) and collapses its block to a line saying what was chosen; a row left without a
  * choice stays open for later. A long list shows a page of rows at a time; choices on every shown row count.
@@ -174,13 +174,13 @@ export function DoubtfulRowsReview({
         <p>Choose what each one is, then save. You can change a choice until you save it.</p>
         {synced && (
           <p>
-            These are almost always in Tempo already from your bank, so leaving them without an
+            These are almost always in Wisp already from your bank, so leaving them without an
             answer loses nothing.
           </p>
         )}
         {doubled && (
           <p>
-            Some are in Tempo twice, from the file and from your bank. Until you answer, both count
+            Some are in Wisp twice, from the file and from your bank. Until you answer, both count
             in your totals.
           </p>
         )}
@@ -250,13 +250,13 @@ function DoubtfulRowBlock({
   onPick: (pick: Pick) => void;
 }) {
   const {row: fileRow} = row;
-  // Already in Tempo from the file; the candidates are what bank sync brought since.
-  const inTempo = row.importedTransactionId !== null;
+  // Already in Wisp from the file; the candidates are what bank sync brought since.
+  const inWisp = row.importedTransactionId !== null;
   const title = fileRow.description || fileRow.counterpartyName || 'Transaction';
   const fileDate = fileRow.bookingDate ?? fileRow.valueDate;
   const date = formatBankTransactionCompactDate(fileDate);
   const name = `bank-import-doubtful-${row.id}`;
-  const newLabel = !inTempo
+  const newLabel = !inWisp
     ? "It's a new transaction"
     : row.candidates.length > 0
       ? 'Different payments, keep both'
@@ -277,14 +277,14 @@ function DoubtfulRowBlock({
         </span>
         <Title
           title={title}
-          detail={`${date} · from the file${inTempo ? ', already in Tempo' : ''}`}
+          detail={`${date} · from the file${inWisp ? ', already in Wisp' : ''}`}
         />
         <Amount amount={fileRow.amount} currency={fileRow.currency} />
       </div>
       {saved ? (
         <p role='status' className='border-t px-3 py-2 text-body-small text-muted-foreground'>
           {saved.decision === 'new'
-            ? inTempo
+            ? inWisp
               ? 'Kept both'
               : 'Kept as new'
             : savedCandidate
@@ -296,12 +296,12 @@ function DoubtfulRowBlock({
           <legend className='sr-only'>What {title} is</legend>
           <p aria-hidden='true' className='px-3 pt-2 text-body-small text-muted-foreground'>
             {row.candidates.length > 0
-              ? inTempo
+              ? inWisp
                 ? 'Your bank also sent'
                 : 'Could be the same as'
-              : inTempo
+              : inWisp
                 ? 'Nothing from your bank matches it now'
-                : 'Nothing already in Tempo matches it now'}
+                : 'Nothing already in Wisp matches it now'}
           </p>
           {row.candidates.map((candidate) => {
             const day = candidateDate(candidate);
@@ -331,7 +331,7 @@ function DoubtfulRowBlock({
             divided={row.candidates.length > 0}
           >
             <span className='flex min-w-0 items-center gap-2 text-body'>
-              {inTempo ? (
+              {inWisp ? (
                 <Files aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />
               ) : (
                 <FilePlus aria-hidden='true' className='size-4 shrink-0 text-muted-foreground' />

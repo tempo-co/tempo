@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import type {BankTransactionCategory} from '@tempo/contracts';
+import type {BankTransactionCategory} from '@wisp/contracts';
 import {FindOptionsSelect, In, IsNull, Not, QueryRunner, Raw, Repository} from 'typeorm';
 
 import type {Account} from '@modules/account/account.entity';

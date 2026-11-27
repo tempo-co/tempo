@@ -4,7 +4,7 @@ import {
   BankTransaction,
   BankTransactionCategory,
   BankTransactionsResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, api, wasToasted} from '@/utils/api';

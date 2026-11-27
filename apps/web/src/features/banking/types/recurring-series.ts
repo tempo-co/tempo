@@ -1,4 +1,4 @@
-import type {RecurringCadence} from '@tempo/contracts';
+import type {RecurringCadence} from '@wisp/contracts';
 
 export const RECURRING_CADENCE_LABELS: Record<RecurringCadence, string> = {
   WEEKLY: 'Weekly',

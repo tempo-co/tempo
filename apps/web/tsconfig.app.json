@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@tempo/contracts": ["../../packages/contracts/src"]
+      "@wisp/contracts": ["../../packages/contracts/src"]
     },
 
     /* Bundler mode */

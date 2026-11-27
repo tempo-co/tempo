@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {DataCoverage, HomeReadQuery, SpendingPace} from '@tempo/contracts';
+import type {DataCoverage, HomeReadQuery, SpendingPace} from '@wisp/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {useTransactionPages} from '@/features/banking/api/use-transaction-pages';

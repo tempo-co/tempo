@@ -1,4 +1,4 @@
-import {BANK_TRANSACTION_UNCATEGORIZED} from '@tempo/contracts';
+import {BANK_TRANSACTION_UNCATEGORIZED} from '@wisp/contracts';
 import {format, isSameDay, startOfDay} from 'date-fns';
 
 import {useActiveBankAccounts} from '@/features/banking/api/use-active-bank-accounts';

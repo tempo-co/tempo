@@ -1,4 +1,4 @@
-import type {BankTransactionFilter} from '@tempo/contracts';
+import type {BankTransactionFilter} from '@wisp/contracts';
 import {format} from 'date-fns';
 
 import type {BankTransactionFilterParams} from '../types/bank-transaction';

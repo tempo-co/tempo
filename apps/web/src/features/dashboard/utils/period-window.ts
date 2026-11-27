@@ -1,4 +1,4 @@
-import type {CashFlowInterval} from '@tempo/contracts';
+import type {CashFlowInterval} from '@wisp/contracts';
 import {format, startOfWeek, subWeeks} from 'date-fns';
 
 import {parseCalendarDate} from './drill-links';

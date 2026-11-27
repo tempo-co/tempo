@@ -3,7 +3,7 @@ import type {
   BankImportAccountCandidate,
   BankImportAccountQuestion,
   BankImportErrorCode,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Plus} from 'lucide-react';
 import {type ReactNode, useMemo} from 'react';
 

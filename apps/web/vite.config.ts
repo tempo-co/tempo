@@ -8,14 +8,14 @@ import {offlineShellPlugin} from './config/offline-shell';
 
 function pwaManifestPlugin(basePath: string): Plugin {
   return {
-    name: 'tempo-pwa-manifest',
+    name: 'wisp-pwa-manifest',
     generateBundle() {
       const icon = (name: string) => `${basePath}${name}`;
       const manifest = {
-        name: 'Tempo',
-        short_name: 'Tempo',
+        name: 'Wisp',
+        short_name: 'Wisp',
         id: basePath,
-        description: 'Personal finance overview and bank account tracker',
+        description: 'A read-only view of your bank accounts: balances, transactions and where your money goes.',
         start_url: basePath,
         scope: basePath,
         display: 'standalone',
@@ -54,7 +54,7 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, './src'),
-        '@tempo/contracts': path.resolve(import.meta.dirname, '../../packages/contracts/src'),
+        '@wisp/contracts': path.resolve(import.meta.dirname, '../../packages/contracts/src'),
       },
     },
   };

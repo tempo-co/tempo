@@ -1,4 +1,4 @@
-import type {ReportingCurrencyUpdateRequest} from '@tempo/contracts';
+import type {ReportingCurrencyUpdateRequest} from '@wisp/contracts';
 import {IsString, Matches} from 'class-validator';
 
 export class ReportingCurrencyUpdateDto implements ReportingCurrencyUpdateRequest {

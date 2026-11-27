@@ -17,7 +17,7 @@ import {
 	type MerchantRanking,
 	type MerchantRankingItem,
 	type MerchantRankingQuery,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Repository} from 'typeorm';
 
 import {

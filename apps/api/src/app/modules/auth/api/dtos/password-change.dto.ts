@@ -1,4 +1,4 @@
-import type {PasswordChangeRequest} from '@tempo/contracts';
+import type {PasswordChangeRequest} from '@wisp/contracts';
 import {IsNotEmpty, IsString, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';

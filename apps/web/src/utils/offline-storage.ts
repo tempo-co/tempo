@@ -5,7 +5,7 @@ import {
   type PersistRetryer,
   type PersistedClient,
 } from '@tanstack/react-query-persist-client';
-import type {Account} from '@tempo/contracts';
+import type {Account} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
@@ -121,7 +121,7 @@ export function createOfflinePersistence(
       .sort((a, b) => a.state.dataUpdatedAt - b.state.dataUpdatedAt)[0];
     if (!oldest) {
       if (!saveFailed)
-        toast.warning('Tempo cannot save data for offline use', {
+        toast.warning('Wisp cannot save data for offline use', {
           id: SAVE_FAILED_TOAST,
           description: 'The browser refused to store it. What you open now may not work offline.',
           duration: Infinity,

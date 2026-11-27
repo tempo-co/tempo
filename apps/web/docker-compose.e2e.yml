@@ -1,4 +1,4 @@
-name: tempo-web
+name: wisp-web
 
 services:
   mailpit:
@@ -27,9 +27,9 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tempo_test
+      POSTGRES_DB: wisp_test
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d tempo_test']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d wisp_test']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -50,15 +50,15 @@ services:
       DB_PORT: 5432
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-      DB_NAME: tempo_test
+      DB_NAME: wisp_test
       DB_SYNCHRONIZE: 'true'
-      SESSION_SECRET: tempo-web-e2e-synthetic-session-secret
+      SESSION_SECRET: wisp-web-e2e-synthetic-session-secret
       SESSION_EXPIRATION: 7d
       SESSION_REDIS_KEY: sess
       REDIS_URL: redis://redis:6379
       BANKING_INTEGRATION_ENABLED: 'true'
       ENABLE_BANKING_API_URL: https://api.example.invalid
-      ENABLE_BANKING_APPLICATION_ID: tempo-web-e2e-application
+      ENABLE_BANKING_APPLICATION_ID: wisp-web-e2e-application
       ENABLE_BANKING_PRIVATE_KEY_B64: dGVzdA==
       ENABLE_BANKING_REDIRECT_URL: http://localhost:5173/banking/callback
       BANKING_SESSION_ENCRYPTION_KEY_B64: dGVtcG8td2ViLWUyZS1zeW50aGV0aWMta2V5LTAwMzI=

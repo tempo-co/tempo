@@ -9,7 +9,7 @@ export class ToolReadError extends Error {
 		};
 		const message =
 			messages[status] ??
-			(status >= 500 ? 'Tempo API unavailable. Retry later.' : 'Request refused. Check tool input.');
-		super(`Tempo API HTTP ${status}: ${message}`);
+			(status >= 500 ? 'Wisp API unavailable. Retry later.' : 'Request refused. Check tool input.');
+		super(`Wisp API HTTP ${status}: ${message}`);
 	}
 }

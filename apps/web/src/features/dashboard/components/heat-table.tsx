@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {BankTransactionBreakdownPeriod} from '@tempo/contracts';
+import type {BankTransactionBreakdownPeriod} from '@wisp/contracts';
 import {ChevronRight} from 'lucide-react';
 import {type ReactNode, useMemo, useState} from 'react';
 

@@ -9,7 +9,7 @@ import {
 	BANK_TRANSACTION_SORT_FIELDS,
 	type BankTransactionFilter,
 	SORT_ORDERS,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import validator from 'validator';
 import {z} from 'zod';
 

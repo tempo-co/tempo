@@ -3,7 +3,7 @@ import type {
   BankImportLayout,
   BankImportLayoutProposal,
   ConfirmBankImportLayoutProposalRequest,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 
@@ -11,7 +11,7 @@ import type {PickedBankId} from '../utils/picked-bank';
 import {bankImportQueryKeys} from './use-bank-imports';
 
 /**
- * Works out the columns of one file Tempo does not know: one model call on a masked sample, then the whole file is
+ * Works out the columns of one file Wisp does not know: one model call on a masked sample, then the whole file is
  * read with the answer. Up to half a minute; `signal` cancels the wait (the owner's daily count is spent anyway).
  */
 export function useProposeLayout() {

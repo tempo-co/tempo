@@ -11,7 +11,7 @@ import {
 	type SpendingPaceDay,
 	USUAL_PACE_MONTHS,
 	type UsualPace,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {averageCents, daysInMonth, formatCents, previousMonths} from './bank-transaction-summary';
 

@@ -1,4 +1,4 @@
-import type {BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnectionAspsp} from '@wisp/contracts';
 
 import {cn} from '@/utils/cn';
 

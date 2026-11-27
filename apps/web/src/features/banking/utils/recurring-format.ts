@@ -1,4 +1,4 @@
-import type {RecurringSeries} from '@tempo/contracts';
+import type {RecurringSeries} from '@wisp/contracts';
 import {differenceInCalendarDays, format} from 'date-fns';
 
 import {parseCalendarDate} from '@/features/dashboard/utils/drill-links';

@@ -18,7 +18,7 @@ import type {
   RecurringSeriesLists,
   RecurringSummary,
   SpendingPace,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {fulfillJson, mockBankConnections, mockJson} from '../utils/api-mocks';
 import {createAccount} from './account.data';
@@ -84,7 +84,7 @@ export async function mockSyntheticHome(
   if (clock === 'installed') await page.clock.install({time: HOME_NOW});
   else await page.clock.setFixedTime(HOME_NOW);
   await mockJson(page, '**/accounts/me', createAccount({email: 'owner@example.com'}));
-  // The bank synced moments ago (204), so opening Tempo reloads nothing and request counts stay exact.
+  // The bank synced moments ago (204), so opening Wisp reloads nothing and request counts stay exact.
   await page.route('**/bank-connections/*/refresh', (route) => route.fulfill({status: 204}));
   await mockBankConnections(page, connections);
   await mockJson(page, '**/bank-transactions/review-counts', reviewCounts);

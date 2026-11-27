@@ -1,6 +1,6 @@
-# Tempo
+# Wisp
 
-Tempo shows people their spending and income across the bank accounts they connect or import.
+Wisp shows people their spending and income across the bank accounts they connect or import.
 
 ## Language
 
@@ -9,7 +9,7 @@ The one way a write to an owner's transaction history (a sync, an import, a doub
 _Avoid_: import transaction, sync transaction, lock helper
 
 **Bank identity**:
-The bank an account is held at, as Tempo records it: the institution name of its connection, of the bank a statement format belongs to or of the bank an owner named for a layout, or a BIC a statement states. A name never equals a BIC. A currency exchange happens inside one bank, so exchanges among imported files pair only within one bank identity. It never names an account: a statement giving an id that is no IBAN another bank than its account records is refused. An account made from files takes its bank from the first drop giving one (the strongest evidence of that drop) and keeps it while it has rows; it goes only with the account.
+The bank an account is held at, as Wisp records it: the institution name of its connection, of the bank a statement format belongs to or of the bank an owner named for a layout, or a BIC a statement states. A name never equals a BIC. A currency exchange happens inside one bank, so exchanges among imported files pair only within one bank identity. It never names an account: a statement giving an id that is no IBAN another bank than its account records is refused. An account made from files takes its bank from the first drop giving one (the strongest evidence of that drop) and keeps it while it has rows; it goes only with the account.
 _Avoid_: institution key, bank code
 
 **Data coverage**:
@@ -17,7 +17,7 @@ The days an owner's data has come in for, per shown account (a hidden one covers
 _Avoid_: freshness, sync range, data gap
 
 **Derived-data refresh**:
-Bringing the values Tempo computes from an owner's transaction history (reporting currency, currency exchanges, own transfers, categories, merchant logos) up to date after a write to that history.
+Bringing the values Wisp computes from an owner's transaction history (reporting currency, currency exchanges, own transfers, categories, merchant logos) up to date after a write to that history.
 _Avoid_: post-sync hook, follow-up steps, after-write steps
 
 **Hidden account**:
@@ -29,7 +29,7 @@ An owner's choice that one of their transactions counts in no total (spending, i
 _Avoid_: exclude, hide, ignore
 
 **To check**:
-An owner's transactions that wait for them to pick a category: those the AI could not place (Needs review) and those whose categorisation failed. A transaction leaves To check when the owner picks its category; Tempo keeps no guess for it, so there is nothing to confirm.
+An owner's transactions that wait for them to pick a category: those the AI could not place (Needs review) and those whose categorisation failed. A transaction leaves To check when the owner picks its category; Wisp keeps no guess for it, so there is nothing to confirm.
 _Avoid_: to review, needs attention, uncategorised
 
 **Usual pace**:

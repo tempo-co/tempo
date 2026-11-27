@@ -1,5 +1,5 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
-import {BankTransaction, OwnTransferOverride} from '@tempo/contracts';
+import {BankTransaction, OwnTransferOverride} from '@wisp/contracts';
 
 import {HttpError, api} from '@/utils/api';
 import {toastRequest} from '@/utils/toast-request';

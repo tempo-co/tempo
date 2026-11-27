@@ -7,9 +7,9 @@ const baseConfig = {
 	API_URL: 'http://api:3000',
 	DB_HOST: 'postgres',
 	DB_PORT: '5432',
-	DB_USERNAME: 'tempo',
+	DB_USERNAME: 'wisp',
 	DB_PASSWORD: 'test-password',
-	DB_NAME: 'tempo',
+	DB_NAME: 'wisp',
 	DB_SYNCHRONIZE: 'false',
 	SESSION_SECRET: 'x'.repeat(32),
 	SESSION_EXPIRATION: '30d',
@@ -115,13 +115,13 @@ describe('SMTP configuration', () => {
 			EMAIL_REQUIRE_TLS: 'true',
 			EMAIL_USERNAME: 'mailer@example.test',
 			EMAIL_PASSWORD: 'synthetic-app-password',
-			EMAIL_FROM: 'Tempo <mailer@example.test>',
+			EMAIL_FROM: 'Wisp <mailer@example.test>',
 		});
 
 		expect(parsed.EMAIL_REQUIRE_TLS).toBe(true);
 		expect(parsed.EMAIL_USERNAME).toBe('mailer@example.test');
 		expect(parsed.EMAIL_PASSWORD).toBe('synthetic-app-password');
-		expect(parsed.EMAIL_FROM).toBe('Tempo <mailer@example.test>');
+		expect(parsed.EMAIL_FROM).toBe('Wisp <mailer@example.test>');
 	});
 
 	it.each([
@@ -132,7 +132,7 @@ describe('SMTP configuration', () => {
 				EMAIL_PORT: '587',
 				EMAIL_SECURE: 'false',
 				EMAIL_REQUIRE_TLS: 'true',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			},
 		],
 		[
@@ -143,7 +143,7 @@ describe('SMTP configuration', () => {
 				EMAIL_SECURE: 'false',
 				EMAIL_USERNAME: 'mailer@example.test',
 				EMAIL_PASSWORD: 'synthetic-app-password',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			},
 		],
 		[
@@ -155,7 +155,7 @@ describe('SMTP configuration', () => {
 				EMAIL_REQUIRE_TLS: 'true',
 				EMAIL_USERNAME: 'mailer@example.test',
 				EMAIL_PASSWORD: 'synthetic-app-password',
-				EMAIL_FROM: 'Tempo <mailer@example.test>',
+				EMAIL_FROM: 'Wisp <mailer@example.test>',
 			},
 		],
 		[
@@ -189,11 +189,11 @@ describe('session cookie configuration', () => {
 	it('accepts an isolated mounted-path cookie contract', () => {
 		const parsed = configSchema.parse({
 			...baseConfig,
-			SESSION_COOKIE_NAME: 'tempo_staging_session',
+			SESSION_COOKIE_NAME: 'wisp_staging_session',
 			SESSION_COOKIE_PATH: '/staging',
 		});
 
-		expect(parsed.SESSION_COOKIE_NAME).toBe('tempo_staging_session');
+		expect(parsed.SESSION_COOKIE_NAME).toBe('wisp_staging_session');
 		expect(parsed.SESSION_COOKIE_PATH).toBe('/staging');
 	});
 });

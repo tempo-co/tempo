@@ -23,7 +23,7 @@ export class HomePage {
     this.accountEmail = page.getByTestId('current-account-email');
     this.settingsLink = page.getByRole('link', {name: 'Settings', exact: true});
     this.logOutButton = page.getByTestId('log-out-button');
-    this.welcomeToastTitle = page.getByText('Welcome to Tempo!');
+    this.welcomeToastTitle = page.getByText('Welcome to Wisp!');
     this.welcomeToastDescription = page.getByText('Your email has been verified.');
     this.alreadyVerifiedToastTitle = page.getByText('Your email has already been verified.');
     this.emptyStateTitle = page.getByRole('heading', {

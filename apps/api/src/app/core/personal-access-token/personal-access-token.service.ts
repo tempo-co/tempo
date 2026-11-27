@@ -4,7 +4,7 @@ import type {
 	CreatedPersonalAccessToken,
 	PersonalAccessToken as PersonalAccessTokenResponse,
 	PersonalAccessTokenScope,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {createHash, randomBytes} from 'node:crypto';
 import {IsNull, Repository} from 'typeorm';
 
@@ -16,7 +16,7 @@ export class PersonalAccessTokenService {
 
 	/** `expiresInDays` null keeps the token until it is revoked. */
 	async create(accountId: string, name: string, expiresInDays: number | null): Promise<CreatedPersonalAccessToken> {
-		const token = `tempo_pat_${randomBytes(32).toString('base64url')}`;
+		const token = `wisp_pat_${randomBytes(32).toString('base64url')}`;
 		const saved = await this.tokens.save(
 			this.tokens.create({
 				accountId,
@@ -48,7 +48,7 @@ export class PersonalAccessTokenService {
 	}
 
 	async authenticate(authorization: string) {
-		const token = /^Bearer (tempo_pat_[A-Za-z0-9_-]{43})$/i.exec(authorization)?.[1];
+		const token = /^Bearer (wisp_pat_[A-Za-z0-9_-]{43})$/i.exec(authorization)?.[1];
 		if (!token) throw new UnauthorizedException();
 		const saved = await this.tokens
 			.createQueryBuilder('token')

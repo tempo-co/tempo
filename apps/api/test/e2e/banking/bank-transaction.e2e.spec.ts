@@ -1,5 +1,5 @@
 import {INestApplication} from '@nestjs/common';
-import type {BankTransaction as BankTransactionResponse} from '@tempo/contracts';
+import type {BankTransaction as BankTransactionResponse} from '@wisp/contracts';
 import {randomUUID} from 'node:crypto';
 import {Server} from 'node:net';
 import TestAgent from 'supertest/lib/agent';

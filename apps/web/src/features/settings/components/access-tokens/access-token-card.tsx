@@ -1,4 +1,4 @@
-import type {PersonalAccessToken} from '@tempo/contracts';
+import type {PersonalAccessToken} from '@wisp/contracts';
 import {format, isPast, isToday, isYesterday} from 'date-fns';
 import {KeyRound} from 'lucide-react';
 import {ReactNode} from 'react';

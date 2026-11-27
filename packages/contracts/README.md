@@ -1,4 +1,4 @@
-# @tempo/contracts
+# @wisp/contracts
 
 The HTTP request and response shapes the API serves, plus the fixed value lists they use (categories, cadences, directions). The API and the web app import them, so a renamed or dropped field fails type-checking in both in the same PR. The API's MCP tools use them too, for their input schemas and the category list they serve.
 

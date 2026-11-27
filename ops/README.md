@@ -1,4 +1,4 @@
-# Tempo operations
+# Wisp operations
 
 CI builds an image of each app a commit changes and publishes `ghcr.io/tempo-co/{api,web}` tags for same-repo PRs and `main` (`docs/ci-and-images.md`). `ops/deploy.sh` deploys those images to both targets: it resolves tags to digests, recreates API and web (plus any pinned service whose pin changed, see below), waits for health, and restores the previous images if the new ones are unhealthy. Database migrations are not rolled back. A new host gets the whole stack started, retried by the next run.
 
@@ -100,7 +100,7 @@ Certificates are issued once both names resolve to the host; until then Caddy re
 
 PostgreSQL, Redis and the API share the `default` network. The API also joins the internal `frontend` network; web joins `frontend`, the web-only `ingress` network that publishes its loopback port, and the `proxy` network it shares with Caddy. Web therefore has no network path to the database or cache, and Caddy reaches only web. Do not mark `default` internal: the API needs outbound access.
 
-The `proxy` network has a fixed subnet so Caddy gets the static address `10.213.47.2`, outside the range Docker assigns to web. Caddy replaces any `X-Forwarded-For` a client sends with the client's address, and web's Nginx takes the client address from `X-Forwarded-For` only on requests from Caddy's address, so the API sees real client addresses while local processes and other containers cannot set their own. Staging's Tailscale sidecar uses the same address on its own daemon (`staging/README.md`), since both run the same web image. Changing the address needs the matching change in `apps/web/nginx/tempo.conf` and in both environments' Compose files; the web security-headers probe reads Caddy's address from `production.compose.yml`. Network changes in the Compose file reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then Caddy.
+The `proxy` network has a fixed subnet so Caddy gets the static address `10.213.47.2`, outside the range Docker assigns to web. Caddy replaces any `X-Forwarded-For` a client sends with the client's address, and web's Nginx takes the client address from `X-Forwarded-For` only on requests from Caddy's address, so the API sees real client addresses while local processes and other containers cannot set their own. Staging's Tailscale sidecar uses the same address on its own daemon (`staging/README.md`), since both run the same web image. Changing the address needs the matching change in `apps/web/nginx/wisp.conf` and in both environments' Compose files; the web security-headers probe reads Caddy's address from `production.compose.yml`. Network changes in the Compose file reach running containers only when they are recreated: after `sudo ops/install.sh production`, recreate web (`deploy.sh` only does that when an image changes) and then Caddy.
 
 ### Container privileges
 
@@ -120,11 +120,11 @@ Redis's default user has no password and full rights; the API uses it from the `
 
 ## Staging
 
-An isolated rootless Docker daemon (`tempo-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://tempo-staging.<tailnet>.ts.net/` for testing on mobile devices. Deploy any API/web pair with one command; an omitted component keeps its current image:
+An isolated rootless Docker daemon (`wisp-staging-docker.service`) runs a separate copy of the stack on `http://127.0.0.1:8119/` and, through its own Tailscale sidecar, at `https://wisp-staging.<tailnet>.ts.net/` for testing on mobile devices. Deploy any API/web pair with one command; an omitted component keeps its current image:
 
 ```bash
 ops/install.sh staging                         # after changing ops/
-tempo-deploy staging --api pr-115 --web main
+wisp-deploy staging --api pr-115 --web main
 ```
 
 A successful deploy refreshes the staging database from production data, so staging stays on loopback and the tailnet: no Funnel, port forward or other route. See [`staging/README.md`](staging/README.md).

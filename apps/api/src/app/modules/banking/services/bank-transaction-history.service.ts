@@ -6,7 +6,7 @@ import {
 	type BankTransactionBreakdownPart,
 	type BankTransactionBreakdownPeriod,
 	type BankTransactionCategory,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

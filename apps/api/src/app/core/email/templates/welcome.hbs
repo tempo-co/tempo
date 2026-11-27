@@ -1,8 +1,8 @@
 {{#> layout
-    subject="Confirm your email for Tempo"
-    preheader=(concat "Your Tempo code is " code ". It expires in " expiration ".")
+    subject="Confirm your email for Wisp"
+    preheader=(concat "Your Wisp code is " code ". It expires in " expiration ".")
 }}
-  <h1>Welcome to Tempo, {{name}}</h1>
+  <h1>Welcome to Wisp, {{name}}</h1>
   <p>Confirm your email address to finish signing up.</p>
   {{> button
       url=verificationUrl
@@ -12,5 +12,5 @@
   }}
   <p>The link and code expire in {{expiration}}. You can also manually enter the code below.</p>
   {{> code-block code=code }}
-  <p>If you didn't sign up for Tempo, you can ignore this email.</p>
+  <p>If you didn't sign up for Wisp, you can ignore this email.</p>
 {{/layout}}

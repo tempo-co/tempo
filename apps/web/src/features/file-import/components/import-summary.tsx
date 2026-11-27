@@ -1,4 +1,4 @@
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {ArrowDownToLine, CalendarRange, CheckCheck, FileWarning, Undo2} from 'lucide-react';
 import {type ElementType, type ReactNode, useState} from 'react';
 
@@ -73,7 +73,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
             muted
             counts={[
               {label: 'Were new', value: summary.rowsAdded},
-              {label: 'Were already in Tempo', value: summary.rowsAlreadyPresent},
+              {label: 'Were already in Wisp', value: summary.rowsAlreadyPresent},
             ]}
           />
         </section>
@@ -83,7 +83,7 @@ export function ImportSummaryBody({summary}: {summary: BankImportSummary}) {
         <Counts
           counts={[
             {label: 'New transactions', value: summary.rowsAdded},
-            {label: 'Already in Tempo', value: summary.rowsAlreadyPresent},
+            {label: 'Already in Wisp', value: summary.rowsAlreadyPresent},
             ...(summary.rowsDoubtful > 0
               ? [{label: 'Need a look', value: summary.rowsDoubtful, attention: true}]
               : []),

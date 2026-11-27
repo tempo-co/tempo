@@ -1,4 +1,4 @@
-import type {RecurringSeries, RecurringSeriesLists} from '@tempo/contracts';
+import type {RecurringSeries, RecurringSeriesLists} from '@wisp/contracts';
 
 import {toCents} from '@/features/dashboard/utils/money';
 

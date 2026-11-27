@@ -1,5 +1,5 @@
 import {hashKey, keepPreviousData, useQuery} from '@tanstack/react-query';
-import type {BankTransactionDayTotals, BankTransactionTotals} from '@tempo/contracts';
+import type {BankTransactionDayTotals, BankTransactionTotals} from '@wisp/contracts';
 import {parseISO} from 'date-fns';
 import {useMemo} from 'react';
 

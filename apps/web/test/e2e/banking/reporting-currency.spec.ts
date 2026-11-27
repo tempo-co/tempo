@@ -1,5 +1,5 @@
 import type {Page, Route} from '@playwright/test';
-import {REPORTING_CURRENCIES, type ReportingCurrency} from '@tempo/contracts';
+import {REPORTING_CURRENCIES, type ReportingCurrency} from '@wisp/contracts';
 
 import {
   HOME_CONNECTION,
@@ -23,7 +23,7 @@ import {
 } from '../../utils/bank-connections';
 import {boxOf, expectNoHorizontalOverflow} from '../../utils/layout';
 
-const QUESTION = 'Which currency should Tempo use for totals?';
+const QUESTION = 'Which currency should Wisp use for totals?';
 
 /** Accounts in EUR and GBP, no currency chosen yet, and recent transactions mostly in GBP. */
 const ASKING: ReportingCurrency = {
@@ -127,7 +127,7 @@ test.describe('fully mocked', () => {
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 
-  test('asks again once Tempo can no longer convert into the chosen currency, suggesting another', async ({
+  test('asks again once Wisp can no longer convert into the chosen currency, suggesting another', async ({
     page,
     baseURL,
   }) => {
@@ -145,7 +145,7 @@ test.describe('fully mocked', () => {
 
     const setup = page.getByRole('region', {name: QUESTION});
     await expect(setup).toContainText(
-      "Tempo can't convert amounts into RUB, because the European Central Bank doesn't publish its exchange rates.",
+      "Wisp can't convert amounts into RUB, because the European Central Bank doesn't publish its exchange rates.",
     );
     await expect(setup.getByTestId('reporting-currency-picker')).toHaveText('EUR — Euro');
     await expect(setup.getByText('Suggested from your recent transactions.')).toBeVisible();

@@ -1,4 +1,4 @@
-import type {EmailChangeVerifyRequest} from '@tempo/contracts';
+import type {EmailChangeVerifyRequest} from '@wisp/contracts';
 import {IsEmail, IsNotEmpty, IsString, IsUUID, Length} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';

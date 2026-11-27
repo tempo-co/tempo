@@ -2,7 +2,7 @@ import {useMutation} from '@tanstack/react-query';
 import {
   BankConnectionAuthorizationRequest,
   BankConnectionAuthorizationResponse,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

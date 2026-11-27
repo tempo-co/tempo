@@ -1,9 +1,9 @@
 {
-	"name": "@tempo/contracts",
+	"name": "@wisp/contracts",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "HTTP request and response shapes shared by the Tempo API and web app.",
+	"description": "HTTP request and response shapes shared by the Wisp API and web app.",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts"
 }

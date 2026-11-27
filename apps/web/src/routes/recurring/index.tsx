@@ -15,9 +15,11 @@ import {
 } from '@/features/reporting-currency/api/use-reporting-currency';
 import {useLocalDate} from '@/hooks/use-local-date';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 
 /** This month's bills and the whole catalogue; the tab, the view and the open series are in the URL. */
 export const Route = createFileRoute('/recurring/')({
+  head: pageHead('Recurring'),
   component: Recurring,
   validateSearch: zodValidator(recurringSearchSchema),
   beforeLoad: ({context}) => {

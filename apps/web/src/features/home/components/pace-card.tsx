@@ -1,5 +1,5 @@
 import {Link} from '@tanstack/react-router';
-import type {SpendingPace} from '@tempo/contracts';
+import type {SpendingPace} from '@wisp/contracts';
 import {format} from 'date-fns';
 import {Minus, TrendingDown, TrendingUp} from 'lucide-react';
 import type {ReactNode} from 'react';

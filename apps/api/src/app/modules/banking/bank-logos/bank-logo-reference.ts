@@ -1,4 +1,4 @@
-import type {BankLogoReference} from '@tempo/contracts';
+import type {BankLogoReference} from '@wisp/contracts';
 
 export function bankLogoReference(name: string, country: string): BankLogoReference {
 	return {

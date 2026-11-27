@@ -11,9 +11,9 @@ type QueryResult = {
 };
 
 /**
- * Loading and error states that keep loaded data while Tempo does not answer. A request without a
+ * Loading and error states that keep loaded data while Wisp does not answer. A request without a
  * response, or one waiting for the connection, leaves loaded data in place and reports missing data
- * as unavailable instead of loading. An error reply from Tempo still counts as an error.
+ * as unavailable instead of loading. An error reply from Wisp still counts as an error.
  */
 export function savedDataStatus({data, isPending, isError, error, fetchStatus}: QueryResult) {
   const isPaused = fetchStatus === 'paused';

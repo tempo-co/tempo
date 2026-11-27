@@ -1,4 +1,4 @@
-import type {Account as AccountResponse} from '@tempo/contracts';
+import type {Account as AccountResponse} from '@wisp/contracts';
 
 import {Account} from '../account.entity';
 

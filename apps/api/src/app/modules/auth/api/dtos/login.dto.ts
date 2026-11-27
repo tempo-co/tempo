@@ -1,4 +1,4 @@
-import type {LogInRequest} from '@tempo/contracts';
+import type {LogInRequest} from '@wisp/contracts';
 import {IsEmail, IsNotEmpty, IsString, Length, MaxLength, MinLength} from 'class-validator';
 
 import {Account} from '@modules/account/account.entity';

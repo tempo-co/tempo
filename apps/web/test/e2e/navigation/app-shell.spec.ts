@@ -17,14 +17,19 @@ async function mockPages(page: Page) {
 
 const HOME = /^https?:\/\/[^/]+\/(?:\?|$)/;
 const desktopPages = [
-  {label: 'Transactions', url: /\/transactions(?:\?|$)/, heading: 'Transactions'},
-  {label: 'Insights', url: /\/insights(?:\?|$)/, heading: 'Insights'},
-  {label: 'Recurring', url: /\/recurring(?:\?|$)/, heading: 'Recurring'},
-  {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Accounts'},
-  {label: 'Home', url: HOME, heading: null},
+  {
+    label: 'Transactions',
+    url: /\/transactions(?:\?|$)/,
+    heading: 'Transactions',
+    title: 'Transactions · Wisp',
+  },
+  {label: 'Insights', url: /\/insights(?:\?|$)/, heading: 'Insights', title: 'Insights · Wisp'},
+  {label: 'Recurring', url: /\/recurring(?:\?|$)/, heading: 'Recurring', title: 'Recurring · Wisp'},
+  {label: 'Accounts', url: /\/accounts(?:\?|$)/, heading: 'Accounts', title: 'Accounts · Wisp'},
+  {label: 'Home', url: HOME, heading: null, title: 'Wisp'},
 ];
 
-test('the desktop sidebar reaches every page, collapses for good and opens Settings', async ({
+test('the desktop sidebar reaches every page under its own tab title, collapses for good and opens Settings', async ({
   page,
 }) => {
   await page.setViewportSize({width: 1440, height: 900});
@@ -43,10 +48,11 @@ test('the desktop sidebar reaches every page, collapses for good and opens Setti
   await expect(sidebar.getByText('owner@example.com')).toBeVisible();
   await expect(sidebar.getByRole('link', {name: 'Transactions, 3 to check'})).toBeVisible();
 
-  for (const {label, url, heading} of desktopPages) {
+  for (const {label, url, heading, title} of desktopPages) {
     const link = nav.getByRole('link', {name: new RegExp(`^${label}`)});
     await link.click();
     await expect(page).toHaveURL(url);
+    await expect(page).toHaveTitle(title);
     await expect(link).toHaveAttribute('aria-current', 'page');
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
     if (heading) await expect(page.getByRole('heading', {level: 1})).toHaveText(heading);
@@ -68,6 +74,7 @@ test('the desktop sidebar reaches every page, collapses for good and opens Setti
 
   await sidebar.getByRole('link', {name: 'Settings'}).click();
   await expect(page).toHaveURL(/\/settings\/profile$/);
+  await expect(page).toHaveTitle('Settings · Wisp');
   await expect(page.getByRole('heading', {level: 1})).toHaveText('Settings');
   await expect(nav.locator('[aria-current="page"]')).toHaveCount(0);
 

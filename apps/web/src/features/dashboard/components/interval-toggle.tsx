@@ -1,4 +1,4 @@
-import type {CashFlowInterval} from '@tempo/contracts';
+import type {CashFlowInterval} from '@wisp/contracts';
 
 import {ToggleGroup, ToggleGroupItem} from '@/components/ui/toggle-group';
 

@@ -1,6 +1,6 @@
-# Tempo MCP
+# Wisp MCP
 
-Connect an MCP client to Tempo's hosted **Streamable HTTP** endpoint using the server URL shown in Settings → Integrations, such as `https://tempo.example.com/api/mcp`. Configure an account-owned personal access token as a Bearer credential through the client's secret store. The client can run on another device; it does not need a local checkout or Node.js.
+Connect an MCP client to Wisp's hosted **Streamable HTTP** endpoint using the server URL shown in Settings → Integrations, such as `https://wisp.example.com/api/mcp`. Configure an account-owned personal access token as a Bearer credential through the client's secret store. The client can run on another device; it does not need a local checkout or Node.js. The server introduces itself as `wisp`.
 
 The endpoint serves sixteen read-only tools through the official `@modelcontextprotocol/sdk`. It reads stored data directly through the same user-scoped services, validation and public response boundaries as REST. It does not sync banks or provide write tools. The tool registration lives in `src/app/modules/banking/mcp/`; `McpReaderService` binds it to the token's account.
 
@@ -14,7 +14,7 @@ Non-browser requests may omit Origin. A present Origin must exactly equal the or
 
 ## Bank data in replies
 
-Descriptions, counterparty names, remittance text, merchant and account names come from banks, shops, senders and imported files, so any of them can carry text aimed at the client's model. Every data tool's reply therefore opens with a one-line notice and holds its JSON between `<bank_data_SUFFIX>` and `</bank_data_SUFFIX>`, with a random 16-hex-digit suffix on every reply, so planted text cannot close the tag. The JSON between the tags equals the REST response. `list_categories` returns Tempo's fixed category text without the wrapper. The server instructions and every data tool's description say that this text is data, never instructions. MCP has no trust field that clients honour, so this lowers the risk of a prompt injection but cannot remove it. The wrapper lives in `src/app/modules/banking/mcp/bank-data.ts`.
+Descriptions, counterparty names, remittance text, merchant and account names come from banks, shops, senders and imported files, so any of them can carry text aimed at the client's model. Every data tool's reply therefore opens with a one-line notice and holds its JSON between `<bank_data_SUFFIX>` and `</bank_data_SUFFIX>`, with a random 16-hex-digit suffix on every reply, so planted text cannot close the tag. The JSON between the tags equals the REST response. `list_categories` returns Wisp's fixed category text without the wrapper. The server instructions and every data tool's description say that this text is data, never instructions. MCP has no trust field that clients honour, so this lowers the risk of a prompt injection but cannot remove it. The wrapper lives in `src/app/modules/banking/mcp/bank-data.ts`.
 
 ## Tests
 
@@ -22,9 +22,9 @@ Descriptions, counterparty names, remittance text, merchant and account names co
 
 ## Tokens
 
-Use a verified Tempo browser session to manage tokens:
+Use a verified Wisp browser session to manage tokens:
 
-- `POST /api/personal-access-tokens` with `{"name":"MCP client","expiresInDays":90}` creates a read-scoped token and returns metadata plus the token once. `expiresInDays` is 30, 90 or 365, or `null` for a token that never expires; it defaults to 90.
+- `POST /api/personal-access-tokens` with `{"name":"MCP client","expiresInDays":90}` creates a read-scoped token and returns metadata plus the token once; tokens start with `wisp_pat_`, and the API refuses any other prefix. `expiresInDays` is 30, 90 or 365, or `null` for a token that never expires; it defaults to 90.
 - `GET /api/personal-access-tokens` returns metadata without secrets.
 - `DELETE /api/personal-access-tokens/:id` revokes a token and returns 204.
 
@@ -46,7 +46,7 @@ All inputs are strict: unknown fields are rejected, including caller-supplied us
 | `transaction_totals`  | `{filters?}`                          | `GET /bank-transactions/totals`, no paging.                                                                                                                  |
 | `get_transaction`     | `{id}`                                | `GET /bank-transactions/:id`, UUIDv4 only.                                                                                                                   |
 | `review_counts`       | `{}`                                  | `GET /bank-transactions/review-counts`.                                                                                                                      |
-| `list_categories`     | `{}`                                  | Values, labels and descriptions from `@tempo/contracts`, including filter-only `UNCATEGORIZED`.                                                              |
+| `list_categories`     | `{}`                                  | Values, labels and descriptions from `@wisp/contracts`, including filter-only `UNCATEGORIZED`.                                                              |
 | `spending_breakdown`  | `{interval, by, from, to, asOf?}`     | `GET /bank-transactions/breakdown`; spending by category or income by source per month or year.                                                              |
 | `list_merchants`      | `{search?, offset?, limit?}`          | `GET /merchants`; merchant groups with all-time totals, most spent first; finds a merchant id by name.                                                       |
 | `merchant_ranking`    | `{interval, period, asOf?, limit?}`   | `GET /merchants/ranking`; merchants by net spending in the period containing `period`, against their usual amount.                                           |
@@ -55,7 +55,7 @@ All inputs are strict: unknown fields are rejected, including caller-supplied us
 
 Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true` and `openWorldHint: true`; server and API authorization, not annotations, enforce read-only access.
 
-`month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date **in the token user's time zone (`accounts.timeZone`) at each call**, including recurring lists/summary, cash flow and balance trend, whose API DTOs require it. Tool descriptions name that zone. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, the range limits in `MAX_RANGE_PERIODS` (`@tempo/contracts`), and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
+`month` is `YYYY-MM` in 1900–2099. Dates are real `YYYY-MM-DD` calendar dates, not timestamps. `asOf` defaults to the date **in the token user's time zone (`accounts.timeZone`) at each call**, including recurring lists/summary, cash flow and balance trend, whose API DTOs require it. Tool descriptions name that zone. `interval` is `week`, `month` or `year`. The API enforces `from <= to <= asOf`, the range limits in `MAX_RANGE_PERIODS` (`@wisp/contracts`), and summary months on or before `asOf`. API range errors are returned as safe HTTP 400 tool errors.
 
 Search `page` is a zero-based nonnegative integer, default 0. `pageSize` defaults to 10 and must be one of the actual API DTO options: **5, 10, 20, 30, 40, 50, 100**. No unbounded fetch-all loop is provided. Use `transaction_totals` with the same filters for sums across all matches; summing a search page does not produce a full total.
 
@@ -74,6 +74,6 @@ Both search and totals accept these optional `filters`, matching the banking DTO
 - `categoryStatuses: (FAILED | CATEGORIZING)[]`.
 - `recurringSeriesKey: string`, the 32-character lowercase hexadecimal `key` from `list_recurring`. It narrows results to that series and combines with the other filters. Unknown or another user's keys return the same safe 404 error.
 
-`transaction_totals` returns `{baseCurrency, spending, income, net, count, excluded: {missingBaseAmount}}`. Monetary totals are decimal strings using Tempo's spending/income semantics. Counts and exclusions describe the whole filtered set, not one search page. `baseCurrency` is the user's reporting currency and is null while there is none or a change is still being converted; the server's instructions tell clients not to present figures as totals then. `list_accounts` preserves the API connection array and does not invent a grand balance total across currencies or missing conversions.
+`transaction_totals` returns `{baseCurrency, spending, income, net, count, excluded: {missingBaseAmount}}`. Monetary totals are decimal strings using Wisp's spending/income semantics. Counts and exclusions describe the whole filtered set, not one search page. `baseCurrency` is the user's reporting currency and is null while there is none or a change is still being converted; the server's instructions tell clients not to present figures as totals then. `list_accounts` preserves the API connection array and does not invent a grand balance total across currencies or missing conversions.
 
-Breakdown `interval` is `month` or `year` and `by` is `category` (spending net of refunds) or `source` (income by merchant), each period's total equal to cash flow's, or `allCategories` (every transaction by category in either direction, as the list's category filter counts them). Merchant ids match `^[bk]_[0-9a-f]{32}$` (`MERCHANT_GROUP_ID_PATTERN`) and come from `list_merchants`, `merchant_ranking` or a transaction's `merchantGroupId`; an unknown or another user's id returns the same safe 404 error. `list_merchants` takes `search` up to 200 characters, a nonnegative `offset` and `limit` 1–100 (default 50); `merchant_ranking` takes `limit` 1–200 (default 50) and refuses a period that starts after `asOf`. Merchant amounts are decimal strings in the base currency with Tempo's spending semantics: own transfers and currency exchanges never count, and `spent` is payments minus refunds. These limits come from `@tempo/contracts`.
+Breakdown `interval` is `month` or `year` and `by` is `category` (spending net of refunds) or `source` (income by merchant), each period's total equal to cash flow's, or `allCategories` (every transaction by category in either direction, as the list's category filter counts them). Merchant ids match `^[bk]_[0-9a-f]{32}$` (`MERCHANT_GROUP_ID_PATTERN`) and come from `list_merchants`, `merchant_ranking` or a transaction's `merchantGroupId`; an unknown or another user's id returns the same safe 404 error. `list_merchants` takes `search` up to 200 characters, a nonnegative `offset` and `limit` 1–100 (default 50); `merchant_ranking` takes `limit` 1–200 (default 50) and refuses a period that starts after `asOf`. Merchant amounts are decimal strings in the base currency with Wisp's spending semantics: own transfers and currency exchanges never count, and `spent` is payments minus refunds. These limits come from `@wisp/contracts`.

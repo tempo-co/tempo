@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
 import {useLocation} from '@tanstack/react-router';
-import type {BankTransactionReviewCounts} from '@tempo/contracts';
+import type {BankTransactionReviewCounts} from '@wisp/contracts';
 
 import {dashboardQueryKeys} from '@/features/banking/api/aggregate-query-keys';
 import {HOME_REFRESH_INTERVAL_MS} from '@/features/dashboard/api/refresh-interval';

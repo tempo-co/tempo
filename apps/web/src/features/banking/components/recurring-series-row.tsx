@@ -1,4 +1,4 @@
-import type {RecurringSeries} from '@tempo/contracts';
+import type {RecurringSeries} from '@wisp/contracts';
 
 import {Badge} from '@/components/ui/badge';
 import {cn} from '@/utils/cn';

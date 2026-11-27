@@ -7,8 +7,8 @@ import type {
 	BankImportList,
 	BankImportNeverSentRow,
 	BankImportSummary,
-} from '@tempo/contracts';
-import {BANK_REQUEST_MAX_PER_DAY, OTHER_BANK_ID} from '@tempo/contracts';
+} from '@wisp/contracts';
+import {BANK_REQUEST_MAX_PER_DAY, OTHER_BANK_ID} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {type Server as HttpServer, request as httpRequest} from 'node:http';
@@ -889,7 +889,7 @@ describe('Bank imports', () => {
 
 	it("takes the closing balance a statement of any bank states when its rows' order is unknown, until its import is undone", async () => {
 		const {agent} = await createOwner();
-		// Two entries of a bank whose entry order Tempo does not know: no row gets a balance after.
+		// Two entries of a bank whose entry order Wisp does not know: no row gets a balance after.
 		const stated = statement(
 			[
 				{amount: '-10.00', bookingDate: '2026-10-05', reference: 'R1'},
@@ -4265,7 +4265,7 @@ describe('Bank imports', () => {
 			file: 2,
 		},
 		{
-			name: 'a table in no layout Tempo knows',
+			name: 'a table in no layout Wisp knows',
 			files: () => [ARCHIVE, Buffer.from('Date,Amount\n2026-03-02,1.00\n')],
 			status: 422,
 			code: 'layout_unknown',
@@ -4565,7 +4565,7 @@ describe('Bank imports', () => {
 		await digest.send(now);
 
 		const email = await EmailUtils.findEmailByRecipient(OPERATOR_ALERT_E2E_EMAIL, MAILPIT_API_URL);
-		expect(email).toMatchObject({Subject: 'Tempo: banks to add'});
+		expect(email).toMatchObject({Subject: 'Wisp: banks to add'});
 		expect(email?.Text).toContain('Example Digest Bank (DE): 2 accounts, a saved layout to build from');
 		expect(email?.Text).toContain('BoursoBank (FR): 1 account, a saved layout to build from');
 		expect(email?.Text).toContain('Example Picked Bank: 1 account, a saved layout to build from');

@@ -1,4 +1,4 @@
-import type {BankAccount, BankImportSummary} from '@tempo/contracts';
+import type {BankAccount, BankImportSummary} from '@wisp/contracts';
 import {Check} from 'lucide-react';
 import {useId, useState} from 'react';
 import {toast} from 'sonner';

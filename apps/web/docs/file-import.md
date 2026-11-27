@@ -16,7 +16,7 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   EEA, Switzerland and the United Kingdom with their listed banks' counts), a search that is never
   focused for the owner, and one scrolling list of 56px rows. The country is the browser's region
   when listed, else the country of the account's time zone when listed, else the first by name,
-  and it stays while the sheet closes and opens. The list holds that country's banks from the shared bank list (`BANK_LIST` in `@tempo/contracts`), then
+  and it stays while the sheet closes and opens. The list holds that country's banks from the shared bank list (`BANK_LIST` in `@wisp/contracts`), then
   the banks that serve several countries from one app ("Several countries" under the name), then
   Another bank under a hairline. A search matches names and countries across every country and
   always keeps Another bank. Whether a bank is verified shows nowhere in the list. Each row leads
@@ -29,7 +29,7 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   columns may need checking once. Another bank shows one generic text instead. The picked bank's
   id goes as `bankId` with the upload and with working out the columns. A page drop skips the
   picker and sends no bank.
-- **Tell us your bank.** A file Tempo cannot read (its columns could not be worked out, the owner
+- **Tell us your bank.** A file Wisp cannot read (its columns could not be worked out, the owner
   said the worked-out ones were not right, or this deployment cannot work them out) offers an
   outline **Tell us your bank** in the footer. Its step asks for the bank name (the picked bank's
   when it is listed), the country (a `Select` of the EEA, Switzerland and the United Kingdom, the
@@ -76,7 +76,7 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   right-hand column, so their right edges line up. An added row turns into a muted "Added". Nothing
   adds every row at once. Rows of the import a later sync removed get a second fold line just like
   it ("Removed: 4 rows your bank never sent"), whose list says the bank sent every transaction for
-  those days, so Tempo removed the file's copies, and offers
+  those days, so Wisp removed the file's copies, and offers
   **Add back** and **Add back N**, a removed row turning into "Added back". Only the summary shows
   removed rows; the list of imports does not. 50 groups show, then **Show 50 more**; a group
   shows 5 rows, then **Show all**. An undone import opens with a `default` Alert
@@ -100,7 +100,7 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   failure (offline, signed out, rate limited), with its choice alone. A long list shows 50 rows, then a ghost **Show 50
   more** (as Load more) under them; it focuses the first row it adds, and choices on every shown
   row count toward Save. When every row is on a synced account, a second muted line under the
-  intro says they are almost always in Tempo already and leaving them open loses nothing.
+  intro says they are almost always in Wisp already and leaving them open loses nothing.
 - **Imports list.** On Accounts' Imports tab, and on an account page for the imports that wrote to it: a small heading, then one
   bordered `divide-y` list, newest first, five rows before Show all. A row reads "3 files · 212
   new" over the day, the accounts and any rows still to check (attention tone), with an
@@ -114,7 +114,7 @@ file** does too. No copy calls import a fallback or assumes a bank is connected.
   then a separator and **Other**, which reveals a "Bank name" input (60 characters at most). While the
   list loads the picker is disabled and reads "Loading your banks…"; once Looks right is pressed it is not read again; a failed load takes its place as a section `LoadErrorState`
   ("Couldn't load your banks", Try again) and no toast (`quiet`), and Looks right stays disabled until it loads.
-  Tempo's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
+  Wisp's guess starts picked when it names a listed bank (ignoring case and spacing), else Other with
   the guess typed in; with no guess nothing is picked and Looks right stays disabled. A name the API
   refuses says why under the control.
 - **Imported files.** An imported-files account has the `Files` leading tile and "statement files"

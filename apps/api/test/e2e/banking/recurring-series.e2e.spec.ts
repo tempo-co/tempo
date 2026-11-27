@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankTransactionRecurring} from '@tempo/contracts';
+import type {BankTransactionRecurring} from '@wisp/contracts';
 import {Job} from 'bullmq';
 import {randomUUID} from 'node:crypto';
 import TestAgent from 'supertest/lib/agent';

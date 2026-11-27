@@ -10,8 +10,8 @@ import {BankTransactionSummaryService} from '../services/bank-transaction-summar
 import {BankConnectionAlertService} from './bank-connection-alert.service';
 import type {BankConnectionAlert} from './bank-connection-alerts';
 
-const TITLE = 'Tempo';
-/** What each alert says. Vague on purpose: a notification can be read on a locked screen without opening Tempo. */
+const TITLE = 'Wisp';
+/** What each alert says. Vague on purpose: a notification can be read on a locked screen without opening Wisp. */
 const BODIES: Record<BankConnectionAlert, string> = {
 	CONSENT_EXPIRING: 'A bank needs re-authorizing soon',
 	CONSENT_FINAL: 'Last day to re-authorize a bank',

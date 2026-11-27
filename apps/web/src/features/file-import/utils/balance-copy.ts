@@ -1,11 +1,11 @@
-import type {BankAccount} from '@tempo/contracts';
+import type {BankAccount} from '@wisp/contracts';
 
 import {HttpError} from '@/utils/api';
 
 import {AccountGoneError} from '../api/use-set-account-balance';
 
 export const ADD_BALANCE = 'Add balance';
-export const BALANCE_HELP = 'Tempo works out earlier balances from your transactions.';
+export const BALANCE_HELP = 'Wisp works out earlier balances from your transactions.';
 
 export function balanceLabel(accountName: string) {
   return `Balance of ${accountName} today`;

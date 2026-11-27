@@ -5,7 +5,7 @@ export const namesNoAccount = (layout: Pick<CsvLayout, 'accountIban' | 'accountI
 	layout.accountIban === undefined && layout.accountIbanLine === undefined;
 
 /**
- * The bank CSV exports Tempo reads, each established from a public description and sample of the export (see
+ * The bank CSV exports Wisp reads, each established from a public description and sample of the export (see
  * `test/fixtures/file-import/SOURCES.md`). A layout with a header is tried before one without: a file without a
  * header is claimed only when all of it reads.
  */

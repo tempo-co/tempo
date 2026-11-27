@@ -2,7 +2,7 @@ import {createWebUrl} from './web-url';
 
 describe('createWebUrl', () => {
 	it('resolves application paths below a mounted base path', () => {
-		expect(createWebUrl('/accounts', 'https://example.ts.net/tempo')).toBe('https://example.ts.net/tempo/accounts');
+		expect(createWebUrl('/accounts', 'https://example.ts.net/wisp')).toBe('https://example.ts.net/wisp/accounts');
 	});
 
 	it('resolves application paths from a root base URL', () => {
@@ -11,10 +11,10 @@ describe('createWebUrl', () => {
 
 	it('encodes query parameters on application URLs', () => {
 		expect(
-			createWebUrl('/verify-email', 'https://example.ts.net/tempo', {
+			createWebUrl('/verify-email', 'https://example.ts.net/wisp', {
 				email: 'user+test@example.com',
 				code: 'a/b',
 			}),
-		).toBe('https://example.ts.net/tempo/verify-email?email=user%2Btest%40example.com&code=a%2Fb');
+		).toBe('https://example.ts.net/wisp/verify-email?email=user%2Btest%40example.com&code=a%2Fb');
 	});
 });

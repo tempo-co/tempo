@@ -28,7 +28,7 @@ import type {
 	BankTransactionTotals,
 	BankTransactionsResponse,
 	SpendingPace,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {Response} from 'express';
 
 import {Account} from '@modules/account/account.entity';

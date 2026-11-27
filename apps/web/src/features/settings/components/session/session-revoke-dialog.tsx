@@ -1,4 +1,4 @@
-import type {Session} from '@tempo/contracts';
+import type {Session} from '@wisp/contracts';
 
 import {Button, ButtonProps} from '@/components/ui/button';
 

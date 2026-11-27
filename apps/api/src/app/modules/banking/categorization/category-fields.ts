@@ -2,7 +2,7 @@ import type {
 	BankTransactionCategorizationSource,
 	BankTransactionCategorizationStatus,
 	BankTransactionCategory,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 
 import type {BankTransaction} from '../bank-transaction.entity';
 import type {BankTransactionCategorizationSearchTrace} from './bank-transaction-categorization.types';

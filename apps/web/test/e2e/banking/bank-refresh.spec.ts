@@ -51,7 +51,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     {
       name: 'an unavailable API',
       status: 503,
-      message: 'Tempo is temporarily unavailable. Try again.',
+      message: 'Wisp is temporarily unavailable. Try again.',
     },
   ]) {
     test(`keeps ${name} quiet without automatically retrying the refresh`, async ({page}) => {
@@ -95,7 +95,7 @@ test.describe('mocked Enable Banking bank connection', () => {
     await page.goto('/accounts');
     await expect.poll(() => requests).toBe(1);
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(1);
-    await expect(page.locator('[data-sonner-toast]')).toContainText('Cannot reach Tempo.');
+    await expect(page.locator('[data-sonner-toast]')).toContainText('Cannot reach Wisp.');
     await expect(page.getByRole('status').filter({hasText: /^Offline/})).toBeVisible();
     unreachable = false;
     await page.evaluate(() => window.dispatchEvent(new Event('online')));

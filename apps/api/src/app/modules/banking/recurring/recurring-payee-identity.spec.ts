@@ -1,4 +1,4 @@
-import type {BankTransactionCategory} from '@tempo/contracts';
+import type {BankTransactionCategory} from '@wisp/contracts';
 
 import {getBankTransactionMerchantKey} from '../categorization/bank-transaction-merchant-key';
 import {type RecurringEvidence, inferRecurringIdentities} from './recurring-payee-identity';

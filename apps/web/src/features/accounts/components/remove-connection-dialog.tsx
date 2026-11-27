@@ -1,5 +1,5 @@
 import {useIsMutating} from '@tanstack/react-query';
-import type {BankConnection} from '@tempo/contracts';
+import type {BankConnection} from '@wisp/contracts';
 import {useState} from 'react';
 import {toast} from 'sonner';
 

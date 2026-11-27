@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportSummary, DataCoverage, SpendingPace} from '@tempo/contracts';
+import type {BankImportSummary, DataCoverage, SpendingPace} from '@wisp/contracts';
 import TestAgent from 'supertest/lib/agent';
 import {Repository} from 'typeorm';
 

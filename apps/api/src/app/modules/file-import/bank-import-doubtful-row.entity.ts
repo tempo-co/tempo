@@ -1,4 +1,4 @@
-import type {BankImportDoubtfulDecision} from '@tempo/contracts';
+import type {BankImportDoubtfulDecision} from '@wisp/contracts';
 import {
 	Column,
 	CreateDateColumn,

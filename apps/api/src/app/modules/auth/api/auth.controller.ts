@@ -1,6 +1,6 @@
 import {Body, Controller, Delete, Get, Head, HttpCode, Param, Post, Query, Req, Res, UseGuards} from '@nestjs/common';
 import {Throttle, minutes} from '@nestjs/throttler';
-import type {Account as AccountResponse, MessageResponse, Session} from '@tempo/contracts';
+import type {Account as AccountResponse, MessageResponse, Session} from '@wisp/contracts';
 import {Request, Response} from 'express';
 
 import {ConfigurationService} from '@core/config/config.service';

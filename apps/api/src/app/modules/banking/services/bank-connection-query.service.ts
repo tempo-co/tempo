@@ -6,7 +6,7 @@ import type {
 	BankConnection as BankConnectionResponse,
 	BankConnectionStatus,
 	BankSyncStatus,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {DataSource, Repository} from 'typeorm';
 
 import {Account} from '@modules/account/account.entity';

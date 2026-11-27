@@ -5,8 +5,10 @@ import {MONTH_PATTERN} from '@/features/dashboard/utils/month';
 import {MonthPage} from '@/features/insights/components/month-page';
 import {insightsPeriodSearchSchema} from '@/features/insights/types/insights-search';
 import {handleAuthenticatedRedirect} from '@/utils/handle-redirect';
+import {pageHead} from '@/utils/page-title';
 
 export const Route = createFileRoute('/insights/months/$month')({
+  head: pageHead('Insights'),
   component: Month,
   validateSearch: zodValidator(insightsPeriodSearchSchema),
   beforeLoad: ({context, params, search}) => {

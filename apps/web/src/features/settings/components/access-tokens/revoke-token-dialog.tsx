@@ -1,4 +1,4 @@
-import type {PersonalAccessToken} from '@tempo/contracts';
+import type {PersonalAccessToken} from '@wisp/contracts';
 import {CircleAlert} from 'lucide-react';
 import {useRef, useState} from 'react';
 import {toast} from 'sonner';

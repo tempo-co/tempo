@@ -32,7 +32,7 @@ type BraveResponse = {web?: {results?: {title?: unknown; url?: unknown; descript
 
 /**
  * Brave's web search API, asked with the code-built merchant query only. Returns the top results as plain text, which
- * the categorizing call reads and Tempo never stores. Throws on any failure; the caller decides without a search.
+ * the categorizing call reads and Wisp never stores. Throws on any failure; the caller decides without a search.
  */
 @Injectable()
 export class BraveWebSearchClient {

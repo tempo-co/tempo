@@ -1,4 +1,4 @@
-import type {BankConnection, BankImportSummary} from '@tempo/contracts';
+import type {BankConnection, BankImportSummary} from '@wisp/contracts';
 
 import {MOCK_CONNECTION} from '../../data/bank-connection.data';
 import {bankImport, importedFiles} from '../../data/bank-import.data';

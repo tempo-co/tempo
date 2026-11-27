@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {InjectRepository} from '@nestjs/typeorm';
-import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategory} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, type BankTransactionCategory} from '@wisp/contracts';
 import {Repository, SelectQueryBuilder} from 'typeorm';
 
 import {CreditDebitIndicator, toBankTransactionDirection} from '../bank-transaction-direction';

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {Logger} from '@nestjs/common';
-import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, BANK_TRANSACTION_CATEGORY_DEFINITIONS} from '@wisp/contracts';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 

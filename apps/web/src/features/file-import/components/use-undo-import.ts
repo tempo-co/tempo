@@ -1,4 +1,4 @@
-import type {BankImportSummary} from '@tempo/contracts';
+import type {BankImportSummary} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, wasToasted} from '@/utils/api';

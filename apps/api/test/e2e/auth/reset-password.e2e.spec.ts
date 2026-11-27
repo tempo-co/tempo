@@ -66,7 +66,7 @@ describe('AuthController - Reset Password', () => {
 
 			expect(resetEmail?.To[0].Address).toEqual(PW_RESET_ACCOUNT_EMAIL);
 			expect(token).toMatch(UUID_VALIDATION_REGEX);
-			expect(resetEmail?.Subject).toBe('Reset your Tempo password');
+			expect(resetEmail?.Subject).toBe('Reset your Wisp password');
 			expect(body).toBe(
 				EmailUtils.getPasswordResetEmailBody(PW_RESET_ACCOUNT_EMAIL, webUrl, token, passwordResetExpiration),
 			);

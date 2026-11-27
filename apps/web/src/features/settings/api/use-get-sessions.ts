@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import type {Session} from '@tempo/contracts';
+import type {Session} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

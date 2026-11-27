@@ -1,5 +1,5 @@
 import {useMutation} from '@tanstack/react-query';
-import type {PasswordChangeRequest} from '@tempo/contracts';
+import type {PasswordChangeRequest} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {HttpError, INVALID_PASSWORD_MESSAGE, api} from '@/utils/api';

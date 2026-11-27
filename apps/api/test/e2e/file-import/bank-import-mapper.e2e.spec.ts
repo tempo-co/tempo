@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportLayoutProposal as ProposalResponse} from '@tempo/contracts';
+import type {BankImportLayoutProposal as ProposalResponse} from '@wisp/contracts';
 import {readFileSync} from 'node:fs';
 import {Server} from 'node:net';
 import {join} from 'node:path';
@@ -282,7 +282,7 @@ describe('Bank import column mapper', () => {
 			bankIdentity: 'name:example bank',
 		});
 		// The banks the owner can pick for the next layout are their own, each once: their connections', their
-		// imported-files accounts' (kept ones, from earlier imports), spelled as Tempo knows the bank, and their saved
+		// imported-files accounts' (kept ones, from earlier imports), spelled as Wisp knows the bank, and their saved
 		// layouts'. Not a bank they have no account at, a BIC, or Revolut, whose own files name their accounts.
 		await fixtures.createConnection(owner, {aspspName: 'Example  Savings Bank', aspspCountry: 'DE'});
 		await fixtures.createConnection(owner, {aspspName: 'ing', aspspCountry: 'NL', status: 'EXPIRED'});
@@ -670,7 +670,7 @@ describe('Bank import column mapper', () => {
 		expect(await transactions.countBy({bankAccountId: synced.id})).toBe(5);
 	});
 
-	it("refuses a bank name of Tempo's own files that name no account, so a layout never shares their accounts", async () => {
+	it("refuses a bank name of Wisp's own files that name no account, so a layout never shares their accounts", async () => {
 		const {owner, agent} = await createOwner();
 		mapLayout.mockResolvedValueOnce(ANSWER.balance);
 		const proposed = await propose(agent, BALANCE_CSV).expect(201);

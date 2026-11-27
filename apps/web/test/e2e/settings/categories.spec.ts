@@ -1,4 +1,4 @@
-import {BANK_TRANSACTION_CATEGORIES, type BankTransactionBreakdown} from '@tempo/contracts';
+import {BANK_TRANSACTION_CATEGORIES, type BankTransactionBreakdown} from '@wisp/contracts';
 
 import {createAccount} from '../../data/account.data';
 import {expect, test} from '../../fixtures';

@@ -1,5 +1,5 @@
 import {QueryClient, useQuery, useQueryClient} from '@tanstack/react-query';
-import {BankTransaction} from '@tempo/contracts';
+import {BankTransaction} from '@wisp/contracts';
 
 import {api} from '@/utils/api';
 

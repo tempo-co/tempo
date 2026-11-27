@@ -2,10 +2,10 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/tempo-web-security-headers.XXXXXX")
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/wisp-web-security-headers.XXXXXX")
 suffix=${tmp_dir##*/}
-image="tempo-web-security-headers:${suffix}"
-container="tempo-web-security-headers-${suffix}"
+image="wisp-web-security-headers:${suffix}"
+container="wisp-web-security-headers-${suffix}"
 mcp_upstream="${container}-mcp"
 neighbour="${container}-neighbour"
 
@@ -122,6 +122,9 @@ check() {
 }
 check spa / spa
 check asset /favicon.svg spa
+# Emails link the header image by absolute URL; a missing file would come back as the app page.
+email_header_type=$(curl -fsS --max-time 5 -o /dev/null -w '%{content_type}' "http://127.0.0.1:$port/email-header.png")
+[[ $email_header_type == image/png ]] || { echo "email header image served as '$email_header_type'" >&2; exit 1; }
 check deep-link /bank-transactions spa
 encoded_search=$(python3 -c 'from urllib.parse import quote; print(quote("€" * 1000))')
 check unicode-api-search "/api/bank-transactions?filter%5Bsearch%5D=$encoded_search" proxy
@@ -134,6 +137,72 @@ for asset in js css; do
     [[ $index_html =~ (/assets/[^\"]+\.$asset) ]] || { echo "index.html links no .$asset asset" >&2; exit 1; }
     check "app-$asset" "${BASH_REMATCH[1]}" compressed
 done
+
+# What a browser tab, an installed app and a pasted link show, and every image they name is served.
+python3 - "$port" <<'PY'
+import json
+import sys
+import urllib.request
+from html.parser import HTMLParser
+from urllib.parse import urlsplit
+
+origin = f'http://127.0.0.1:{sys.argv[1]}'
+
+
+class Head(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title = ''
+        self.in_title = False
+        self.meta = {}
+        self.manifest = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'title':
+            self.in_title = True
+        elif tag == 'meta' and 'content' in attrs:
+            self.meta[attrs.get('property') or attrs.get('name')] = attrs['content']
+        elif tag == 'link' and attrs.get('rel') == 'manifest':
+            self.manifest = attrs['href']
+
+    def handle_endtag(self, tag):
+        if tag == 'title':
+            self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_title:
+            self.title += data
+
+
+def served(path, content_type):
+    with urllib.request.urlopen(origin + path, timeout=5) as response:
+        assert response.status == 200, f'{path}: HTTP {response.status}'
+        assert response.headers['Content-Type'].startswith(content_type), f'{path}: {response.headers["Content-Type"]}'
+        return response.read()
+
+
+head = Head()
+head.feed(served('/', 'text/html').decode())
+assert head.title == 'Wisp', f'page title {head.title!r}'
+for name in ('description', 'og:title', 'og:description', 'og:image', 'og:type', 'twitter:card'):
+    assert head.meta.get(name), f'missing {name} meta'
+assert head.meta['og:title'] == 'Wisp', head.meta['og:title']
+assert head.meta['og:type'] == 'website', head.meta['og:type']
+assert head.meta['twitter:card'] == 'summary_large_image', head.meta['twitter:card']
+image = urlsplit(head.meta['og:image'])
+assert image.scheme == 'https' and image.netloc, f'og:image is not an absolute HTTPS URL: {head.meta["og:image"]!r}'
+preview = served(image.path, 'image/png')
+assert preview[16:24] == (1200).to_bytes(4, 'big') + (630).to_bytes(4, 'big'), 'the preview image is not 1200x630'
+
+manifest = json.loads(served(head.manifest, 'application/manifest+json'))
+assert manifest['name'] == 'Wisp' and manifest['short_name'] == 'Wisp', manifest
+assert manifest['id'] == '/' and manifest['start_url'] == '/' and manifest['scope'] == '/', manifest
+assert manifest['icons'], 'the manifest names no icons'
+for icon in manifest['icons']:
+    served(icon['src'], icon['type'])
+print('wisp web title, link preview and manifest: PASS')
+PY
 
 # The first streamed event must arrive before a second request releases the final event.
 # Sharing only the network namespace keeps the synthetic API isolated from host services.
@@ -184,7 +253,7 @@ except urllib.error.HTTPError as error:
     assert error.code == 413, f'expected request size cap HTTP 413, got {error.code}'
 else:
     raise AssertionError('MCP requests larger than 100 KiB must be refused')
-print('tempo MCP proxy streaming and request limit: PASS')
+print('wisp MCP proxy streaming and request limit: PASS')
 
 # A statement import, and the file sent to work out its columns, are larger than Nginx's default 1 MB request limit;
 # they must reach the API whole.
@@ -200,7 +269,7 @@ for path in ('/bank-imports', '/bank-imports/layout-proposals'):
         assert error.code == 413, f'expected {path} size cap HTTP 413, got {error.code}'
     else:
         raise AssertionError(f'{path} uploads larger than 26 MB must be refused')
-print('tempo statement import upload size: PASS')
+print('wisp statement import upload size: PASS')
 
 # Use the API's real URL builder, then verify Nginx preserves each name as one segment.
 base = url.removesuffix('/mcp')
@@ -212,7 +281,7 @@ for name in ('Example Bank', 'Example Bank A/S', 'Example Bank & Épargne', 'Exa
             forwarded = json.load(response)['path']
         assert forwarded == path, f'proxy changed logo path for {name!r}: {forwarded!r}'
         assert re.fullmatch(r'/bank-connections/aspsps/logos/XX/[^/]+(?:/colour-v2/[a-f0-9]{64})?', forwarded), forwarded
-print('tempo bank logo proxy paths: PASS')
+print('wisp bank logo proxy paths: PASS')
 PY
 
 # Waits for Nginx to log the request whose query is $1 and checks the client address it logged.
@@ -261,4 +330,4 @@ docker exec "$neighbour" curl -sS --max-time 5 -o /dev/null \
     -H 'X-Forwarded-For: 203.0.113.10' "http://$web_address:8080/?other-container"
 expect_client other-container "$neighbour_address"
 
-echo 'tempo web security headers: PASS'
+echo 'wisp web security headers: PASS'

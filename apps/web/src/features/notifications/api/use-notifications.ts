@@ -4,7 +4,7 @@ import type {
   NotificationSettings,
   PushSubscriptionRegistration,
   PushSubscriptionRemoval,
-} from '@tempo/contracts';
+} from '@wisp/contracts';
 import {toast} from 'sonner';
 
 import {
@@ -90,7 +90,7 @@ export function useAllowNotifications() {
   });
 }
 
-/** Unsubscribes this browser and removes it from Tempo; Tempo leaves it off until Allow is tapped again. */
+/** Unsubscribes this browser and removes it from Wisp; Wisp leaves it off until Allow is tapped again. */
 export function useTurnOffNotifications() {
   const queryClient = useQueryClient();
   return useMutation({

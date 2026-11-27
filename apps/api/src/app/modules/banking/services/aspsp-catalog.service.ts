@@ -1,5 +1,5 @@
 import {BadGatewayException, Inject, Injectable, Logger} from '@nestjs/common';
-import type {BankConnectionAspsp} from '@tempo/contracts';
+import type {BankConnectionAspsp} from '@wisp/contracts';
 import Redis from 'ioredis';
 
 import {ConfigurationService} from '@core/config/config.service';
