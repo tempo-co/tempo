@@ -619,6 +619,38 @@ function worstInsights() {
   });
 }
 
+for (const {width, theme} of [
+  {width: 1440, theme: 'light'},
+  {width: 1440, theme: 'dark'},
+  {width: 390, theme: 'light'},
+  {width: 390, theme: 'dark'},
+  {width: 320, theme: 'light'},
+  {width: 320, theme: 'dark'},
+] as const) {
+  test(`This month's balance line on Insights fits worst-case data at ${width}px in ${theme}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width, height: 1000});
+    await page.addInitScript((value) => localStorage.setItem('vite-ui-theme', value), theme);
+    await mockSyntheticHome(page, {history: worstInsights()});
+    await page.goto('/insights?period=month');
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.classList.contains('dark')))
+      .toBe(theme === 'dark');
+    const days = page.getByRole('region', {name: 'Balance over time'});
+    await expect(days.getByRole('img', {name: /^Total balance at each day end/})).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    if (process.env.HOME_POLISH_CAPTURE_DIR) {
+      await mkdir(process.env.HOME_POLISH_CAPTURE_DIR, {recursive: true});
+      await days.screenshot({
+        path: join(process.env.HOME_POLISH_CAPTURE_DIR, `insights-month-${theme}-${width}.png`),
+      });
+    }
+    await expectNoHorizontalOverflow(page);
+    expect.soft(await outside(days, 'svg, text')).toEqual([]);
+  });
+}
+
 const insightsMerchant = (id: string, name: string, spent: string, count: number) => ({
   id,
   name,
@@ -669,6 +701,7 @@ for (const [name, data] of Object.entries(insightsData)) {
     {width: 1024, theme: 'light'},
     {width: 390, theme: 'light'},
     {width: 390, theme: 'dark'},
+    {width: 320, theme: 'light'},
     {width: 320, theme: 'dark'},
   ] as const) {
     test(`Insights fits ${name} data at ${width}px in ${theme}`, async ({page}) => {
@@ -723,6 +756,9 @@ for (const [name, data] of Object.entries(insightsData)) {
 
       for (const period of ['12m', 'all']) {
         await page.goto(period === 'all' ? '/insights?period=all' : '/insights');
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.classList.contains('dark')))
+          .toBe(theme === 'dark');
         await expect(
           page.getByRole('region', {name: 'Categories'}).getByRole('link').first(),
         ).toBeVisible();
@@ -738,6 +774,12 @@ for (const [name, data] of Object.entries(insightsData)) {
         if (width < 768) expect(sources).toBe(0);
         else expect(sources).toBeGreaterThan(0);
         await expect(flow.getByRole('list', {name: 'Went to'})).toBeVisible();
+        // The balance line and its axis labels keep inside their card.
+        const balance = page.getByRole('region', {name: 'Balance over time'});
+        await expect(
+          balance.getByRole('img', {name: /^Total balance at each month end/}),
+        ).toBeVisible();
+        expect.soft(await outside(balance, 'svg, text')).toEqual([]);
         // Every money-flow label and rail row keeps inside its column.
         expect.soft(await outside(flow, 'li span')).toEqual([]);
         expect.soft(await outside(rail, 'button, a, span')).toEqual([]);

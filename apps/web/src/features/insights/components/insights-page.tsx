@@ -25,6 +25,7 @@ import {
 import {useIsMobile} from '@/hooks/use-is-mobile';
 import {useLocalDate} from '@/hooks/use-local-date';
 
+import {useBalanceLine} from '../api/use-balance-line';
 import {useInsightsHistory} from '../api/use-insights-history';
 import type {InsightsPeriodSearch, InsightsSearch} from '../types/insights-search';
 import {periodSearch} from '../utils/insights-links';
@@ -37,6 +38,7 @@ import {
   sumParts,
   yearPeriods,
 } from '../utils/period-figures';
+import {BalanceHistoryCard} from './balance-history-card';
 import {CashFlowCard, type FlowBar} from './cash-flow-card';
 import {CategoryList} from './category-list';
 import {
@@ -72,8 +74,8 @@ export type InsightsNavigation = {
 
 /**
  * Cash flow over one period kept in the address: In, Out and Kept with monthly bars or the year and heat tables,
- * where the money went, and the categories. The rail holds top merchants, bills and the balance, and opens a
- * merchant's details in place (in a sheet below the rail's width).
+ * the total balance over the period, where the money went, and the categories. The rail holds top merchants, bills
+ * and the balance, and opens a merchant's details in place (in a sheet below the rail's width).
  */
 export function InsightsPage({
   search,
@@ -202,6 +204,14 @@ function InsightsReport({
       : undefined;
   const categories = breakdowns ? categoryRows(breakdowns.categories, from, to) : null;
   const lastMonth = sliced?.months[sliced.months.length - 1];
+  const balanceLine = useBalanceLine({
+    months: sliced?.months ?? null,
+    historyPlaceholder: history.isPlaceholderData,
+    range,
+    byDay: period === 'month',
+    today,
+    currency,
+  });
 
   const railBeside = useRailBeside();
   const phone = useIsMobile();
@@ -300,6 +310,14 @@ function InsightsReport({
               onRetry={history.refetchBreakdowns}
             />
           )}
+          <BalanceHistoryCard
+            points={balanceLine.points}
+            unit={balanceLine.unit}
+            currency={currency}
+            error={balanceLine.isError ? balanceLine.error : undefined}
+            onRetry={balanceLine.refetch}
+            onPick={(month) => void navigate(monthLink(month))}
+          />
           <Section title='Where the money went' loaded={flow !== undefined}>
             {flow === undefined && history.breakdownsError ? (
               <LoadErrorState

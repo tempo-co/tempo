@@ -14,18 +14,21 @@ export const useGetBankTransactionCashFlow = (
   asOf: string,
   {enabled = true}: {enabled?: boolean} = {},
 ) => {
-  const {data, isPending, isError, error, refetch} = useQuery<BankTransactionCashFlow>({
-    enabled,
-    queryKey: dashboardQueryKeys.cashFlow(interval, from, to, asOf),
-    queryFn: () => {
-      const params = new URLSearchParams({interval, from, to, asOf});
-      return api.get<BankTransactionCashFlow>(`/bank-transactions/cash-flow?${params.toString()}`);
-    },
-    placeholderData: (previous) => (previous?.interval === interval ? previous : undefined),
-    refetchInterval: HOME_REFRESH_INTERVAL_MS,
-    staleTime: HOME_REFRESH_INTERVAL_MS,
-    refetchOnReconnect: 'always',
-  });
+  const {data, isPending, isPlaceholderData, isError, error, refetch} =
+    useQuery<BankTransactionCashFlow>({
+      enabled,
+      queryKey: dashboardQueryKeys.cashFlow(interval, from, to, asOf),
+      queryFn: () => {
+        const params = new URLSearchParams({interval, from, to, asOf});
+        return api.get<BankTransactionCashFlow>(
+          `/bank-transactions/cash-flow?${params.toString()}`,
+        );
+      },
+      placeholderData: (previous) => (previous?.interval === interval ? previous : undefined),
+      refetchInterval: HOME_REFRESH_INTERVAL_MS,
+      staleTime: HOME_REFRESH_INTERVAL_MS,
+      refetchOnReconnect: 'always',
+    });
 
-  return {cashFlow: data, isPending, isError, error, refetch};
+  return {cashFlow: data, isPending, isPlaceholderData, isError, error, refetch};
 };

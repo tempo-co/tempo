@@ -16,6 +16,7 @@ import {cn} from '@/utils/cn';
 import {axisFormatter, axisTicks} from '../utils/chart-axis';
 import {parseCalendarDate} from '../utils/drill-links';
 import {signed, wholeCents} from '../utils/format';
+import {formatMoney} from '../utils/money';
 import {formatMonth} from '../utils/month';
 import type {BalancePoint} from '../utils/overview';
 import {Readout, ReadoutRow, ReadoutTitle} from './data-tip';
@@ -115,6 +116,19 @@ export function BalanceChart({
     .map((d) => d.index);
   const first = known[0];
   const last = known[known.length - 1];
+  // A balance with no known neighbour has no stretch of line, so it is drawn as a dot.
+  const isolated = (index: number) =>
+    points[index]?.balance != null &&
+    points[index - 1]?.balance == null &&
+    points[index + 1]?.balance == null;
+  const label =
+    first === undefined
+      ? `Total balance at each ${unit} end.`
+      : `Total balance at each ${unit} end, from ${wholeCents(first, currency)} to ${wholeCents(last, currency)}.`;
+  const pointName = (point: BalancePoint) =>
+    unit === 'day'
+      ? format(parseCalendarDate(point.end), 'EEE d MMM yyyy')
+      : formatMonth(point.month, 'MMMM yyyy');
   // A month's name alone says which one opens, unless the span holds that month in two years.
   const ambiguous = (month: string) =>
     points.filter((point) => point.month !== month && point.month.slice(5) === month.slice(5))
@@ -126,11 +140,7 @@ export function BalanceChart({
         className={cn('aspect-auto min-h-0 w-full flex-1', POINTER)}
         config={{balance: {color: 'var(--color-chart-primary)'}}}
         role='img'
-        aria-label={
-          first === undefined
-            ? `Total balance at each ${unit} end.`
-            : `Total balance at each ${unit} end, from ${wholeCents(first, currency)} to ${wholeCents(last, currency)}.`
-        }
+        aria-label={label}
       >
         <ComposedChart
           data={data}
@@ -189,6 +199,20 @@ export function BalanceChart({
             fill='var(--color-balance)'
             fillOpacity={0.08}
             isAnimationActive={false}
+            dot={({cx, cy, index}) =>
+              isolated(index) && cx != null && cy != null ? (
+                <circle
+                  key={index}
+                  data-slot='lone-point'
+                  cx={cx}
+                  cy={cy}
+                  r={3}
+                  fill='var(--color-balance)'
+                />
+              ) : (
+                <g key={index} />
+              )
+            }
             activeDot={{r: 4}}
           />
           <ChartTooltip
@@ -228,9 +252,52 @@ export function BalanceChart({
           />
         </ComposedChart>
       </ChartContainer>
+      {/* The exact values the line draws, for a screen reader. A div clips it: a table won't shrink. */}
+      <div className='sr-only'>
+        <table>
+          <caption>{label}</caption>
+          <thead>
+            <tr>
+              <th scope='col'>{unit === 'day' ? 'Day' : 'Month'}</th>
+              <th scope='col'>Balance</th>
+              <th scope='col'>{unit === 'day' ? 'Change' : 'Kept'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((point, index) => {
+              const before = points[index - 1]?.balance;
+              // As the readout: what was kept in a month, or the change since the day before.
+              const delta =
+                unit === 'day'
+                  ? point.balance !== null && before != null
+                    ? point.balance - before
+                    : null
+                  : (point.kept ?? null);
+              return (
+                <tr key={point.end}>
+                  <th scope='row'>
+                    {pointName(point)}
+                    {point.complete ? '' : ', so far'}
+                  </th>
+                  <td>{exact(point.balance, currency)}</td>
+                  <td>{delta === null ? '—' : signedExact(delta, currency)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
+
+/** Cents in full, or a dash when unknown. */
+const exact = (cents: number | null, currency: string | null) =>
+  cents === null ? '—' : formatMoney(cents / 100, currency);
+
+/** Cents in full with a + or − sign. */
+const signedExact = (cents: number, currency: string | null) =>
+  `${cents > 0 ? '+' : cents < 0 ? '−' : ''}${formatMoney(Math.abs(cents) / 100, currency)}`;
 
 /**
  * The point nearest to `x` px into a plot `width` px wide holding `count` points, which sit {@link X_PAD} in from

@@ -18,7 +18,7 @@ export const useGetBankBalanceTrend = (
   asOf: string,
   {enabled = true}: {enabled?: boolean} = {},
 ) => {
-  const {data, isPending, isError, error, refetch} = useQuery<BankBalanceTrend>({
+  const {data, isPending, isPlaceholderData, isError, error, refetch} = useQuery<BankBalanceTrend>({
     enabled,
     queryKey: dashboardQueryKeys.balanceTrend(interval, from, to, asOf),
     queryFn: () => {
@@ -31,5 +31,5 @@ export const useGetBankBalanceTrend = (
     refetchOnReconnect: 'always',
   });
 
-  return {balanceTrend: data, isPending, isError, error, refetch};
+  return {balanceTrend: data, isPending, isPlaceholderData, isError, error, refetch};
 };

@@ -127,6 +127,15 @@ export type BalancePoint = {
   kept?: number;
 };
 
+/** The total balance at each day end of a `day` balance trend, oldest first. */
+export const dayBalancePoints = (trend: BankBalanceTrend): BalancePoint[] =>
+  trend.periods.map((period) => ({
+    month: period.end.slice(0, 7),
+    end: period.end,
+    complete: period.complete,
+    balance: period.total === null ? null : toCents(period.total),
+  }));
+
 /** A breakdown part's amount in cents, zero when the period has no such part. */
 export function partCents(period: BankTransactionBreakdownPeriod, key: string) {
   return toCents(period.parts.find((part) => part.key === key)?.amount ?? '0');

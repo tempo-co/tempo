@@ -8,7 +8,7 @@ import type {
 
 import {VERIFIED_USER_AUTH_FILE} from '../../constants/auth.constants';
 import {SEEDED_TRANSACTION_YEAR_NOW} from '../../constants/seed.constants';
-import {MARKET_ID, mockSyntheticHome} from '../../data/home-history.data';
+import {MARKET_ID, homeHistory, mockSyntheticHome} from '../../data/home-history.data';
 import {expect, test} from '../../fixtures';
 import {fulfillJson} from '../../utils/api-mocks';
 
@@ -39,11 +39,28 @@ function expectedFigures(flow: BankTransactionCashFlow, from: string, to: string
   ];
 }
 
-const monthly = (page: Page, path: string) =>
+const intervalResponse = (page: Page, path: string, interval = 'month') =>
   page.waitForResponse((response) => {
     const url = new URL(response.url());
-    return url.pathname.endsWith(path) && url.searchParams.get('interval') === 'month';
+    return url.pathname.endsWith(path) && url.searchParams.get('interval') === interval;
   });
+
+const balanceLine = (page: Page) =>
+  page.getByRole('region', {name: 'Balance over time'}).getByRole('img');
+
+/** The balance line's name, from the API's totals at each period end of `trend` in `from` through `to` (`YYYY-MM`). */
+function expectedBalanceLine(trend: BankBalanceTrend, from: string, to: string) {
+  const totals = trend.periods
+    .filter((period) => period.end.slice(0, 7) >= from && period.end.slice(0, 7) <= to)
+    .flatMap((period) => (period.total === null ? [] : [Number(period.total)]));
+  const whole = (value: number) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: trend.baseCurrency ?? 'EUR',
+      maximumFractionDigits: 0,
+    }).format(value);
+  return `Total balance at each ${trend.interval} end, from ${whole(totals[0])} to ${whole(totals[totals.length - 1])}.`;
+}
 
 /** Every top-merchants list the page reads, by its `from..to` range. */
 function recordMerchantLists(page: Page) {
@@ -62,38 +79,44 @@ function recordMerchantLists(page: Page) {
 }
 
 /**
- * Opens Insights on the seeded history. Returns the API's monthly cash flow, `range(from)`: the top-merchants range of a
+ * Opens Insights on the seeded history. Returns the API's monthly cash flow and balance trend, `range(from)`: the top-merchants range of a
  * period starting in the month `from` (cut to the history's first month, through the running 1 October), and
  * `merchantList(range)`: the merchants the rail lists for it.
  */
 async function openInsights(page: Page) {
   const merchantList = recordMerchantLists(page);
-  const cashFlow = monthly(page, '/bank-transactions/cash-flow');
-  const balances = monthly(page, '/bank-transactions/balance-trend');
+  const cashFlow = intervalResponse(page, '/bank-transactions/cash-flow');
+  const balances = intervalResponse(page, '/bank-transactions/balance-trend');
   await page.goto('/insights');
   const flow = (await (await cashFlow).json()) as BankTransactionCashFlow;
-  const first = ((await (await balances).json()) as BankBalanceTrend).periods[0].start.slice(0, 7);
+  const trend = (await (await balances).json()) as BankBalanceTrend;
+  const first = trend.periods[0].start.slice(0, 7);
   const range = (from: string) => `${from > first ? from : first}-01..2026-10-01`;
-  return {flow, range, merchantList};
+  return {flow, trend, range, merchantList};
 }
 
 test.describe('Insights over the seeded history', () => {
-  test.use({storageState: VERIFIED_USER_AUTH_FILE});
+  // The seeded clock's 1 October is a local date, so the calendar is pinned too.
+  test.use({storageState: VERIFIED_USER_AUTH_FILE, timezoneId: 'Europe/Amsterdam'});
 
   test.beforeEach(async ({page}) => {
     await page.clock.setFixedTime(SEEDED_TRANSACTION_YEAR_NOW);
   });
 
-  test('every figure and the top merchants follow the period picker, kept in the address, and a merchant opens in the rail', async ({
+  test('every figure, the balance line and the top merchants follow the period picker, kept in the address, and a merchant opens in the rail', async ({
     page,
   }) => {
     await page.setViewportSize({width: 1440, height: 1000});
-    const {flow, range, merchantList} = await openInsights(page);
+    const {flow, trend, range, merchantList} = await openInsights(page);
 
     const picker = page.getByRole('radiogroup', {name: 'Period'});
     // The last 12 months by default, through the running October.
     await expect(picker.getByRole('radio', {name: '12 months'})).toBeChecked();
     await expect(figures(page)).toHaveText(expectedFigures(flow, '2025-11', '2026-10'));
+    // The total balance at each month end of the period.
+    await expect(balanceLine(page)).toHaveAccessibleName(
+      expectedBalanceLine(trend, '2025-11', '2026-10'),
+    );
     await merchantList(range('2025-11'));
 
     await picker.getByRole('radio', {name: '2026'}).click();
@@ -104,6 +127,9 @@ test.describe('Insights over the seeded history', () => {
     const top = page.getByRole('region', {name: 'Top merchants'});
     await expect(top.getByRole('listitem').first()).toContainText(merchant.name);
 
+    const dayEnds = intervalResponse(page, '/bank-transactions/balance-trend', 'day').then(
+      async (response) => (await response.json()) as BankBalanceTrend,
+    );
     await picker.getByRole('radio', {name: 'This month'}).click();
     await expect(page).toHaveURL(/\/insights\?period=month$/);
     await expect(figures(page)).toHaveText(expectedFigures(flow, '2026-10', '2026-10'));
@@ -112,6 +138,18 @@ test.describe('Insights over the seeded history', () => {
     await page.reload();
     await expect(picker.getByRole('radio', {name: 'This month'})).toBeChecked();
     await expect(figures(page)).toHaveText(expectedFigures(flow, '2026-10', '2026-10'));
+    // This month's balance line is drawn by day: on the 1st, one day end, shown as a dot. A point opens its month's
+    // page with the period kept.
+    const days = await dayEnds;
+    expect(days.periods.map((period) => period.end)).toEqual(['2026-10-01']);
+    await expect(balanceLine(page)).toHaveAccessibleName(
+      expectedBalanceLine(days, '2026-10', '2026-10'),
+    );
+    await expect(balanceLine(page).locator('[data-slot="lone-point"]')).toBeVisible();
+    await balanceLine(page).click();
+    await expect(page).toHaveURL('/insights/months/2026-10?period=month');
+    await page.goBack();
+    await expect(page).toHaveURL(/\/insights\?period=month$/);
 
     await picker.getByRole('radio', {name: '2026'}).click();
     const view = page.getByRole('tablist', {name: 'Cash flow view'});
@@ -260,6 +298,7 @@ test.describe('Insights over a synthetic multi-year history', () => {
   test.use({storageState: {cookies: [], origins: []}, timezoneId: 'Europe/Amsterdam'});
 
   const LANDLORD_ID = `k_${'e5'.repeat(16)}`;
+  const HIDDEN_ACCOUNT_ID = '00000000-0000-4000-8000-0000000000a2';
 
   /** Top merchants over any range: the landlord, then the market; records each request's range. */
   async function mockInsightsMerchants(page: Page) {
@@ -289,11 +328,28 @@ test.describe('Insights over a synthetic multi-year history', () => {
     return ranges;
   }
 
-  test('over a multi-year history each figure, the money flow and the heat tables cover the picked period', async ({
+  test('over a multi-year history each figure, the balance line, the money flow and the heat tables cover the picked period', async ({
     page,
   }) => {
     await page.setViewportSize({width: 1440, height: 1000});
-    await mockSyntheticHome(page);
+    const history = homeHistory();
+    await mockSyntheticHome(page, {history});
+    // A hidden account is listed with its balance but counted in no total; before 2025 only it has history.
+    await page.route('**/bank-transactions/balance-trend?**', (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      const trend =
+        query.get('interval') === 'day'
+          ? history.dayEnds(query.get('from')!, query.get('to')!, query.get('asOf')!)
+          : history.trend;
+      return fulfillJson(route, {
+        ...trend,
+        periods: trend.periods.map((period) => ({
+          ...period,
+          total: period.end < '2025-01-01' ? null : period.total,
+          accounts: [...period.accounts, {id: HIDDEN_ACCOUNT_ID, balance: '99999.00'}],
+        })),
+      } satisfies BankBalanceTrend);
+    });
     const ranges = await mockInsightsMerchants(page);
     await page.goto('/insights');
 
@@ -306,7 +362,10 @@ test.describe('Insights over a synthetic multi-year history', () => {
       'Out€24,700',
       'Kept+€8,30025% of income',
     ]);
-    await expect(page.getByRole('region', {name: 'Balance'})).toContainText('€24,300');
+    await expect(page.getByRole('region', {name: 'Balance', exact: true})).toContainText('€24,300');
+    await expect(balanceLine(page)).toHaveAccessibleName(
+      'Total balance at each month end, from €17,000 to €24,300.',
+    );
     await expect.poll(() => ranges).toContain('2025-12-01..2026-11-05');
 
     await picker.getByRole('radio', {name: '2025'}).click();
@@ -317,7 +376,10 @@ test.describe('Insights over a synthetic multi-year history', () => {
       'Kept+€16,00040% of income',
     ]);
     // The balance at the period's end, and the top merchants of the same span.
-    await expect(page.getByRole('region', {name: 'Balance'})).toContainText('€17,000');
+    await expect(page.getByRole('region', {name: 'Balance', exact: true})).toContainText('€17,000');
+    await expect(balanceLine(page)).toHaveAccessibleName(
+      'Total balance at each month end, from €2,000 to €17,000.',
+    );
     await expect.poll(() => ranges).toContain('2025-01-01..2025-12-31');
     const flow = page.getByRole('region', {name: 'Where the money went'});
     await expect(flow.getByTestId('money-flow-target')).toHaveText([
@@ -335,7 +397,29 @@ test.describe('Insights over a synthetic multi-year history', () => {
     await picker.getByRole('radio', {name: 'This month'}).click();
     await expect(page).toHaveURL(/\/insights\?period=month$/);
     await expect(figures(page)).toHaveText(['In€0', 'Out€1,200', 'Kept−€1,200']);
+    await expect(balanceLine(page)).toHaveAccessibleName(
+      'Total balance at each day end, from €24,300 to €24,300.',
+    );
+    // A screen reader gets each day's exact balance and its change since the day before.
+    const days = page.getByRole('region', {name: 'Balance over time'}).getByRole('row');
+    await expect(days).toHaveText([
+      'DayBalanceChange',
+      'Sun 1 Nov 2026€24,300.00—',
+      'Mon 2 Nov 2026€24,300.00€0.00',
+      'Tue 3 Nov 2026€24,300.00€0.00',
+      'Wed 4 Nov 2026€24,300.00€0.00',
+      'Thu 5 Nov 2026, so far€24,300.00€0.00',
+    ]);
     await expect.poll(() => ranges).toContain('2026-11-01..2026-11-05');
+
+    // Before 2025 only the hidden account has a balance: the line says there is none rather than drawing zero.
+    await picker.getByRole('radio', {name: '2024'}).click();
+    await expect(page).toHaveURL(/\/insights\?period=2024$/);
+    const balance = page.getByRole('region', {name: 'Balance over time'});
+    await expect(
+      balance.getByRole('heading', {name: 'No total balance for this period'}),
+    ).toBeVisible();
+    await expect(balanceLine(page)).toHaveCount(0);
 
     await picker.getByRole('radio', {name: '12 months'}).click();
     await expect(page).toHaveURL(/\/insights$/);
@@ -353,4 +437,52 @@ test.describe('Insights over a synthetic multi-year history', () => {
     await expect(page.getByRole('region', {name: 'Year by year'})).toHaveCount(0);
     await expect(page.getByRole('list', {name: /^In and out per month/})).toBeVisible();
   });
+  for (const {period, line, held: heldInterval, after} of [
+    {
+      period: 'month',
+      line: 'Total balance at each day end, from €24,300 to €24,300.',
+      held: 'day',
+      after: 'Tue 1 Dec 2026, so far€24,300.00—',
+    },
+    {
+      period: '12m',
+      line: 'Total balance at each month end, from €17,000 to €24,300.',
+      held: 'month',
+      after: 'January 2026€18,000.00+€1,000.00',
+    },
+  ] as const) {
+    test(`past midnight into a new month, the ${period} balance line waits for the new day's balances`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({width: 1440, height: 1000});
+      await mockSyntheticHome(page, {clock: 'installed'});
+      await page.clock.setSystemTime(new Date('2026-11-30T23:59:30+01:00'));
+      await mockInsightsMerchants(page);
+      await page.goto(`/insights?period=${period}`);
+      await expect(balanceLine(page)).toHaveAccessibleName(line);
+
+      // The balances read as of 1 December wait until the spec lets them through, while the page turns to December.
+      const held: (() => void)[] = [];
+      await page.route('**/bank-transactions/balance-trend?**', async (route) => {
+        const query = new URL(route.request().url()).searchParams;
+        if (query.get('asOf') !== '2026-12-01' || query.get('interval') !== heldInterval)
+          return route.fallback();
+        await new Promise<void>((resolve) => held.push(resolve));
+        await route.fallback();
+      });
+      const balance = page.getByRole('region', {name: 'Balance over time'});
+      try {
+        // The open tab's day timer turns the page to 1 December.
+        await page.clock.fastForward(60_000);
+        await expect(page.getByText(/December 2026$/)).toBeVisible();
+        await expect.poll(() => held.length).toBe(1);
+        // November's balances never stand under the new period.
+        await expect(balance).toHaveAttribute('aria-busy', 'true');
+        await expect(balanceLine(page)).toHaveCount(0);
+      } finally {
+        held.forEach((release) => release());
+      }
+      await expect(balance.getByRole('row').nth(1)).toHaveText(after);
+    });
+  }
 });
