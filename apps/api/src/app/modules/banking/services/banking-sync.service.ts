@@ -252,7 +252,7 @@ export class BankingSyncService {
 
 				const bankAccounts = await this.bankAccountRepository.find({
 					where: {bankConnection: {id: connection.id}},
-					order: {createdAt: 'ASC'},
+					order: {createdAt: 'ASC', id: 'ASC'},
 				});
 				const requestedTo = dateInAppTimeZone(new Date());
 				// A foreground refresh is always full; an automatic one repeats only what the last run failed, if anything.
