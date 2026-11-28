@@ -6,7 +6,7 @@
 		"properties": {
 			"lookUpMerchant": {
 				"type": "boolean",
-				"description": "Set lookUpMerchant to true only when merchantSearch is absent and the transactions are paid to or received from a business you cannot identify with certainty from the input and the owner's history, so that a web search for the merchant's name could settle the category; Wisp then searches the web for that name and asks again with the results. Set it to false for payments to or from a private person, for a business you know with certainty, when the evidence already decides every transaction's category, and whenever merchantSearch is present."
+				"description": "Set lookUpMerchant to true only when merchantSearch is absent and the transactions are paid to or received from a business you cannot identify with certainty from the input and the owner's history, so that a web search for the merchant's name could settle the category; the app then searches the web for that name and asks again with the results. Set it to false for payments to or from a private person, for a business you know with certainty, when the evidence already decides every transaction's category, and whenever merchantSearch is present."
 			},
 			"classifications": {
 				"type": "array",
