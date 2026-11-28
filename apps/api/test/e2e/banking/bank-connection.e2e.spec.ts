@@ -2040,9 +2040,10 @@ describe('BankConnectionController', () => {
 			gbpTransactions: EnableBankingTransaction[],
 		) => {
 			getAccountBalances.mockResolvedValue([]);
-			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions(eurTransactions))
-				.mockResolvedValueOnce(fetchedTransactions(gbpTransactions));
+			answerTransactionsByAccount({
+				'sync-provider-account': eurTransactions,
+				'sync-provider-account-gbp': gbpTransactions,
+			});
 			return synchronizeDue(connection.id);
 		};
 		expect(await synchronize([payment, exchange], [])).toMatchObject({status: 'SUCCEEDED', transactionsAdded: 2});
@@ -2888,9 +2889,10 @@ describe('BankConnectionController', () => {
 
 		try {
 			getAccountBalances.mockResolvedValue([]);
-			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment, lookalikeCredit]))
-				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
+			answerTransactionsByAccount({
+				'currency-exchange-eur-account': [sourceLeg, ordinaryPayment, lookalikeCredit],
+				'currency-exchange-gbp-account': [targetLeg],
+			});
 
 			const firstResponse = await app.get(BankingSyncService).synchronizeAutomatically(connection.id);
 			expect(firstResponse).toEqual(
@@ -2985,9 +2987,10 @@ describe('BankConnectionController', () => {
 			);
 
 			getAccountBalances.mockResolvedValue([]);
-			getAccountTransactions
-				.mockResolvedValueOnce(fetchedTransactions([sourceLeg, ordinaryPayment, lookalikeCredit]))
-				.mockResolvedValueOnce(fetchedTransactions([targetLeg]));
+			answerTransactionsByAccount({
+				'currency-exchange-eur-account': [sourceLeg, ordinaryPayment, lookalikeCredit],
+				'currency-exchange-gbp-account': [targetLeg],
+			});
 			const secondResponse = await synchronizeDue(connection.id);
 			expect(secondResponse).toEqual(
 				expect.objectContaining({
@@ -4082,6 +4085,13 @@ describe('BankConnectionController', () => {
 			})),
 		);
 		return connection;
+	}
+
+	// Queues one fetch answer for each account, so a sync's one fetch per account uses them all. Each answer picks the
+	// rows by the account being fetched, since a sync reads its accounts in an order the test does not control.
+	function answerTransactionsByAccount(transactionsByAccount: Record<string, EnableBankingTransaction[]>) {
+		const answer = async (accountId: string) => fetchedTransactions(transactionsByAccount[accountId]);
+		Object.keys(transactionsByAccount).forEach(() => getAccountTransactions.mockImplementationOnce(answer));
 	}
 
 	async function createAuthorizedConnectionFixture(
