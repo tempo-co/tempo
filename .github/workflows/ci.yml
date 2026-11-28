@@ -102,7 +102,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
 
@@ -172,7 +172,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -202,7 +202,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -229,7 +229,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -286,7 +286,7 @@ jobs:
 
             - name: Setup Node.js 26.x
               if: env.HAS_KEY == 'true'
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -317,7 +317,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -356,7 +356,7 @@ jobs:
 
             - name: Log in to GitHub Container registry
               if: env.PUSH == 'true'
-              uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+              uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
               with:
                   registry: ghcr.io
                   username: ${{ github.actor }}
@@ -378,7 +378,7 @@ jobs:
             # An image that is not published is saved for this run's web E2E instead.
             - name: Build, smoke-test and publish image
               id: build
-              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+              uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
               with:
                   context: .
                   file: apps/api/Dockerfile
@@ -404,7 +404,7 @@ jobs:
 
             - name: Save unpublished image for web E2E
               if: env.PUSH != 'true'
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: api-image
                   path: ${{ runner.temp }}/api-image.tar
@@ -427,7 +427,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -460,7 +460,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -547,7 +547,7 @@ jobs:
               run: docker compose -f docker-compose.e2e.yml up -d
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -597,7 +597,7 @@ jobs:
                       "$PLAYWRIGHT_IMAGE" \
                       npx playwright test --shard="$SHARD" --reporter=list,blob "$@"
 
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               if: ${{ !cancelled() }}
               with:
                   name: playwright-blob-${{ matrix.shard }}
@@ -622,7 +622,7 @@ jobs:
                   persist-credentials: false
 
             - name: Setup Node.js 26.x
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: 26.x
                   cache: 'npm'
@@ -648,7 +648,7 @@ jobs:
               continue-on-error: true
               run: node scripts/list-flaky-tests.mjs merged-report.json >> "$GITHUB_STEP_SUMMARY"
 
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: playwright-report
                   path: apps/web/playwright-report/
@@ -686,7 +686,7 @@ jobs:
 
             - name: Log in to GitHub Container registry
               if: env.PUSH == 'true'
-              uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+              uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
               with:
                   registry: ghcr.io
                   username: ${{ github.actor }}
@@ -705,7 +705,7 @@ jobs:
                   } >> "$GITHUB_OUTPUT"
 
             - name: Build and publish image
-              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+              uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
               with:
                   context: .
                   file: apps/web/Dockerfile.production
@@ -760,7 +760,7 @@ jobs:
               uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
             - name: Log in to GitHub Container registry
-              uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+              uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
               with:
                   registry: ghcr.io
                   username: ${{ github.actor }}
