@@ -271,6 +271,9 @@ describe('bank CSV layouts', () => {
 		lines[2] = lines[2].replace('00012345678', '00087654321');
 
 		expect(refusal(lines.join('\n'))).toEqual({code: 'several_accounts', layout: null});
+		// A row that leaves the column empty names no other account.
+		lines[2] = lines[2].replace('00087654321', '');
+		expect(summary(lines.join('\n'))).toHaveLength(1);
 	});
 
 	it('leaves a file without a header whose one-account column differs from row to row to the other readers', () => {

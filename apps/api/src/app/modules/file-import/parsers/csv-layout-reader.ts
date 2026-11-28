@@ -365,11 +365,12 @@ function readRows(
 		const lineIban = layout.accountIbanLine === undefined ? null : ibanOnLine(above[layout.accountIbanLine]);
 		const debitsNegative = writesDebitsNegative(records, layout);
 		rows = records.map((cells) => readRow(cells, layout, lineIban, debitsNegative, width));
-		// Rows that read but name more than one account would mix those accounts in one statement.
+		// Rows that read but name more than one account would mix those accounts in one statement; a row naming none,
+		// such as a card statement's payment, names no other.
 		const {oneAccountColumn} = layout;
 		if (
 			oneAccountColumn !== undefined &&
-			new Set(records.map((cells) => (cells[oneAccountColumn]?.text ?? '').trim())).size > 1
+			new Set(records.map((cells) => (cells[oneAccountColumn]?.text ?? '').trim()).filter(Boolean)).size > 1
 		) {
 			throw new SeveralAccounts();
 		}
