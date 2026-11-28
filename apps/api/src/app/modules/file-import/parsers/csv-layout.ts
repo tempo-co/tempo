@@ -97,6 +97,12 @@ export const PENDING_WORDS: ReadonlySet<string> = new Set([
 	'pendiente',
 ]);
 
+/**
+ * What a bank writes at the end of a row's description while the payment is not booked yet, as written (mBank's card
+ * payments not settled yet), compared case-folded: in any layout, such a row is skipped like a pending one.
+ */
+export const PENDING_SUFFIXES: readonly string[] = ['transakcja nierozliczona'];
+
 /** Whether a cell says its row is not booked yet. */
 export function isPendingWord(value: string): boolean {
 	return PENDING_WORDS.has(value.trim().toLowerCase());

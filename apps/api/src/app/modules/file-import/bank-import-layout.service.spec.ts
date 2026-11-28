@@ -122,6 +122,32 @@ describe('buildLayout', () => {
 		expect(proposed.statements).toEqual([{accountIban: null, bank: 'Proposed', rows: [['-120.50', null]]}]);
 	});
 
+	it('skips the rows a bank ends the description of with its words for not booked yet, whatever file the layout came from', () => {
+		// mBank (PL) ends the description of a card payment not settled yet with "transakcja nierozliczona".
+		const file = fixture('mbank-pl-synthetic.csv').toString('utf8').replace(/ PLN;/g, ' EUR;');
+		const settled = file
+			.split('\n')
+			.filter((line) => !line.endsWith('transakcja nierozliczona";"eKonto";"Jedzenie poza domem";-8,40 EUR;;'))
+			.join('\n');
+		const {layout} = propose(settled, {
+			dateFormat: 'YYYY-MM-DD',
+			amount: {kind: 'signed', column: 4},
+			decimalMark: ',',
+			thousandsSeparator: ' ',
+			description: [1],
+		});
+
+		// Written in another case and padded, as a re-saved spreadsheet can write it.
+		const later = file.replace('transakcja nierozliczona"', 'Transakcja Nierozliczona  "');
+		const read = readCsvLayout(Buffer.from(later), [layout], {owned: true, today: '2026-11-15'});
+		expect(read?.statements.flatMap(({rows}) => rows.map(({amount}) => amount))).toEqual([
+			'-62.10',
+			'2500.00',
+			'-12.50',
+		]);
+		expect(read?.statements[0].entriesSkipped).toBe(1);
+	});
+
 	it('leaves out a balance column that holds one value on every row: the current balance, not one per row', () => {
 		// Boursorama repeats the account's balance at the time of the export on every row.
 		const proposed = propose(fixture('boursorama-current-balance-synthetic.csv'), {
