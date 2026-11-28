@@ -423,13 +423,14 @@ export class BankImportService {
 		);
 		const found = await Promise.all(
 			targets.map(async (target, index) => {
-				if (target.account) return {account: target.account, rows: accountRows[index], target};
-				const rows =
+				if (target.account)
+					return {account: target.account, placed: accountRows[index], rows: accountRows[index], target};
+				const placed =
 					target.kind === 'file' && target.bank
 						? withoutAccount(accountRows[index], target.bank)
 						: accountRows[index];
-				const {account, identity} = await findFileAccountIn(this.dataSource.manager, ownerId, null, rows);
-				return {account, identity, rows: accountRows[index], target};
+				const {account, identity} = await findFileAccountIn(this.dataSource.manager, ownerId, null, placed);
+				return {account, identity, placed, rows: accountRows[index], target};
 			}),
 		);
 		refuseBankConflicts(
@@ -441,14 +442,15 @@ export class BankImportService {
 		);
 
 		// Two statements reaching one account are one account of the import, as its summary lists them: an account it
-		// creates for a file that names none is its bank's, named ignoring case and spacing, as `findFileAccountIn` finds it.
+		// creates for rows of a bank, a file that names none or one answered `new`, is that bank's, named ignoring case
+		// and spacing, as `findFileAccountIn` finds it.
 		const byAccount = new Map<string, {account: BankImportPreviewAccount; statements: AccountStatement[]}>();
 		for (const entry of found) {
 			const {account, rows, target} = entry;
 			const key =
 				account?.id ??
-				(rows.bank
-					? `new-bank:${bankNameKey(rows.bank)}:${rows.currency}`
+				(entry.placed.bank
+					? `new-bank:${bankNameKey(entry.placed.bank)}:${rows.currency}`
 					: `new:${entry.identity!.providerAccountId}`);
 			const days = rows.byFormat.flatMap((part) => part.rows.flatMap((row) => matchDay(row) ?? [])).sort();
 			const known = byAccount.get(key);
