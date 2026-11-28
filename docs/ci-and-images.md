@@ -41,6 +41,7 @@ Production deploys `:release` (`ops/README.md`). `.github/workflows/release.yml`
 ## Rules
 
 - Publish a tag that deployments track (`:main`, `:release`) only after `CI` passed; production deploys whatever `:release` points at, and `:release` follows `:main`.
+- Pin every action by commit SHA with its release as a comment (`uses: actions/checkout@<sha> # v7`); Dependabot proposes the week's action bumps as one PR.
 - Image cleanup on a host must filter on `org.opencontainers.image.source` and pass `--all`; tagged leftovers are never dangling.
 
 ## ECB currencies
