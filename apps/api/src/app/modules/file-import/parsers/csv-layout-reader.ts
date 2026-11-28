@@ -5,6 +5,7 @@ import {
 	CsvDateFormat,
 	CsvLayout,
 	CsvTextEncoding,
+	PENDING_SUFFIXES,
 	csvLayoutColumnCount,
 	decodeTable,
 	isPendingWord,
@@ -298,7 +299,10 @@ function readTable(
 	const pending = (cells: readonly TableCell[]) =>
 		(layout.pendingColumn !== undefined && isPendingWord(cells[layout.pendingColumn]?.text ?? '')) ||
 		(layout.pendingSuffix !== undefined &&
-			(cells[layout.pendingSuffix.column]?.text ?? '').endsWith(layout.pendingSuffix.text));
+			(cells[layout.pendingSuffix.column]?.text ?? '').endsWith(layout.pendingSuffix.text)) ||
+		layout.description.some((column) =>
+			PENDING_SUFFIXES.some((suffix) => (cells[column]?.text ?? '').trim().toLowerCase().endsWith(suffix)),
+		);
 	// A pending row is a row of the table all the same: one of another width is not skipped but refused.
 	const width = rowWidthOf(lines);
 	const body = lines.filter((cells) => !pending(cells) || !fitsRow(cells, layout, width));
