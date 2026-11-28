@@ -110,3 +110,16 @@ updates:
       # Keep the image on the runtime major in .nvmrc and CI.
       - dependency-name: node
         update-types: ['version-update:semver-major']
+
+  # Workflow actions are pinned by commit SHA with the release as a comment; Dependabot moves both.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      # One PR for every action bump in the week.
+      actions:
+        patterns:
+          - '*'
