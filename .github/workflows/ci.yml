@@ -91,7 +91,7 @@ jobs:
                   fi
                   printf 'api=%s\nweb=%s\nops=%s\ne2e=%s\ncorpus=%s\napi_image=%s\napi_main=%s\n' "$api" "$web" "$ops" "$e2e" "$corpus" "$api_image" "$api_main" | tee -a "$GITHUB_OUTPUT"
 
-    # Not gated: every change can touch a living doc or a path one names.
+    # Not gated: every change can touch a living doc, a path one names, or a workflow.
     docs:
         name: Docs check
         runs-on: ubuntu-latest
@@ -111,6 +111,20 @@ jobs:
 
             - name: Check living docs
               run: node .github/scripts/check-docs.mjs
+
+            # actionlint checks every workflow's expressions, job outputs, action inputs and, with
+            # the runner's shellcheck, its `run:` scripts. Pinned by version and checksum.
+            - name: Lint workflows
+              env:
+                  ACTIONLINT_VERSION: 1.7.12
+                  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+              run: |
+                  set -euo pipefail
+                  archive=$RUNNER_TEMP/actionlint.tar.gz
+                  curl -fsSL -m 60 -o "$archive" "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+                  echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+                  tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+                  "$RUNNER_TEMP/actionlint"
 
     ops:
         name: Ops checks
@@ -511,6 +525,7 @@ jobs:
                   elif [[ $API_CHANGED == true ]]; then
                       source='this run'
                   else
+                      # shellcheck disable=SC2016 # the backticks are Markdown for the run summary
                       source='this run, because `:main` was not shown to include the last API change in the base'
                   fi
                   if [[ $API_BUILT == true && -f $ARCHIVE ]]; then
