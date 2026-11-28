@@ -67,6 +67,7 @@ jobs:
                   body=$(
                       echo 'The ECB changed the currencies it publishes euro reference rates for:'
                       echo
+                      # shellcheck disable=SC2001 # sed prefixes every line of the list
                       sed 's/^/- /' <<<"$CHANGES"
                       echo
                       echo 'This updates the table the reporting-currency choices and the currencies offered for an imported file come from.'
