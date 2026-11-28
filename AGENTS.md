@@ -32,7 +32,7 @@ This repository and everything attached to it (commits, PRs, comments, CI logs, 
 
 ### Issue tracker
 
-Issues live in the Linear project named Tempo; GitHub Issues are disabled. See `docs/agents/issue-tracker.md`.
+Issues live in the Linear project named Wisp; GitHub Issues are disabled. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
