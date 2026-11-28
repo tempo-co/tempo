@@ -125,6 +125,28 @@ check asset /favicon.svg spa
 # Emails link the header image by absolute URL; a missing file would come back as the app page.
 email_header_type=$(curl -fsS --max-time 5 -o /dev/null -w '%{content_type}' "http://127.0.0.1:$port/email-header.png")
 [[ $email_header_type == image/png ]] || { echo "email header image served as '$email_header_type'" >&2; exit 1; }
+# The domain's BIMI record points mail clients at this logo; they accept only SVG Tiny PS.
+curl -fsS --max-time 5 -D "$tmp_dir/bimi.headers" -o "$tmp_dir/bimi.svg" "http://127.0.0.1:$port/bimi-logo.svg"
+grep -qiE '^content-type: image/svg\+xml(;|[[:space:]]*$)' "$tmp_dir/bimi.headers" || { echo 'BIMI logo not served as image/svg+xml' >&2; exit 1; }
+python3 - "$tmp_dir/bimi.svg" <<'PY'
+import os
+import sys
+import xml.etree.ElementTree as ET
+
+assert os.path.getsize(sys.argv[1]) < 32 * 1024, 'BIMI logo must stay under 32 KB'
+root = ET.parse(sys.argv[1]).getroot()
+ns = '{http://www.w3.org/2000/svg}'
+assert root.tag == ns + 'svg', root.tag
+assert root.get('version') == '1.2' and root.get('baseProfile') == 'tiny-ps', root.attrib
+assert root.find(ns + 'title') is not None and root.find(ns + 'title').text == 'Wisp', 'BIMI logo needs the title Wisp'
+assert root.get('x') is None and root.get('y') is None, 'BIMI logo root must not set x or y'
+_, _, width, height = (float(v) for v in root.get('viewBox').split())
+assert width == height, f'BIMI logo must be square, got {width}x{height}'
+for element in root.iter():
+    assert element.tag.split('}')[-1] not in {'script', 'image', 'a', 'foreignObject', 'animate', 'animateTransform', 'animateMotion', 'animateColor', 'set'}, element.tag
+    assert not any(k.endswith('href') for k in element.attrib), f'{element.tag} links outside the file'
+print('wisp BIMI logo: PASS')
+PY
 check deep-link /bank-transactions spa
 encoded_search=$(python3 -c 'from urllib.parse import quote; print(quote("€" * 1000))')
 check unicode-api-search "/api/bank-transactions?filter%5Bsearch%5D=$encoded_search" proxy
