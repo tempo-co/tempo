@@ -1,6 +1,6 @@
 import {INestApplication} from '@nestjs/common';
 import {getRepositoryToken} from '@nestjs/typeorm';
-import type {BankImportPreview, BankImportSummary} from '@wisp/contracts';
+import type {BankImportLayoutProposal, BankImportPreview, BankImportSummary} from '@wisp/contracts';
 import {readFileSync} from 'node:fs';
 import {Server} from 'node:net';
 import {join} from 'node:path';
@@ -11,14 +11,18 @@ import {Account} from '@modules/account/account.entity';
 import {BankImportDoubtfulRow} from '@modules/file-import/bank-import-doubtful-row.entity';
 import {BankImportLayoutMiss} from '@modules/file-import/bank-import-layout-miss.entity';
 import {BankImport} from '@modules/file-import/bank-import.entity';
+import {LayoutMapper} from '@modules/file-import/mapper/layout-mapper';
+import {LayoutAnswer} from '@modules/file-import/mapper/layout-mapper.contract';
 
 import {BankingFixtures} from '../../../scripts/seed-data/banking-fixtures';
 import {CamtEntry, EXAMPLE_IBAN, OTHER_EXAMPLE_IBAN, camt053} from '../../fixtures/statement-file.fixture';
-import {enableFileImportE2e, getApp} from '../../setup/e2e.setup';
+import {enableFileImportMapperE2e, getApp} from '../../setup/e2e.setup';
 import {createVerifiedAccount} from '../../utils/auth-utils';
 import {MAILPIT_API_URL} from '../../utils/email-utils';
 
-enableFileImportE2e();
+enableFileImportMapperE2e();
+// Replaced before the app starts, so no test reaches a model.
+const mapLayout = jest.spyOn(LayoutMapper.prototype, 'mapLayout');
 
 const ORIGIN = 'http://localhost:5173';
 const FIXTURES = join(__dirname, '../../fixtures/file-import');
@@ -307,6 +311,67 @@ describe('Bank import preview', () => {
 
 		expect(summary).toMatchObject({rowsAdded: 7, accounts: [{id: fileAccount.id}]});
 		expect(account).toMatchObject({id: fileAccount.id, rowCount: 7});
+	});
+
+	/** Saves the owner's layout for the file under the bank, the model answering `answer`. */
+	async function saveLayout(agent: TestAgent, file: Buffer, answer: LayoutAnswer, bankName: string) {
+		mapLayout.mockResolvedValueOnce(answer);
+		const proposal = (await send(agent, '/bank-imports/layout-proposals', [file]).expect(201))
+			.body as BankImportLayoutProposal;
+		await agent
+			.post(`/bank-imports/layout-proposals/${proposal.id}/confirm`)
+			.set('Origin', ORIGIN)
+			.send({bankName})
+			.expect(201);
+	}
+
+	it('counts the rows the import adds to the one new account of a bank two statements spell differently', async () => {
+		const {agent} = await createOwner();
+		const answer: LayoutAnswer = {
+			bankName: null,
+			dateFormat: 'YYYY-MM-DD',
+			bookingDate: 0,
+			valueDate: null,
+			transactionDate: null,
+			pending: null,
+			amount: {kind: 'signed', column: 1},
+			decimalMark: '.',
+			thousandsSeparator: null,
+			currency: {column: 2},
+			balance: null,
+			counterpartyName: null,
+			counterpartyAccount: null,
+			description: [3],
+			account: null,
+		};
+		// A card export naming the current account it is paid from, which the owner says is not the card's account,
+		// and another export of the same bank that names no account; they share the payment of 4 October.
+		const card = Buffer.from(
+			[
+				'Date,Amount,Currency,Description,Linked account',
+				...['-4.10', '-7.20', '-3.30'].map(
+					(amount, index) => `2026-10-0${index + 2},${amount},EUR,Example Shop,${EXAMPLE_IBAN}`,
+				),
+				'',
+			].join('\n'),
+		);
+		const statement = Buffer.from(
+			[
+				'Booked;Amount;Currency;Details',
+				'2026-10-04;-3.30;EUR;Example Shop',
+				'2026-10-05;-9.40;EUR;Example Shop',
+				'',
+			].join('\n'),
+		);
+		await saveLayout(agent, card, {...answer, account: {column: 4}}, 'EXAMPLE BANK');
+		await saveLayout(agent, statement, answer, 'Example Bank');
+
+		const {account, summary} = await previewThenImport(agent, [card, statement], {
+			accountChoices: JSON.stringify({'EXAMPLE BANK:EUR': 'new'}),
+		});
+
+		expect(summary).toMatchObject({rowsAdded: 4, accounts: [{name: 'EXAMPLE BANK EUR', created: true}]});
+		expect(account).toMatchObject({id: null, name: 'EXAMPLE BANK EUR', rowCount: 4});
 	});
 
 	it("counts the rows the import adds when an earlier format's reference recurs outside the later format's days", async () => {
