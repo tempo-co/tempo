@@ -261,7 +261,9 @@ export class BankImportLayoutService {
 		const validation = built && validateCsvLayout(built.layout);
 		if (!built || !validation?.ok) throw await this.fail(proposal, 'layout_not_mappable');
 		const preview = await this.parseRunner.preview(file, validation.layout);
-		if (!preview.ok) throw await this.fail(proposal, 'layout_not_mappable');
+		if (!preview.ok) {
+			throw await this.fail(proposal, preview.code === 'several_accounts' ? preview.code : 'layout_not_mappable');
+		}
 
 		await this.dataSource
 			.getRepository(BankImportLayoutProposal)
@@ -384,7 +386,7 @@ export class BankImportLayoutService {
 
 	private async fail(
 		proposal: BankImportLayoutProposal,
-		code: 'mapper_unavailable' | 'layout_not_mappable',
+		code: 'mapper_unavailable' | 'layout_not_mappable' | 'several_accounts',
 	): Promise<BankImportRefusalException> {
 		await this.dataSource
 			.getRepository(BankImportLayoutProposal)

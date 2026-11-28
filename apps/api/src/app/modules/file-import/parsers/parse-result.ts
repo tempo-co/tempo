@@ -15,6 +15,8 @@ export const PARSE_REFUSAL_CODES = [
 	'layout_unknown',
 	/** An owner's saved layout claims the file but would skip lines above its table that look like rows. */
 	'layout_not_mappable',
+	/** A table whose rows name more than one account without an IBAN per row to tell them apart. */
+	'several_accounts',
 ] as const;
 export type ParseRefusalCode = (typeof PARSE_REFUSAL_CODES)[number];
 

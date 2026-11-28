@@ -89,15 +89,13 @@ describe('buildLayout', () => {
 		const twoAccounts = file.toString('utf8').split('\n');
 		twoAccounts[3] = twoAccounts[3].replace('12345678', '87654321');
 		twoAccounts[4] = twoAccounts[4].replace('12345678', '87654321');
-		const merged = propose(Buffer.from(twoAccounts.join('\n')), answer);
-		expect(merged.layout).toEqual(expect.objectContaining({oneAccountColumn: 3}));
-		expect(merged.layout.accountIban).toBeUndefined();
-		expect(merged.statements).toBeUndefined();
+		expect(() => propose(Buffer.from(twoAccounts.join('\n')), answer)).toThrow('several_accounts');
 		// The layout saved from a one-account file keeps that column to check: a later file of two is refused.
 		expect(proposed.layout.oneAccountColumn).toBe(3);
-		expect(
+		expect(proposed.layout.accountIban).toBeUndefined();
+		expect(() =>
 			readCsvLayout(Buffer.from(twoAccounts.join('\n')), [proposed.layout], {owned: true, today: '2026-11-15'}),
-		).toBeNull();
+		).toThrow('several_accounts');
 		expect(readCsvLayout(file, [proposed.layout], {owned: true, today: '2026-11-15'})?.statements).toHaveLength(1);
 		// A column of IBANs is the account.
 		const ibans = Buffer.from(file.toString('utf8').replace(/12345678/g, 'GB33BUKB20201555555555'));
@@ -508,7 +506,7 @@ describe('buildLayout', () => {
 			if (!validation.ok) throw new Error(validation.error);
 
 			expect(validation.layout.oneAccountColumn).toBe(column);
-			expect(() => readCsvLayout(file, [validation.layout], {owned: true})).toThrow('layout_not_recognized');
+			expect(() => readCsvLayout(file, [validation.layout], {owned: true})).toThrow('several_accounts');
 		}
 	});
 

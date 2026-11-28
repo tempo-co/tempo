@@ -60,7 +60,8 @@ export async function runParseChild(input: AsyncIterable<Buffer>): Promise<Parse
 	} catch (error) {
 		if (!(error instanceof ParseRefusal)) return {ok: false, code: 'parse_failed'};
 		// A layout the preview reads with matched the header but not the rows: it does not map the file.
-		if (request.mode === 'preview') return {ok: false, code: 'layout_not_mappable'};
+		if (request.mode === 'preview' && error.code !== 'several_accounts')
+			return {ok: false, code: 'layout_not_mappable'};
 		return error.layout ? {ok: false, code: error.code, layout: error.layout} : {ok: false, code: error.code};
 	}
 }

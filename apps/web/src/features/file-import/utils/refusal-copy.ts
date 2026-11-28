@@ -45,6 +45,10 @@ const REFUSAL_COPY: Record<
     description:
       'Nothing was imported. Try another export format from your bank, such as CAMT.053 or MT940.',
   },
+  several_accounts: {
+    title: 'This file holds several accounts',
+    description: 'Export one account at a time and import each file on its own.',
+  },
   layout_proposal_expired: {
     title: 'This preview has expired',
     description: 'Work out the columns again to import this file.',

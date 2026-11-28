@@ -19,6 +19,11 @@ const REFUSALS: Record<BankImportErrorCode, {status: HttpStatus; message: string
 		status: HttpStatus.UNPROCESSABLE_ENTITY,
 		message: "Wisp couldn't work out this file's columns. Nothing was imported.",
 	},
+	several_accounts: {
+		status: HttpStatus.UNPROCESSABLE_ENTITY,
+		message:
+			'This file holds the transactions of several accounts. Export one account at a time. Nothing was imported.',
+	},
 	mapper_unavailable: {
 		status: HttpStatus.SERVICE_UNAVAILABLE,
 		message: "Wisp can't work out file columns right now. This file isn't supported yet.",
